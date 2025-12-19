@@ -125,13 +125,15 @@ tcc_get_symbol <- function(state, name) {
   .Call(RC_libtcc_get_symbol, state, name)
 }
 
-#' Call a zero-argument symbol returning int from a libtcc state
+#' Call a zero-argument symbol with a specified return type
 #' @param state A `tcc_state`.
 #' @param name Symbol name to call.
-#' @return Integer return value from the symbol.
+#' @param return One of "int", "double", "void".
+#' @return The return value cast to the requested type (NULL for void).
 #' @export
-tcc_call_symbol_int <- function(state, name) {
-  .Call(RC_libtcc_call_symbol, state, name)
+tcc_call_symbol <- function(state, name, return = c("int", "double", "void")) {
+  return <- match.arg(return)
+  .Call(RC_libtcc_call_symbol, state, name, return)
 }
 
 #' Check if a tcc_symbol external pointer is valid

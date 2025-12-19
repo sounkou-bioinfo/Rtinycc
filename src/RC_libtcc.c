@@ -102,19 +102,6 @@ SEXP RC_libtcc_relocate(SEXP ext) {
     return Rf_ScalarInteger(rc);
 }
 
-SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name) {
-    TCCState *s = RC_tcc_state(ext);
-    const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
-    void *fn = tcc_get_symbol(s, sym);
-    if (!fn) {
-        Rf_error("symbol '%s' not found", sym);
-    }
-    /* Cast through an integer type to avoid pedantic warnings on some compilers */
-    uintptr_t addr = (uintptr_t) fn;
-    int (*callable)(void) = (int (*)(void)) addr;
-    return Rf_ScalarInteger(callable());
-}
-
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     TCCState *s = RC_tcc_state(ext);
     const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
@@ -126,6 +113,29 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_symbol"));
     UNPROTECT(1);
     return ptr;
+}
+
+SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
+    const char *rtype = Rf_translateCharUTF8(STRING_ELT(ret_type, 0));
+    void *fn = tcc_get_symbol(s, sym);
+    if (!fn) {
+        Rf_error("symbol '%s' not found", sym);
+    }
+    uintptr_t addr = (uintptr_t) fn;
+    if (strcmp(rtype, "int") == 0) {
+        int (*callable)(void) = (int (*)(void)) addr;
+        return Rf_ScalarInteger(callable());
+    } else if (strcmp(rtype, "double") == 0) {
+        double (*callable)(void) = (double (*)(void)) addr;
+        return Rf_ScalarReal(callable());
+    } else if (strcmp(rtype, "void") == 0) {
+        void (*callable)(void) = (void (*)(void)) addr;
+        callable();
+        return R_NilValue;
+    }
+    Rf_error("unsupported return type '%s' (expected int, double, or void)", rtype);
 }
 
 SEXP RC_libtcc_ptr_valid(SEXP ptr) {

@@ -2,7 +2,7 @@
 
 export(tcc_add_file)
 export(tcc_bin_path)
-export(tcc_call_symbol_int)
+export(tcc_call_symbol)
 export(tcc_cli)
 export(tcc_compile_string)
 export(tcc_get_symbol)
