@@ -22,8 +22,8 @@ expect_true(tcc_symbol_is_valid(sym_ptr))
 
 # Debug: print symbol pointer address and alignment (always enabled)
 addr <- get_external_ptr_addr(sym_ptr)
-cat(sprintf("[RTINYCC_DEBUG] symbol 'forty_two' address: 0x%x\n", addr))
-cat(sprintf("[RTINYCC_DEBUG] address %% 8: %d\n", addr %% 8))
+cat(sprintf("[RTINYCC_DEBUG] symbol 'forty_two' address: %f\n", addr))
+cat(sprintf("[RTINYCC_DEBUG] address %% 8: %f\n", addr %% 8))
 
 # CLI compile to object
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
