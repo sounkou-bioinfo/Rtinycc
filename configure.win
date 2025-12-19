@@ -123,6 +123,7 @@ if [ -d "$TINYCC_SRC" ]; then
     else
         echo "Cannot test TinyCC: binary or test header not found"
     fi
+    rm -rf "$TINYCC_SRC" || true
     echo "=== End TinyCC preprocessing test ==="
 else
     echo "Error: tinycc source directory $TINYCC_SRC does not exist."

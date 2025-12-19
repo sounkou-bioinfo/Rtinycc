@@ -160,6 +160,7 @@ if [ -d "$TINYCC_SRC" ]; then
         [ ! -f "$TEST_HEADER" ] && echo "  Test header missing: $TEST_HEADER" >> config.log
     fi
     echo "=== End TinyCC preprocessing test ===" >> config.log
+    rm -rf "$TINYCC_SRC" || true
     echo "" >> config.log
 else
     echo "Error: tinycc source directory $TINYCC_SRC does not exist."
