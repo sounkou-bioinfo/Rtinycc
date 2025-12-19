@@ -2,6 +2,8 @@
 
 ## All functions
 
+- [`get_external_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/get_external_ptr_addr.md)
+  : Get the address of an external pointer
 - [`tcc_add_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_file.md)
   : Add a source file to a libtcc state
 - [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
