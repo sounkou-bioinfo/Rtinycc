@@ -8,8 +8,8 @@ bundled include/lib paths.
 ``` r
 tcc_state(
   output = c("memory", "obj", "dll", "exe", "preprocess"),
-  include_path = tcc_include_path(),
-  lib_path = tcc_lib_path()
+  include_path = tcc_include_paths(),
+  lib_path = tcc_lib_paths()
 )
 ```
 
@@ -21,11 +21,12 @@ tcc_state(
 
 - include_path:
 
-  Path to headers; defaults to the bundled include dir.
+  Path(s) to headers; defaults to the bundled include dirs.
 
 - lib_path:
 
-  Path to libraries; defaults to the bundled lib dir.
+  Path(s) to libraries; defaults to the bundled lib dirs (lib and
+  lib/tcc).
 
 ## Value
 

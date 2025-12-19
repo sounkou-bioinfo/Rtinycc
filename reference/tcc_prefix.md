@@ -10,6 +10,8 @@ tcc_prefix()
 
 tcc_lib_path()
 
+tcc_lib_paths()
+
 tcc_include_path()
 
 tcc_bin_path()

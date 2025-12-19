@@ -20,12 +20,19 @@ The goal of Rtinycc is to …
 
 - [`tcc_add_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_file.md)
   : Add a source file to a libtcc state
-- [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
-  : Call a zero-argument symbol from a libtcc state
+- [`tcc_call_symbol_int()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol_int.md)
+  : Call a zero-argument symbol returning int from a libtcc state
 - [`tcc_compile_string()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.md)
   : Compile C code from a character string
+- [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md)
+  : Get a symbol pointer from a libtcc state
+- [`tcc_include_paths()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include_paths.md)
+  : TinyCC include search paths
+- [`tcc_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_path.md)
+  : Locate the TinyCC executable
 - [`tcc_prefix()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
   [`tcc_lib_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
+  [`tcc_lib_paths()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
   [`tcc_include_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
   [`tcc_bin_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
   [`tcc_cli()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
@@ -36,4 +43,6 @@ The goal of Rtinycc is to …
   : Run the tinycc CLI
 - [`tcc_state()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_state.md)
   : Create a libtcc state
+- [`tcc_symbol_is_valid()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_symbol_is_valid.md)
+  : Check if a tcc_symbol external pointer is valid
 
