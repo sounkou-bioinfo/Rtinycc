@@ -50,8 +50,8 @@ if [ -d "$TINYCC_SRC" ]; then
     "$MAKE" tccdefs_.h || { echo "Failed to generate tccdefs_.h" >&2; exit 1; }
 
     echo "Building libtcc (static and dll) and tcc executable ..."
-    "$MAKE" libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
-    "$MAKE" libtcc.dll || true
+    "$MAKE" CONFIG_static=no libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
+    "$MAKE" CONFIG_static=no libtcc.dll || true
     "$MAKE" tcc || "$MAKE" tcc.exe || { echo "Failed to build tcc executable" >&2; exit 1; }
 
     # On Windows, TCC searches for include/lib directories relative to the executable location

@@ -1,10 +1,21 @@
 TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
-PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
 
+LIBTCC_SO   := $(wildcard $(TINYCC_DIR)/lib/libtcc.so)
+LIBTCC_DYLIB:= $(wildcard $(TINYCC_DIR)/lib/libtcc.dylib)
+
+ifneq ($(LIBTCC_SO),)
+PKG_LIBS = $(LIBTCC_SO)
+PKG_LIBS += -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
+else ifneq ($(LIBTCC_DYLIB),)
+PKG_LIBS = $(LIBTCC_DYLIB)
+PKG_LIBS += -Wl,-rpath,@loader_path/../tinycc/lib
+else
+PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 PKG_LIBS += -Wl,-rpath,@loader_path/../tinycc/lib
 else
 PKG_LIBS += -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
+endif
 endif

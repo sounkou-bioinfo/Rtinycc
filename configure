@@ -47,7 +47,7 @@ if [ -d "$TINYCC_SRC" ]; then
     mkdir -p "$TINYCC_DEST/include"
     
     echo "Running make (shared + static libtcc) ..." >> config.log
-    $MAKE libtcc.a libtcc.so libtcc1.a tcc >> config.log 2>&1 || { echo "tinycc make failed" >> config.log; exit 1; }
+    $MAKE CONFIG_static=no libtcc.a libtcc.so libtcc1.a tcc >> config.log 2>&1 || { echo "tinycc make failed" >> config.log; exit 1; }
     
     echo "Running make install ..." >> config.log
     $MAKE install >> config.log 2>&1
