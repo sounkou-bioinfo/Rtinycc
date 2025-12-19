@@ -128,20 +128,13 @@ SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type) {
     }
     uintptr_t addr = (uintptr_t) fn;
     /* Debug: print address and alignment if RTINYCC_DEBUG is set */
-    SEXP debug_env = PROTECT(Rf_mkString("RTINYCC_DEBUG"));
-    SEXP debug_val = PROTECT(Rf_GetOption(debug_env, R_GlobalEnv));
     int debug_enabled = 0;
-    if (!Rf_isNull(debug_val)) {
-        debug_enabled = Rf_asLogical(debug_val);
-    } else {
-        const char *env = getenv("RTINYCC_DEBUG");
-        if (env && env[0] == '1') debug_enabled = 1;
-    }
+    const char *env = getenv("RTINYCC_DEBUG");
+    if (env && env[0] == '1') debug_enabled = 1;
     if (debug_enabled) {
         Rprintf("[RTINYCC_DEBUG][C] symbol '%s' address: 0x%lx\n", sym, (unsigned long)addr);
         Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)(addr % 8));
     }
-    UNPROTECT(2);
     if (strcmp(rtype, "int") == 0) {
         int (*callable)(void) = (int (*)(void)) addr;
         return Rf_ScalarInteger(callable());
