@@ -1,11 +1,16 @@
 Package: Rtinycc
-Title: What the Package Does (One Line, Title Case)
+Title: Builds `TinyCC` Cli and Library For R Package Use
 Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
+Authors@R:c(
+    person(given = "Sounkou Mahamane", family = "Toure", 
+    email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
+    person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
+    comment = "Tinycc Compiler (tinycc) authors and COPYRIGHT holders")
+    )
 Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+URL: https://sounkou-bioinfo.github.io/Rtinycc
+BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues

@@ -5,3 +5,6 @@
 .DS_Store
 .quarto
 README.html
+docs
+Rtinycc*tar.gz
+Rtinycc.Rcheck/*

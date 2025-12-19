@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/usr/share/R/include/**",
+                "${workspaceFolder}/inst/libffi/include/**",
+                "${workspaceFolder}/inst/tinycc/include/**",
+                "${workspaceFolder}/src/**",
+                "/usr/local/lib/R/site-library/RBCFLib/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c99",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
