@@ -1,0 +1,5 @@
+^README\.Rmd$
+^\.github$
+^README\.html$
+src/*so$
+src/*.o
