@@ -8,16 +8,53 @@
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-The goal of Rtinycc is to …
+We provide a simple R interface to the TinyCC (TCC) compiler including
+the cli and the libtcc library.
 
 ## Installation
 
 ``` r
-# FILL THIS IN! HOW CAN PEOPLE INSTALL YOUR DEV PACKAGE?
+remotes::install_github("sounkou-bioinfo/Rtinycc")
 ```
 
 ## Example
 
+### CLI
+
+``` r
+library(Rtinycc)
+tcc_dir <- tcc_prefix()
+# CLI compile to object
+src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
+out <- tempfile(fileext = ".o")
+inc_args <- as.character(paste0("-I", tcc_include_paths()))
+status <- tcc_run_cli(c(inc_args, "-c", src, "-o", out))
+status
+#> [1] 0
+```
+
+### In memory using libtcc
+
+``` r
+# libtcc in-memory compile
+state <- tcc_state(output = "memory")
+code <- "int forty_two(){ return 42; }"
+tcc_compile_string(state, code)
+#> [1] 0
+tcc_relocate(state)
+#> [1] 0
+tcc_call_symbol(state, "forty_two", return = "int")
+#> [1] 42
+tcc_get_symbol(state, "forty_two")
+#> <pointer: 0x5d59a24aa000>
+#> attr(,"class")
+#> [1] "tcc_symbol"
+```
+
 ## License
 
+GPL-3
+
 # References
+
+  - [tinycc](https://github.com/TinyCC/tinycc)
