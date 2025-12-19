@@ -51,7 +51,7 @@
 </h1></div>
 <!-- badges: start -->
 
-<p>We provide a simple R interface to the <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a> compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. Right now only basic functionalities are implemented and some warnings remain since libtcc uses printf and other symbols R CMD check does not like.</p>
+<p>We provide a simple R interface to the <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a> compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. Right now only basic functionalities are implemented and we do not support windows.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x6176ed22e000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c9fb6cc3000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
