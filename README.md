@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x650f30e58000>
+#> <pointer: 0x6176ed22e000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -65,4 +65,4 @@ GPL-3
 
 # References
 
-  - [tinycc](https://github.com/TinyCC/tinycc)
+- [tinycc](https://github.com/TinyCC/tinycc)

@@ -1,3 +1,17 @@
+#!/bin/sh
+# Copy bundled libtcc.dll into package `libs` so R on Windows can find it at runtime.
+# This runs during package configure step on Windows (Rtools/MSYS2 shell).
+set -e
+
+TINYCC_DIR="inst/tinycc"
+DLL="$TINYCC_DIR/bin/libtcc.dll"
+
+if [ -f "$DLL" ]; then
+  mkdir -p libs
+  cp -f "$DLL" libs/
+fi
+
+exit 0
 
 #!/bin/sh
 # we are on rtools so we have pkg-config etc

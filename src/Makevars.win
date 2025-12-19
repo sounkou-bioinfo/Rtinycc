@@ -1,7 +1,10 @@
 TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
+LIBTCC_A = $(TINYCC_DIR)/lib/libtcc.dll.a
 LIBTCC_DLL = $(TINYCC_DIR)/bin/libtcc.dll
-!if exist "$(LIBTCC_DLL)"
+!if exist "$(LIBTCC_A)"
+PKG_LIBS = $(LIBTCC_A)
+!else if exist "$(LIBTCC_DLL)"
 PKG_LIBS = $(LIBTCC_DLL)
 !else
 PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
