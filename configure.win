@@ -1,4 +1,3 @@
-
 #!/bin/sh
 # we are on rtools so we have pkg-config etc
 
