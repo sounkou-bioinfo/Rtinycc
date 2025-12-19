@@ -1,0 +1,15 @@
+# Rtinycc
+
+The goal of Rtinycc is to …
+
+## Installation
+
+``` r
+# FILL THIS IN! HOW CAN PEOPLE INSTALL YOUR DEV PACKAGE?
+```
+
+## Example
+
+## License
+
+# References
