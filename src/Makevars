@@ -19,3 +19,5 @@ else
 PKG_LIBS += -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
 endif
 endif
+
+all: $(SHLIB)

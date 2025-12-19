@@ -6,3 +6,5 @@ PKG_LIBS = $(LIBTCC_DLL)
 !else
 PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
 !endif
+
+all: $(SHLIB)
