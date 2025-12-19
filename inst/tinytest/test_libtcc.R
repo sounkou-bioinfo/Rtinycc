@@ -15,15 +15,16 @@ state <- tcc_state(output = "memory")
 code <- "int forty_two(){ return 42; }"
 expect_equal(tcc_compile_string(state, code), 0L)
 expect_equal(tcc_relocate(state), 0L)
-expect_equal(tcc_call_symbol(state, "forty_two", return = "int"), 42L)
 sym_ptr <- tcc_get_symbol(state, "forty_two")
 expect_true(inherits(sym_ptr, "tcc_symbol"))
 expect_true(tcc_symbol_is_valid(sym_ptr))
-
 # Debug: print symbol pointer address and alignment (always enabled)
 addr <- get_external_ptr_addr(sym_ptr)
 cat(sprintf("[RTINYCC_DEBUG] symbol 'forty_two' address: %f\n", addr))
 cat(sprintf("[RTINYCC_DEBUG] address %% 8: %f\n", addr %% 8))
+expect_equal(tcc_call_symbol(state, "forty_two", return = "int"), 42L)
+
+#
 
 # CLI compile to object
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
