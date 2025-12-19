@@ -1,12 +1,13 @@
-if (!requireNamespace("tinytest", quietly = TRUE)) {
-  message("tinytest not installed; skipping tests")
-  quit(save = "no", status = 0)
-}
-
 library(tinytest)
 
 tcc_dir <- tcc_prefix()
-skip_if_not(nzchar(tcc_dir) && file.exists(tcc_dir), "Bundled tinycc not found; run configure.")
+expect_true(
+  nzchar(tcc_dir) && file.exists(tcc_dir),
+  info = "Bundled tinycc not found; run configure to build it."
+)
+if (!(nzchar(tcc_dir) && file.exists(tcc_dir))) {
+  quit(save = "no", status = 1)
+}
 
 # libtcc in-memory compile
 state <- tcc_state(output = "memory")
@@ -17,9 +18,17 @@ expect_equal(tcc_call_symbol(state, "forty_two"), 42L)
 
 # CLI compile to object
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
-skip_if_not(file.exists(src), "example source missing")
+expect_true(
+  file.exists(src),
+  info = "example source missing: inst/c_examples/forty_two.c"
+)
+if (!file.exists(src)) {
+  quit(save = "no", status = 1)
+}
+
 out <- tempfile(fileext = ".o")
 on.exit(unlink(out), add = TRUE)
-status <- tcc_run_cli(c("-c", src, "-o", out))
+inc_args <- as.character(paste0("-I", tcc_include_paths()))
+status <- tcc_run_cli(c(inc_args, "-c", src, "-o", out))
 expect_equal(status, 0L)
 expect_true(file.exists(out))

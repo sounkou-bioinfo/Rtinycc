@@ -13,6 +13,14 @@ tcc_lib_path <- function() file.path(tcc_prefix(), "lib")
 
 #' @rdname tcc_prefix
 #' @export
+tcc_lib_paths <- function() {
+  prefix <- tcc_prefix()
+  paths <- c(file.path(prefix, "lib"), file.path(prefix, "lib", "tcc"))
+  normalizePath(paths[file.exists(paths)], winslash = "/", mustWork = FALSE)
+}
+
+#' @rdname tcc_prefix
+#' @export
 tcc_include_path <- function() file.path(tcc_prefix(), "include")
 
 #' @rdname tcc_prefix
@@ -51,8 +59,8 @@ tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
   switch(output,
          memory = 1L,  # TCC_OUTPUT_MEMORY
-         obj = 4L,     # TCC_OUTPUT_OBJ
-         dll = 3L,     # TCC_OUTPUT_DLL
+         obj = 3L,     # TCC_OUTPUT_OBJ
+         dll = 4L,     # TCC_OUTPUT_DLL
          exe = 2L,     # TCC_OUTPUT_EXE
          preprocess = 5L) # TCC_OUTPUT_PREPROCESS
 }
@@ -70,12 +78,13 @@ check_cli_exists <- function() {
 #' Initialize a libtcc compilation state, optionally pointing at the bundled include/lib paths.
 #' @param output Output type: one of "memory", "obj", "dll", "exe", "preprocess".
 #' @param include_path Path to headers; defaults to the bundled include dir.
-#' @param lib_path Path to libraries; defaults to the bundled lib dir.
+#' @param include_path Path(s) to headers; defaults to the bundled include dirs.
+#' @param lib_path Path(s) to libraries; defaults to the bundled lib dirs (lib and lib/tcc).
 #' @return An external pointer of class `tcc_state`.
 #' @export
 tcc_state <- function(output = c("memory", "obj", "dll", "exe", "preprocess"),
-                      include_path = tcc_include_path(),
-                      lib_path = tcc_lib_path()) {
+                      include_path = tcc_include_paths(),
+                      lib_path = tcc_lib_paths()) {
   .Call(RC_libtcc_state_new, normalizePath(lib_path, winslash = "/", mustWork = FALSE),
         normalizePath(include_path, winslash = "/", mustWork = FALSE),
         tcc_output_type(output))

@@ -11,7 +11,17 @@ CC=`"${R_HOME}/bin/R" CMD config CC`
 CC=$(echo "${CC}" | awk '{print $1}')
 AR=`"${R_HOME}/bin/R" CMD config AR`
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
+LOCAL_TINYCC="${THISDir}/tinycc"
 TINYCC_SRC="${THISDir}/src/tinycc"
+USE_LOCAL=0
+if [ -d "$LOCAL_TINYCC" ]; then
+    TINYCC_SRC="$LOCAL_TINYCC"
+    USE_LOCAL=1
+    echo "Using existing tinycc source at $LOCAL_TINYCC" >> config.log
+else
+    echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
+    "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+fi
 TINYCC_DEST="${THISDir}/inst/tinycc"
 if [ -d "$TINYCC_DEST" ]; then
     echo "Removing existing tinycc installation at $TINYCC_DEST ..." >> config.log
@@ -21,8 +31,6 @@ else
     echo "Created tinycc installation directory at $TINYCC_DEST" >> config.log
 fi
 # Build TinyCC
-echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
-"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
 if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
     echo "$PWD"
@@ -43,9 +51,20 @@ if [ -d "$TINYCC_SRC" ]; then
     
     echo "Running make install ..." >> config.log
     $MAKE install >> config.log 2>&1
+
+    # Ensure runtime library is installed (needed by CLI and libtcc)
+    LIBTCC1_SRC=$(find "$TINYCC_SRC" -name 'libtcc1.a' | head -n 1)
+    if [ -n "$LIBTCC1_SRC" ]; then
+        mkdir -p "$TINYCC_DEST/lib/tcc"
+        cp "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" >> config.log 2>&1 || true
+    else
+        echo "WARNING: libtcc1.a not found during build; CLI may fail" >> config.log
+    fi
     
     echo "tinycc built and installed to $TINYCC_DEST" >> config.log
-    rm -rf "$TINYCC_SRC"
+    if [ "$USE_LOCAL" -eq 0 ]; then
+        rm -rf "$TINYCC_SRC"
+    fi
     
     # Test TinyCC preprocessing with difficult_structs.h
     cd "${THISDir}"

@@ -29,20 +29,35 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         Rf_error("tcc_new failed");
     }
 
-    const char *libdir = (lib_path == R_NilValue) ? NULL : Rf_translateCharUTF8(STRING_ELT(lib_path, 0));
-    const char *incdir = (include_path == R_NilValue) ? NULL : Rf_translateCharUTF8(STRING_ELT(include_path, 0));
+    /* library paths */
+    if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
+        for (R_xlen_t i = 0; i < XLENGTH(lib_path); i++) {
+            const char *p = Rf_translateCharUTF8(STRING_ELT(lib_path, i));
+            if (p && p[0]) {
+                if (i == 0) {
+                    tcc_set_lib_path(s, p);
+                }
+                tcc_add_library_path(s, p);
+            }
+        }
+    }
+
+    /* include and sysinclude paths */
+    if (Rf_isString(include_path) && XLENGTH(include_path) > 0) {
+        for (R_xlen_t i = 0; i < XLENGTH(include_path); i++) {
+            const char *p = Rf_translateCharUTF8(STRING_ELT(include_path, i));
+            if (p && p[0]) {
+                tcc_add_include_path(s, p);
+                tcc_add_sysinclude_path(s, p);
+            }
+        }
+    }
+
     int out_type = Rf_asInteger(output_type);
     if (out_type <= 0) {
         out_type = TCC_OUTPUT_MEMORY;
     }
 
-    if (libdir && libdir[0] != '\0') {
-        tcc_set_lib_path(s, libdir);
-        tcc_add_library_path(s, libdir);
-    }
-    if (incdir && incdir[0] != '\0') {
-        tcc_add_include_path(s, incdir);
-    }
     if (tcc_set_output_type(s, out_type) != 0) {
         tcc_delete(s);
         Rf_error("tcc_set_output_type failed");
@@ -96,4 +111,17 @@ SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name) {
     }
     int (*callable)(void) = (int (*)(void)) fn;
     return Rf_ScalarInteger(callable());
+}
+
+SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
+    void *fn = tcc_get_symbol(s, sym);
+    if (!fn) {
+        Rf_error("symbol '%s' not found", sym);
+    }
+    SEXP ptr = PROTECT(R_MakeExternalPtr(fn, R_NilValue, R_NilValue));
+    Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_symbol"));
+    UNPROTECT(1);
+    return ptr;
 }

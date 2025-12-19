@@ -8,3 +8,4 @@ src/*.o
 ^pkgdown$
 ^LICENSE\.md$
 ^Rtinycc*tar\.gz$
+^tinycc/*$

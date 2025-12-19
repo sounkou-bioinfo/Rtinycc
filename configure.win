@@ -11,15 +11,23 @@ AR=`"${R_HOME}/bin/R" CMD config AR`
 # Build TinyCC
 THISDir=$(dirname "$0")
 THISDir=$(cd "$THISDir" && pwd)
+LOCAL_TINYCC="${THISDir}/tinycc"
 TINYCC_SRC="${THISDir}/src/tinycc"
+USE_LOCAL=0
+if [ -d "$LOCAL_TINYCC" ]; then
+    TINYCC_SRC="$LOCAL_TINYCC"
+    USE_LOCAL=1
+    echo "Using existing tinycc source at $LOCAL_TINYCC"
+else
+    echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
+    "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+fi
 TINYCC_DEST="${THISDir}/inst/tinycc"
 echo "Package source directory: $THISDir"
 echo "TinyCC will be installed to: $TINYCC_DEST"
 MSYSTEM=MINGW64
 MSYS2_PATH_TYPE=inherit
 CHERE_INVOKING=yes
-echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
-"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
 
 if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
@@ -67,6 +75,13 @@ if [ -d "$TINYCC_SRC" ]; then
     # Copy TCC's library files (required for linking on Windows)
     echo "Installing TCC library files..."
     cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
+    LIBTCC1_SRC=$(find "$TINYCC_SRC" -name "libtcc1.a" | head -n 1)
+    if [ -n "$LIBTCC1_SRC" ]; then
+        mkdir -p "$TINYCC_DEST/lib/tcc"
+        cp -f "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" 2>/dev/null || true
+    else
+        echo "WARNING: libtcc1.a not found during build; CLI may fail"
+    fi
     cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
     
     echo "TinyCC tcc executable and support files installed to $TINYCC_DEST"
@@ -116,8 +131,10 @@ if [ -d "$TINYCC_SRC" ]; then
     echo "=== End TinyCC preprocessing test ==="
     echo ""
     
-    # remove tinycc source
-    rm -rf "${TINYCC_SRC}"
+    # remove tinycc source if we unpacked it
+    if [ "$USE_LOCAL" -eq 0 ]; then
+        rm -rf "${TINYCC_SRC}"
+    fi
 else
     echo "Error: tinycc source directory $TINYCC_SRC does not exist."
     exit 1
