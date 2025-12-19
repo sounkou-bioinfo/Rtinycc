@@ -13,6 +13,13 @@ AR=`"${R_HOME}/bin/R" CMD config AR`
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
 TINYCC_SRC="${THISDir}/src/tinycc"
 TINYCC_DEST="${THISDir}/inst/tinycc"
+if [ -d "$TINYCC_DEST" ]; then
+    echo "Removing existing tinycc installation at $TINYCC_DEST ..." >> config.log
+    rm -rf "$TINYCC_DEST"
+else 
+    mkdir -p "$TINYCC_DEST"
+    echo "Created tinycc installation directory at $TINYCC_DEST" >> config.log
+fi
 # Build TinyCC
 echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
 "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack

@@ -5,16 +5,6 @@
 PKGNAME := $(shell sed -n 's/Package: *\([^ ]*\)/\1/p' DESCRIPTION)
 PKGVERS := $(shell sed -n 's/Version: *\([^ ]*\)/\1/p' DESCRIPTION)
 
-FLATBUF_SRC := tools/flatbuf
-FLATBUF_DST := inst/go/vendor/github.com/apache/arrow/go/v18/arrow/internal/flatbuf
-
-restore-flatbuf:
-	@if [ -d "$(FLATBUF_SRC)" ] && [ ! -d "$(FLATBUF_DST)" ]; then \
-	  echo "Restoring flatbuf files to $(FLATBUF_DST)"; \
-	  mkdir -p "$(FLATBUF_DST)"; \
-	  cp -r "$(FLATBUF_SRC)"/* "$(FLATBUF_DST)/"; \
-	fi
-
 
 all: check
 
@@ -35,8 +25,11 @@ install_deps:
 
 install: build
 	R CMD INSTALL $(PKGNAME)_$(PKGVERS).tar.gz
-install2: restore-flatbuf
+install2:
 	R CMD INSTALL --no-configure .
+
+install3:
+	R CMD INSTALL .
 clean:
 	@rm -rf $(PKGNAME)_$(PKGVERS).tar.gz $(PKGNAME).Rcheck
 
