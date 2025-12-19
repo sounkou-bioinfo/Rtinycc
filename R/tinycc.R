@@ -3,7 +3,7 @@
 #' @return Address as numeric
 #' @export
 get_external_ptr_addr <- function(ptr) {
-  .Call("RC_get_external_ptr_addr", ptr)
+  .Call(RC_get_external_ptr_addr, ptr)
 }
 #' TinyCC paths
 #'

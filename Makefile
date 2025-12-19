@@ -11,7 +11,7 @@ all: check
 
 
 rd:
-	R -e 'roxygen2::roxygenize(".")'
+	R -e 'roxygen2::roxygenize(load_code = "source")'
 build:  install_deps
 	R CMD build .
 
