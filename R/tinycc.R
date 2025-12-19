@@ -1,3 +1,10 @@
+#' Get the address of an external pointer
+#' @param ptr External pointer
+#' @return Address as numeric
+#' @export
+get_external_ptr_addr <- function(ptr) {
+  .Call("RC_get_external_ptr_addr", ptr)
+}
 #' TinyCC paths
 #'
 #' Helpers to locate the bundled tinycc installation after the package is installed.
@@ -33,7 +40,9 @@ tcc_cli <- function() {
   exe <- if (.Platform$OS.type == "windows") "tcc.exe" else "tcc"
   candidates <- c(file.path(tcc_bin_path(), exe), file.path(tcc_prefix(), exe))
   existing <- candidates[file.exists(candidates)]
-  if (length(existing)) return(existing[[1L]])
+  if (length(existing)) {
+    return(existing[[1L]])
+  }
   candidates[[1L]]
 }
 
@@ -58,11 +67,12 @@ tcc_include_paths <- function() {
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
   switch(output,
-         memory = 1L,  # TCC_OUTPUT_MEMORY
-         obj = 3L,     # TCC_OUTPUT_OBJ
-         dll = 4L,     # TCC_OUTPUT_DLL
-         exe = 2L,     # TCC_OUTPUT_EXE
-         preprocess = 5L) # TCC_OUTPUT_PREPROCESS
+    memory = 1L, # TCC_OUTPUT_MEMORY
+    obj = 3L, # TCC_OUTPUT_OBJ
+    dll = 4L, # TCC_OUTPUT_DLL
+    exe = 2L, # TCC_OUTPUT_EXE
+    preprocess = 5L
+  ) # TCC_OUTPUT_PREPROCESS
 }
 
 check_cli_exists <- function() {
@@ -85,9 +95,11 @@ check_cli_exists <- function() {
 tcc_state <- function(output = c("memory", "obj", "dll", "exe", "preprocess"),
                       include_path = tcc_include_paths(),
                       lib_path = tcc_lib_paths()) {
-  .Call(RC_libtcc_state_new, normalizePath(lib_path, winslash = "/", mustWork = FALSE),
-        normalizePath(include_path, winslash = "/", mustWork = FALSE),
-        tcc_output_type(output))
+  .Call(
+    RC_libtcc_state_new, normalizePath(lib_path, winslash = "/", mustWork = FALSE),
+    normalizePath(include_path, winslash = "/", mustWork = FALSE),
+    tcc_output_type(output)
+  )
 }
 
 #' Add a source file to a libtcc state
