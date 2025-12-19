@@ -1,4 +1,5 @@
 library(tinytest)
+library(Rtinycc)
 
 tcc_dir <- tcc_prefix()
 expect_true(
@@ -14,7 +15,10 @@ state <- tcc_state(output = "memory")
 code <- "int forty_two(){ return 42; }"
 expect_equal(tcc_compile_string(state, code), 0L)
 expect_equal(tcc_relocate(state), 0L)
-expect_equal(tcc_call_symbol(state, "forty_two"), 42L)
+expect_equal(tcc_call_symbol_int(state, "forty_two"), 42L)
+sym_ptr <- tcc_get_symbol(state, "forty_two")
+expect_true(inherits(sym_ptr, "tcc_symbol"))
+expect_true(tcc_symbol_is_valid(sym_ptr))
 
 # CLI compile to object
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")

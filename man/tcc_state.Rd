@@ -6,16 +6,16 @@
 \usage{
 tcc_state(
   output = c("memory", "obj", "dll", "exe", "preprocess"),
-  include_path = tcc_include_path(),
-  lib_path = tcc_lib_path()
+  include_path = tcc_include_paths(),
+  lib_path = tcc_lib_paths()
 )
 }
 \arguments{
 \item{output}{Output type: one of "memory", "obj", "dll", "exe", "preprocess".}
 
-\item{include_path}{Path to headers; defaults to the bundled include dir.}
+\item{include_path}{Path(s) to headers; defaults to the bundled include dirs.}
 
-\item{lib_path}{Path to libraries; defaults to the bundled lib dir.}
+\item{lib_path}{Path(s) to libraries; defaults to the bundled lib dirs (lib and lib/tcc).}
 }
 \value{
 An external pointer of class \code{tcc_state}.

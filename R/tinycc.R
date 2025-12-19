@@ -116,13 +116,30 @@ tcc_relocate <- function(state) {
   .Call(RC_libtcc_relocate, state)
 }
 
-#' Call a zero-argument symbol from a libtcc state
+#' Get a symbol pointer from a libtcc state
+#' @param state A `tcc_state`.
+#' @param name Symbol name to look up.
+#' @return External pointer of class `tcc_symbol`.
+#' @export
+tcc_get_symbol <- function(state, name) {
+  .Call(RC_libtcc_get_symbol, state, name)
+}
+
+#' Call a zero-argument symbol returning int from a libtcc state
 #' @param state A `tcc_state`.
 #' @param name Symbol name to call.
 #' @return Integer return value from the symbol.
 #' @export
-tcc_call_symbol <- function(state, name) {
+tcc_call_symbol_int <- function(state, name) {
   .Call(RC_libtcc_call_symbol, state, name)
+}
+
+#' Check if a tcc_symbol external pointer is valid
+#' @param ptr External pointer from `tcc_get_symbol()`.
+#' @return TRUE if the pointer address is non-null, FALSE otherwise.
+#' @export
+tcc_symbol_is_valid <- function(ptr) {
+  .Call(RC_libtcc_ptr_valid, ptr)
 }
 
 #' Run the tinycc CLI

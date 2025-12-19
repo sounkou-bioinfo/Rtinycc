@@ -3,6 +3,7 @@
 \name{tcc_prefix}
 \alias{tcc_prefix}
 \alias{tcc_lib_path}
+\alias{tcc_lib_paths}
 \alias{tcc_include_path}
 \alias{tcc_bin_path}
 \alias{tcc_cli}
@@ -11,6 +12,8 @@
 tcc_prefix()
 
 tcc_lib_path()
+
+tcc_lib_paths()
 
 tcc_include_path()
 

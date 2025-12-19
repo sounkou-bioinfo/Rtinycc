@@ -109,7 +109,9 @@ SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name) {
     if (!fn) {
         Rf_error("symbol '%s' not found", sym);
     }
-    int (*callable)(void) = (int (*)(void)) fn;
+    /* Cast through an integer type to avoid pedantic warnings on some compilers */
+    uintptr_t addr = (uintptr_t) fn;
+    int (*callable)(void) = (int (*)(void)) addr;
     return Rf_ScalarInteger(callable());
 }
 
@@ -124,4 +126,12 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_symbol"));
     UNPROTECT(1);
     return ptr;
+}
+
+SEXP RC_libtcc_ptr_valid(SEXP ptr) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("expected an external pointer");
+    }
+    void *p = R_ExternalPtrAddr(ptr);
+    return Rf_ScalarLogical(p != NULL);
 }
