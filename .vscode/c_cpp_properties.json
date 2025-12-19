@@ -6,8 +6,7 @@
                 "/usr/share/R/include/**",
                 "${workspaceFolder}/inst/libffi/include/**",
                 "${workspaceFolder}/inst/tinycc/include/**",
-                "${workspaceFolder}/src/**",
-                "/usr/local/lib/R/site-library/RBCFLib/include/**"
+                "${workspaceFolder}/src/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

@@ -1,0 +1,4 @@
+SRC = $(CURDIR)
+TINYCC_DIR = $(SRC)/../tinycc
+PKG_CFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
+PKG_LIBS = -L$(TINYCC_DIR)/libtcc.a
