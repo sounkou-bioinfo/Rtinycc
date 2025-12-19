@@ -34,13 +34,15 @@ remotes::install_github("sounkou-bioinfo/Rtinycc")
 ```{r}
 library(Rtinycc)
 tcc_dir <- tcc_prefix()
-# CLI compile to object
+# CLI compile to executable
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
-out <- tempfile(fileext = ".o")
-inc_args <- as.character(paste0("-I", tcc_include_paths()))
-status <- tcc_run_cli(c(inc_args, "-c", src, "-o", out))
+exe <- tempfile(fileext = if (.Platform$OS.type == "windows") ".exe" else "")
+inc_args <- paste0("-I", tcc_include_paths())
+lib_args <- paste0("-L", tcc_lib_paths())
+status <- tcc_run_cli(c("-B", tcc_dir, inc_args, lib_args, src, "-o", exe))
 status
-system2(out, stdout = TRUE)
+Sys.chmod(exe, mode = "0755")
+system2(exe, stdout = TRUE)
 ```
 ### In memory using libtcc
 

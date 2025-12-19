@@ -28,19 +28,17 @@ remotes::install_github("sounkou-bioinfo/Rtinycc")
 ``` r
 library(Rtinycc)
 tcc_dir <- tcc_prefix()
-# CLI compile to object
+# CLI compile to executable
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
-out <- tempfile(fileext = ".o")
-inc_args <- as.character(paste0("-I", tcc_include_paths()))
-status <- tcc_run_cli(c(inc_args, "-c", src, "-o", out))
+exe <- tempfile(fileext = if (.Platform$OS.type == "windows") ".exe" else "")
+inc_args <- paste0("-I", tcc_include_paths())
+lib_args <- paste0("-L", tcc_lib_paths())
+status <- tcc_run_cli(c("-B", tcc_dir, inc_args, lib_args, src, "-o", exe))
 status
 #> [1] 0
-system2(out, stdout = TRUE)
-#> Warning in system2(out, stdout = TRUE): running command
-#> ''/tmp/RtmpabtLJC/file1169f264373f3.o'' had status 126
-#> character(0)
-#> attr(,"status")
-#> [1] 126
+Sys.chmod(exe, mode = "0755")
+system2(exe, stdout = TRUE)
+#> [1] "42"
 ```
 
 ### In memory using libtcc
@@ -56,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x62153d600000>
+#> <pointer: 0x55d4e4682000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
