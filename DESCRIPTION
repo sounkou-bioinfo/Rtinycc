@@ -14,6 +14,7 @@ License: GPL (>= 3)
 Suggests:
     tinytest
 SystemRequirements: GNU make
+OS_type: unix
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
