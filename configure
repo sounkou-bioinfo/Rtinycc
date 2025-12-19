@@ -3,7 +3,8 @@
 # configure script to build and install libffi to inst/libffi for Unix
 set -x
 
-> config.log
+mkdir -p "$THISDir"
+> "$THISDir/config.log"
 THISDir=`dirname $0`
 THISDir=`realpath ${THISDir}`
 MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
@@ -13,22 +14,22 @@ AR=`"${R_HOME}/bin/R" CMD config AR`
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
 TINYCC_SRC="${THISDir}/src/tinycc"
 
-echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> "$THISDir/config.log"
 "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
 
 TINYCC_DEST="${THISDir}/inst/tinycc"
 if [ -d "$TINYCC_DEST" ]; then
-    echo "Removing existing tinycc installation at $TINYCC_DEST ..." >> config.log
+    echo "Removing existing tinycc installation at $TINYCC_DEST ..." >> "$THISDir/config.log"
     rm -rf "$TINYCC_DEST"
 else 
     mkdir -p "$TINYCC_DEST"
-    echo "Created tinycc installation directory at $TINYCC_DEST" >> config.log
+    echo "Created tinycc installation directory at $TINYCC_DEST" >> "$THISDir/config.log"
 fi
 # Build TinyCC
 if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
     echo "$PWD"
-    echo "Configuring and building tinycc ..." >> config.log
+    echo "Configuring and building tinycc ..." >> "$THISDir/config.log"
     
     # Configure TinyCC
     # Note: TinyCC's configure is simpler than autotools
@@ -40,22 +41,22 @@ if [ -d "$TINYCC_SRC" ]; then
     mkdir -p "$TINYCC_DEST/lib"
     mkdir -p "$TINYCC_DEST/include"
     
-    echo "Running make (shared + static libtcc) ..." >> config.log
+    echo "Running make (shared + static libtcc) ..." >> "$THISDir/config.log"
     # Detect platform for shared library extension
     SHLIB=libtcc.so
     if [ "$(uname)" = "Darwin" ]; then
         SHLIB=libtcc.dylib
     fi
-    $MAKE CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc >> config.log 2>&1 || { echo "tinycc make failed" >> config.log; exit 1; }
+    $MAKE CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc >> "$THISDir/config.log" 2>&1 || { echo "tinycc make failed" >> "$THISDir/config.log"; exit 1; }
     
-    echo "Running make install ..." >> config.log
-    $MAKE install >> config.log 2>&1
+    echo "Running make install ..." >> "$THISDir/config.log"
+    $MAKE install >> "$THISDir/config.log" 2>&1
 
     # Ensure runtime library is installed (needed by CLI and libtcc)
     LIBTCC1_SRC=$(find "$TINYCC_SRC" -name 'libtcc1.a' | head -n 1)
     if [ -n "$LIBTCC1_SRC" ]; then
         mkdir -p "$TINYCC_DEST/lib/tcc"
-        cp "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" >> config.log 2>&1 || true
+        cp "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" >> "$THISDir/config.log" 2>&1 || true
     else
         echo "WARNING: libtcc1.a not found during build; CLI may fail" >> config.log
     fi
@@ -63,124 +64,33 @@ if [ -d "$TINYCC_SRC" ]; then
     for so in "$TINYCC_SRC/libtcc.so" "$TINYCC_SRC/libtcc.dylib"; do
         if [ -f "$so" ]; then
             mkdir -p "$TINYCC_DEST/lib"
-            cp "$so" "$TINYCC_DEST/lib/" >> config.log 2>&1 || true
+            cp "$so" "$TINYCC_DEST/lib/" >> "$THISDir/config.log" 2>&1 || true
         fi
     done
     
-    echo "tinycc built and installed to $TINYCC_DEST" >> config.log
+    echo "tinycc built and installed to $TINYCC_DEST" >> "$THISDir/config.log"
     
-    # Test TinyCC preprocessing with difficult_structs.h
-    cd "${THISDir}"
-    echo "" >> config.log
-    echo "=== Testing TinyCC preprocessing ===" >> config.log
-    TCC_BIN="${TINYCC_DEST}/bin/tcc"
-    TEST_HEADER="${THISDir}/inst/extdata/difficult_structs.h"
-    
-    if [ -f "$TCC_BIN" ] && [ -f "$TEST_HEADER" ]; then
-        echo "TinyCC binary: $TCC_BIN" >> config.log
-        echo "TinyCC binary size: $(wc -c < "$TCC_BIN") bytes" >> config.log
-        echo "TinyCC binary permissions: $(ls -l "$TCC_BIN")" >> config.log
-        echo "Test header: $TEST_HEADER" >> config.log
-        
-        # Check system info
-        echo "System info: $(uname -a)" >> config.log
-        if [ -f /etc/os-release ]; then
-            echo "OS: $(grep PRETTY_NAME /etc/os-release)" >> config.log
-        fi
-        
-        # Check glibc version
-        if [ -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
-            echo "glibc version: $(/lib/x86_64-linux-gnu/libc.so.6 | head -1)" >> config.log
-        elif command -v ldd >/dev/null 2>&1; then
-            echo "glibc version: $(ldd --version | head -1)" >> config.log
-        fi
-        
-        # Get TinyCC version
-        echo "TinyCC version:" >> config.log
-        "$TCC_BIN" -v 2>&1 | head -1 >> config.log
-        
-        # Check TinyCC's include paths
-        echo "TinyCC config paths:" >> config.log
-        "$TCC_BIN" -print-search-dirs >> config.log 2>&1 || echo "Could not get TCC search dirs" >> config.log
-        
-        # Test preprocessing with timeout and capture exit code
-        TMP_OUT=$(mktemp)
-        TMP_ERR=$(mktemp)
-        echo "Running: $TCC_BIN -E $TEST_HEADER -o $TMP_OUT" >> config.log
-        
-        # Use timeout if available (10 seconds should be more than enough)
-        if command -v timeout >/dev/null 2>&1; then
-            timeout 10s "$TCC_BIN" -E -v "$TEST_HEADER" -o "$TMP_OUT" > "$TMP_ERR" 2>&1
-            TCC_EXIT=$?
-        else
-            "$TCC_BIN" -E -v "$TEST_HEADER" -o "$TMP_OUT" > "$TMP_ERR" 2>&1
-            TCC_EXIT=$?
-        fi
-        
-        echo "TinyCC exit code: $TCC_EXIT" >> config.log
-        
-        if [ "$TCC_EXIT" -eq 124 ]; then
-            echo "ERROR: TinyCC preprocessing TIMED OUT after 10 seconds" >> config.log
-            echo "This suggests TinyCC hangs on this system" >> config.log
-        elif [ "$TCC_EXIT" -eq 139 ]; then
-            echo "ERROR: TinyCC SEGMENTATION FAULT (exit 139)" >> config.log
-            echo "This suggests TinyCC crashes on this system" >> config.log
-        elif [ "$TCC_EXIT" -ne 0 ]; then
-            echo "ERROR: TinyCC preprocessing failed with exit code $TCC_EXIT" >> config.log
-        fi
-        
-        # Log stderr output
-        if [ -s "$TMP_ERR" ]; then
-            echo "TinyCC stderr output:" >> config.log
-            cat "$TMP_ERR" >> config.log
-        fi
-        
-        if [ -f "$TMP_OUT" ]; then
-            OUTPUT_SIZE=$(wc -c < "$TMP_OUT" 2>/dev/null || echo 0)
-            OUTPUT_LINES=$(wc -l < "$TMP_OUT" 2>/dev/null || echo 0)
-            echo "Preprocessing output: $OUTPUT_SIZE bytes, $OUTPUT_LINES lines" >> config.log
-            
-            # Check if output is suspiciously small
-            if [ "$OUTPUT_SIZE" -lt 5000 ]; then
-                echo "WARNING: Preprocessed output is suspiciously small ($OUTPUT_SIZE bytes)" >> config.log
-                echo "This may indicate TinyCC crashed or hung during preprocessing" >> config.log
-                echo "Last 50 lines of preprocessed output:" >> config.log
-                tail -50 "$TMP_OUT" >> config.log
-            else
-                echo "Preprocessing appears successful (output size is reasonable)" >> config.log
-            fi
-        else
-            echo "ERROR: No output file was created by TinyCC" >> config.log
-        fi
-        
-        rm -f "$TMP_OUT" "$TMP_ERR"
-    else
-        echo "Cannot test TinyCC: binary or test header not found" >> config.log
-        [ ! -f "$TCC_BIN" ] && echo "  TCC binary missing: $TCC_BIN" >> config.log
-        [ ! -f "$TEST_HEADER" ] && echo "  Test header missing: $TEST_HEADER" >> config.log
-    fi
-    echo "=== End TinyCC preprocessing test ===" >> config.log
+    # Always remove TCC source after build for R CMD check complains
     rm -rf "$TINYCC_SRC" || true
-    echo "" >> config.log
 else
     echo "Error: tinycc source directory $TINYCC_SRC does not exist."
     exit 1
 fi
-cat config.log
+cat "$THISDir/config.log"
 
 # Run minimal TCC JIT test (no R involved)
-echo "" >> config.log
-echo "=== Running minimal TCC JIT test (tools/tcc_minimal_test.c) ===" >> config.log
+echo "" >> "$THISDir/config.log"
+echo "=== Running minimal TCC JIT test (tools/tcc_minimal_test.c) ===" >> "$THISDir/config.log"
 if [ -x "${THISDir}/tools/run_tcc_minimal_test.sh" ]; then
-    (cd "${THISDir}/tools" && ./run_tcc_minimal_test.sh >> ../config.log 2>&1)
+    (cd "${THISDir}/tools" && ./run_tcc_minimal_test.sh >> "$THISDir/config.log" 2>&1)
     TCC_MINIMAL_EXIT=$?
-    echo "Minimal TCC JIT test exit code: $TCC_MINIMAL_EXIT" >> config.log
+    echo "Minimal TCC JIT test exit code: $TCC_MINIMAL_EXIT" >> "$THISDir/config.log"
     if [ "$TCC_MINIMAL_EXIT" -ne 0 ]; then
-        echo "ERROR: Minimal TCC JIT test failed (see above for output)" >> config.log
+        echo "ERROR: Minimal TCC JIT test failed (see above for output)" >> "$THISDir/config.log"
     else
-        echo "Minimal TCC JIT test succeeded" >> config.log
+        echo "Minimal TCC JIT test succeeded" >> "$THISDir/config.log"
     fi
 else
-    echo "Minimal TCC JIT test script not found or not executable" >> config.log
+    echo "Minimal TCC JIT test script not found or not executable" >> "$THISDir/config.log"
 fi
-echo "=== End minimal TCC JIT test ===" >> config.log
+echo "=== End minimal TCC JIT test ===" >> "$THISDir/config.log"
