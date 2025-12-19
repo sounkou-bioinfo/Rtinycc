@@ -1,0 +1,111 @@
+#' TinyCC paths
+#'
+#' Helpers to locate the bundled tinycc installation after the package is installed.
+#' @return A character scalar path.
+#' @export
+tcc_prefix <- function() {
+  system.file("tinycc", package = "Rtinycc")
+}
+
+#' @rdname tcc_prefix
+#' @export
+tcc_lib_path <- function() file.path(tcc_prefix(), "lib")
+
+#' @rdname tcc_prefix
+#' @export
+tcc_include_path <- function() file.path(tcc_prefix(), "include")
+
+#' @rdname tcc_prefix
+#' @export
+tcc_bin_path <- function() file.path(tcc_prefix(), "bin")
+
+#' @rdname tcc_prefix
+#' @export
+tcc_cli <- function() {
+  exe <- if (.Platform$OS.type == "windows") "tcc.exe" else "tcc"
+  candidates <- c(file.path(tcc_bin_path(), exe), file.path(tcc_prefix(), exe))
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing)) return(existing[[1L]])
+  candidates[[1L]]
+}
+
+tcc_output_type <- function(output) {
+  output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
+  switch(output,
+         memory = 1L,  # TCC_OUTPUT_MEMORY
+         obj = 4L,     # TCC_OUTPUT_OBJ
+         dll = 3L,     # TCC_OUTPUT_DLL
+         exe = 2L,     # TCC_OUTPUT_EXE
+         preprocess = 5L) # TCC_OUTPUT_PREPROCESS
+}
+
+check_cli_exists <- function() {
+  path <- tcc_cli()
+  if (!nzchar(path) || !file.exists(path)) {
+    stop("tinycc CLI not found at ", path, call. = FALSE)
+  }
+  path
+}
+
+#' Create a libtcc state
+#'
+#' Initialize a libtcc compilation state, optionally pointing at the bundled include/lib paths.
+#' @param output Output type: one of "memory", "obj", "dll", "exe", "preprocess".
+#' @param include_path Path to headers; defaults to the bundled include dir.
+#' @param lib_path Path to libraries; defaults to the bundled lib dir.
+#' @return An external pointer of class `tcc_state`.
+#' @export
+tcc_state <- function(output = c("memory", "obj", "dll", "exe", "preprocess"),
+                      include_path = tcc_include_path(),
+                      lib_path = tcc_lib_path()) {
+  .Call(RC_libtcc_state_new, normalizePath(lib_path, winslash = "/", mustWork = FALSE),
+        normalizePath(include_path, winslash = "/", mustWork = FALSE),
+        tcc_output_type(output))
+}
+
+#' Add a source file to a libtcc state
+#' @param state A `tcc_state`.
+#' @param path Path to a C source file.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_add_file <- function(state, path) {
+  .Call(RC_libtcc_add_file, state, normalizePath(path, winslash = "/", mustWork = TRUE))
+}
+
+#' Compile C code from a character string
+#' @param state A `tcc_state`.
+#' @param code C source code string.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_compile_string <- function(state, code) {
+  .Call(RC_libtcc_compile_string, state, code)
+}
+
+#' Relocate compiled code
+#' @param state A `tcc_state`.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_relocate <- function(state) {
+  .Call(RC_libtcc_relocate, state)
+}
+
+#' Call a zero-argument symbol from a libtcc state
+#' @param state A `tcc_state`.
+#' @param name Symbol name to call.
+#' @return Integer return value from the symbol.
+#' @export
+tcc_call_symbol <- function(state, name) {
+  .Call(RC_libtcc_call_symbol, state, name)
+}
+
+#' Run the tinycc CLI
+#' @param args Character vector of CLI arguments (e.g., `c("-c", file, "-o", out)`).
+#' @param tcc_path Optional path to the `tcc` binary; defaults to the bundled CLI.
+#' @return Integer status from `system2()`.
+#' @export
+tcc_run_cli <- function(args = character(), tcc_path = check_cli_exists()) {
+  tcc_path <- normalizePath(tcc_path, winslash = "/", mustWork = TRUE)
+  args <- as.character(args)
+  res <- system2(tcc_path, args)
+  as.integer(res)
+}

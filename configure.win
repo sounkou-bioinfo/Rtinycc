@@ -41,10 +41,8 @@ if [ -d "$TINYCC_SRC" ]; then
     echo "Generating tccdefs_.h ..."
     "$MAKE" tccdefs_.h || { echo "Failed to generate tccdefs_.h" >&2; exit 1; }
 
-    echo "Building tcc executable only ..."
-    # Build just the tcc executable to avoid linking the full libtcc DLL which
-    # can fail under some Rtools/linker combinations. This still produces the
-    # command-line compiler used for preprocessing headers.
+    echo "Building libtcc and tcc executable ..."
+    "$MAKE" libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
     "$MAKE" tcc || "$MAKE" tcc.exe || { echo "Failed to build tcc executable" >&2; exit 1; }
 
     # On Windows, TCC searches for include/lib directories relative to the executable location
@@ -68,6 +66,7 @@ if [ -d "$TINYCC_SRC" ]; then
     
     # Copy TCC's library files (required for linking on Windows)
     echo "Installing TCC library files..."
+    cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
     cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
     
     echo "TinyCC tcc executable and support files installed to $TINYCC_DEST"
