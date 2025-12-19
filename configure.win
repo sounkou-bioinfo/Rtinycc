@@ -1,6 +1,6 @@
 #!/bin/sh
 # we are on rtools so we have pkg-config etc
-
+set -ex
 # Get R's build configuration
 MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
 CC=`"${R_HOME}/bin/R" CMD config CC`
@@ -12,15 +12,9 @@ THISDir=$(dirname "$0")
 THISDir=$(cd "$THISDir" && pwd)
 LOCAL_TINYCC="${THISDir}/tinycc"
 TINYCC_SRC="${THISDir}/src/tinycc"
-USE_LOCAL=0
-if [ -d "$LOCAL_TINYCC" ]; then
-    TINYCC_SRC="$LOCAL_TINYCC"
-    USE_LOCAL=1
-    echo "Using existing tinycc source at $LOCAL_TINYCC"
-else
-    echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
-    "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
-fi
+
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
+"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
 TINYCC_DEST="${THISDir}/inst/tinycc"
 echo "Package source directory: $THISDir"
 echo "TinyCC will be installed to: $TINYCC_DEST"
@@ -130,12 +124,6 @@ if [ -d "$TINYCC_SRC" ]; then
         echo "Cannot test TinyCC: binary or test header not found"
     fi
     echo "=== End TinyCC preprocessing test ==="
-    echo ""
-    
-    # remove tinycc source if we unpacked it
-    if [ "$USE_LOCAL" -eq 0 ]; then
-        rm -rf "${TINYCC_SRC}"
-    fi
 else
     echo "Error: tinycc source directory $TINYCC_SRC does not exist."
     exit 1

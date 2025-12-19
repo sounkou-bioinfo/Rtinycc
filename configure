@@ -1,7 +1,7 @@
 
 #!/bin/sh
 # configure script to build and install libffi to inst/libffi for Unix
-set -e
+set -ex
 
 > config.log
 THISDir=`dirname $0`
@@ -11,17 +11,11 @@ CC=`"${R_HOME}/bin/R" CMD config CC`
 CC=$(echo "${CC}" | awk '{print $1}')
 AR=`"${R_HOME}/bin/R" CMD config AR`
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
-LOCAL_TINYCC="${THISDir}/tinycc"
 TINYCC_SRC="${THISDir}/src/tinycc"
-USE_LOCAL=0
-if [ -d "$LOCAL_TINYCC" ]; then
-    TINYCC_SRC="$LOCAL_TINYCC"
-    USE_LOCAL=1
-    echo "Using existing tinycc source at $LOCAL_TINYCC" >> config.log
-else
-    echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
-    "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
-fi
+
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
+"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+
 TINYCC_DEST="${THISDir}/inst/tinycc"
 if [ -d "$TINYCC_DEST" ]; then
     echo "Removing existing tinycc installation at $TINYCC_DEST ..." >> config.log
@@ -69,9 +63,6 @@ if [ -d "$TINYCC_SRC" ]; then
     done
     
     echo "tinycc built and installed to $TINYCC_DEST" >> config.log
-    if [ "$USE_LOCAL" -eq 0 ]; then
-        rm -rf "$TINYCC_SRC"
-    fi
     
     # Test TinyCC preprocessing with difficult_structs.h
     cd "${THISDir}"
