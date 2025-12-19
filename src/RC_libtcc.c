@@ -30,7 +30,7 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     }
 
     /* Route libtcc diagnostics through R */
-    tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) REprintf);
+    // tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) REprintf);
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
