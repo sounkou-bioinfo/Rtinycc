@@ -7,7 +7,9 @@ Authors@R:c(
     person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
     comment = "Tinycc Compiler (tinycc) authors and COPYRIGHT holders")
     )
-Description: What the package does (one paragraph).
+Description: Builds TinyCC (Tiny C Compiler) cli and library for R package use.
+    This package compiles TinyCC from source code and provides R functions to interact with the TinyCC compiler.
+    TinyCC is a small and fast C compiler that can be used for various purposes, including preprocessing of headers and just-in-time compilation.
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
