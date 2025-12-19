@@ -18,3 +18,4 @@ URL: https://sounkou-bioinfo.github.io/Rtinycc
 BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues
 Suggests:
     tinytest
+SystemRequirements: GNU make
