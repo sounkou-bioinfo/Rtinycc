@@ -8,3 +8,7 @@ README.html
 docs
 Rtinycc*tar.gz
 Rtinycc.Rcheck/*
+inst/tinycc
+# tinycc
+src/tinycc
+inst/tinycc

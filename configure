@@ -1,0 +1,139 @@
+
+#!/bin/sh
+# configure script to build and install libffi to inst/libffi for Unix
+set -e
+
+> config.log
+THISDir=`dirname $0`
+THISDir=`realpath ${THISDir}`
+MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
+CC=`"${R_HOME}/bin/R" CMD config CC`
+CC=$(echo "${CC}" | awk '{print $1}')
+AR=`"${R_HOME}/bin/R" CMD config AR`
+RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
+TINYCC_SRC="${THISDir}/src/tinycc"
+TINYCC_DEST="${THISDir}/inst/tinycc"
+# Build TinyCC
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> config.log
+"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+if [ -d "$TINYCC_SRC" ]; then
+    cd "$TINYCC_SRC"
+    echo "$PWD"
+    echo "Configuring and building tinycc ..." >> config.log
+    
+    # Configure TinyCC
+    # Note: TinyCC's configure is simpler than autotools
+    ./configure --prefix="$TINYCC_DEST" \
+        --cc="$CC" \
+        --ar="$AR" \
+        --extra-cflags="-fPIC"
+    
+    mkdir -p "$TINYCC_DEST/lib"
+    mkdir -p "$TINYCC_DEST/include"
+    
+    echo "Running make ..." >> config.log
+    $MAKE >> config.log 2>&1
+    
+    echo "Running make install ..." >> config.log
+    $MAKE install >> config.log 2>&1
+    
+    echo "tinycc built and installed to $TINYCC_DEST" >> config.log
+    rm -rf "$TINYCC_SRC"
+    
+    # Test TinyCC preprocessing with difficult_structs.h
+    cd "${THISDir}"
+    echo "" >> config.log
+    echo "=== Testing TinyCC preprocessing ===" >> config.log
+    TCC_BIN="${TINYCC_DEST}/bin/tcc"
+    TEST_HEADER="${THISDir}/inst/extdata/difficult_structs.h"
+    
+    if [ -f "$TCC_BIN" ] && [ -f "$TEST_HEADER" ]; then
+        echo "TinyCC binary: $TCC_BIN" >> config.log
+        echo "TinyCC binary size: $(wc -c < "$TCC_BIN") bytes" >> config.log
+        echo "TinyCC binary permissions: $(ls -l "$TCC_BIN")" >> config.log
+        echo "Test header: $TEST_HEADER" >> config.log
+        
+        # Check system info
+        echo "System info: $(uname -a)" >> config.log
+        if [ -f /etc/os-release ]; then
+            echo "OS: $(grep PRETTY_NAME /etc/os-release)" >> config.log
+        fi
+        
+        # Check glibc version
+        if [ -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
+            echo "glibc version: $(/lib/x86_64-linux-gnu/libc.so.6 | head -1)" >> config.log
+        elif command -v ldd >/dev/null 2>&1; then
+            echo "glibc version: $(ldd --version | head -1)" >> config.log
+        fi
+        
+        # Get TinyCC version
+        echo "TinyCC version:" >> config.log
+        "$TCC_BIN" -v 2>&1 | head -1 >> config.log
+        
+        # Check TinyCC's include paths
+        echo "TinyCC config paths:" >> config.log
+        "$TCC_BIN" -print-search-dirs >> config.log 2>&1 || echo "Could not get TCC search dirs" >> config.log
+        
+        # Test preprocessing with timeout and capture exit code
+        TMP_OUT=$(mktemp)
+        TMP_ERR=$(mktemp)
+        echo "Running: $TCC_BIN -E $TEST_HEADER -o $TMP_OUT" >> config.log
+        
+        # Use timeout if available (10 seconds should be more than enough)
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 10s "$TCC_BIN" -E -v "$TEST_HEADER" -o "$TMP_OUT" > "$TMP_ERR" 2>&1
+            TCC_EXIT=$?
+        else
+            "$TCC_BIN" -E -v "$TEST_HEADER" -o "$TMP_OUT" > "$TMP_ERR" 2>&1
+            TCC_EXIT=$?
+        fi
+        
+        echo "TinyCC exit code: $TCC_EXIT" >> config.log
+        
+        if [ "$TCC_EXIT" -eq 124 ]; then
+            echo "ERROR: TinyCC preprocessing TIMED OUT after 10 seconds" >> config.log
+            echo "This suggests TinyCC hangs on this system" >> config.log
+        elif [ "$TCC_EXIT" -eq 139 ]; then
+            echo "ERROR: TinyCC SEGMENTATION FAULT (exit 139)" >> config.log
+            echo "This suggests TinyCC crashes on this system" >> config.log
+        elif [ "$TCC_EXIT" -ne 0 ]; then
+            echo "ERROR: TinyCC preprocessing failed with exit code $TCC_EXIT" >> config.log
+        fi
+        
+        # Log stderr output
+        if [ -s "$TMP_ERR" ]; then
+            echo "TinyCC stderr output:" >> config.log
+            cat "$TMP_ERR" >> config.log
+        fi
+        
+        if [ -f "$TMP_OUT" ]; then
+            OUTPUT_SIZE=$(wc -c < "$TMP_OUT" 2>/dev/null || echo 0)
+            OUTPUT_LINES=$(wc -l < "$TMP_OUT" 2>/dev/null || echo 0)
+            echo "Preprocessing output: $OUTPUT_SIZE bytes, $OUTPUT_LINES lines" >> config.log
+            
+            # Check if output is suspiciously small
+            if [ "$OUTPUT_SIZE" -lt 5000 ]; then
+                echo "WARNING: Preprocessed output is suspiciously small ($OUTPUT_SIZE bytes)" >> config.log
+                echo "This may indicate TinyCC crashed or hung during preprocessing" >> config.log
+                echo "Last 50 lines of preprocessed output:" >> config.log
+                tail -50 "$TMP_OUT" >> config.log
+            else
+                echo "Preprocessing appears successful (output size is reasonable)" >> config.log
+            fi
+        else
+            echo "ERROR: No output file was created by TinyCC" >> config.log
+        fi
+        
+        rm -f "$TMP_OUT" "$TMP_ERR"
+    else
+        echo "Cannot test TinyCC: binary or test header not found" >> config.log
+        [ ! -f "$TCC_BIN" ] && echo "  TCC binary missing: $TCC_BIN" >> config.log
+        [ ! -f "$TEST_HEADER" ] && echo "  Test header missing: $TEST_HEADER" >> config.log
+    fi
+    echo "=== End TinyCC preprocessing test ===" >> config.log
+    echo "" >> config.log
+else
+    echo "Error: tinycc source directory $TINYCC_SRC does not exist."
+    exit 1
+fi
+cat config.log

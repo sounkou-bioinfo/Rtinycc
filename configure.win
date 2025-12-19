@@ -1,0 +1,125 @@
+
+#!/bin/sh
+# we are on rtools so we have pkg-config etc
+
+# Get R's build configuration
+MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
+CC=`"${R_HOME}/bin/R" CMD config CC`
+CC=$(echo "${CC}" | awk '{print $1}')
+AR=`"${R_HOME}/bin/R" CMD config AR`
+
+# Build TinyCC
+THISDir=$(dirname "$0")
+THISDir=$(cd "$THISDir" && pwd)
+TINYCC_SRC="${THISDir}/src/tinycc"
+TINYCC_DEST="${THISDir}/inst/tinycc"
+echo "Package source directory: $THISDir"
+echo "TinyCC will be installed to: $TINYCC_DEST"
+MSYSTEM=MINGW64
+MSYS2_PATH_TYPE=inherit
+CHERE_INVOKING=yes
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
+"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+
+if [ -d "$TINYCC_SRC" ]; then
+    cd "$TINYCC_SRC"
+    echo "Configuring and building tinycc ..."
+    
+    # Configure TinyCC for Windows
+    # TinyCC can be built with mingw/gcc on Windows via Rtools
+    ./configure --prefix="$TINYCC_DEST" \
+        --cc="$CC" \
+        --ar="$AR" \
+        --extra-cflags="-DONE_SOURCE"
+    
+    mkdir -p "$TINYCC_DEST/lib"
+    mkdir -p "$TINYCC_DEST/include"
+    
+    echo "Building c2str helper ..."
+    "$MAKE" c2str.exe || { echo "Failed to build c2str.exe" >&2; exit 1; }
+
+    echo "Generating tccdefs_.h ..."
+    "$MAKE" tccdefs_.h || { echo "Failed to generate tccdefs_.h" >&2; exit 1; }
+
+    echo "Building tcc executable only ..."
+    # Build just the tcc executable to avoid linking the full libtcc DLL which
+    # can fail under some Rtools/linker combinations. This still produces the
+    # command-line compiler used for preprocessing headers.
+    "$MAKE" tcc || "$MAKE" tcc.exe || { echo "Failed to build tcc executable" >&2; exit 1; }
+
+    # On Windows, TCC searches for include/lib directories relative to the executable location
+    # We need tcc.exe to be in the root of tinycc/, not in bin/, so it finds include/ and lib/
+    mkdir -p "$TINYCC_DEST"
+    if [ -f "tcc.exe" ]; then
+        cp -f "tcc.exe" "$TINYCC_DEST/"
+    elif [ -f "tcc" ]; then
+        cp -f "tcc" "$TINYCC_DEST/"
+    else
+        echo "tcc executable not found after build" >&2
+        exit 1
+    fi
+
+    # Copy TCC's include files (required for preprocessing on Windows)
+    echo "Installing TCC include files..."
+    cp -f include/*.h "$TINYCC_DEST/include/" 2>/dev/null || true
+    cp -f tcclib.h "$TINYCC_DEST/include/" 2>/dev/null || true
+    mkdir -p "$TINYCC_DEST/include/winapi"
+    cp -rf win32/include/* "$TINYCC_DEST/include/" 2>/dev/null || true
+    
+    # Copy TCC's library files (required for linking on Windows)
+    echo "Installing TCC library files..."
+    cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
+    
+    echo "TinyCC tcc executable and support files installed to $TINYCC_DEST"
+    #ls -la "$TINYCC_DEST/" "$TINYCC_DEST/include/" "$TINYCC_DEST/lib/" 2>/dev/null || true
+    echo "Verifying tcc.exe exists:"
+    #ls -la "$TINYCC_DEST/tcc.exe" || echo "ERROR: tcc.exe not found at expected location!"
+    
+    # Test TinyCC preprocessing with difficult_structs.h
+    cd "${THISDir}"
+    echo ""
+    echo "=== Testing TinyCC preprocessing ==="
+    TCC_BIN="${TINYCC_DEST}/tcc.exe"
+    TEST_HEADER="${THISDir}/inst/extdata/difficult_structs.h"
+    
+    if [ -f "$TCC_BIN" ] && [ -f "$TEST_HEADER" ]; then
+        echo "TinyCC binary: $TCC_BIN"
+        echo "Test header: $TEST_HEADER"
+        
+        # Get TinyCC version
+        "$TCC_BIN" -v 2>&1 | head -1
+        
+        # Test preprocessing
+        TMP_OUT=$(mktemp)
+        echo "Running: $TCC_BIN -E $TEST_HEADER -o $TMP_OUT"
+        if "$TCC_BIN" -E -v "$TEST_HEADER" -o "$TMP_OUT" 2>&1; then
+            OUTPUT_SIZE=$(wc -c < "$TMP_OUT")
+            OUTPUT_LINES=$(wc -l < "$TMP_OUT")
+            echo "Preprocessing SUCCESS: $OUTPUT_SIZE bytes, $OUTPUT_LINES lines"
+            
+            # Check if output is suspiciously small
+            if [ "$OUTPUT_SIZE" -lt 5000 ]; then
+                echo "WARNING: Preprocessed output is suspiciously small ($OUTPUT_SIZE bytes)"
+                echo "This may indicate TinyCC cannot process system headers properly"
+                echo "Last 20 lines of preprocessed output:"
+                tail -20 "$TMP_OUT"
+            else
+                echo "Preprocessing appears successful (output size is reasonable)"
+            fi
+        else
+            echo "ERROR: TinyCC preprocessing failed"
+            echo "This may cause test failures related to header parsing"
+        fi
+        rm -f "$TMP_OUT"
+    else
+        echo "Cannot test TinyCC: binary or test header not found"
+    fi
+    echo "=== End TinyCC preprocessing test ==="
+    echo ""
+    
+    # remove tinycc source
+    rm -rf "${TINYCC_SRC}"
+else
+    echo "Error: tinycc source directory $TINYCC_SRC does not exist."
+    exit 1
+fi
