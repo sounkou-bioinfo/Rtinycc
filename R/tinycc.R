@@ -29,6 +29,24 @@ tcc_cli <- function() {
   candidates[[1L]]
 }
 
+#' Locate the TinyCC executable
+#'
+#' Returns the platform-specific `tcc` binary path (or `tcc.exe` on Windows), preferring the bundled installation.
+#' @return A character scalar path.
+#' @export
+tcc_path <- function() normalizePath(tcc_cli(), winslash = "/", mustWork = FALSE)
+
+#' TinyCC include search paths
+#'
+#' Returns the include directories used by the bundled TinyCC (top-level include and lib/tcc/include).
+#' @return A character vector of include directories.
+#' @export
+tcc_include_paths <- function() {
+  prefix <- tcc_prefix()
+  paths <- c(file.path(prefix, "include"), file.path(prefix, "lib", "tcc", "include"))
+  normalizePath(paths[file.exists(paths)], winslash = "/", mustWork = FALSE)
+}
+
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
   switch(output,
@@ -40,7 +58,7 @@ tcc_output_type <- function(output) {
 }
 
 check_cli_exists <- function() {
-  path <- tcc_cli()
+  path <- tcc_path()
   if (!nzchar(path) || !file.exists(path)) {
     stop("tinycc CLI not found at ", path, call. = FALSE)
   }
