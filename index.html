@@ -51,7 +51,7 @@
 </h1></div>
 <!-- badges: start -->
 
-<p>We provide a simple R interface to the TinyCC (TCC) compiler including the cli and the libtcc library.</p>
+<p>We provide a simple R interface to the <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a> compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. Right now only basic functionalities are implemented and some warnings remain since libtcc uses printf and other symbols R CMD check does not like.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -73,7 +73,13 @@
 <span><span class="va">inc_args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"-I"</span>, <span class="fu"><a href="reference/tcc_include_paths.html">tcc_include_paths</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">status</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_run_cli.html">tcc_run_cli</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">inc_args</span>, <span class="st">"-c"</span>, <span class="va">src</span>, <span class="st">"-o"</span>, <span class="va">out</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">status</span></span>
-<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/system2.html" class="external-link">system2</a></span><span class="op">(</span><span class="va">out</span>, stdout <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Warning in system2(out, stdout = TRUE): running command</span></span>
+<span><span class="co">#&gt; ''/tmp/RtmpabtLJC/file1169f264373f3.o'' had status 126</span></span>
+<span><span class="co">#&gt; character(0)</span></span>
+<span><span class="co">#&gt; attr(,"status")</span></span>
+<span><span class="co">#&gt; [1] 126</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="in-memory-using-libtcc">In memory using libtcc<a class="anchor" aria-label="anchor" href="#in-memory-using-libtcc"></a>
@@ -89,7 +95,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5d59a24aa000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x62153d600000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
