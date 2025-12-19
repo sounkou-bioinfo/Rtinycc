@@ -1,3 +1,10 @@
 TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
 PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+PKG_LIBS += -Wl,-rpath,@loader_path/../tinycc/lib
+else
+PKG_LIBS += -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
+endif

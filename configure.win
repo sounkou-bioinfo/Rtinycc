@@ -49,8 +49,9 @@ if [ -d "$TINYCC_SRC" ]; then
     echo "Generating tccdefs_.h ..."
     "$MAKE" tccdefs_.h || { echo "Failed to generate tccdefs_.h" >&2; exit 1; }
 
-    echo "Building libtcc and tcc executable ..."
+    echo "Building libtcc (static and dll) and tcc executable ..."
     "$MAKE" libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
+    "$MAKE" libtcc.dll || true
     "$MAKE" tcc || "$MAKE" tcc.exe || { echo "Failed to build tcc executable" >&2; exit 1; }
 
     # On Windows, TCC searches for include/lib directories relative to the executable location
@@ -75,6 +76,7 @@ if [ -d "$TINYCC_SRC" ]; then
     # Copy TCC's library files (required for linking on Windows)
     echo "Installing TCC library files..."
     cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
+    cp -f libtcc.dll "$TINYCC_DEST/bin/" 2>/dev/null || true
     LIBTCC1_SRC=$(find "$TINYCC_SRC" -name "libtcc1.a" | head -n 1)
     if [ -n "$LIBTCC1_SRC" ]; then
         mkdir -p "$TINYCC_DEST/lib/tcc"

@@ -46,8 +46,8 @@ if [ -d "$TINYCC_SRC" ]; then
     mkdir -p "$TINYCC_DEST/lib"
     mkdir -p "$TINYCC_DEST/include"
     
-    echo "Running make ..." >> config.log
-    $MAKE >> config.log 2>&1
+    echo "Running make (shared + static libtcc) ..." >> config.log
+    $MAKE libtcc.a libtcc.so libtcc1.a tcc >> config.log 2>&1 || { echo "tinycc make failed" >> config.log; exit 1; }
     
     echo "Running make install ..." >> config.log
     $MAKE install >> config.log 2>&1
@@ -60,6 +60,13 @@ if [ -d "$TINYCC_SRC" ]; then
     else
         echo "WARNING: libtcc1.a not found during build; CLI may fail" >> config.log
     fi
+    # Copy shared library if built
+    for so in "$TINYCC_SRC/libtcc.so" "$TINYCC_SRC/libtcc.dylib"; do
+        if [ -f "$so" ]; then
+            mkdir -p "$TINYCC_DEST/lib"
+            cp "$so" "$TINYCC_DEST/lib/" >> config.log 2>&1 || true
+        fi
+    done
     
     echo "tinycc built and installed to $TINYCC_DEST" >> config.log
     if [ "$USE_LOCAL" -eq 0 ]; then
