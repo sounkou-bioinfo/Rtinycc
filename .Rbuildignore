@@ -9,3 +9,5 @@ src/*.o
 ^LICENSE\.md$
 ^Rtinycc*tar\.gz$
 ^tinycc/*$
+^\.vscode$
+^Makefile$
