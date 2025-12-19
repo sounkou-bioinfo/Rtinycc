@@ -152,6 +152,17 @@ tcc_symbol_is_valid <- function(ptr) {
 tcc_run_cli <- function(args = character(), tcc_path = check_cli_exists()) {
   tcc_path <- normalizePath(tcc_path, winslash = "/", mustWork = TRUE)
   args <- as.character(args)
-  res <- system2(tcc_path, args)
+  lib_paths <- normalizePath(tcc_lib_paths(), winslash = "/", mustWork = FALSE)
+  env <- character()
+  if (length(lib_paths)) {
+    if (.Platform$OS.type == "windows") {
+      env <- sprintf("PATH=%s", paste(c(lib_paths, Sys.getenv("PATH")), collapse = .Platform$path.sep))
+    } else if (Sys.info()[["sysname"]] == "Darwin") {
+      env <- sprintf("DYLD_LIBRARY_PATH=%s", paste(c(lib_paths, Sys.getenv("DYLD_LIBRARY_PATH")), collapse = ":"))
+    } else {
+      env <- sprintf("LD_LIBRARY_PATH=%s", paste(c(lib_paths, Sys.getenv("LD_LIBRARY_PATH")), collapse = ":"))
+    }
+  }
+  res <- system2(tcc_path, args, env = env)
   as.integer(res)
 }
