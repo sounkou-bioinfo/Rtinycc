@@ -12,6 +12,7 @@ TCC_LIB="../inst/tinycc/lib"
 # Build the minimal test
 "$TCC_BIN" -I"$TCC_INC" -L"$TCC_LIB" -ltcc -o tcc_minimal_test tcc_minimal_test.c
 
-# Run the test with correct library path
+# Set library path for both Linux and macOS
 export LD_LIBRARY_PATH="$TCC_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export DYLD_LIBRARY_PATH="$TCC_LIB${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 ./tcc_minimal_test
