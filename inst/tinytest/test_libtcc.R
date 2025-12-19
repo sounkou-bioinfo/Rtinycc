@@ -1,6 +1,8 @@
 library(tinytest)
 library(Rtinycc)
 
+Sys.setenv(RTINYCC_DEBUG = "1")
+
 tcc_dir <- tcc_prefix()
 expect_true(
   nzchar(tcc_dir) && file.exists(tcc_dir),
