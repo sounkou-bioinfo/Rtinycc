@@ -1,3 +1,1 @@
-# Rtinycc (development version)
-
-* Initial CRAN submission.
+# Rtinycc 0.9000 (development version)

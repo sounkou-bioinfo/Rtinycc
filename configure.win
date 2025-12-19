@@ -47,6 +47,14 @@ if [ -d "$TINYCC_SRC" ]; then
     "$MAKE" CONFIG_static=no libtcc.dll || true
     "$MAKE" tcc || "$MAKE" tcc.exe || { echo "Failed to build tcc executable" >&2; exit 1; }
 
+    # Install built files if present
+    if [ -f libtcc.dll ]; then
+        mkdir -p "$TINYCC_DEST/bin"
+        cp -f libtcc.dll "$TINYCC_DEST/bin/"
+    fi
+    if [ -f tcc.exe ]; then
+        cp -f tcc.exe "$TINYCC_DEST/"
+    fi
     # On Windows, TCC searches for include/lib directories relative to the executable location
     # We need tcc.exe to be in the root of tinycc/, not in bin/, so it finds include/ and lib/
     mkdir -p "$TINYCC_DEST"
