@@ -4,8 +4,8 @@
 
 - [`tcc_add_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_file.md)
   : Add a source file to a libtcc state
-- [`tcc_call_symbol_int()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol_int.md)
-  : Call a zero-argument symbol returning int from a libtcc state
+- [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
+  : Call a zero-argument symbol with a specified return type
 - [`tcc_compile_string()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.md)
   : Compile C code from a character string
 - [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md)
