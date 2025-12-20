@@ -19,6 +19,11 @@ jobs:
           sudo tar -xzf R-4.5-branch.tar.gz -C /
           echo "/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
           echo "R_HOME=/Library/Frameworks/R.framework/Resources" >> $GITHUB_ENV
+      - name: Create /opt/R/arm64 symlinks
+        run: |
+          sudo mkdir -p /opt/R/arm64
+          sudo ln -sf /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/include /opt/R/arm64/include
+          sudo ln -sf /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib /opt/R/arm64/lib
 
       - name: Check R version
         run: |
