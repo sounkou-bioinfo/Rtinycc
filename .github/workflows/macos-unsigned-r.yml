@@ -15,8 +15,8 @@ jobs:
 
       - name: Download unsigned R binary
         run: |
-          curl -LO https://mac.r-project.org/high-sierra/x86_64/R-4.5-branch.tar.gz
-          sudo tar -xzf R-4.5-branch.tar.gz -C /
+          curl -LO https://mac.r-project.org/big-sur/last-success/R-4.5-branch-arm64.tar.xz
+          sudo tar -xJf R-4.5-branch-arm64.tar.xz -C /
           echo "/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
 
       - name: Check R version
