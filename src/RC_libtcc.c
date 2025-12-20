@@ -1,8 +1,9 @@
+#include "libtcc.h"
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Error.h>
 #include <stdint.h>
-#include "libtcc.h"
+
 
 static void RC_tcc_finalizer(SEXP ext) {
     TCCState *s = (TCCState *) R_ExternalPtrAddr(ext);
