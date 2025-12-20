@@ -3,8 +3,7 @@
 # configure script to build and install libffi to inst/libffi for Unix
 set -x
 
-mkdir -p "$THISDir"
-> "$THISDir/config.log"
+
 THISDir=`dirname $0`
 THISDir=`realpath ${THISDir}`
 MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
@@ -13,6 +12,7 @@ CC=$(echo "${CC}" | awk '{print $1}')
 AR=`"${R_HOME}/bin/R" CMD config AR`
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
 TINYCC_SRC="${THISDir}/src/tinycc"
+> "$THISDir/config.log"
 
 echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> "$THISDir/config.log"
 "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
