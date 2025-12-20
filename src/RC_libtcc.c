@@ -89,20 +89,11 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     // print the allignement of s
     Rprintf("[RTINYCC_DEBUG][C] TCCState pointer address: %p\n", (void *)s);
     Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)((uintptr_t)s % 8));
-    const char *src_orig = Rf_translateCharUTF8(STRING_ELT(code, 0));
-    size_t src_len = strlen(src_orig);
-    // Allocate 8-byte aligned buffer for ARM (and always for safety)
-    char *src_aligned = NULL;
-    int align_res = posix_memalign((void **)&src_aligned, 8, src_len + 1);
-    if (align_res != 0 || !src_aligned) {
-        Rf_error("posix_memalign failed for source buffer");
-    }
-    memcpy(src_aligned, src_orig, src_len + 1);
-    // print the allignement of src_aligned
-    Rprintf("[RTINYCC_DEBUG][C] source code pointer address: %p\n", (void *)src_aligned);
-    Rprintf("[RTINYCC_DEBUG][C] source code pointer address %% 8: %ld\n", (long)((uintptr_t)src_aligned % 8));
-    int rc = tcc_compile_string(s, src_aligned);
-    free(src_aligned);
+    const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
+    // print the allignement of src
+    Rprintf("[RTINYCC_DEBUG][C] source code pointer address: %p\n", (void *)src);
+    Rprintf("[RTINYCC_DEBUG][C] source code pointer address %% 8: %ld\n", (long)((uintptr_t)src % 8));
+    int rc = tcc_compile_string(s, src);
     return Rf_ScalarInteger(rc);
 }
 

@@ -38,6 +38,14 @@ jobs:
         run: |
           "/Library/Frameworks/R.framework/Resources/bin/R" CMD BUILD --preclean .
           "/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL Rtinycc_*.tar.gz
+
+      - name: Install gdb
+        run: |
+          brew install gdb
+
+      - name: Run tests with gdb backtrace
+        run: |
+          gdb --batch --ex run --ex bt --ex quit --args "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'
       - name: Run tests
         run: |
           "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'
