@@ -84,7 +84,6 @@ else
     echo "Error: tinycc source directory $TINYCC_SRC does not exist."
     exit 1
 fi
-cat "$THISDir/config.log"
 
 # Run minimal TCC JIT test (no R involved)
 echo "" >> "$THISDir/config.log"
