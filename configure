@@ -10,6 +10,7 @@ MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
 CC=`"${R_HOME}/bin/R" CMD config CC`
 CC=$(echo "${CC}" | awk '{print $1}')
 AR=`"${R_HOME}/bin/R" CMD config AR`
+AR=$(echo "${AR}" | awk '{print $1}')
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
 TINYCC_SRC="${THISDir}/src/tinycc"
 > "$THISDir/config.log"
