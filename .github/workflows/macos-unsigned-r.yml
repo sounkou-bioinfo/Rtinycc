@@ -15,8 +15,8 @@ jobs:
 
       - name: Download unsigned R binary
         run: |
-          curl -LO https://mac.r-project.org/big-sur/last-success/R-4.5-branch-arm64.tar.xz
-          tar -xJf R-4.5-branch-arm64.tar.xz -C $HOME
+          curl -LO https://mac.r-project.org/big-sur/R-4.5-branch/arm64/R-4.5-branch.tar.gz
+          tar -xzf R-4.5-branch.tar.gz -C $HOME
           echo "$HOME/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
           echo "R_HOME=$HOME/Library/Frameworks/R.framework/Resources" >> $GITHUB_ENV
 
