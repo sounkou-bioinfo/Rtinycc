@@ -46,6 +46,10 @@ jobs:
       - name: Run tests with lldb backtrace
         run: |
           lldb --batch -o "run" -o "bt" -- /Library/Frameworks/R.framework/Resources/bin/Rscript  ./inst/tinytest/test_libtcc.R
+          # within tinytest 
+          lldb --batch -o "run" -o "bt" -- /Library/Frameworks/R.framework/Resources/bin/Rscript -e 'tinytest::test_package("Rtinycc")'
       - name: Run tests
         run: |
+          # run test directly
+          "/Library/Frameworks/R.framework/Resources/bin/Rscript" ./inst/tinytest/test_libtcc.R
           "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'
