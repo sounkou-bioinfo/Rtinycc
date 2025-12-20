@@ -1,7 +1,7 @@
 
 #!/bin/sh
 # configure script to build and install libffi to inst/libffi for Unix
-set -x
+set -e
 
 
 THISDir=`dirname $0`
@@ -47,7 +47,12 @@ if [ -d "$TINYCC_SRC" ]; then
     SHLIB=libtcc.so
     if [ "$(uname)" = "Darwin" ]; then
         SHLIB=libtcc.dylib
+        echo "Detected macOS platform, using $SHLIB for shared library" >> "$THISDir/config.log"
+    else
+        echo "Detected non-macOS platform, using $SHLIB for shared library" >> "$THISDir/config.log"
     fi
+    # Build both shared and static libraries
+    
     $MAKE CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc >> "$THISDir/config.log" 2>&1 || { echo "tinycc make failed" >> "$THISDir/config.log"; exit 1; }
     
     echo "Running make install ..." >> "$THISDir/config.log"
