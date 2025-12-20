@@ -30,10 +30,7 @@ jobs:
 
       - name: Install package
         run: |
-          "/Library/Frameworks/R.framework/Resources/bin/R" CMD build .
-          PKG_TAR=$(ls -1t *.tar.gz | head -n1)
-          "/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL "$PKG_TAR"
-
+          "/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL .
       - name: Run tests
         run: |
           "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'
