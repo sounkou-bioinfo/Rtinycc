@@ -1,9 +1,7 @@
 
 #!/bin/sh
 # configure script to build and install libffi to inst/libffi for Unix
-set -e
-
-
+set -ex
 THISDir=`dirname $0`
 THISDir=`realpath ${THISDir}`
 MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
@@ -14,6 +12,10 @@ AR=$(echo "${AR}" | awk '{print $1}')
 RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
 TINYCC_SRC="${THISDir}/src/tinycc"
 > "$THISDir/config.log"
+
+# Always show config.log on exit
+CONFIG_LOG="$THISDir/config.log"
+trap "cat '$CONFIG_LOG'" EXIT
 
 echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> "$THISDir/config.log"
 "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
@@ -30,10 +32,10 @@ fi
 if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
     echo "$PWD"
+    echo "Configuring and building tinycc ..."
     echo "Configuring and building tinycc ..." >> "$THISDir/config.log"
     
     # Configure TinyCC
-    # Note: TinyCC's configure is simpler than autotools
     ./configure --prefix="$TINYCC_DEST" \
         --cc="$CC" \
         --ar="$AR" \
@@ -52,7 +54,7 @@ if [ -d "$TINYCC_SRC" ]; then
         echo "Detected non-macOS platform, using $SHLIB for shared library" >> "$THISDir/config.log"
     fi
     # Build both shared and static libraries
-    
+
     $MAKE CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc >> "$THISDir/config.log" 2>&1 || { echo "tinycc make failed" >> "$THISDir/config.log"; exit 1; }
     
     echo "Running make install ..." >> "$THISDir/config.log"
