@@ -97,11 +97,7 @@ SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr) {
 
 SEXP RC_libtcc_relocate(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
-#ifdef TCC_RELOCATE_AUTO
-    int rc = tcc_relocate(s, TCC_RELOCATE_AUTO);
-#else
     int rc = tcc_relocate(s);
-#endif
     return Rf_ScalarInteger(rc);
 }
 

@@ -27,11 +27,7 @@ int main() {
         return 3;
     }
     // Relocate
-#ifdef TCC_RELOCATE_AUTO
-    rc = tcc_relocate(s, TCC_RELOCATE_AUTO);
-#else
     rc = tcc_relocate(s);
-#endif
     if (rc != 0) {
         fprintf(stderr, "tcc_relocate failed: %d\n", rc);
         tcc_delete(s);
