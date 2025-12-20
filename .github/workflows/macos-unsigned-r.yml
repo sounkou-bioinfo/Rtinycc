@@ -15,23 +15,26 @@ jobs:
 
       - name: Download unsigned R binary
         run: |
-          curl -LO https://mac.r-project.org/big-sur/last-success/R-4.5-branch-arm64.tar.xz
-          sudo tar -xJf R-4.5-branch-arm64.tar.xz -C /
-          echo "/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
+          mkdir -p $HOME/R
+          curl -LO https://mac.r-project.org/sonoma/last-success/R-4.5-branch-arm64.tar.xz
+          tar -xJf R-4.5-branch-arm64.tar.xz -C $HOME/R
+          echo "$HOME/R/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
+          echo "R_HOME=$HOME/R/Library/Frameworks/R.framework/Resources" >> $GITHUB_ENV
 
       - name: Check R version
-        run: R --version
+        run: |
+          "$HOME/R/Library/Frameworks/R.framework/Resources/bin/R" --version
 
       - name: Install dependencies
         run: |
-          Rscript -e 'install.packages(c("devtools", "tinytest"), repos="https://cloud.r-project.org")'
+          "$HOME/R/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'install.packages(c("devtools", "tinytest"), repos="https://cloud.r-project.org")'
 
       - name: Install package
         run: |
-          R CMD build .
+          "$HOME/R/Library/Frameworks/R.framework/Resources/bin/R" CMD build .
           PKG_TAR=$(ls -1t *.tar.gz | head -n1)
-          R CMD INSTALL "$PKG_TAR"
+          "$HOME/R/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL "$PKG_TAR"
 
       - name: Run tests
         run: |
-          Rscript -e 'tinytest::test_package("Rtinycc")'
+          "$HOME/R/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'
