@@ -30,7 +30,7 @@ jobs:
 
       - name: Install package
         run: |
-          "/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL .
+          "/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL --no-staged-install .
       - name: Run tests
         run: |
           "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'
