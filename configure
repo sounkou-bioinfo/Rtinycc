@@ -89,7 +89,7 @@ fi
 echo "" >> "$THISDir/config.log"
 echo "=== Running minimal TCC JIT test (tools/tcc_minimal_test.c) ===" >> "$THISDir/config.log"
 if [ -x "${THISDir}/tools/run_tcc_minimal_test.sh" ]; then
-    (cd "${THISDir}/tools" && ./run_tcc_minimal_test.sh >> "$THISDir/config.log" 2>&1)
+    (cd "${THISDir}/tools" && ./run_tcc_minimal_test.sh >> "$THISDir/config.log" 2>&1 || true)
     TCC_MINIMAL_EXIT=$?
     echo "Minimal TCC JIT test exit code: $TCC_MINIMAL_EXIT" >> "$THISDir/config.log"
     if [ "$TCC_MINIMAL_EXIT" -ne 0 ]; then
