@@ -13,7 +13,7 @@ static void RC_tcc_finalizer(SEXP ext) {
     }
 }
 
-static TCCState *RC_tcc_state(SEXP ext) {
+static inline TCCState *RC_tcc_state(SEXP ext) {
     if (!Rf_inherits(ext, "tcc_state")) {
         Rf_error("expected a 'tcc_state' external pointer");
     }
@@ -86,6 +86,9 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
 
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);
+    // print the allignement of s
+    Rprintf("[RTINYCC_DEBUG][C] TCCState pointer address: %p\n", (void *)s);
+    Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)((uintptr_t)s % 8));
     const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
     int rc = tcc_compile_string(s, src);
     return Rf_ScalarInteger(rc);
