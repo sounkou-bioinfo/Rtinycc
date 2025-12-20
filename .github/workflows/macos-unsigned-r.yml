@@ -17,13 +17,16 @@ jobs:
         run: |
           curl -LO https://mac.r-project.org/big-sur/R-4.5-branch/arm64/R-4.5-branch.tar.gz
           sudo tar -xzf R-4.5-branch.tar.gz -C /
-          echo "/Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/bin:$PATH" >> $GITHUB_PATH
+          echo "/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
           echo "R_HOME=/Library/Frameworks/R.framework/Resources" >> $GITHUB_ENV
       - name: Copy R libtool to /usr/local/bin
         run: |
           sudo cp /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/bin/libtool /usr/local/bin/libtool
           sudo chmod +x /usr/local/bin/libtool
           echo "/usr/local/bin:$PATH" >> $GITHUB_PATH
+      - name: Check if R libtool supports -m
+        run: |
+          /usr/local/bin/libtool --help | grep -m 1 '\-m' || echo "libtool -m not supported"
       - name: Create /opt/R/arm64 symlinks
         run: |
           sudo mkdir -p /opt/R/arm64
