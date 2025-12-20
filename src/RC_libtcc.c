@@ -90,6 +90,9 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     Rprintf("[RTINYCC_DEBUG][C] TCCState pointer address: %p\n", (void *)s);
     Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)((uintptr_t)s % 8));
     const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
+    // print the allignement of src
+    Rprintf("[RTINYCC_DEBUG][C] source code pointer address: %p\n", (void *)src);
+    Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)((uintptr_t)src % 8));
     int rc = tcc_compile_string(s, src);
     return Rf_ScalarInteger(rc);
 }
