@@ -1,5 +1,6 @@
 TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
+PKG_CFLAGS = $(PKG_CPPFLAGS)
 
 LIBTCC_SO   := $(wildcard $(TINYCC_DIR)/lib/libtcc.so)
 LIBTCC_DYLIB:= $(wildcard $(TINYCC_DIR)/lib/libtcc.dylib)
