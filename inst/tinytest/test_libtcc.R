@@ -14,12 +14,9 @@ if (!(nzchar(tcc_dir) && file.exists(tcc_dir))) {
 
 # libtcc in-memory compile
 state <- tcc_state(output = "memory")
-code <- "int forty_two(){ return 42; }"
+code <- "int forty_two(){ printf(\"Hello from forty_two!\\n\"); return 42; }"
 message("Adding source code...")
 expect_equal(tcc_compile_string(state, code), 0L)
-if (TRUE) {
-  quit(save = "no", status = 0)
-}
 message("Relocating code...")
 expect_equal(tcc_relocate(state), 0L)
 sym_ptr <- tcc_get_symbol(state, "forty_two")

@@ -45,15 +45,21 @@ system2(exe, stdout = TRUE)
 ``` r
 # libtcc in-memory compile
 state <- tcc_state(output = "memory")
+#> [RTINYCC_DEBUG][C] TCCState pointer address: 0x619eac4db900
+#> [RTINYCC_DEBUG][C] address % 8: 0
 code <- "int forty_two(){ return 42; }"
 tcc_compile_string(state, code)
+#> [RTINYCC_DEBUG][C] TCCState pointer address: 0x619eac4db900
+#> [RTINYCC_DEBUG][C] address % 8: 0
+#> [RTINYCC_DEBUG][C] source code pointer address: 0x619eae54a968
+#> [RTINYCC_DEBUG][C] source code pointer address % 8: 0
 #> [1] 0
 tcc_relocate(state)
 #> [1] 0
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5c9fb6cc3000>
+#> <pointer: 0x619eae0d7000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
