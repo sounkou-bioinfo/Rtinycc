@@ -18,9 +18,19 @@ int main() {
         tcc_delete(s);
         return 2;
     }
-    // Compile a trivial function
-    const char *src = "int forty_two() { return 42; }";
+    // Compile a trivial function using malloc'd buffer
+    // to rule out string storage issues
+    const char *src_literal = "int forty_two() { return 42; }";
+    size_t src_len = strlen(src_literal);
+    char *src = (char *)malloc(src_len + 1);
+    if (!src) {
+        fprintf(stderr, "malloc failed\n");
+        tcc_delete(s);
+        return 3;
+    }
+    memcpy(src, src_literal, src_len + 1);
     int rc = tcc_compile_string(s, src);
+    free(src);
     if (rc != 0) {
         fprintf(stderr, "tcc_compile_string failed: %d\n", rc);
         tcc_delete(s);
