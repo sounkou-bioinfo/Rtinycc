@@ -146,7 +146,15 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     sigaction(SIGBUS, &sa, &old_bus);
     sigaction(SIGSEGV, &sa, &old_segv);
 
+    /* record pointers so the signal handler can report them */
+    rc_last_s = s;
+    rc_last_src = src;
+
     int rc = tcc_compile_string(s, src);
+
+    /* clear recorded pointers */
+    rc_last_s = NULL;
+    rc_last_src = NULL;
      // Restore previous handlers
     sigaction(SIGBUS, &old_bus, NULL);
     sigaction(SIGSEGV, &old_segv, NULL);
