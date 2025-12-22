@@ -39,6 +39,7 @@ if [ -d "$TINYCC_SRC" ]; then
     # Remove '-flat_namespace' from tinycc/Makefile on macOS
     if [ "$(uname)" = "Darwin" ]; then
         sed -i 's/-flat_namespace//g' "$TINYCC_SRC/Makefile"
+        sed -i '' -e 's/-flat_namespace//g' "$TINYCC_SRC/Makefile"
     fi
     grep "flat_namespace" "$TINYCC_SRC/Makefile" >> "$THISDir/config.log" || echo "No -flat_namespace found in Makefile" >> "$THISDir/config.log"
     # Configure TinyCC
