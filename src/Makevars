@@ -1,5 +1,5 @@
 TINYCC_DIR = ../inst/tinycc
-PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include -fPIC -fno-lto -fno-omit-frame-pointer
+PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
 PKG_CFLAGS = $(PKG_CPPFLAGS)
 
 # Prefer static archive to avoid runtime symbol interposition with R

@@ -3,16 +3,6 @@
 #include <Rinternals.h>
 #include <R_ext/Error.h>
 #include <stdint.h>
-#include <execinfo.h>
-#include <signal.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-
-/* Globals to record last state and source passed to tcc_compile_string
-    so the signal handler can report them. */
-static TCCState *rc_last_s = NULL;
-static const char *rc_last_src = NULL;
 
 static void RC_tcc_finalizer(SEXP ext) {
     TCCState *s = (TCCState *) R_ExternalPtrAddr(ext);
@@ -93,72 +83,11 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
-static void rc_libtcc_sig_handler(int sig) {
-    void *array[128];
-    int depth = backtrace(array, 128);
-
-    Rprintf("\n[RTINYCC_DEBUG][C] ==============================================\n");
-    Rprintf("[RTINYCC_DEBUG][C] Caught signal %d during tcc_compile_string.\n", sig);
-
-    if (rc_last_s) {
-        Rprintf("[RTINYCC_DEBUG][C] Last TCCState pointer: %p\n", (void *)rc_last_s);
-        Rprintf("[RTINYCC_DEBUG][C] TCCState address %% 8: %ld\n", (long)((uintptr_t)rc_last_s % 8));
-    } else {
-        Rprintf("[RTINYCC_DEBUG][C] Last TCCState pointer: NULL\n");
-    }
-    if (rc_last_src) {
-        Rprintf("[RTINYCC_DEBUG][C] Last source pointer: %p\n", (void *)rc_last_src);
-        Rprintf("[RTINYCC_DEBUG][C] source pointer %% 8: %ld\n", (long)((uintptr_t)rc_last_src % 8));
-    } else {
-        Rprintf("[RTINYCC_DEBUG][C] Last source pointer: NULL\n");
-    }
-
-    /* Use backtrace_symbols to get human readable strings. */
-    char **symbols = backtrace_symbols(array, depth);
-    for (int i = 0; i < depth; ++i) {
-        if (symbols) {
-            Rprintf("[RTINYCC_DEBUG][C] #%02d: %s\n", i, symbols[i]);
-        } else {
-            Rprintf("[RTINYCC_DEBUG][C] #%02d: %p\n", i, array[i]);
-        }
-    }
-    if (symbols) free(symbols);
-
-    Rprintf("[RTINYCC_DEBUG][C] ==============================================\n");
-
-    /* Exit to avoid continuing in a corrupted state. */
-    _exit(128 + sig);
-}
 
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);
-    // print the allignement of s
-    Rprintf("[RTINYCC_DEBUG][C] TCCState pointer address: %p\n", (void *)s);
-    Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)((uintptr_t)s % 8));
-    const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
-    // print the allignement of src
-    Rprintf("[RTINYCC_DEBUG][C] source code pointer address: %p\n", (void *)src);
-    Rprintf("[RTINYCC_DEBUG][C] source code pointer address %% 8: %ld\n", (long)((uintptr_t)src % 8));
-     struct sigaction sa, old_bus, old_segv;
-    sa.sa_handler = rc_libtcc_sig_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESETHAND;
-    sigaction(SIGBUS, &sa, &old_bus);
-    sigaction(SIGSEGV, &sa, &old_segv);
-
-    /* record pointers so the signal handler can report them */
-    rc_last_s = s;
-    rc_last_src = src;
-
+     const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
     int rc = tcc_compile_string(s, src);
-
-    /* clear recorded pointers */
-    rc_last_s = NULL;
-    rc_last_src = NULL;
-     // Restore previous handlers
-    sigaction(SIGBUS, &old_bus, NULL);
-    sigaction(SIGSEGV, &old_segv, NULL);
-    Rprintf("[RTINYCC_DEBUG][C] tcc_compile_string returned: %d\n", rc);
     return Rf_ScalarInteger(rc);
 }
 
