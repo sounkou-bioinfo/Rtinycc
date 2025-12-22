@@ -6,6 +6,13 @@
 #include <execinfo.h>
 #include <signal.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+
+/* Globals to record last state and source passed to tcc_compile_string
+    so the signal handler can report them. */
+static TCCState *rc_last_s = NULL;
+static const char *rc_last_src = NULL;
 
 static void RC_tcc_finalizer(SEXP ext) {
     TCCState *s = (TCCState *) R_ExternalPtrAddr(ext);
@@ -87,11 +94,39 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
 }
 
 static void rc_libtcc_sig_handler(int sig) {
-    void *array[32];
-    size_t size = backtrace(array, 32);
-    const char *sigstr = (sig == SIGBUS) ? "SIGBUS" : (sig == SIGSEGV ? "SIGSEGV" : "UNKNOWN");
-    Rprintf("\n[RTINYCC_DEBUG][C] Caught signal %d (%s) during tcc_compile_string.\n", sig, sigstr);
-    backtrace_symbols_fd(array, size, 2);
+    void *array[128];
+    int depth = backtrace(array, 128);
+
+    Rprintf("\n[RTINYCC_DEBUG][C] ==============================================\n");
+    Rprintf("[RTINYCC_DEBUG][C] Caught signal %d during tcc_compile_string.\n", sig);
+
+    if (rc_last_s) {
+        Rprintf("[RTINYCC_DEBUG][C] Last TCCState pointer: %p\n", (void *)rc_last_s);
+        Rprintf("[RTINYCC_DEBUG][C] TCCState address %% 8: %ld\n", (long)((uintptr_t)rc_last_s % 8));
+    } else {
+        Rprintf("[RTINYCC_DEBUG][C] Last TCCState pointer: NULL\n");
+    }
+    if (rc_last_src) {
+        Rprintf("[RTINYCC_DEBUG][C] Last source pointer: %p\n", (void *)rc_last_src);
+        Rprintf("[RTINYCC_DEBUG][C] source pointer %% 8: %ld\n", (long)((uintptr_t)rc_last_src % 8));
+    } else {
+        Rprintf("[RTINYCC_DEBUG][C] Last source pointer: NULL\n");
+    }
+
+    /* Use backtrace_symbols to get human readable strings. */
+    char **symbols = backtrace_symbols(array, depth);
+    for (int i = 0; i < depth; ++i) {
+        if (symbols) {
+            Rprintf("[RTINYCC_DEBUG][C] #%02d: %s\n", i, symbols[i]);
+        } else {
+            Rprintf("[RTINYCC_DEBUG][C] #%02d: %p\n", i, array[i]);
+        }
+    }
+    if (symbols) free(symbols);
+
+    Rprintf("[RTINYCC_DEBUG][C] ==============================================\n");
+
+    /* Exit to avoid continuing in a corrupted state. */
     _exit(128 + sig);
 }
 
