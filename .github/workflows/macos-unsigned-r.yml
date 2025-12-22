@@ -56,7 +56,7 @@ jobs:
           register read
           bt all
           quit
-LLDB
+          LLDB
 
           # Run lldb in batch mode with the command script against Rscript test entry
           lldb --batch -s lldb_cmds.txt -- /Library/Frameworks/R.framework/Resources/bin/Rscript ./inst/tinytest/test_libtcc.R || true
