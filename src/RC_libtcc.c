@@ -3,7 +3,9 @@
 #include <Rinternals.h>
 #include <R_ext/Error.h>
 #include <stdint.h>
-
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
 
 static void RC_tcc_finalizer(SEXP ext) {
     TCCState *s = (TCCState *) R_ExternalPtrAddr(ext);
@@ -84,6 +86,15 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
+static void rc_libtcc_sig_handler(int sig) {
+    void *array[32];
+    size_t size = backtrace(array, 32);
+    const char *sigstr = (sig == SIGBUS) ? "SIGBUS" : (sig == SIGSEGV ? "SIGSEGV" : "UNKNOWN");
+    Rprintf("\n[RTINYCC_DEBUG][C] Caught signal %d (%s) during tcc_compile_string.\n", sig, sigstr);
+    backtrace_symbols_fd(array, size, 2);
+    _exit(128 + sig);
+}
+
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);
     // print the allignement of s
@@ -93,7 +104,17 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     // print the allignement of src
     Rprintf("[RTINYCC_DEBUG][C] source code pointer address: %p\n", (void *)src);
     Rprintf("[RTINYCC_DEBUG][C] source code pointer address %% 8: %ld\n", (long)((uintptr_t)src % 8));
+     struct sigaction sa, old_bus, old_segv;
+    sa.sa_handler = rc_libtcc_sig_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESETHAND;
+    sigaction(SIGBUS, &sa, &old_bus);
+    sigaction(SIGSEGV, &sa, &old_segv);
+
     int rc = tcc_compile_string(s, src);
+     // Restore previous handlers
+    sigaction(SIGBUS, &old_bus, NULL);
+    sigaction(SIGSEGV, &old_segv, NULL);
     Rprintf("[RTINYCC_DEBUG][C] tcc_compile_string returned: %d\n", rc);
     return Rf_ScalarInteger(rc);
 }
