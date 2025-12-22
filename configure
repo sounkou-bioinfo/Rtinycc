@@ -9,7 +9,7 @@ CC=`"${R_HOME}/bin/R" CMD config CC`
 CC=$(echo "${CC}" | awk '{print $1}')
     # Remove '-flat_namespace' from tinycc/Makefile on macOS
     if [ "$(uname)" = "Darwin" ]; then
-        sed -i '' 's/-flat_namespace//g' "$TINYCC_SRC/Makefile"
+        sed -i 's/-flat_namespace//g' "$TINYCC_SRC/Makefile"
     fi
 AR=`"${R_HOME}/bin/R" CMD config AR`
 AR=$(echo "${AR}" | awk '{print $1}')
