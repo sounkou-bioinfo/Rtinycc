@@ -43,11 +43,19 @@ jobs:
         run: |
           brew install llvm
 
-      - name: Run tests with lldb backtrace
+      - name: Run tests with detailed lldb capture
         run: |
-          lldb --batch -o "process handle -p true -s false SIGBUS" -o "run" -o "bt" -- /Library/Frameworks/R.framework/Resources/bin/Rscript  ./inst/tinytest/test_libtcc.R
-          # within tinytest 
-          lldb --batch -o "run" -o "bt" -- /Library/Frameworks/R.framework/Resources/bin/Rscript -e 'tinytest::test_package("Rtinycc")'
+          # Capture SIGBUS with backtrace, disassembly and registers for debugging
+          lldb --batch \
+            -o "process handle SIGBUS -p true -s false" \
+            -o "settings set -- target.run-args ./inst/tinytest/test_libtcc.R" \
+            -o "run" \
+            -o "process continue" \
+            -o "bt all" \
+            -o "frame select 2" \
+            -o "disassemble --frame" \
+            -o "register read" \
+            -- /Library/Frameworks/R.framework/Resources/bin/Rscript || true
       - name: Run tests
         run: |
           # run test directly

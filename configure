@@ -39,7 +39,7 @@ if [ -d "$TINYCC_SRC" ]; then
     ./configure --prefix="$TINYCC_DEST" \
         --cc="$CC" \
         --ar="$AR" \
-        --extra-cflags="-fPIC -O0 -g"
+        --extra-cflags="-fPIC -O0 -g -fno-omit-frame-pointer"
     
     mkdir -p "$TINYCC_DEST/lib"
     mkdir -p "$TINYCC_DEST/include"
