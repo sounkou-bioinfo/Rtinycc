@@ -47,13 +47,23 @@ jobs:
         run: |
           # Create an lldb script that stops on SIGBUS and dumps backtraces, disassembly and registers
           cat > lldb_cmds.txt <<'LLDB'
+          # stop/notify on SIGBUS
           process handle SIGBUS -p true -s true -n true
           settings set target.run-args "./inst/tinytest/test_libtcc.R"
           run
-          # When the process stops on SIGBUS, print thread backtraces and disassembly for the current frame
+          # print all thread backtraces
           thread backtrace all
-          disassemble --frame 0
+          # list threads so we can pick the crashing one interactively if needed
+          thread list
+          # select the thread that shows libtcc frames (replace N with the thread id if necessary)
+          # e.g. "thread select 2"
+          # select the frame you want to inspect (use the frame index from the backtrace)
+          # e.g. "frame select 2"
+          # disassemble the selected frame (plain disassemble works across LLDB versions)
+          disassemble
+          # dump registers
           register read
+          # full backtrace of all threads for context
           bt all
           quit
           LLDB
