@@ -16,17 +16,12 @@ RPATH = -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
 endif
 
 # Prefer static archive; for dynamic cases append platform rpath
-ifneq ($(LIBTCC_A),)
-PKG_LIBS = $(LIBTCC_A)
+ifneq ($(LIBTCC_SO),)
+		PKG_LIBS = $(LIBTCC_SO) $(RPATH)
+else ifneq ($(LIBTCC_DYLIB),)
+		PKG_LIBS = $(LIBTCC_DYLIB) $(RPATH)
 else
-	ifneq ($(LIBTCC_SO),)
-		PKG_LIBS = $(LIBTCC_SO)
-	else ifneq ($(LIBTCC_DYLIB),)
-		PKG_LIBS = $(LIBTCC_DYLIB)
-	else
 		PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
-	endif
-	PKG_LIBS += $(RPATH)
 endif
 
 all: $(SHLIB)
