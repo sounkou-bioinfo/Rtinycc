@@ -51,7 +51,9 @@ jobs:
           process handle SIGBUS -p true -s true -n true
           settings set target.run-args "./inst/tinytest/test_libtcc.R"
           run
-          # print all thread backtraces
+          # initial exec stop can occur; continue until SIGBUS occurs
+          process continue
+          # print all thread backtraces (after SIGBUS stop)
           thread backtrace all
           # list threads so we can pick the crashing one interactively if needed
           thread list
