@@ -94,6 +94,7 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     Rprintf("[RTINYCC_DEBUG][C] source code pointer address: %p\n", (void *)src);
     Rprintf("[RTINYCC_DEBUG][C] source code pointer address %% 8: %ld\n", (long)((uintptr_t)src % 8));
     int rc = tcc_compile_string(s, src);
+    Rprintf("[RTINYCC_DEBUG][C] tcc_compile_string returned: %d\n", rc);
     return Rf_ScalarInteger(rc);
 }
 
