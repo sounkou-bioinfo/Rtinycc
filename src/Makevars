@@ -2,23 +2,32 @@ TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include -fPIC -fno-lto -fno-omit-frame-pointer
 PKG_CFLAGS = $(PKG_CPPFLAGS)
 
-LIBTCC_SO   := $(wildcard $(TINYCC_DIR)/lib/libtcc.so)
-LIBTCC_DYLIB:= $(wildcard $(TINYCC_DIR)/lib/libtcc.dylib)
+# Prefer static archive to avoid runtime symbol interposition with R
+LIBTCC_A     := $(wildcard $(TINYCC_DIR)/lib/libtcc.a)
+LIBTCC_SO    := $(wildcard $(TINYCC_DIR)/lib/libtcc.so)
+LIBTCC_DYLIB := $(wildcard $(TINYCC_DIR)/lib/libtcc.dylib)
 
-ifneq ($(LIBTCC_SO),)
-PKG_LIBS = $(LIBTCC_SO)
-PKG_LIBS += -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
-else ifneq ($(LIBTCC_DYLIB),)
-PKG_LIBS = $(LIBTCC_DYLIB)
-PKG_LIBS += -Wl,-rpath,@loader_path/../tinycc/lib
-else
-PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
+# Determine platform rpath flag for dynamic linking
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-PKG_LIBS += -Wl,-rpath,@loader_path/../tinycc/lib
+RPATH = -Wl,-rpath,@loader_path/../tinycc/lib
 else
-PKG_LIBS += -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
+RPATH = -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
 endif
+
+# Prefer static archive; for dynamic cases append platform rpath
+ifneq ($(LIBTCC_A),)
+PKG_LIBS = $(LIBTCC_A)
+else
+	ifneq ($(LIBTCC_SO),)
+		PKG_LIBS = $(LIBTCC_SO)
+	else ifneq ($(LIBTCC_DYLIB),)
+		PKG_LIBS = $(LIBTCC_DYLIB)
+	else
+		PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
+	endif
+	PKG_LIBS += $(RPATH)
 endif
 
 all: $(SHLIB)
+
