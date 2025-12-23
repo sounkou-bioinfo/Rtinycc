@@ -1,0 +1,4 @@
+- add simple input types for tcc_call_symbol
+- add simple more types
+- setjump support for tcc_call_symbol
+- external symbols when compiling with tinycc
