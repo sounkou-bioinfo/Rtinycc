@@ -24,6 +24,8 @@
   : Get a symbol pointer from a libtcc state
 - [`tcc_include_paths()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include_paths.md)
   : TinyCC include search paths
+- [`tcc_list_symbols()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_list_symbols.md)
+  : List all symbols in a libtcc state
 - [`tcc_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_path.md)
   : Locate the TinyCC executable
 - [`tcc_prefix()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)

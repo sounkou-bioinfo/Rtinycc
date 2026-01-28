@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x55a4c246e000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6035e8d47000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
@@ -110,51 +110,40 @@
 <span></span>
 <span><span class="fu"><a href="reference/tcc_add_include_path.html">tcc_add_include_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_include</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="fu"><a href="reference/tcc_add_sysinclude_path.html">tcc_add_sysinclude_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_include</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="fu"><a href="reference/tcc_add_library_path.html">tcc_add_library_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_lib</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
-<span><span class="co"># Link against R library</span></span>
-<span><span class="fu"><a href="reference/tcc_add_library.html">tcc_add_library</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"R"</span><span class="op">)</span></span>
+<span><span class="co"># Link against external math library (libm) for real math functions</span></span>
+<span><span class="fu"><a href="reference/tcc_add_library.html">tcc_add_library</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"m"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
-<span><span class="co"># C code that includes R headers and calls R functions</span></span>
+<span><span class="co"># C code that includes math.h and uses external library functions</span></span>
 <span><span class="co"># Workaround: Define _Complex to empty since TinyCC doesn't support complex types</span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">#define _Complex</span></span>
 <span><span class="st">#include &lt;R.h&gt;</span></span>
-<span><span class="st">#include &lt;Rmath.h&gt;</span></span>
+<span><span class="st">#include &lt;math.h&gt;</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">void hello_world() {</span></span>
 <span><span class="st">  Rprintf("Hello World from compiled C code!\\n");</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">double get_random_normal() {</span></span>
-<span><span class="st">  double val = rnorm(0.0, 1.0);</span></span>
-<span><span class="st">  Rprintf("Generated random normal: %f\\n", val);</span></span>
+<span><span class="st">double calculate_sqrt_2() {</span></span>
+<span><span class="st">  double val = sqrt(2.0);</span></span>
+<span><span class="st">  Rprintf("sqrt(2) = %f\\n", val);</span></span>
 <span><span class="st">  return val;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">double get_pi() {</span></span>
-<span><span class="st">  Rprintf("Returning PI value\\n");</span></span>
-<span><span class="st">  return 3.14159265359;</span></span>
+<span><span class="st">double calculate_sin_pi() {</span></span>
+<span><span class="st">  double val = sin(3.14159265359);</span></span>
+<span><span class="st">  Rprintf("sin(PI) = %f\\n", val);</span></span>
+<span><span class="st">  return val;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">double get_euler() {</span></span>
-<span><span class="st">  Rprintf("Returning Euler\\\"s number\\n");</span></span>
-<span><span class="st">  return 2.71828182846;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">int fibonacci_10() {</span></span>
-<span><span class="st">  Rprintf("Calculating 10th Fibonacci number\\n");</span></span>
-<span><span class="st">  int a = 0, b = 1, temp;</span></span>
-<span><span class="st">  for (int i = 0; i &lt; 10; i++) {</span></span>
-<span><span class="st">    temp = a + b;</span></span>
-<span><span class="st">    a = b;</span></span>
-<span><span class="st">    b = temp;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  return a;</span></span>
+<span><span class="st">double calculate_log_10() {</span></span>
+<span><span class="st">  double val = log(10.0);</span></span>
+<span><span class="st">  Rprintf("log(10) = %f\\n", val);</span></span>
+<span><span class="st">  return val;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
 <span></span>
@@ -163,37 +152,30 @@
 <span><span class="fu"><a href="reference/tcc_relocate.html">tcc_relocate</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
+<span><span class="co"># List available symbols in the compilation state</span></span>
+<span><span class="va">symbols</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_list_symbols.html">tcc_list_symbols</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="va">symbols</span></span>
+<span><span class="co">#&gt; character(0)</span></span>
+<span></span>
 <span><span class="co"># Call the functions (all zero-argument functions)</span></span>
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Hello World from compiled C code!</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span></span>
-<span><span class="va">result1</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"get_random_normal"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Generated random normal: -8.773321</span></span>
+<span><span class="va">result1</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"calculate_sqrt_2"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; sqrt(2) = 1.414214</span></span>
 <span><span class="va">result1</span></span>
-<span><span class="co">#&gt; [1] -8.773321</span></span>
+<span><span class="co">#&gt; [1] 1.414214</span></span>
 <span></span>
-<span><span class="va">result2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"get_pi"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span> </span>
-<span><span class="co">#&gt; Returning PI value</span></span>
+<span><span class="va">result2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"calculate_sin_pi"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span> </span>
+<span><span class="co">#&gt; sin(PI) = -0.000000</span></span>
 <span><span class="va">result2</span></span>
-<span><span class="co">#&gt; [1] 3.141593</span></span>
+<span><span class="co">#&gt; [1] -2.068231e-13</span></span>
 <span></span>
-<span><span class="va">result3</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"get_euler"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Returning Euler"s number</span></span>
+<span><span class="va">result3</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"calculate_log_10"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; log(10) = 2.302585</span></span>
 <span><span class="va">result3</span></span>
-<span><span class="co">#&gt; [1] 2.718282</span></span>
-<span></span>
-<span><span class="va">result4</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"fibonacci_10"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Calculating 10th Fibonacci number</span></span>
-<span><span class="va">result4</span></span>
-<span><span class="co">#&gt; [1] 55</span></span>
-<span></span>
-<span><span class="co"># Get symbol pointers for external use</span></span>
-<span><span class="va">hello_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span><span class="op">)</span></span>
-<span><span class="va">normal_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"get_random_normal"</span><span class="op">)</span></span>
-<span><span class="va">pi_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"get_pi"</span><span class="op">)</span></span>
-<span><span class="va">euler_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"get_euler"</span><span class="op">)</span></span>
-<span><span class="va">fib_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"fibonacci_10"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 2.302585</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
