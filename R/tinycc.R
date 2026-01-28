@@ -51,7 +51,9 @@ tcc_cli <- function() {
 #' Returns the platform-specific `tcc` binary path (or `tcc.exe` on Windows), preferring the bundled installation.
 #' @return A character scalar path.
 #' @export
-tcc_path <- function() normalizePath(tcc_cli(), winslash = "/", mustWork = FALSE)
+tcc_path <- function() {
+  normalizePath(tcc_cli(), winslash = "/", mustWork = FALSE)
+}
 
 #' TinyCC include search paths
 #'
@@ -60,13 +62,17 @@ tcc_path <- function() normalizePath(tcc_cli(), winslash = "/", mustWork = FALSE
 #' @export
 tcc_include_paths <- function() {
   prefix <- tcc_prefix()
-  paths <- c(file.path(prefix, "include"), file.path(prefix, "lib", "tcc", "include"))
+  paths <- c(
+    file.path(prefix, "include"),
+    file.path(prefix, "lib", "tcc", "include")
+  )
   normalizePath(paths[file.exists(paths)], winslash = "/", mustWork = FALSE)
 }
 
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
-  switch(output,
+  switch(
+    output,
     memory = 1L, # TCC_OUTPUT_MEMORY
     obj = 3L, # TCC_OUTPUT_OBJ
     dll = 4L, # TCC_OUTPUT_DLL
@@ -92,11 +98,14 @@ check_cli_exists <- function() {
 #' @param lib_path Path(s) to libraries; defaults to the bundled lib dirs (lib and lib/tcc).
 #' @return An external pointer of class `tcc_state`.
 #' @export
-tcc_state <- function(output = c("memory", "obj", "dll", "exe", "preprocess"),
-                      include_path = tcc_include_paths(),
-                      lib_path = tcc_lib_paths()) {
+tcc_state <- function(
+  output = c("memory", "obj", "dll", "exe", "preprocess"),
+  include_path = tcc_include_paths(),
+  lib_path = tcc_lib_paths()
+) {
   .Call(
-    RC_libtcc_state_new, normalizePath(lib_path, winslash = "/", mustWork = FALSE),
+    RC_libtcc_state_new,
+    normalizePath(lib_path, winslash = "/", mustWork = FALSE),
     normalizePath(include_path, winslash = "/", mustWork = FALSE),
     tcc_output_type(output)
   )
@@ -108,7 +117,11 @@ tcc_state <- function(output = c("memory", "obj", "dll", "exe", "preprocess"),
 #' @return Integer status code (0 = success).
 #' @export
 tcc_add_file <- function(state, path) {
-  .Call(RC_libtcc_add_file, state, normalizePath(path, winslash = "/", mustWork = TRUE))
+  .Call(
+    RC_libtcc_add_file,
+    state,
+    normalizePath(path, winslash = "/", mustWork = TRUE)
+  )
 }
 
 #' Compile C code from a character string
@@ -168,11 +181,20 @@ tcc_run_cli <- function(args = character(), tcc_path = check_cli_exists()) {
   env <- character()
   if (length(lib_paths)) {
     if (.Platform$OS.type == "windows") {
-      env <- sprintf("PATH=%s", paste(c(lib_paths, Sys.getenv("PATH")), collapse = .Platform$path.sep))
+      env <- sprintf(
+        "PATH=%s",
+        paste(c(lib_paths, Sys.getenv("PATH")), collapse = .Platform$path.sep)
+      )
     } else if (Sys.info()[["sysname"]] == "Darwin") {
-      env <- sprintf("DYLD_LIBRARY_PATH=%s", paste(c(lib_paths, Sys.getenv("DYLD_LIBRARY_PATH")), collapse = ":"))
+      env <- sprintf(
+        "DYLD_LIBRARY_PATH=%s",
+        paste(c(lib_paths, Sys.getenv("DYLD_LIBRARY_PATH")), collapse = ":")
+      )
     } else {
-      env <- sprintf("LD_LIBRARY_PATH=%s", paste(c(lib_paths, Sys.getenv("LD_LIBRARY_PATH")), collapse = ":"))
+      env <- sprintf(
+        "LD_LIBRARY_PATH=%s",
+        paste(c(lib_paths, Sys.getenv("LD_LIBRARY_PATH")), collapse = ":")
+      )
     }
   }
   res <- system2(tcc_path, args, env = env)
