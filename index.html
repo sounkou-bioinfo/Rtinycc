@@ -85,8 +85,6 @@
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># libtcc in-memory compile</span></span>
 <span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [RTINYCC_DEBUG][C] TCCState pointer address: 0x5e4efa15d910</span></span>
-<span><span class="co">#&gt; [RTINYCC_DEBUG][C] address % 8: 0</span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">"int forty_two(){ return 42; }"</span></span>
 <span><span class="fu"><a href="reference/tcc_compile_string.html">tcc_compile_string</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">code</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
@@ -95,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5e4efbd59000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5997dd688000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>

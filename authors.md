@@ -12,14 +12,14 @@
 Source:
 [`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/main/DESCRIPTION)
 
-Toure S (2025). *Rtinycc: Builds 'TinyCC' Cli and Library For R Package
+Toure S (2026). *Rtinycc: Builds 'TinyCC' Cli and Library For R Package
 Use*. R package version 0.0.0.9000,
 <https://github.com/sounkou-bioinfo/Rtinycc>.
 
     @Manual{,
       title = {Rtinycc: Builds `TinyCC` Cli and Library For R Package Use},
       author = {Sounkou Mahamane Toure},
-      year = {2025},
+      year = {2026},
       note = {R package version 0.0.0.9000},
       url = {https://github.com/sounkou-bioinfo/Rtinycc},
     }
