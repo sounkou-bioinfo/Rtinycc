@@ -105,9 +105,6 @@ double calculate_log_10() {
 tcc_compile_string(state, code)
 tcc_relocate(state)
 
-# List available symbols in the compilation state
-symbols <- tcc_list_symbols(state)
-symbols
 
 # Call the functions (all zero-argument functions)
 tcc_call_symbol(state, "hello_world", return = "void")

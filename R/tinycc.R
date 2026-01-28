@@ -208,13 +208,6 @@ tcc_get_symbol <- function(state, name) {
   .Call(RC_libtcc_get_symbol, state, name)
 }
 
-#' List all symbols in a libtcc state
-#' @param state A `tcc_state`.
-#' @return Character vector of symbol names.
-#' @export
-tcc_list_symbols <- function(state) {
-  .Call(RC_libtcc_list_symbols, state)
-}
 
 #' Call a zero-argument symbol with a specified return type
 #' @param state A `tcc_state`.

@@ -53,7 +53,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x6035e8d47000>
+#> <pointer: 0x5de73701a000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -112,10 +112,6 @@ tcc_compile_string(state, code)
 tcc_relocate(state)
 #> [1] 0
 
-# List available symbols in the compilation state
-symbols <- tcc_list_symbols(state)
-symbols
-#> character(0)
 
 # Call the functions (all zero-argument functions)
 tcc_call_symbol(state, "hello_world", return = "void")

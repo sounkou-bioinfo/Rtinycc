@@ -107,15 +107,7 @@ SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
     return Rf_ScalarInteger(rc);
 }
 
-SEXP RC_libtcc_list_symbols(SEXP ext) {
-    TCCState *s = RC_tcc_state(ext);
-    
-    // Simple placeholder that would need to be implemented with a proper callback
-    // For now, return empty character vector
-    SEXP symbols = PROTECT(Rf_allocVector(STRSXP, 0));
-    UNPROTECT(1);
-    return symbols;
-}
+
 
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);

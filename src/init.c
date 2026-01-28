@@ -14,7 +14,7 @@ SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
 SEXP RC_libtcc_relocate(SEXP ext);
 SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type);
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
-SEXP RC_libtcc_list_symbols(SEXP ext);
+
 SEXP RC_libtcc_call_symbol_typed(SEXP ext, SEXP name, SEXP ret_type);
 SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_get_external_ptr_addr(SEXP ext);
@@ -32,7 +32,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_relocate",    (DL_FUNC) &RC_libtcc_relocate,    1},
     {"RC_libtcc_call_symbol", (DL_FUNC) &RC_libtcc_call_symbol, 3},
     {"RC_libtcc_get_symbol",  (DL_FUNC) &RC_libtcc_get_symbol,  2},
-    {"RC_libtcc_list_symbols", (DL_FUNC) &RC_libtcc_list_symbols, 1},
+    
     {"RC_libtcc_ptr_valid",   (DL_FUNC) &RC_libtcc_ptr_valid,   1},
     {"RC_get_external_ptr_addr", (DL_FUNC) &RC_get_external_ptr_addr, 1},
     {NULL, NULL, 0}
