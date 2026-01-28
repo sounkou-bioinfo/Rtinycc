@@ -93,13 +93,14 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5de73701a000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5a3515cdc000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="calling-r-functions-from-compiled-c-code">Calling R functions from compiled C code<a class="anchor" aria-label="anchor" href="#calling-r-functions-from-compiled-c-code"></a>
+<h3 id="calling-rs-c-api-functions-from-compiled-c-code">Calling R’s C API functions from compiled C code<a class="anchor" aria-label="anchor" href="#calling-rs-c-api-functions-from-compiled-c-code"></a>
 </h3>
+<p>Using <code>Define _Complex</code> as workaround of <code>TinyCC</code>’s lack of support for complex types, we can link against R’s install headers and <code>libR</code> to call R’s C API function.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create new state for R linking example</span></span>
 <span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
@@ -117,33 +118,73 @@
 <span><span class="fu"><a href="reference/tcc_add_library.html">tcc_add_library</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"m"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
-<span><span class="co"># C code that includes math.h and uses external library functions</span></span>
+<span><span class="co"># C code that demonstrates actual R C API usage</span></span>
 <span><span class="co"># Workaround: Define _Complex to empty since TinyCC doesn't support complex types</span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">#define _Complex</span></span>
 <span><span class="st">#include &lt;R.h&gt;</span></span>
-<span><span class="st">#include &lt;math.h&gt;</span></span>
+<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">void hello_world() {</span></span>
 <span><span class="st">  Rprintf("Hello World from compiled C code!\\n");</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">double calculate_sqrt_2() {</span></span>
-<span><span class="st">  double val = sqrt(2.0);</span></span>
-<span><span class="st">  Rprintf("sqrt(2) = %f\\n", val);</span></span>
-<span><span class="st">  return val;</span></span>
+<span><span class="st">// Create an R numeric vector and calculate its length</span></span>
+<span><span class="st">int create_r_vector() {</span></span>
+<span><span class="st">  SEXP vec = PROTECT(Rf_allocVector(REALSXP, 5));</span></span>
+<span><span class="st">  for(int i = 0; i &lt; 5; i++) {</span></span>
+<span><span class="st">    REAL(vec)[i] = (double)(i + 1) * 2.0;  // 2, 4, 6, 8, 10</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  int length = Rf_length(vec);</span></span>
+<span><span class="st">  Rprintf("Created vector length: %d\\n", length);</span></span>
+<span><span class="st">  Rprintf("Vector values: ");</span></span>
+<span><span class="st">  for(int i = 0; i &lt; length; i++) {</span></span>
+<span><span class="st">    Rprintf("%f ", REAL(vec)[i]);</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  Rprintf("\\n");</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  UNPROTECT(1);</span></span>
+<span><span class="st">  return length;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">double calculate_sin_pi() {</span></span>
-<span><span class="st">  double val = sin(3.14159265359);</span></span>
-<span><span class="st">  Rprintf("sin(PI) = %f\\n", val);</span></span>
-<span><span class="st">  return val;</span></span>
+<span><span class="st">// Use Rf_install to get a function and call it</span></span>
+<span><span class="st">double call_r_function() {</span></span>
+<span><span class="st">  // Get the sqrt function from R base</span></span>
+<span><span class="st">  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  // Create a scalar value</span></span>
+<span><span class="st">  SEXP val = PROTECT(Rf_ScalarReal(16.0));</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  // Call the function</span></span>
+<span><span class="st">  SEXP result = PROTECT(Rf_lang2(sqrt_fun, val));</span></span>
+<span><span class="st">  SEXP eval_result = PROTECT(Rf_eval(result, R_GlobalEnv));</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  double sqrt_val = REAL(eval_result)[0];</span></span>
+<span><span class="st">  Rprintf("R sqrt(16.0) = %f\\n", sqrt_val);</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  UNPROTECT(4);</span></span>
+<span><span class="st">  return sqrt_val;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">double calculate_log_10() {</span></span>
-<span><span class="st">  double val = log(10.0);</span></span>
-<span><span class="st">  Rprintf("log(10) = %f\\n", val);</span></span>
-<span><span class="st">  return val;</span></span>
+<span><span class="st">// Demonstrate creating different R data types</span></span>
+<span><span class="st">void demonstrate_r_types() {</span></span>
+<span><span class="st">  // Create different types of R objects</span></span>
+<span><span class="st">  SEXP int_vec = PROTECT(Rf_allocVector(INTSXP, 3));</span></span>
+<span><span class="st">  INTEGER(int_vec)[0] = 1;</span></span>
+<span><span class="st">  INTEGER(int_vec)[1] = 2;</span></span>
+<span><span class="st">  INTEGER(int_vec)[2] = 3;</span></span>
+<span><span class="st">  Rprintf("Integer vector created with %d elements\\n", Rf_length(int_vec));</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  SEXP str_vec = PROTECT(Rf_allocVector(STRSXP, 2));</span></span>
+<span><span class="st">  SET_STRING_ELT(str_vec, 0, Rf_mkChar("Hello"));</span></span>
+<span><span class="st">  SET_STRING_ELT(str_vec, 1, Rf_mkChar("R"));</span></span>
+<span><span class="st">  Rprintf("String vector created with %d elements\\n", Rf_length(str_vec));</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  SEXP logical = PROTECT(Rf_ScalarLogical(TRUE));</span></span>
+<span><span class="st">  Rprintf("Logical value: %d\\n", LOGICAL(logical)[0]);</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  UNPROTECT(3);</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
 <span></span>
@@ -153,25 +194,26 @@
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
 <span></span>
-<span><span class="co"># Call the functions (all zero-argument functions)</span></span>
+<span><span class="co"># Call the functions that demonstrate R C API usage</span></span>
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Hello World from compiled C code!</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span></span>
-<span><span class="va">result1</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"calculate_sqrt_2"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; sqrt(2) = 1.414214</span></span>
+<span><span class="va">result1</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"create_r_vector"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Created vector length: 5</span></span>
+<span><span class="co">#&gt; Vector values: 2.000000 4.000000 6.000000 8.000000 10.000000</span></span>
 <span><span class="va">result1</span></span>
-<span><span class="co">#&gt; [1] 1.414214</span></span>
+<span><span class="co">#&gt; [1] 5</span></span>
 <span></span>
-<span><span class="va">result2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"calculate_sin_pi"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span> </span>
-<span><span class="co">#&gt; sin(PI) = -0.000000</span></span>
+<span><span class="va">result2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"call_r_function"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span> </span>
+<span><span class="co">#&gt; R sqrt(16.0) = 4.000000</span></span>
 <span><span class="va">result2</span></span>
-<span><span class="co">#&gt; [1] -2.068231e-13</span></span>
+<span><span class="co">#&gt; [1] 4</span></span>
 <span></span>
-<span><span class="va">result3</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"calculate_log_10"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; log(10) = 2.302585</span></span>
-<span><span class="va">result3</span></span>
-<span><span class="co">#&gt; [1] 2.302585</span></span></code></pre></div>
+<span><span class="va">result3</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"demonstrate_r_types"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Integer vector created with 3 elements</span></span>
+<span><span class="co">#&gt; String vector created with 2 elements</span></span>
+<span><span class="co">#&gt; Logical value: 1</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
