@@ -31,7 +31,7 @@ remotes::install_github("sounkou-bioinfo/Rtinycc")
 
 ### CLI
 
-```{r}
+```{r cli}
 library(Rtinycc)
 tcc_dir <- tcc_prefix()
 # CLI compile to executable
@@ -46,7 +46,7 @@ system2(exe, stdout = TRUE)
 ```
 ### In memory using libtcc
 
-```{r}
+```{r in-memory}
 # libtcc in-memory compile
 state <- tcc_state(output = "memory")
 code <- "int forty_two(){ return 42; }"
@@ -55,6 +55,89 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 tcc_get_symbol(state, "forty_two")
 ```
+
+### Calling R functions from compiled C code
+
+```{r call-R-C-API}
+# Create new state for R linking example
+state <- tcc_state(output = "memory")
+
+# Add R include and library paths using Rtinycc functions
+r_include <- R.home("include")
+r_lib <- file.path(R.home("lib"))
+
+tcc_add_include_path(state, r_include)
+tcc_add_sysinclude_path(state, r_include)
+tcc_add_library_path(state, r_lib)
+
+# Link against R library
+tcc_add_library(state, "R")
+
+# C code that includes R headers and calls R functions
+# Workaround: Define _Complex to empty since TinyCC doesn't support complex types
+code <- '
+#define _Complex
+#include <R.h>
+#include <Rmath.h>
+
+void hello_world() {
+  Rprintf("Hello World from compiled C code!\\n");
+}
+
+double get_random_normal() {
+  double val = rnorm(0.0, 1.0);
+  Rprintf("Generated random normal: %f\\n", val);
+  return val;
+}
+
+double get_pi() {
+  Rprintf("Returning PI value\\n");
+  return 3.14159265359;
+}
+
+double get_euler() {
+  Rprintf("Returning Euler\\\"s number\\n");
+  return 2.71828182846;
+}
+
+int fibonacci_10() {
+  Rprintf("Calculating 10th Fibonacci number\\n");
+  int a = 0, b = 1, temp;
+  for (int i = 0; i < 10; i++) {
+    temp = a + b;
+    a = b;
+    b = temp;
+  }
+  return a;
+}
+'
+
+tcc_compile_string(state, code)
+tcc_relocate(state)
+
+# Call the functions (all zero-argument functions)
+tcc_call_symbol(state, "hello_world", return = "void")
+
+result1 <- tcc_call_symbol(state, "get_random_normal", return = "double")
+result1
+
+result2 <- tcc_call_symbol(state, "get_pi", return = "double") 
+result2
+
+result3 <- tcc_call_symbol(state, "get_euler", return = "double")
+result3
+
+result4 <- tcc_call_symbol(state, "fibonacci_10", return = "int")
+result4
+
+# Get symbol pointers for external use
+hello_ptr <- tcc_get_symbol(state, "hello_world")
+normal_ptr <- tcc_get_symbol(state, "get_random_normal")
+pi_ptr <- tcc_get_symbol(state, "get_pi")
+euler_ptr <- tcc_get_symbol(state, "get_euler")
+fib_ptr <- tcc_get_symbol(state, "fibonacci_10")
+```
+
 ## License
 
 GPL-3

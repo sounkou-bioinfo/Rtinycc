@@ -79,6 +79,33 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
+SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
+    int rc = tcc_add_include_path(s, p);
+    return Rf_ScalarInteger(rc);
+}
+
+SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
+    int rc = tcc_add_sysinclude_path(s, p);
+    return Rf_ScalarInteger(rc);
+}
+
+SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
+    int rc = tcc_add_library_path(s, p);
+    return Rf_ScalarInteger(rc);
+}
+
+SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *lib = Rf_translateCharUTF8(STRING_ELT(library, 0));
+    int rc = tcc_add_library(s, lib);
+    return Rf_ScalarInteger(rc);
+}
 
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);

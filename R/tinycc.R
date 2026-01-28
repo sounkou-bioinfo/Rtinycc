@@ -124,6 +124,54 @@ tcc_add_file <- function(state, path) {
   )
 }
 
+#' Add an include path to a libtcc state
+#' @param state A `tcc_state`.
+#' @param path Path to include directory.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_add_include_path <- function(state, path) {
+  .Call(
+    RC_libtcc_add_include_path,
+    state,
+    normalizePath(path, winslash = "/", mustWork = FALSE)
+  )
+}
+
+#' Add a system include path to a libtcc state
+#' @param state A `tcc_state`.
+#' @param path Path to system include directory.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_add_sysinclude_path <- function(state, path) {
+  .Call(
+    RC_libtcc_add_sysinclude_path,
+    state,
+    normalizePath(path, winslash = "/", mustWork = FALSE)
+  )
+}
+
+#' Add a library path to a libtcc state
+#' @param state A `tcc_state`.
+#' @param path Path to library directory.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_add_library_path <- function(state, path) {
+  .Call(
+    RC_libtcc_add_library_path,
+    state,
+    normalizePath(path, winslash = "/", mustWork = FALSE)
+  )
+}
+
+#' Add a library to a libtcc state
+#' @param state A `tcc_state`.
+#' @param library Library name (e.g., "m" for libm, "R" for libR).
+#' @return Integer status code (0 = success).
+#' @export
+tcc_add_library <- function(state, library) {
+  .Call(RC_libtcc_add_library, state, library)
+}
+
 #' Compile C code from a character string
 #' @param state A `tcc_state`.
 #' @param code C source code string.
@@ -139,6 +187,16 @@ tcc_compile_string <- function(state, code) {
 #' @export
 tcc_relocate <- function(state) {
   .Call(RC_libtcc_relocate, state)
+}
+
+#' Add a symbol to a libtcc state
+#' @param state A `tcc_state`.
+#' @param name Symbol name.
+#' @param addr External pointer address or symbol value.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_add_symbol <- function(state, name, addr) {
+  .Call(RC_libtcc_add_symbol, state, name, addr)
 }
 
 #' Get a symbol pointer from a libtcc state
