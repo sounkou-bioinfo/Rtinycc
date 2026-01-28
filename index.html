@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x6035e8d47000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5de73701a000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
@@ -152,10 +152,6 @@
 <span><span class="fu"><a href="reference/tcc_relocate.html">tcc_relocate</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
-<span><span class="co"># List available symbols in the compilation state</span></span>
-<span><span class="va">symbols</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_list_symbols.html">tcc_list_symbols</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
-<span><span class="va">symbols</span></span>
-<span><span class="co">#&gt; character(0)</span></span>
 <span></span>
 <span><span class="co"># Call the functions (all zero-argument functions)</span></span>
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
