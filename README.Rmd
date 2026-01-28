@@ -76,6 +76,7 @@ tcc_add_library(state, "m")
 # Workaround: Define _Complex to empty since TinyCC doesn't support complex types
 code <- '
 #define _Complex
+#define _USE_MATH_DEFINES
 #include <R.h>
 #include <math.h>
 
@@ -90,8 +91,8 @@ double calculate_sqrt_2() {
 }
 
 double calculate_sin_pi() {
-  double val = sin(3.14159265359);
-  Rprintf("sin(PI) = %f\\n", val);
+  double val = sin(M_PI);
+  Rprintf("sin(M_PI) = %f\\n", val);
   return val;
 }
 

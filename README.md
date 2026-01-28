@@ -53,7 +53,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5de73701a000>
+#> <pointer: 0x6512e22df000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -81,6 +81,7 @@ tcc_add_library(state, "m")
 # Workaround: Define _Complex to empty since TinyCC doesn't support complex types
 code <- '
 #define _Complex
+#define _USE_MATH_DEFINES
 #include <R.h>
 #include <math.h>
 
@@ -95,8 +96,8 @@ double calculate_sqrt_2() {
 }
 
 double calculate_sin_pi() {
-  double val = sin(3.14159265359);
-  Rprintf("sin(PI) = %f\\n", val);
+  double val = sin(M_PI);
+  Rprintf("sin(M_PI) = %f\\n", val);
   return val;
 }
 
@@ -124,9 +125,9 @@ result1
 #> [1] 1.414214
 
 result2 <- tcc_call_symbol(state, "calculate_sin_pi", return = "double") 
-#> sin(PI) = -0.000000
+#> sin(M_PI) = 0.000000
 result2
-#> [1] -2.068231e-13
+#> [1] 1.224647e-16
 
 result3 <- tcc_call_symbol(state, "calculate_log_10", return = "double")
 #> log(10) = 2.302585
