@@ -6,6 +6,16 @@
   : Get the address of an external pointer
 - [`tcc_add_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_file.md)
   : Add a source file to a libtcc state
+- [`tcc_add_include_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_include_path.md)
+  : Add an include path to a libtcc state
+- [`tcc_add_library()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_library.md)
+  : Add a library to a libtcc state
+- [`tcc_add_library_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_library_path.md)
+  : Add a library path to a libtcc state
+- [`tcc_add_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_symbol.md)
+  : Add a symbol to a libtcc state
+- [`tcc_add_sysinclude_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_sysinclude_path.md)
+  : Add a system include path to a libtcc state
 - [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
   : Call a zero-argument symbol with a specified return type
 - [`tcc_compile_string()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.md)
