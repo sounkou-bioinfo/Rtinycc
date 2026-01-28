@@ -53,7 +53,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x55a4c246e000>
+#> <pointer: 0x6035e8d47000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -70,51 +70,40 @@ r_lib <- file.path(R.home("lib"))
 
 tcc_add_include_path(state, r_include)
 #> [1] 0
-tcc_add_sysinclude_path(state, r_include)
-#> [1] 0
 tcc_add_library_path(state, r_lib)
 #> [1] 0
 
-# Link against R library
-tcc_add_library(state, "R")
+# Link against external math library (libm) for real math functions
+tcc_add_library(state, "m")
 #> [1] 0
 
-# C code that includes R headers and calls R functions
+# C code that includes math.h and uses external library functions
 # Workaround: Define _Complex to empty since TinyCC doesn't support complex types
 code <- '
 #define _Complex
 #include <R.h>
-#include <Rmath.h>
+#include <math.h>
 
 void hello_world() {
   Rprintf("Hello World from compiled C code!\\n");
 }
 
-double get_random_normal() {
-  double val = rnorm(0.0, 1.0);
-  Rprintf("Generated random normal: %f\\n", val);
+double calculate_sqrt_2() {
+  double val = sqrt(2.0);
+  Rprintf("sqrt(2) = %f\\n", val);
   return val;
 }
 
-double get_pi() {
-  Rprintf("Returning PI value\\n");
-  return 3.14159265359;
+double calculate_sin_pi() {
+  double val = sin(3.14159265359);
+  Rprintf("sin(PI) = %f\\n", val);
+  return val;
 }
 
-double get_euler() {
-  Rprintf("Returning Euler\\\"s number\\n");
-  return 2.71828182846;
-}
-
-int fibonacci_10() {
-  Rprintf("Calculating 10th Fibonacci number\\n");
-  int a = 0, b = 1, temp;
-  for (int i = 0; i < 10; i++) {
-    temp = a + b;
-    a = b;
-    b = temp;
-  }
-  return a;
+double calculate_log_10() {
+  double val = log(10.0);
+  Rprintf("log(10) = %f\\n", val);
+  return val;
 }
 '
 
@@ -123,37 +112,30 @@ tcc_compile_string(state, code)
 tcc_relocate(state)
 #> [1] 0
 
+# List available symbols in the compilation state
+symbols <- tcc_list_symbols(state)
+symbols
+#> character(0)
+
 # Call the functions (all zero-argument functions)
 tcc_call_symbol(state, "hello_world", return = "void")
 #> Hello World from compiled C code!
 #> NULL
 
-result1 <- tcc_call_symbol(state, "get_random_normal", return = "double")
-#> Generated random normal: -8.773321
+result1 <- tcc_call_symbol(state, "calculate_sqrt_2", return = "double")
+#> sqrt(2) = 1.414214
 result1
-#> [1] -8.773321
+#> [1] 1.414214
 
-result2 <- tcc_call_symbol(state, "get_pi", return = "double") 
-#> Returning PI value
+result2 <- tcc_call_symbol(state, "calculate_sin_pi", return = "double") 
+#> sin(PI) = -0.000000
 result2
-#> [1] 3.141593
+#> [1] -2.068231e-13
 
-result3 <- tcc_call_symbol(state, "get_euler", return = "double")
-#> Returning Euler"s number
+result3 <- tcc_call_symbol(state, "calculate_log_10", return = "double")
+#> log(10) = 2.302585
 result3
-#> [1] 2.718282
-
-result4 <- tcc_call_symbol(state, "fibonacci_10", return = "int")
-#> Calculating 10th Fibonacci number
-result4
-#> [1] 55
-
-# Get symbol pointers for external use
-hello_ptr <- tcc_get_symbol(state, "hello_world")
-normal_ptr <- tcc_get_symbol(state, "get_random_normal")
-pi_ptr <- tcc_get_symbol(state, "get_pi")
-euler_ptr <- tcc_get_symbol(state, "get_euler")
-fib_ptr <- tcc_get_symbol(state, "fibonacci_10")
+#> [1] 2.302585
 ```
 
 ## License
