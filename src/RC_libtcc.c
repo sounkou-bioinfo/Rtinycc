@@ -65,10 +65,6 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         tcc_delete(s);
         Rf_error("tcc_set_output_type failed");
     }
-    // print the allignement of s
-    Rprintf("[RTINYCC_DEBUG][C] TCCState pointer address: %p\n", (void *)s);
-    Rprintf("[RTINYCC_DEBUG][C] address %% 8: %ld\n", (long)((uintptr_t)s % 8));
-
     SEXP ext = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
     R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, TRUE);

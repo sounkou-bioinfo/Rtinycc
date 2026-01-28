@@ -22,14 +22,10 @@ expect_equal(tcc_relocate(state), 0L)
 sym_ptr <- tcc_get_symbol(state, "forty_two")
 expect_true(inherits(sym_ptr, "tcc_symbol"))
 expect_true(tcc_symbol_is_valid(sym_ptr))
-# Debug: print symbol pointer address and alignment (always enabled)
 addr <- get_external_ptr_addr(sym_ptr)
-cat(sprintf("[RTINYCC_DEBUG] symbol 'forty_two' address: %f\n", addr))
-cat(sprintf("[RTINYCC_DEBUG] address %% 8: %f\n", addr %% 8))
+cat(sprintf("symbol 'forty_two' address: %f\n", addr))
+cat(sprintf("address %% 8: %f\n", addr %% 8))
 expect_equal(tcc_call_symbol(state, "forty_two", return = "int"), 42L)
-
-#
-
 # CLI compile to object
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
 expect_true(
@@ -39,7 +35,6 @@ expect_true(
 if (!file.exists(src)) {
   quit(save = "no", status = 1)
 }
-
 out <- tempfile(fileext = ".o")
 on.exit(unlink(out), add = TRUE)
 inc_args <- as.character(paste0("-I", tcc_include_paths()))
