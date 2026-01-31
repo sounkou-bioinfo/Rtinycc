@@ -1,10 +1,11 @@
-#' Get the address of an external pointer
+# Get the address of an external pointer
 #' @param ptr External pointer
 #' @return Address as numeric
 #' @export
 get_external_ptr_addr <- function(ptr) {
   .Call(RC_get_external_ptr_addr, ptr)
 }
+
 #' TinyCC paths
 #'
 #' Helpers to locate the bundled tinycc installation after the package is installed.
@@ -68,6 +69,10 @@ tcc_include_paths <- function() {
   )
   normalizePath(paths[file.exists(paths)], winslash = "/", mustWork = FALSE)
 }
+
+#' @rdname tcc_include_paths
+#' @export
+tcc_sysinclude_paths <- tcc_include_paths
 
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))

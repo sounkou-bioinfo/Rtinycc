@@ -137,7 +137,12 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     if (!fn) {
         Rf_error("symbol '%s' not found", sym);
     }
-    SEXP ptr = PROTECT(R_MakeExternalPtr(fn, R_NilValue, R_NilValue));
+    /* Create a proper native symbol pointer that .Call can use directly */
+    static SEXP native_symbol_tag = NULL;
+    if (native_symbol_tag == NULL) {
+        native_symbol_tag = Rf_install("native symbol");
+    }
+    SEXP ptr = PROTECT(R_MakeExternalPtrFn((DL_FUNC)fn, native_symbol_tag, R_NilValue));
     Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_symbol"));
     UNPROTECT(1);
     return ptr;
@@ -180,6 +185,13 @@ SEXP RC_libtcc_ptr_valid(SEXP ptr) {
     }
     void *p = R_ExternalPtrAddr(ptr);
     return Rf_ScalarLogical(p != NULL);
+}
+
+SEXP RC_libtcc_output_file(SEXP ext, SEXP filename) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *fname = Rf_translateCharUTF8(STRING_ELT(filename, 0));
+    int rc = tcc_output_file(s, fname);
+    return Rf_ScalarInteger(rc);
 }
 
 // Expose external pointer address to R

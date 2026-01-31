@@ -15,7 +15,6 @@ SEXP RC_libtcc_relocate(SEXP ext);
 SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type);
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
 
-SEXP RC_libtcc_call_symbol_typed(SEXP ext, SEXP name, SEXP ret_type);
 SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_get_external_ptr_addr(SEXP ext);
 

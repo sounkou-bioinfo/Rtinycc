@@ -2,9 +2,12 @@
 % Please edit documentation in R/tinycc.R
 \name{tcc_include_paths}
 \alias{tcc_include_paths}
+\alias{tcc_sysinclude_paths}
 \title{TinyCC include search paths}
 \usage{
 tcc_include_paths()
+
+tcc_sysinclude_paths()
 }
 \value{
 A character vector of include directories.
