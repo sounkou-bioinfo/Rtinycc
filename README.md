@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x595119b56000>
+#> <pointer: 0x5d1b02209000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -260,7 +260,6 @@ math_lib <- tcc_link(
   )
 )
 
-# Use directly
 math_lib$sqrt(16.0)
 #> [1] 4
 ```
@@ -287,28 +286,140 @@ sqlite$sqlite3_libversion()
 #> [1] "3.45.1"
 ```
 
-you can also link against your own small wrappers
+#### In-Memory Database with Helper Functions
+
+Create user-friendly helper functions for SQLite operations:
 
 ``` r
+# Create SQLite with helper functions
+sqlite_with_helpers <- tcc_ffi()
+sqlite_with_helpers <- tcc_header(sqlite_with_helpers, '#include <sqlite3.h>')
+sqlite_with_helpers <- tcc_library(sqlite_with_helpers, "sqlite3")
+sqlite_with_helpers <- tcc_source(sqlite_with_helpers, '
+  #include <sqlite3.h>
+  
+  void* tcc_create_inmemory_db() {
+    sqlite3* db = NULL;
+    sqlite3_open(":memory:", &db);
+    return db;
+  }
+  
+  int tcc_exec_sql(void* db_ptr, const char* sql) {
+    sqlite3* db = (sqlite3*)db_ptr;
+    char* err_msg = NULL;
+    int rc = sqlite3_exec(db, sql, NULL, NULL, &err_msg);
+    if (err_msg) sqlite3_free(err_msg);
+    return rc;
+  }
+')
+sqlite_with_helpers <- tcc_bind(sqlite_with_helpers,
+  sqlite3_libversion = list(args = list(), returns = "cstring"),
+  sqlite3_close = list(args = list("ptr"), returns = "i32"),
+  tcc_create_inmemory_db = list(args = list(), returns = "ptr"),
+  tcc_exec_sql = list(args = list("ptr", "cstring"), returns = "i32")
+)
+sqlite_with_helpers <- tcc_compile(sqlite_with_helpers)
 
+# Create in-memory database and use it
+db <- sqlite_with_helpers$tcc_create_inmemory_db()
+sqlite_with_helpers$tcc_exec_sql(db, "CREATE TABLE users (id INTEGER, name TEXT);")
+#> [1] 0
+sqlite_with_helpers$tcc_exec_sql(db, "INSERT INTO users VALUES (1, 'Alice');")
+#> [1] 0
+sqlite_with_helpers$tcc_exec_sql(db, "INSERT INTO users VALUES (2, 'Bob');")
+#> [1] 0
 
-compiled <- tcc_ffi() |>
-  tcc_output("memory") |>
+sqlite_with_helpers$sqlite3_libversion()
+#> [1] "3.45.1"
+sqlite_with_helpers$sqlite3_close(db)
+#> [1] 0
+```
+
+#### SQLite with Pointer Utilities
+
+Using generic pointer utilities for cleaner SQLite operations:
+
+``` r
+# Create SQLite with pointer utilities integration
+sqlite_with_utils <- tcc_ffi() |>
   tcc_header('#include <sqlite3.h>') |>
   tcc_library("sqlite3") |>
-  tcc_source(
-    paste0(
-      "const char* get_sqlite_version() {\n",
-      "  return sqlite3_libversion();\n",
-      "}\n"
-    )
-  ) |>
+  tcc_source('
+    #include <sqlite3.h>
+  
+  // Helper to create in-memory database
+  void* tcc_create_inmemory_db_with_utils() {
+    sqlite3* db = NULL;
+    sqlite3_open(":memory:", &db);
+    return db;
+  }
+  
+  // Helper that executes SQL
+  int tcc_exec_with_utils(void* db_ptr, const char* sql) {
+    sqlite3* db = (sqlite3*)db_ptr;
+    char* err_msg = NULL;
+    int rc = sqlite3_exec(db, sql, NULL, NULL, &err_msg);
+    if (err_msg) {
+      sqlite3_free(err_msg);
+    }
+    return rc;
+  }
+  
+  // Helper to create and populate database
+  void* tcc_setup_test_db() {
+    sqlite3* db = NULL;
+    sqlite3_open(":memory:", &db);
+    if (db) {
+      sqlite3_exec(db, "CREATE TABLE items (id INTEGER, name TEXT);", NULL, NULL, NULL);
+      sqlite3_exec(db, "INSERT INTO items VALUES (1, test);", NULL, NULL, NULL);
+    }
+    return db;
+  }
+') |>
   tcc_bind(
-    get_sqlite_version = list(args = list(), returns = "cstring")
+    sqlite3_libversion = list(args = list(), returns = "cstring"),
+    sqlite3_close = list(args = list("ptr"), returns = "i32"),
+    tcc_create_inmemory_db_with_utils = list(args = list(), returns = "ptr"),
+    tcc_exec_with_utils = list(args = list("ptr", "cstring"), returns = "i32"),
+    tcc_setup_test_db = list(args = list(), returns = "ptr")
   ) |>
   tcc_compile()
 
-# Call the compiled function; type conversion returns an R string
+# Use pointer utilities with SQLite
+db <- sqlite_with_utils$tcc_setup_test_db()
+tcc_ptr_addr(db, hex = TRUE)
+#> Warning in sprintf("0x%016x", as.integer(addr)): NAs introduced by coercion to
+#> integer range
+#> [1] "0x              NA"
+
+result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
+sqlite_with_utils$sqlite3_libversion()
+#> [1] "3.45.1"
+sqlite_with_utils$sqlite3_close(db)
+#> [1] 0
+```
+
+#### Custom Wrappers
+
+You can also create custom wrapper functions:
+
+``` r
+compiled <- tcc_ffi()
+compiled <- tcc_output(compiled, "memory")
+compiled <- tcc_header(compiled, '#include <sqlite3.h>')
+compiled <- tcc_library(compiled, "sqlite3")
+compiled <- tcc_source(compiled,
+  paste0(
+    "const char* get_sqlite_version() {\n",
+    "  return sqlite3_libversion();\n",
+    "}\n"
+  )
+)
+compiled <- tcc_bind(compiled,
+  get_sqlite_version = list(args = list(), returns = "cstring")
+)
+compiled <- tcc_compile(compiled)
+
 compiled$get_sqlite_version()
 #> [1] "3.45.1"
 ```

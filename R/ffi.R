@@ -416,7 +416,8 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(sysname,
+  switch(
+    sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -469,14 +470,14 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(sysname,
+    lib_name <- switch(
+      sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
       paste0("lib", name, ".so") # Default
     )
   }
-
 
   for (path in paths) {
     if (dir.exists(path)) {
@@ -508,6 +509,7 @@ tcc_find_library <- function(name) {
 #' @param libs Library names to link (e.g., "sqlite3")
 #' @param lib_paths Additional library search paths
 #' @param include_paths Additional include search paths
+#' @param user_code Optional custom C code to include in the compilation
 #' @param verbose Print debug information
 #' @return A tcc_compiled object with callable functions
 #' @export
@@ -525,6 +527,29 @@ tcc_find_library <- function(name) {
 #'
 #' # Call directly - type conversion happens automatically
 #' sqlite$sqlite3_libversion()
+#'
+#' # Example with custom user code for helper functions
+#' math_with_helpers <- tcc_link(
+#'   "libm.so.6",
+#'   symbols = list(
+#'     sqrt = list(args = list("f64"), returns = "f64"),
+#'     safe_sqrt = list(args = list("f64"), returns = "f64")
+#'   ),
+#'   user_code = '
+#'     #include <math.h>
+#'
+#'     // Helper function that validates input before calling sqrt
+#'     double safe_sqrt(double x) {
+#'       if (x < 0) {
+#'         return NAN;
+#'       }
+#'       return sqrt(x);
+#'     }
+#'   ',
+#'   libs = "m"
+#' )
+#' math_with_helpers$safe_sqrt(16.0)
+#' math_with_helpers$safe_sqrt(-4.0)  # Returns NaN for negative input
 #' }
 tcc_link <- function(
   path,
@@ -533,6 +558,7 @@ tcc_link <- function(
   libs = character(0),
   lib_paths = character(0),
   include_paths = character(0),
+  user_code = NULL,
   verbose = FALSE
 ) {
   # Find library if not absolute path
@@ -561,6 +587,11 @@ tcc_link <- function(
   # Process headers
   if (!is.null(headers)) {
     ffi$headers <- headers
+  }
+
+  # Process user code
+  if (!is.null(user_code)) {
+    ffi$c_code <- user_code
   }
 
   # Add the library path for the specific library

@@ -1,6 +1,10 @@
-# Get the address of an external pointer
-#' @param ptr External pointer
-#' @return Address as numeric
+#' Get the address of an external pointer
+#'
+#' Extract the memory address from an external pointer as a numeric value.
+#' This is primarily useful for debugging and inspection purposes.
+#'
+#' @param ptr An external pointer object (e.g., from `tcc_get_symbol()`).
+#' @return The memory address as a numeric value.
 #' @export
 get_external_ptr_addr <- function(ptr) {
   .Call(RC_get_external_ptr_addr, ptr)

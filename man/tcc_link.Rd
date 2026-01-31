@@ -11,6 +11,7 @@ tcc_link(
   libs = character(0),
   lib_paths = character(0),
   include_paths = character(0),
+  user_code = NULL,
   verbose = FALSE
 )
 }
@@ -30,6 +31,8 @@ tcc_link(
 \item{lib_paths}{Additional library search paths}
 
 \item{include_paths}{Additional include search paths}
+
+\item{user_code}{Optional custom C code to include in the compilation}
 
 \item{verbose}{Print debug information}
 }
@@ -56,5 +59,28 @@ sqlite <- tcc_link(
 
 # Call directly - type conversion happens automatically
 sqlite$sqlite3_libversion()
+
+# Example with custom user code for helper functions
+math_with_helpers <- tcc_link(
+  "libm.so.6",
+  symbols = list(
+    sqrt = list(args = list("f64"), returns = "f64"),
+    safe_sqrt = list(args = list("f64"), returns = "f64")
+  ),
+  user_code = '
+    #include <math.h>
+
+    // Helper function that validates input before calling sqrt
+    double safe_sqrt(double x) {
+      if (x < 0) {
+        return NAN;
+      }
+      return sqrt(x);
+    }
+  ',
+  libs = "m"
+)
+math_with_helpers$safe_sqrt(16.0)
+math_with_helpers$safe_sqrt(-4.0)  # Returns NaN for negative input
 }
 }

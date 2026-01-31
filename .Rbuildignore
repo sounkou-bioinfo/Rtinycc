@@ -11,3 +11,5 @@ src/*.o
 ^tinycc/*$
 ^\.vscode$
 ^Makefile$
+^AGENTS.md$
+^\.sync/.*$

@@ -5,9 +5,34 @@
 #include <stdint.h>
 
 static void RC_tcc_finalizer(SEXP ext) {
-    TCCState *s = (TCCState *) R_ExternalPtrAddr(ext);
-    if (s) {
+    void *ptr = R_ExternalPtrAddr(ext);
+    if (ptr) {
+        TCCState *s = (TCCState*)ptr;
         tcc_delete(s);
+        R_ClearExternalPtr(ext);
+    }
+}
+
+static void RC_null_finalizer(SEXP ext) {
+    // NULL pointer doesn't need cleanup
+    R_ClearExternalPtr(ext);
+}
+
+static void RC_free_finalizer(SEXP ext) {
+    void *ptr = R_ExternalPtrAddr(ext);
+    if (ptr) {
+        free(ptr);
+        R_ClearExternalPtr(ext);
+    }
+}
+
+static void RC_cstring_finalizer(SEXP ext) {
+    char **ptr = (char**)R_ExternalPtrAddr(ext);
+    if (ptr) {
+        if (*ptr) {
+            free(*ptr);
+        }
+        free(ptr);
         R_ClearExternalPtr(ext);
     }
 }
@@ -198,4 +223,72 @@ SEXP RC_libtcc_output_file(SEXP ext, SEXP filename) {
 SEXP RC_get_external_ptr_addr(SEXP ext) {
     void *addr = R_ExternalPtrAddr(ext);
     return Rf_ScalarReal((double)(uintptr_t)addr);
+}
+
+// Pointer utility functions
+SEXP RC_null_pointer() {
+    SEXP ptr = R_MakeExternalPtr(NULL, R_NilValue, R_NilValue);
+    R_RegisterCFinalizerEx(ptr, RC_null_finalizer, TRUE);
+    return ptr;
+}
+
+SEXP RC_malloc(SEXP size) {
+    int sz = Rf_asInteger(size);
+    if (sz <= 0) {
+        Rf_error("Size must be positive");
+    }
+    
+    void *data = malloc(sz);
+    if (!data) {
+        Rf_error("Memory allocation failed");
+    }
+    
+    SEXP ptr = R_MakeExternalPtr(data, R_NilValue, R_NilValue);
+    R_RegisterCFinalizerEx(ptr, RC_free_finalizer, TRUE);
+    return ptr;
+}
+
+SEXP RC_free(SEXP ptr) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+    
+    void *data = R_ExternalPtrAddr(ptr);
+    if (data) {
+        free(data);
+        R_ClearExternalPtr(ptr);
+    }
+    
+    return R_NilValue;
+}
+
+SEXP RC_create_cstring(SEXP str) {
+    if (TYPEOF(str) != STRSXP) {
+        Rf_error("Expected character vector");
+    }
+    
+    const char *c_str = Rf_translateCharUTF8(STRING_ELT(str, 0));
+    char *data = malloc(strlen(c_str) + 1);
+    if (!data) {
+        Rf_error("Memory allocation failed");
+    }
+    
+    strcpy(data, c_str);
+    
+    SEXP ptr = R_MakeExternalPtr(data, R_NilValue, R_NilValue);
+    R_RegisterCFinalizerEx(ptr, RC_free_finalizer, TRUE);
+    return ptr;
+}
+
+SEXP RC_read_cstring(SEXP ptr) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+    
+    char *data = (char*)R_ExternalPtrAddr(ptr);
+    if (!data) {
+        return Rf_ScalarString(Rf_mkChar(""));
+    }
+    
+    return Rf_ScalarString(Rf_mkCharCE(data, CE_UTF8));
 }

@@ -18,6 +18,13 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
 SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_get_external_ptr_addr(SEXP ext);
 
+// Pointer utility functions
+SEXP RC_null_pointer(void);
+SEXP RC_malloc(SEXP size);
+SEXP RC_free(SEXP ptr);
+SEXP RC_create_cstring(SEXP str);
+SEXP RC_read_cstring(SEXP ptr);
+
 // .Call entries
 static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_state_new",   (DL_FUNC) &RC_libtcc_state_new,   3},
@@ -34,6 +41,13 @@ static const R_CallMethodDef CallEntries[] = {
     
     {"RC_libtcc_ptr_valid",   (DL_FUNC) &RC_libtcc_ptr_valid,   1},
     {"RC_get_external_ptr_addr", (DL_FUNC) &RC_get_external_ptr_addr, 1},
+    
+    // Pointer utility functions
+    {"RC_null_pointer",   (DL_FUNC) &RC_null_pointer,   0},
+    {"RC_malloc",        (DL_FUNC) &RC_malloc,        1},
+    {"RC_free",          (DL_FUNC) &RC_free,          1},
+    {"RC_create_cstring",(DL_FUNC) &RC_create_cstring,1},
+    {"RC_read_cstring",  (DL_FUNC) &RC_read_cstring,  1},
     {NULL, NULL, 0}
 };
 
