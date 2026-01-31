@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5783abe54000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x637a3f1c5000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
@@ -321,58 +321,10 @@
 <span><span class="co">#&gt; [1] "3.45.1"</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="in-memory-database-with-helper-functions">In-Memory Database with Helper Functions<a class="anchor" aria-label="anchor" href="#in-memory-database-with-helper-functions"></a>
+<h4 id="custom-wrapper-functions-sqlite-with-pointer-utilities">Custom wrapper functions: SQLite with Pointer Utilities<a class="anchor" aria-label="anchor" href="#custom-wrapper-functions-sqlite-with-pointer-utilities"></a>
 </h4>
-<p>Create user-friendly helper functions for SQLite operations:</p>
+<p>You can also create custom wrapper functions</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Create SQLite with helper functions</span></span>
-<span><span class="va">sqlite_with_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="va">sqlite_with_helpers</span>, <span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="va">sqlite_with_helpers</span>, <span class="st">"sqlite3"</span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">sqlite_with_helpers</span>, <span class="st">'</span></span>
-<span><span class="st">  #include &lt;sqlite3.h&gt;</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  void* tcc_create_inmemory_db() {</span></span>
-<span><span class="st">    sqlite3* db = NULL;</span></span>
-<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
-<span><span class="st">    return db;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  int tcc_exec_sql(void* db_ptr, const char* sql) {</span></span>
-<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
-<span><span class="st">    char* err_msg = NULL;</span></span>
-<span><span class="st">    int rc = sqlite3_exec(db, sql, NULL, NULL, &amp;err_msg);</span></span>
-<span><span class="st">    if (err_msg) sqlite3_free(err_msg);</span></span>
-<span><span class="st">    return rc;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">'</span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span><span class="va">sqlite_with_helpers</span>,</span>
-<span>  sqlite3_libversion <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"cstring"</span><span class="op">)</span>,</span>
-<span>  sqlite3_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>  tcc_create_inmemory_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
-<span>  tcc_exec_sql <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="va">sqlite_with_helpers</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Create in-memory database and use it</span></span>
-<span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_helpers</span><span class="op">$</span><span class="fu">tcc_create_inmemory_db</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_helpers</span><span class="op">$</span><span class="fu">tcc_exec_sql</span><span class="op">(</span><span class="va">db</span>, <span class="st">"CREATE TABLE users (id INTEGER, name TEXT);"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_with_helpers</span><span class="op">$</span><span class="fu">tcc_exec_sql</span><span class="op">(</span><span class="va">db</span>, <span class="st">"INSERT INTO users VALUES (1, 'Alice');"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_with_helpers</span><span class="op">$</span><span class="fu">tcc_exec_sql</span><span class="op">(</span><span class="va">db</span>, <span class="st">"INSERT INTO users VALUES (2, 'Bob');"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span></span>
-<span><span class="va">sqlite_with_helpers</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "3.45.1"</span></span>
-<span><span class="va">sqlite_with_helpers</span><span class="op">$</span><span class="fu">sqlite3_close</span><span class="op">(</span><span class="va">db</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="sqlite-with-pointer-utilities">SQLite with Pointer Utilities<a class="anchor" aria-label="anchor" href="#sqlite-with-pointer-utilities"></a>
-</h4>
-<p>Using generic pointer utilities for cleaner SQLite operations:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create SQLite with pointer utilities integration</span></span>
 <span><span class="va">sqlite_with_utils</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -421,39 +373,13 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Warning in sprintf("0x%016x", as.integer(addr)): NAs introduced by coercion to</span></span>
-<span><span class="co">#&gt; integer range</span></span>
-<span><span class="co">#&gt; [1] "0x              NA"</span></span>
+<span><span class="co">#&gt; [1] "0x637a3f2af168"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "3.45.1"</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_close</span><span class="op">(</span><span class="va">db</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="custom-wrappers">Custom Wrappers<a class="anchor" aria-label="anchor" href="#custom-wrappers"></a>
-</h4>
-<p>You can also create custom wrapper functions:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_output.html">tcc_output</a></span><span class="op">(</span><span class="va">compiled</span>, <span class="st">"memory"</span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="va">compiled</span>, <span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="va">compiled</span>, <span class="st">"sqlite3"</span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">compiled</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
-<span>    <span class="st">"const char* get_sqlite_version() {\n"</span>,</span>
-<span>    <span class="st">"  return sqlite3_libversion();\n"</span>,</span>
-<span>    <span class="st">"}\n"</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span><span class="va">compiled</span>,</span>
-<span>  get_sqlite_version <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"cstring"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="va">compiled</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">compiled</span><span class="op">$</span><span class="fu">get_sqlite_version</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "3.45.1"</span></span></code></pre></div>
 </div>
 </div>
 </div>
