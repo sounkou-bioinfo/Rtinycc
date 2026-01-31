@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5c4beb592000>
+#> <pointer: 0x5a9f1c3bd000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -180,7 +180,7 @@ result3 <- tcc_call_symbol(state, "demonstrate_r_types", return = "void")
 #> Logical value: 1
 ```
 
-### Modern FFI API (Bun-style)
+### A declarative FFI API
 
 A declarative interface inspired by
 [Bun:FFI](https://bun.com/docs/runtime/ffi) is provided. Define types
