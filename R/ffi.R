@@ -416,20 +416,28 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(
-    sysname,
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
       "/usr/local/lib",
       "/lib",
-      "/lib64"
+      "/lib64",
+      "/lib32",
+      "/usr/local/lib64",
+      "/usr/lib/x86_64-linux-gnu",
+      "/usr/lib/i386-linux-gnu",
+      "/lib/x86_64-linux-gnu",
+      "/lib32/x86_64-linux-gnu",
+      "/lib/x86_64-linux-gnu/"
     ),
     Darwin = c(
       "/usr/lib",
       "/usr/local/lib",
       "/opt/homebrew/lib", # Apple Silicon Homebrew
-      "/opt/local/lib" # MacPorts
+      "/opt/local/lib", # MacPorts
+      "/System/Library/Frameworks", # Apple system libs
+      "/Library/Frameworks"
     ),
     Windows = c(
       "C:/msys64/mingw64/lib", # MSYS2
@@ -453,13 +461,22 @@ tcc_find_library <- function(name) {
   sysname <- Sys.info()["sysname"]
 
   # Platform-specific library naming
-  lib_name <- switch(
-    sysname,
-    Linux = paste0("lib", name, ".so"),
-    Darwin = paste0("lib", name, ".dylib"),
-    Windows = paste0(name, ".dll"),
-    paste0("lib", name, ".so") # Default
-  )
+  # check if name already has ddl subix (including version numbers)
+  if (sysname == "Windows" && grepl("\\.dll$", name, ignore.case = TRUE)) {
+    lib_name <- name
+  } else if (sysname == "Linux" && grepl("\\.so(\\..*)?$", name)) {
+    lib_name <- name
+  } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
+    lib_name <- name
+  } else {
+    lib_name <- switch(sysname,
+      Linux = paste0("lib", name, ".so"),
+      Darwin = paste0("lib", name, ".dylib"),
+      Windows = paste0(name, ".dll"),
+      paste0("lib", name, ".so") # Default
+    )
+  }
+
 
   for (path in paths) {
     if (dir.exists(path)) {
@@ -552,7 +569,7 @@ tcc_link <- function(
   # Extract library name from path for linking
   lib_name <- sub("^lib", "", basename(path))
   lib_name <- sub("\\.(so|dylib|dll).*", "", lib_name)
-  if (nzchar(lib_name)) {
+  if (nzchar(lib_name) > 0) {
     ffi <- tcc_library(ffi, lib_name)
   }
 
@@ -600,7 +617,7 @@ tcc_link <- function(
 
   # Add library paths
   for (lp in ffi$lib_paths) {
-    if (nzchar(lp) && dir.exists(lp)) {
+    if (nzchar(lp) > 0 && dir.exists(lp)) {
       tcc_add_library_path(state, lp)
     }
   }

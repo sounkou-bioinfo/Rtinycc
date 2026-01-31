@@ -54,14 +54,14 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5c94c7271000>
+#> <pointer: 0x5c4beb592000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
 
-### Calling R’s C API functions from compiled C code
+### Low Level API For Calling C code
 
-Using `Define _Complex` as workaround of `TinyCC`’s lack of support for
+Using `#Define _Complex` as workaround of `TinyCC`’s lack of support for
 complex types, we can link against R’s install headers and `libR` to
 call R’s C API function.
 
@@ -182,9 +182,10 @@ result3 <- tcc_call_symbol(state, "demonstrate_r_types", return = "void")
 
 ### Modern FFI API (Bun-style)
 
-The new FFI API provides a clean, declarative interface inspired by
-Bun’s FFI. Define types explicitly and let TinyCC generate the binding
-code automatically.
+A declarative interface inspired by
+[Bun:FFI](https://bun.com/docs/runtime/ffi) is provided. Define types
+explicitly and let `Rtinycc` generate the binding code automatically by
+using `TinyCC` to compile a dll.
 
 #### Type System
 
@@ -199,7 +200,6 @@ The FFI type system maps R types to C types:
 #### Example: Simple Function
 
 ``` r
-library(Rtinycc)
 
 # Define and compile in one chain
 ffi <- tcc_ffi() |>
@@ -248,25 +248,22 @@ result
 
 #### Linking External Libraries
 
-Link against system libraries like libm (math) or libsqlite3:
+Link against system libraries like libm
 
 ``` r
 # Link against math library
 math_lib <- tcc_link(
-  "libm.so",
+  "libm.so.6",
   symbols = list(
     sqrt = list(args = list("f64"), returns = "f64"),
     sin = list(args = list("f64"), returns = "f64")
-  ),
-  libs = "m"
+  )
 )
 
 # Use directly
 math_lib$sqrt(16.0)
+#> [1] 4
 ```
-
-**Note**: The `_Complex` workaround is automatically applied when using
-R headers.
 
 ## License
 

@@ -5,8 +5,7 @@
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
     i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
     i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
@@ -61,8 +60,7 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
 generate_c_return <- function(value_expr, ffi_type) {
   type_info <- check_ffi_type(ffi_type, "return value")
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
@@ -266,8 +264,10 @@ generate_ffi_code <- function(
   }
 
   # User C code
-  if (!is.null(c_code) && nzchar(c_code)) {
-    parts <- c(parts, "/* User code */", c_code, "")
+  if (!is.null(c_code) && length(c_code) > 0) {
+    if (nzchar(c_code) > 0) {
+      parts <- c(parts, "/* User code */", c_code, "")
+    }
   }
 
   # Wrapper functions
