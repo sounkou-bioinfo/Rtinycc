@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-We provide a simple R interface to the [tinycc](https://github.com/TinyCC/tinycc) compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. A simple FFI interface inspired by [bun's FFI](https://bun.com/docs/runtime/ffi) is included .We do not support windows.
+We provide a simple R interface to the [tinycc](https://github.com/TinyCC/tinycc) compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. A simple FFI interface inspired by [bun's FFI](https://bun.com/docs/runtime/ffi) is included. We do not support windows.
 
 ## Installation
 

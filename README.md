@@ -12,7 +12,7 @@ We provide a simple R interface to the
 [tinycc](https://github.com/TinyCC/tinycc) compiler including the cli
 and the libtcc library. This is mainly a vehicule for the tinycc
 compiler and libtcc library. A simple FFI interface inspired by [bun’s
-FFI](https://bun.com/docs/runtime/ffi) is included .We do not support
+FFI](https://bun.com/docs/runtime/ffi) is included. We do not support
 windows.
 
 ## Installation
@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5a9f1c3bd000>
+#> <pointer: 0x5a6031219000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
