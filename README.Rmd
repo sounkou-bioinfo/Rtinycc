@@ -239,6 +239,8 @@ math_lib$sqrt(16.0)
 
 #### Linking SQLite3
 
+you can link again the libraries and access the exported symbol
+
 ```{r ffi-link-sqlite, eval=TRUE}
 # Link the system SQLite3 library and expose a few symbols
 sqlite <- tcc_link(
@@ -254,6 +256,31 @@ sqlite <- tcc_link(
 
 # Query the SQLite library version
 sqlite$sqlite3_libversion()
+```
+
+you can also link against your own small wrappers
+
+```{r ffi-source-with-link, eval=TRUE}
+
+
+compiled <- tcc_ffi() |>
+  tcc_output("memory") |>
+  tcc_header('#include <sqlite3.h>') |>
+  tcc_library("sqlite3") |>
+  tcc_source(
+    paste0(
+      "const char* get_sqlite_version() {\n",
+      "  return sqlite3_libversion();\n",
+      "}\n"
+    )
+  ) |>
+  tcc_bind(
+    get_sqlite_version = list(args = list(), returns = "cstring")
+  ) |>
+  tcc_compile()
+
+# Call the compiled function; type conversion returns an R string
+compiled$get_sqlite_version()
 ```
 
 ## License
