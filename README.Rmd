@@ -267,9 +267,7 @@ You can also create custom wrapper functions
 sqlite_with_utils <- tcc_ffi() |>
   tcc_header('#include <sqlite3.h>') |>
   tcc_library("sqlite3") |>
-  tcc_source('
-    #include <sqlite3.h>
-  
+  tcc_source('  
   // Helper to create in-memory database
   void* tcc_create_inmemory_db_with_utils() {
     sqlite3* db = NULL;
