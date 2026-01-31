@@ -2,6 +2,8 @@
 
 ## All functions
 
+- [`get_external_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/get_external_ptr_addr.md)
+  : Get the address of an external pointer
 - [`print(`*`<tcc_compiled>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_compiled.md)
   : Print tcc_compiled object
 - [`print(`*`<tcc_ffi>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_ffi.md)
@@ -30,6 +32,8 @@
   : CString S3 Class
 - [`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md)
   : Create a new FFI compilation context
+- [`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md)
+  : Free allocated memory
 - [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md)
   : Get a symbol pointer from a libtcc state
 - [`tcc_header()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_header.md)
@@ -45,6 +49,10 @@
   : Add library path to FFI context
 - [`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
   : Link an external shared library with Bun-style FFI bindings
+- [`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
+  : Allocate memory buffer
+- [`tcc_null_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_null_ptr.md)
+  : Create a NULL pointer
 - [`tcc_output()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output.md)
   : Set output type for FFI compilation
 - [`tcc_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_path.md)
@@ -56,6 +64,12 @@
   [`tcc_bin_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
   [`tcc_cli()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.md)
   : TinyCC paths
+- [`tcc_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_addr.md)
+  : Get pointer address as integer
+- [`tcc_ptr_utils`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_utils.md)
+  : Pointer and Buffer Utilities for FFI
+- [`tcc_read_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_cstring.md)
+  : Read C-style string from pointer
 - [`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md)
   : Relocate compiled code
 - [`tcc_run_cli()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_run_cli.md)

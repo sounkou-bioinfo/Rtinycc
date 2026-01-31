@@ -3,13 +3,22 @@
 Safe handling of C strings (char\*) with automatic memory management.
 Like Bun's CString class.
 
+Convert R character strings to C-style null-terminated string pointers.
+This handles UTF-8 encoding and null termination automatically.
+
 ## Usage
 
 ``` r
-tcc_cstring(ptr, clone = TRUE, owned = FALSE)
+tcc_cstring(str)
+
+tcc_cstring(str)
 ```
 
 ## Arguments
+
+- str:
+
+  Character string
 
 - ptr:
 
@@ -26,3 +35,5 @@ tcc_cstring(ptr, clone = TRUE, owned = FALSE)
 ## Value
 
 A tcc_cstring object
+
+External pointer to C string
