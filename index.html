@@ -93,14 +93,14 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5c94c7271000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c4beb592000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="calling-rs-c-api-functions-from-compiled-c-code">Calling R’s C API functions from compiled C code<a class="anchor" aria-label="anchor" href="#calling-rs-c-api-functions-from-compiled-c-code"></a>
+<h3 id="low-level-api-for-calling-c-code">Low Level API For Calling C code<a class="anchor" aria-label="anchor" href="#low-level-api-for-calling-c-code"></a>
 </h3>
-<p>Using <code>Define _Complex</code> as workaround of <code>TinyCC</code>’s lack of support for complex types, we can link against R’s install headers and <code>libR</code> to call R’s C API function.</p>
+<p>Using <code>#Define _Complex</code> as workaround of <code>TinyCC</code>’s lack of support for complex types, we can link against R’s install headers and <code>libR</code> to call R’s C API function.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create new state for R linking example</span></span>
 <span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
@@ -218,7 +218,7 @@
 <div class="section level3">
 <h3 id="modern-ffi-api-bun-style">Modern FFI API (Bun-style)<a class="anchor" aria-label="anchor" href="#modern-ffi-api-bun-style"></a>
 </h3>
-<p>The new FFI API provides a clean, declarative interface inspired by Bun’s FFI. Define types explicitly and let TinyCC generate the binding code automatically.</p>
+<p>A declarative interface inspired by <a href="https://bun.com/docs/runtime/ffi" class="external-link">Bun:FFI</a> is provided. Define types explicitly and let <code>Rtinycc</code> generate the binding code automatically by using <code>TinyCC</code> to compile a dll.</p>
 <div class="section level4">
 <h4 id="type-system">Type System<a class="anchor" aria-label="anchor" href="#type-system"></a>
 </h4>
@@ -238,8 +238,7 @@
 <h4 id="example-simple-function">Example: Simple Function<a class="anchor" aria-label="anchor" href="#example-simple-function"></a>
 </h4>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rtinycc" class="external-link">Rtinycc</a></span><span class="op">)</span></span>
-<span></span>
+<code class="sourceCode R"><span></span>
 <span><span class="co"># Define and compile in one chain</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
@@ -286,21 +285,20 @@
 <div class="section level4">
 <h4 id="linking-external-libraries">Linking External Libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
 </h4>
-<p>Link against system libraries like libm (math) or libsqlite3:</p>
+<p>Link against system libraries like libm</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Link against math library</span></span>
 <span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
-<span>  <span class="st">"libm.so"</span>,</span>
+<span>  <span class="st">"libm.so.6"</span>,</span>
 <span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span>
 <span>    sin <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  libs <span class="op">=</span> <span class="st">"m"</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Use directly</span></span>
-<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span></code></pre></div>
-<p><strong>Note</strong>: The <code>_Complex</code> workaround is automatically applied when using R headers.</p>
+<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
 </div>
 </div>
 </div>
