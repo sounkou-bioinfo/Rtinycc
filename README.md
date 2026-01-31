@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5a6031219000>
+#> <pointer: 0x614f42319000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -263,6 +263,26 @@ math_lib <- tcc_link(
 # Use directly
 math_lib$sqrt(16.0)
 #> [1] 4
+```
+
+#### Linking SQLite3
+
+``` r
+# Link the system SQLite3 library and expose a few symbols
+sqlite <- tcc_link(
+  "libsqlite3.so",
+  symbols = list(
+    sqlite3_libversion = list(args = list(), returns = "cstring"),
+    sqlite3_open = list(args = list("cstring", "ptr"), returns = "i32"),
+    sqlite3_close = list(args = list("ptr"), returns = "i32"),
+    sqlite3_exec = list(args = list("ptr", "cstring", "ptr", "ptr", "ptr"), returns = "i32")
+  ),
+  libs = "sqlite3"
+)
+
+# Query the SQLite library version
+sqlite$sqlite3_libversion()
+#> [1] "3.45.1"
 ```
 
 ## License

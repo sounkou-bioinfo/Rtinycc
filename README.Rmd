@@ -237,6 +237,25 @@ math_lib <- tcc_link(
 math_lib$sqrt(16.0)
 ```
 
+#### Linking SQLite3
+
+```{r ffi-link-sqlite, eval=TRUE}
+# Link the system SQLite3 library and expose a few symbols
+sqlite <- tcc_link(
+  "libsqlite3.so",
+  symbols = list(
+    sqlite3_libversion = list(args = list(), returns = "cstring"),
+    sqlite3_open = list(args = list("cstring", "ptr"), returns = "i32"),
+    sqlite3_close = list(args = list("ptr"), returns = "i32"),
+    sqlite3_exec = list(args = list("ptr", "cstring", "ptr", "ptr", "ptr"), returns = "i32")
+  ),
+  libs = "sqlite3"
+)
+
+# Query the SQLite library version
+sqlite$sqlite3_libversion()
+```
+
 ## License
 
 GPL-3
