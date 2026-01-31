@@ -21,8 +21,11 @@ test_generate_compile_simple <- function() {
   expect_true(grepl("int forty_two", code))
   expect_true(grepl("R_wrap_forty_two", code))
 
-  # Try to compile it
-  state <- tcc_state(output = "memory")
+  # Try to compile it (with R headers)
+  state <- tcc_state(
+    output = "memory",
+    include_path = file.path(R.home("include"))
+  )
   result <- tcc_compile_string(state, code)
 
   if (result != 0) {
@@ -68,8 +71,11 @@ test_generate_compile_arrays <- function() {
   expect_true(grepl("sum_ints", code))
   expect_true(grepl("R_wrap_sum_ints", code))
 
-  # Try to compile
-  state <- tcc_state(output = "memory")
+  # Try to compile (with R headers)
+  state <- tcc_state(
+    output = "memory",
+    include_path = file.path(R.home("include"))
+  )
   result <- tcc_compile_string(state, code)
 
   if (result == 0) {
