@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5d1b02209000>
+#> <pointer: 0x5783abe54000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
