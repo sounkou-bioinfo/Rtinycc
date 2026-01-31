@@ -75,10 +75,10 @@ tcc_free <- function(ptr) {
 #' @return Character representation of pointer address (hex if requested, decimal otherwise)
 #' @export
 tcc_ptr_addr <- function(ptr, hex = FALSE) {
-  addr <- get_external_ptr_addr(ptr)
   if (hex) {
-    format(sprintf("0x%016x", as.integer(addr)))
+    .Call(RC_get_external_ptr_hex, ptr)
   } else {
+    addr <- get_external_ptr_addr(ptr)
     as.character(addr)
   }
 }

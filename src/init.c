@@ -17,6 +17,7 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
 
 SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_get_external_ptr_addr(SEXP ext);
+SEXP RC_get_external_ptr_hex(SEXP ext);
 
 // Pointer utility functions
 SEXP RC_null_pointer(void);
@@ -41,6 +42,7 @@ static const R_CallMethodDef CallEntries[] = {
     
     {"RC_libtcc_ptr_valid",   (DL_FUNC) &RC_libtcc_ptr_valid,   1},
     {"RC_get_external_ptr_addr", (DL_FUNC) &RC_get_external_ptr_addr, 1},
+    {"RC_get_external_ptr_hex", (DL_FUNC) &RC_get_external_ptr_hex, 1},
     
     // Pointer utility functions
     {"RC_null_pointer",   (DL_FUNC) &RC_null_pointer,   0},

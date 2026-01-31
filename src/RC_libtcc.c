@@ -3,6 +3,7 @@
 #include <Rinternals.h>
 #include <R_ext/Error.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 static void RC_tcc_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
@@ -223,6 +224,27 @@ SEXP RC_libtcc_output_file(SEXP ext, SEXP filename) {
 SEXP RC_get_external_ptr_addr(SEXP ext) {
     void *addr = R_ExternalPtrAddr(ext);
     return Rf_ScalarReal((double)(uintptr_t)addr);
+}
+
+// Return pointer address formatted as hex string using uintptr_t width
+SEXP RC_get_external_ptr_hex(SEXP ext) {
+    void *raw = R_ExternalPtrAddr(ext);
+    uintptr_t addr = (uintptr_t) raw;
+    /* Buffer size: '0x' + two chars per byte + NUL */
+    size_t buf_size = 2 + (sizeof(uintptr_t) * 2) + 1;
+    char *buf = (char*) R_Calloc(buf_size, char);
+    if (!buf) {
+        Rf_error("memory allocation failed");
+    }
+    /* Use PRIxPTR for portable formatting */
+    if (raw == NULL) {
+        snprintf(buf, buf_size, "0x0");
+    } else {
+        snprintf(buf, buf_size, "0x%" PRIxPTR, addr);
+    }
+    SEXP res = Rf_mkString(buf);
+    R_Free(buf);
+    return res;
 }
 
 // Pointer utility functions
