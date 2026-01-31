@@ -51,7 +51,7 @@
 </h1></div>
 <!-- badges: start -->
 
-<p>We provide a simple R interface to the <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a> compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. Right now only basic functionalities are implemented and we do not support windows.</p>
+<p>We provide a simple R interface to the <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a> compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. A simple FFI interface inspired by <a href="https://bun.com/docs/runtime/ffi" class="external-link">bun’s FFI</a> is included .We do not support windows.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a3515cdc000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c94c7271000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
@@ -215,6 +215,94 @@
 <span><span class="co">#&gt; String vector created with 2 elements</span></span>
 <span><span class="co">#&gt; Logical value: 1</span></span></code></pre></div>
 </div>
+<div class="section level3">
+<h3 id="modern-ffi-api-bun-style">Modern FFI API (Bun-style)<a class="anchor" aria-label="anchor" href="#modern-ffi-api-bun-style"></a>
+</h3>
+<p>The new FFI API provides a clean, declarative interface inspired by Bun’s FFI. Define types explicitly and let TinyCC generate the binding code automatically.</p>
+<div class="section level4">
+<h4 id="type-system">Type System<a class="anchor" aria-label="anchor" href="#type-system"></a>
+</h4>
+<p>The FFI type system maps R types to C types:</p>
+<ul>
+<li>
+<strong>Scalars</strong>: <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code> (integers), <code>f32</code>, <code>f64</code> (floats), <code>bool</code>, <code>cstring</code>
+</li>
+<li>
+<strong>Arrays</strong> (zero-copy): <code>raw</code> → <code>uint8_t*</code>, <code>integer_array</code> → <code>int32_t*</code>, <code>numeric_array</code> → <code>double*</code>
+</li>
+<li>
+<strong>Pointers</strong>: <code>ptr</code> (externalptr), <code>sexp</code> (R object)</li>
+</ul>
+</div>
+<div class="section level4">
+<h4 id="example-simple-function">Example: Simple Function<a class="anchor" aria-label="anchor" href="#example-simple-function"></a>
+</h4>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rtinycc" class="external-link">Rtinycc</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Define and compile in one chain</span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    add <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
+<span><span class="st">    int add(int a, int b) {</span></span>
+<span><span class="st">      return a + b;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  "</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Call directly with type conversion</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="fl">5L</span>, <span class="fl">3L</span><span class="op">)</span></span>
+<span><span class="va">result</span></span>
+<span><span class="co">#&gt; [1] 8</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="example-working-with-r-arrays">Example: Working with R Arrays<a class="anchor" aria-label="anchor" href="#example-working-with-r-arrays"></a>
+</h4>
+<p>Pass R vectors to C with zero-copy:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    sum_array <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"integer_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i64"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
+<span><span class="st">    int64_t sum_array(int32_t* arr, int32_t n) {</span></span>
+<span><span class="st">      int64_t sum = 0;</span></span>
+<span><span class="st">      for(int i = 0; i &lt; n; i++) {</span></span>
+<span><span class="st">        sum += arr[i];</span></span>
+<span><span class="st">      }</span></span>
+<span><span class="st">      return sum;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  "</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Pass R integer vector directly</span></span>
+<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fl">1</span><span class="op">:</span><span class="fl">100</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">result</span></span>
+<span><span class="co">#&gt; [1] 5050</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="linking-external-libraries">Linking External Libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
+</h4>
+<p>Link against system libraries like libm (math) or libsqlite3:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Link against math library</span></span>
+<span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
+<span>  <span class="st">"libm.so"</span>,</span>
+<span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span>
+<span>    sin <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  libs <span class="op">=</span> <span class="st">"m"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Use directly</span></span>
+<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Note</strong>: The <code>_Complex</code> workaround is automatically applied when using R headers.</p>
+</div>
+</div>
 </div>
 <div class="section level2">
 <h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
@@ -227,6 +315,7 @@
 </h1>
 <ul>
 <li><a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a></li>
+<li><a href="https://bun.com/docs/runtime/ffi" class="external-link">bun’s FFI</a></li>
 </ul>
 </div>
 

@@ -3,8 +3,9 @@
 We provide a simple R interface to the
 [tinycc](https://github.com/TinyCC/tinycc) compiler including the cli
 and the libtcc library. This is mainly a vehicule for the tinycc
-compiler and libtcc library. Right now only basic functionalities are
-implemented and we do not support windows.
+compiler and libtcc library. A simple FFI interface inspired by [bun’s
+FFI](https://bun.com/docs/runtime/ffi) is included .We do not support
+windows.
 
 ## Installation
 
@@ -45,7 +46,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5a3515cdc000>
+#> <pointer: 0x5c94c7271000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -171,6 +172,94 @@ result3 <- tcc_call_symbol(state, "demonstrate_r_types", return = "void")
 #> Logical value: 1
 ```
 
+### Modern FFI API (Bun-style)
+
+The new FFI API provides a clean, declarative interface inspired by
+Bun’s FFI. Define types explicitly and let TinyCC generate the binding
+code automatically.
+
+#### Type System
+
+The FFI type system maps R types to C types:
+
+- **Scalars**: `i8`, `i16`, `i32`, `i64` (integers), `f32`, `f64`
+  (floats), `bool`, `cstring`
+- **Arrays** (zero-copy): `raw` → `uint8_t*`, `integer_array` →
+  `int32_t*`, `numeric_array` → `double*`
+- **Pointers**: `ptr` (externalptr), `sexp` (R object)
+
+#### Example: Simple Function
+
+``` r
+library(Rtinycc)
+
+# Define and compile in one chain
+ffi <- tcc_ffi() |>
+  tcc_bind(
+    add = list(args = list("i32", "i32"), returns = "i32")
+  ) |>
+  tcc_source("
+    int add(int a, int b) {
+      return a + b;
+    }
+  ") |>
+  tcc_compile()
+
+# Call directly with type conversion
+result <- ffi$add(5L, 3L)
+result
+#> [1] 8
+```
+
+#### Example: Working with R Arrays
+
+Pass R vectors to C with zero-copy:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_bind(
+    sum_array = list(args = list("integer_array", "i32"), returns = "i64")
+  ) |>
+  tcc_source("
+    int64_t sum_array(int32_t* arr, int32_t n) {
+      int64_t sum = 0;
+      for(int i = 0; i < n; i++) {
+        sum += arr[i];
+      }
+      return sum;
+    }
+  ") |>
+  tcc_compile()
+
+# Pass R integer vector directly
+x <- 1:100
+result <- ffi$sum_array(x, length(x))
+result
+#> [1] 5050
+```
+
+#### Linking External Libraries
+
+Link against system libraries like libm (math) or libsqlite3:
+
+``` r
+# Link against math library
+math_lib <- tcc_link(
+  "libm.so",
+  symbols = list(
+    sqrt = list(args = list("f64"), returns = "f64"),
+    sin = list(args = list("f64"), returns = "f64")
+  ),
+  libs = "m"
+)
+
+# Use directly
+math_lib$sqrt(16.0)
+```
+
+**Note**: The `_Complex` workaround is automatically applied when using
+R headers.
+
 ## License
 
 GPL-3
@@ -178,3 +267,4 @@ GPL-3
 # References
 
 - [tinycc](https://github.com/TinyCC/tinycc)
+- [bun’s FFI](https://bun.com/docs/runtime/ffi)

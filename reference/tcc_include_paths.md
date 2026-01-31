@@ -7,6 +7,8 @@ include and lib/tcc/include).
 
 ``` r
 tcc_include_paths()
+
+tcc_sysinclude_paths()
 ```
 
 ## Value
