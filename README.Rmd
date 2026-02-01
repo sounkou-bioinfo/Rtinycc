@@ -56,110 +56,6 @@ tcc_call_symbol(state, "forty_two", return = "int")
 tcc_get_symbol(state, "forty_two")
 ```
 
-### Low Level API For Calling C code
-
-Using `#Define _Complex` as workaround of  `TinyCC`'s lack of support for complex types, we can link against R's install headers and `libR` to call R's C API function.
-
-```{r call-R-C-API}
-# Create new state for R linking example
-state <- tcc_state(output = "memory")
-
-# Add R include and library paths using Rtinycc functions
-r_include <- R.home("include")
-r_lib <- file.path(R.home("lib"))
-
-tcc_add_include_path(state, r_include)
-tcc_add_library_path(state, r_lib)
-
-# Link against external math library (libm) for real math functions
-tcc_add_library(state, "m")
-
-# C code that demonstrates actual R C API usage
-# Workaround: Define _Complex to empty since TinyCC doesn't support complex types
-code <- '
-#define _Complex
-#include <R.h>
-#include <Rinternals.h>
-
-void hello_world() {
-  Rprintf("Hello World from compiled C code!\\n");
-}
-
-// Create an R numeric vector and calculate its length
-int create_r_vector() {
-  SEXP vec = PROTECT(Rf_allocVector(REALSXP, 5));
-  for(int i = 0; i < 5; i++) {
-    REAL(vec)[i] = (double)(i + 1) * 2.0;  // 2, 4, 6, 8, 10
-  }
-  
-  int length = Rf_length(vec);
-  Rprintf("Created vector length: %d\\n", length);
-  Rprintf("Vector values: ");
-  for(int i = 0; i < length; i++) {
-    Rprintf("%f ", REAL(vec)[i]);
-  }
-  Rprintf("\\n");
-  
-  UNPROTECT(1);
-  return length;
-}
-
-// Use Rf_install to get a function and call it
-double call_r_function() {
-  // Get the sqrt function from R base
-  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
-  
-  // Create a scalar value
-  SEXP val = PROTECT(Rf_ScalarReal(16.0));
-  
-  // Call the function
-  SEXP result = PROTECT(Rf_lang2(sqrt_fun, val));
-  SEXP eval_result = PROTECT(Rf_eval(result, R_GlobalEnv));
-  
-  double sqrt_val = REAL(eval_result)[0];
-  Rprintf("R sqrt(16.0) = %f\\n", sqrt_val);
-  
-  UNPROTECT(4);
-  return sqrt_val;
-}
-
-// Demonstrate creating different R data types
-void demonstrate_r_types() {
-  // Create different types of R objects
-  SEXP int_vec = PROTECT(Rf_allocVector(INTSXP, 3));
-  INTEGER(int_vec)[0] = 1;
-  INTEGER(int_vec)[1] = 2;
-  INTEGER(int_vec)[2] = 3;
-  Rprintf("Integer vector created with %d elements\\n", Rf_length(int_vec));
-  
-  SEXP str_vec = PROTECT(Rf_allocVector(STRSXP, 2));
-  SET_STRING_ELT(str_vec, 0, Rf_mkChar("Hello"));
-  SET_STRING_ELT(str_vec, 1, Rf_mkChar("R"));
-  Rprintf("String vector created with %d elements\\n", Rf_length(str_vec));
-  
-  SEXP logical = PROTECT(Rf_ScalarLogical(TRUE));
-  Rprintf("Logical value: %d\\n", LOGICAL(logical)[0]);
-  
-  UNPROTECT(3);
-}
-'
-
-tcc_compile_string(state, code)
-tcc_relocate(state)
-
-
-# Call the functions that demonstrate R C API usage
-tcc_call_symbol(state, "hello_world", return = "void")
-
-result1 <- tcc_call_symbol(state, "create_r_vector", return = "int")
-result1
-
-result2 <- tcc_call_symbol(state, "call_r_function", return = "double") 
-result2
-
-result3 <- tcc_call_symbol(state, "demonstrate_r_types", return = "void")
-```
-
 ### A declarative FFI API 
 
 A declarative interface inspired by [Bun:FFI](https://bun.com/docs/runtime/ffi) is provided. Define types explicitly and let `Rtinycc` generate the binding code automatically by using `TinyCC` to compile a dll.
@@ -532,6 +428,111 @@ sqlite_with_utils$sqlite3_libversion()
 sqlite_with_utils$sqlite3_close(db)
 rm(sqlite_with_utils, db, result)
 invisible(gc())
+```
+
+### Low Level API For Calling C code
+
+Using `#Define _Complex` as workaround of  `TinyCC`'s lack of support for complex types, we can link against R's install headers and `libR` to call R's C API function.
+
+```{r call-R-C-API}
+# Create new state for R linking example
+state <- tcc_state(output = "memory")
+
+# Add R include and library paths using Rtinycc functions
+r_include <- R.home("include")
+r_lib <- file.path(R.home("lib"))
+
+tcc_add_include_path(state, r_include)
+tcc_add_library_path(state, r_lib)
+
+# Link against external math library (libm) for real math functions
+tcc_add_library(state, "m")
+
+# C code that demonstrates actual R C API usage
+# Workaround: Define _Complex to empty since TinyCC doesn't support complex types
+code <- '
+#define _Complex
+#include <R.h>
+#include <Rinternals.h>
+
+void hello_world() {
+  Rprintf("Hello World from compiled C code!\\n");
+}
+
+// Create an R numeric vector and calculate its length
+int create_r_vector() {
+  SEXP vec = PROTECT(Rf_allocVector(REALSXP, 5));
+  for(int i = 0; i < 5; i++) {
+    REAL(vec)[i] = (double)(i + 1) * 2.0;  // 2, 4, 6, 8, 10
+  }
+  
+  int length = Rf_length(vec);
+  Rprintf("Created vector length: %d\\n", length);
+  Rprintf("Vector values: ");
+  for(int i = 0; i < length; i++) {
+    Rprintf("%f ", REAL(vec)[i]);
+  }
+  Rprintf("\\n");
+  
+  UNPROTECT(1);
+  return length;
+}
+
+// Use Rf_install to get a function and call it
+double call_r_function() {
+  // Get the sqrt function from R base
+  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
+  
+  // Create a scalar value
+  SEXP val = PROTECT(Rf_ScalarReal(16.0));
+  
+  // Call the function
+  SEXP result = PROTECT(Rf_lang2(sqrt_fun, val));
+  SEXP eval_result = PROTECT(Rf_eval(result, R_GlobalEnv));
+  
+  double sqrt_val = REAL(eval_result)[0];
+  Rprintf("R sqrt(16.0) = %f\\n", sqrt_val);
+  
+  UNPROTECT(4);
+  return sqrt_val;
+}
+
+// Demonstrate creating different R data types
+void demonstrate_r_types() {
+  // Create different types of R objects
+  SEXP int_vec = PROTECT(Rf_allocVector(INTSXP, 3));
+  INTEGER(int_vec)[0] = 1;
+  INTEGER(int_vec)[1] = 2;
+  INTEGER(int_vec)[2] = 3;
+  Rprintf("Integer vector created with %d elements\\n", Rf_length(int_vec));
+  
+  SEXP str_vec = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(str_vec, 0, Rf_mkChar("Hello"));
+  SET_STRING_ELT(str_vec, 1, Rf_mkChar("R"));
+  Rprintf("String vector created with %d elements\\n", Rf_length(str_vec));
+  
+  SEXP logical = PROTECT(Rf_ScalarLogical(TRUE));
+  Rprintf("Logical value: %d\\n", LOGICAL(logical)[0]);
+  
+  UNPROTECT(3);
+}
+'
+
+tcc_compile_string(state, code)
+tcc_relocate(state)
+
+
+# Call the functions that demonstrate R C API usage
+tcc_call_symbol(state, "hello_world", return = "void")
+
+result1 <- tcc_call_symbol(state, "create_r_vector", return = "int")
+result1
+
+result2 <- tcc_call_symbol(state, "call_r_function", return = "double") 
+result2
+
+result3 <- tcc_call_symbol(state, "demonstrate_r_types", return = "void")
+result3
 ```
 
 ## License
