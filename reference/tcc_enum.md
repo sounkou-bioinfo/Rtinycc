@@ -19,6 +19,10 @@ tcc_enum(ffi, name, constants = NULL, export_constants = FALSE)
 
   Enum name (as defined in C header)
 
+- constants:
+
+  Character vector of constant names to export
+
 - export_constants:
 
   Whether to export enum constants as R functions
@@ -30,8 +34,9 @@ Updated tcc_ffi object
 ## Examples
 
 ``` r
-ffi <- tcc_ffi() %>%
-  tcc_header("#include <errors.h>") %>%
-  tcc_enum("error_code", export_constants = TRUE)
-#> Error in tcc_ffi() %>% tcc_header("#include <errors.h>") %>% tcc_enum("error_code",     export_constants = TRUE): could not find function "%>%"
+if (FALSE) { # \dontrun{
+ffi <- tcc_ffi() |>
+  tcc_header("#include <errors.h>") |>
+  tcc_enum("error_code", constants = c("OK", "ERROR"), export_constants = TRUE)
+} # }
 ```

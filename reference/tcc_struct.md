@@ -15,10 +15,14 @@ tcc_struct(ffi, name, accessors)
 
   A tcc_ffi object
 
-- ...:
+- name:
 
-  Named list of struct definitions. Each is a named list where names are
-  field names and values are FFI types (e.g., list(x="f64", y="f64"))
+  Struct name (as defined in C header)
+
+- accessors:
+
+  Named list of field accessors where names are field names and values
+  are FFI types (e.g., list(x="f64", y="f64"))
 
 ## Value
 
@@ -27,8 +31,9 @@ Updated tcc_ffi object
 ## Examples
 
 ``` r
-ffi <- tcc_ffi() %>%
-  tcc_header("#include <point.h>") %>%
-  tcc_struct(point = list(x = "f64", y = "f64", id = "i32"))
-#> Error in tcc_ffi() %>% tcc_header("#include <point.h>") %>% tcc_struct(point = list(x = "f64",     y = "f64", id = "i32")): could not find function "%>%"
+if (FALSE) { # \dontrun{
+ffi <- tcc_ffi() |>
+  tcc_header("#include <point.h>") |>
+  tcc_struct("point", list(x = "f64", y = "f64", id = "i32"))
+} # }
 ```

@@ -2,8 +2,16 @@
 
 ## All functions
 
+- [`generate_trampoline()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/generate_trampoline.md)
+  : Generate trampoline code for a callback argument
 - [`get_external_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/get_external_ptr_addr.md)
   : Get the address of an external pointer
+- [`is_callback_type()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/is_callback_type.md)
+  : Check if a type represents a callback
+- [`parse_callback_type()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/parse_callback_type.md)
+  : Parse callback type specification
+- [`print(`*`<tcc_callback>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_callback.md)
+  : Print tcc_callback object
 - [`print(`*`<tcc_compiled>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_compiled.md)
   : Print tcc_compiled object
 - [`print(`*`<tcc_ffi>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_ffi.md)
@@ -24,6 +32,14 @@
   : Bind symbols with type specifications
 - [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
   : Call a zero-argument symbol with a specified return type
+- [`tcc_callback()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback.md)
+  : Register an R function as a callback
+- [`tcc_callback_close()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_close.md)
+  : Close/unregister a callback
+- [`tcc_callback_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_ptr.md)
+  : Get the C-compatible function pointer
+- [`tcc_callback_valid()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_valid.md)
+  : Check if callback is still valid
 - [`tcc_compile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.md)
   : Compile FFI bindings
 - [`tcc_compile_string()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.md)
@@ -31,7 +47,7 @@
 - [`tcc_container_of()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_container_of.md)
   : Generate container_of helper for struct member
 - [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md)
-  : CString S3 Class
+  : Create a C-style string pointer
 - [`tcc_enum()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_enum.md)
   : Declare enum for FFI helper generation
 - [`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md)

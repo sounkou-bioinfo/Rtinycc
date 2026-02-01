@@ -5,8 +5,12 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/copilot-instructions.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/index.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/news/index.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/generate_trampoline.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/get_external_ptr_addr.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/index.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/is_callback_type.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/parse_callback_type.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_callback.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_compiled.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_ffi.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_file.html</loc></url>
@@ -17,6 +21,10 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_sysinclude_path.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_close.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_ptr.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_valid.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_container_of.html</loc></url>

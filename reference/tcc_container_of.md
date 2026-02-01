@@ -31,8 +31,9 @@ Updated tcc_ffi object
 ## Examples
 
 ``` r
-ffi <- tcc_ffi() %>%
-  tcc_struct(student = list(id = "i32", marks = "i32")) %>%
+if (FALSE) { # \dontrun{
+ffi <- tcc_ffi() |>
+  tcc_struct("student", list(id = "i32", marks = "i32")) |>
   tcc_container_of("student", "marks")  # Creates student_from_marks()
-#> Error in tcc_ffi() %>% tcc_struct(student = list(id = "i32", marks = "i32")) %>%     tcc_container_of("student", "marks"): could not find function "%>%"
+} # }
 ```

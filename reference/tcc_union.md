@@ -34,10 +34,11 @@ Updated tcc_ffi object
 ## Examples
 
 ``` r
-ffi <- tcc_ffi() %>%
+if (FALSE) { # \dontrun{
+ffi <- tcc_ffi() |>
   tcc_union("data_variant",
     members = list(as_int = "i32", as_float = "f32"),
     active = "as_int"
   )
-#> Error in tcc_ffi() %>% tcc_union("data_variant", members = list(as_int = "i32",     as_float = "f32"), active = "as_int"): could not find function "%>%"
+} # }
 ```
