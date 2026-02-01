@@ -17,8 +17,9 @@ providing both CLI access and a libtcc-backed in-memory compiler. It
 includes a small, explicit FFI inspired by [bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
 predictable conversions and pointer utilities. The package targets
-Unix-like systems (no Windows support) and focuses on embedding TinyCC
-and enabling JIT-compiled bindings directly from R. Combined with
+Unix-alikes systems (no Windows support for now) and focuses on
+embedding TinyCC and enabling JIT-compiled bindings directly from R.
+Combined with
 [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
 provides C header parsers, it can be used to rapidly generate
 declarative bindings.
@@ -26,7 +27,7 @@ declarative bindings.
 ## Installation
 
 ``` r
-remotes::install_github("sounkou-bioinfo/Rtinycc")
+install.packages('Rtinycc', repos = c('https://sounkou-bioinfo.r-universe.dev', 'https://cloud.r-project.org'))
 ```
 
 ## Usage
@@ -65,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x617d016e7000>
+#> <pointer: 0x571fb8659000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -661,7 +662,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x617d00d83b88"
+#> [1] "0x571fb7025df8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()

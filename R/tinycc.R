@@ -71,6 +71,9 @@ tcc_include_paths <- function() {
     file.path(prefix, "include"),
     file.path(prefix, "lib", "tcc", "include")
   )
+  if (.Platform$OS.type == "windows") {
+    paths <- c(paths, file.path(prefix, "include", "winapi"))
+  }
   normalizePath(paths[file.exists(paths)], winslash = "/", mustWork = FALSE)
 }
 
@@ -80,8 +83,7 @@ tcc_sysinclude_paths <- tcc_include_paths
 
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
-  switch(
-    output,
+  switch(output,
     memory = 1L, # TCC_OUTPUT_MEMORY
     obj = 3L, # TCC_OUTPUT_OBJ
     dll = 4L, # TCC_OUTPUT_DLL
