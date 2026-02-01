@@ -1,4 +1,4 @@
-# Rtinycc 0.0.1 
+# Rtinycc 0.0.1
 
 - First release
 
