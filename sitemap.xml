@@ -19,13 +19,17 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_container_of.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_enum.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_field_addr.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_header.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include_paths.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_introspect.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_library.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_library_path.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.html</loc></url>
@@ -41,6 +45,9 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_run_cli.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_source.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_state.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct_raw_access.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_symbol_is_valid.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_union.html</loc></url>
 </urlset>
 

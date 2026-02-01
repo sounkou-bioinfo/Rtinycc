@@ -28,10 +28,16 @@
   : Compile FFI bindings
 - [`tcc_compile_string()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.md)
   : Compile C code from a character string
+- [`tcc_container_of()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_container_of.md)
+  : Generate container_of helper for struct member
 - [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md)
   : CString S3 Class
+- [`tcc_enum()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_enum.md)
+  : Declare enum for FFI helper generation
 - [`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md)
   : Create a new FFI compilation context
+- [`tcc_field_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_field_addr.md)
+  : Generate field address getter helpers
 - [`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md)
   : Free allocated memory
 - [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md)
@@ -43,6 +49,8 @@
 - [`tcc_include_paths()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include_paths.md)
   [`tcc_sysinclude_paths()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include_paths.md)
   : TinyCC include search paths
+- [`tcc_introspect()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_introspect.md)
+  : Enable introspection helpers
 - [`tcc_library()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_library.md)
   : Add library to link against
 - [`tcc_library_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_library_path.md)
@@ -78,5 +86,11 @@
   : Add C source code
 - [`tcc_state()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_state.md)
   : Create a libtcc state
+- [`tcc_struct()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.md)
+  : Declare struct for FFI helper generation
+- [`tcc_struct_raw_access()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct_raw_access.md)
+  : Enable raw byte access for struct
 - [`tcc_symbol_is_valid()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_symbol_is_valid.md)
   : Check if a tcc_symbol external pointer is valid
+- [`tcc_union()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_union.md)
+  : Declare union for FFI helper generation
