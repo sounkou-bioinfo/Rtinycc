@@ -314,3 +314,240 @@ SEXP RC_read_cstring(SEXP ptr) {
     
     return Rf_ScalarString(Rf_mkCharCE(data, CE_UTF8));
 }
+
+// ============================================================================
+// Callback Registration and Invocation
+// ============================================================================
+
+// Callback registry entry - stores preserved R function and metadata
+typedef struct {
+    SEXP fun;              // Preserved R function object
+    char *return_type;     // Return type string
+    char **arg_types;      // Array of argument type strings
+    int n_args;            // Number of arguments
+    int threadsafe;        // Thread-safety flag
+    int valid;             // Whether this entry is still valid
+    void *trampoline;      // Pointer to trampoline function (if generated)
+} callback_entry_t;
+
+// Static array of callbacks (simple fixed-size for now)
+#define MAX_CALLBACKS 256
+static callback_entry_t callback_registry[MAX_CALLBACKS];
+static int next_callback_id = 0;
+
+// Callback token structure - passed back to R as external ptr
+typedef struct {
+    int id;                // Index into callback_registry
+} callback_token_t;
+
+// Finalizer for callback tokens
+static void RC_callback_finalizer(SEXP ext) {
+    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
+    if (token) {
+        // Release the preserved R function
+        if (token->id >= 0 && token->id < MAX_CALLBACKS) {
+            callback_entry_t *entry = &callback_registry[token->id];
+            if (entry->valid) {
+                R_ReleaseObject(entry->fun);
+                entry->valid = 0;
+                if (entry->return_type) {
+                    free(entry->return_type);
+                    entry->return_type = NULL;
+                }
+                if (entry->arg_types) {
+                    for (int i = 0; i < entry->n_args; i++) {
+                        if (entry->arg_types[i]) {
+                            free(entry->arg_types[i]);
+                        }
+                    }
+                    free(entry->arg_types);
+                    entry->arg_types = NULL;
+                }
+            }
+        }
+        free(token);
+        R_ClearExternalPtr(ext);
+    }
+}
+
+// Register a callback
+SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe) {
+    if (!Rf_isFunction(fun)) {
+        Rf_error("Expected a function");
+    }
+    
+    if (!Rf_isString(return_type) || XLENGTH(return_type) != 1) {
+        Rf_error("Expected single string for return_type");
+    }
+    
+    if (!Rf_isString(arg_types)) {
+        Rf_error("Expected character vector for arg_types");
+    }
+    
+    // Find an available slot
+    if (next_callback_id >= MAX_CALLBACKS) {
+        Rf_error("Callback registry full (max %d)", MAX_CALLBACKS);
+    }
+    
+    int id = next_callback_id++;
+    callback_entry_t *entry = &callback_registry[id];
+    
+    // Preserve the R function
+    entry->fun = fun;
+    R_PreserveObject(fun);
+    
+    // Store return type
+    const char *rtype = Rf_translateCharUTF8(STRING_ELT(return_type, 0));
+    entry->return_type = strdup(rtype);
+    
+    // Store argument types
+    entry->n_args = (int)XLENGTH(arg_types);
+    if (entry->n_args > 0) {
+        entry->arg_types = malloc(entry->n_args * sizeof(char*));
+        if (!entry->arg_types) {
+            Rf_error("Memory allocation failed");
+        }
+        for (int i = 0; i < entry->n_args; i++) {
+            const char *atype = Rf_translateCharUTF8(STRING_ELT(arg_types, i));
+            entry->arg_types[i] = strdup(atype);
+        }
+    } else {
+        entry->arg_types = NULL;
+    }
+    
+    entry->threadsafe = Rf_asInteger(threadsafe);
+    entry->valid = 1;
+    entry->trampoline = NULL;
+    
+    // Create token
+    callback_token_t *token = malloc(sizeof(callback_token_t));
+    if (!token) {
+        Rf_error("Memory allocation failed");
+    }
+    token->id = id;
+    
+    SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
+    Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_callback"));
+    R_RegisterCFinalizerEx(ext, RC_callback_finalizer, TRUE);
+    UNPROTECT(1);
+    
+    return ext;
+}
+
+// Unregister a callback
+SEXP RC_unregister_callback(SEXP callback_ext) {
+    if (!Rf_inherits(callback_ext, "tcc_callback")) {
+        Rf_error("Expected a 'tcc_callback' external pointer");
+    }
+    
+    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(callback_ext);
+    if (!token) {
+        Rf_error("Callback is already closed");
+    }
+    
+    // The finalizer will handle cleanup, we just trigger it
+    R_ClearExternalPtr(callback_ext);
+    RC_callback_finalizer(callback_ext);
+    
+    return R_NilValue;
+}
+
+// Get the pointer address of a callback token
+SEXP RC_get_callback_ptr(SEXP callback_ext) {
+    if (!Rf_inherits(callback_ext, "tcc_callback")) {
+        Rf_error("Expected a 'tcc_callback' external pointer");
+    }
+    
+    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(callback_ext);
+    if (!token) {
+        Rf_error("Callback is closed");
+    }
+    
+    // Return the token address as external pointer (this is what trampolines use)
+    SEXP ptr = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
+    Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_callback_ptr"));
+    UNPROTECT(1);
+    return ptr;
+}
+
+// Check if callback is valid
+SEXP RC_callback_is_valid(SEXP callback_ext) {
+    if (!Rf_inherits(callback_ext, "tcc_callback")) {
+        return Rf_ScalarLogical(FALSE);
+    }
+    
+    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(callback_ext);
+    if (!token) {
+        return Rf_ScalarLogical(FALSE);
+    }
+    
+    if (token->id < 0 || token->id >= MAX_CALLBACKS) {
+        return Rf_ScalarLogical(FALSE);
+    }
+    
+    callback_entry_t *entry = &callback_registry[token->id];
+    return Rf_ScalarLogical(entry->valid && entry->fun != NULL);
+}
+
+// Invoke callback from trampoline
+// This is called by generated trampolines
+SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
+    // callback_id is a character string with the callback identifier
+    const char *id_str = Rf_translateCharUTF8(STRING_ELT(callback_id, 0));
+    int id = atoi(id_str);
+    
+    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
+        Rf_error("Invalid or expired callback: %s", id_str);
+    }
+    
+    callback_entry_t *entry = &callback_registry[id];
+    
+    // Build the call
+    SEXP call = PROTECT(Rf_lang1(entry->fun));
+    
+    // Add arguments
+    if (args != R_NilValue && TYPEOF(args) == VECSXP) {
+        int n_args = (int)XLENGTH(args);
+        for (int i = 0; i < n_args; i++) {
+            call = PROTECT(Rf_lang2(call, VECTOR_ELT(args, i)));
+        }
+        // Unprotect the intermediate calls (keep final call protected)
+        if (n_args > 0) {
+            UNPROTECT(n_args);
+        }
+    }
+    
+    // Evaluate the call
+    SEXP result = PROTECT(Rf_eval(call, R_GlobalEnv));
+    
+    // Convert result based on expected return type
+    SEXP converted = R_NilValue;
+    if (strcmp(entry->return_type, "void") == 0) {
+        converted = R_NilValue;
+    } else if (strcmp(entry->return_type, "int") == 0 || 
+               strcmp(entry->return_type, "i32") == 0 ||
+               strcmp(entry->return_type, "int32_t") == 0) {
+        converted = Rf_ScalarInteger(Rf_asInteger(result));
+    } else if (strcmp(entry->return_type, "double") == 0 ||
+               strcmp(entry->return_type, "f64") == 0 ||
+               strcmp(entry->return_type, "float") == 0) {
+        converted = Rf_ScalarReal(Rf_asReal(result));
+    } else if (strcmp(entry->return_type, "bool") == 0 ||
+               strcmp(entry->return_type, "logical") == 0) {
+        converted = Rf_ScalarLogical(Rf_asLogical(result));
+    } else if (strcmp(entry->return_type, "string") == 0 ||
+               strcmp(entry->return_type, "cstring") == 0 ||
+               strcmp(entry->return_type, "char*") == 0) {
+        if (Rf_isString(result)) {
+            converted = result;
+        } else {
+            converted = Rf_asChar(result);
+        }
+    } else {
+        // Default: return as-is
+        converted = result;
+    }
+    
+    UNPROTECT(2);  // call and result
+    return converted;
+}

@@ -26,6 +26,13 @@ SEXP RC_free(SEXP ptr);
 SEXP RC_create_cstring(SEXP str);
 SEXP RC_read_cstring(SEXP ptr);
 
+// Callback functions
+SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
+SEXP RC_unregister_callback(SEXP callback_ext);
+SEXP RC_get_callback_ptr(SEXP callback_ext);
+SEXP RC_callback_is_valid(SEXP callback_ext);
+SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
+
 // .Call entries
 static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_state_new",   (DL_FUNC) &RC_libtcc_state_new,   3},
@@ -50,6 +57,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_free",          (DL_FUNC) &RC_free,          1},
     {"RC_create_cstring",(DL_FUNC) &RC_create_cstring,1},
     {"RC_read_cstring",  (DL_FUNC) &RC_read_cstring,  1},
+    
+    // Callback functions
+    {"RC_register_callback",   (DL_FUNC) &RC_register_callback,   4},
+    {"RC_unregister_callback", (DL_FUNC) &RC_unregister_callback, 1},
+    {"RC_get_callback_ptr",    (DL_FUNC) &RC_get_callback_ptr,    1},
+    {"RC_callback_is_valid",   (DL_FUNC) &RC_callback_is_valid,   1},
+    {"RC_invoke_callback",     (DL_FUNC) &RC_invoke_callback,     2},
     {NULL, NULL, 0}
 };
 

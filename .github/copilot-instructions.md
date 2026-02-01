@@ -2,6 +2,11 @@
 
 This file provides guidance for agentic coding agents working on the Rtinycc package, which provides an R interface to the TinyCC (Tiny C Compiler) including both CLI and libtcc library functionality.
 
+## Agent behavior
+
+- **Read the code first:** Agents must start by reading the relevant code implementations in the repository before making assumptions or proposing changes. Do not guess about behavior; inspect functions, C helpers, and tests to understand current behavior.
+
+
 ## Package Overview
 
 Rtinycc is an R package that:

@@ -147,6 +147,12 @@ SCALAR_TYPES <- names(Filter(function(x) x$kind == "scalar", FFI_TYPES))
 
 # Validate FFI type
 check_ffi_type <- function(type, context = "argument") {
+  # Check for enum:type pattern
+  if (grepl("^enum:", type)) {
+    # Enum types are always i32 (int)
+    return(list(c_type = "int", r_type = "integer", size = 4L, kind = "scalar"))
+  }
+
   if (!type %in% VALID_FFI_TYPES) {
     stop(
       "Invalid FFI type '",

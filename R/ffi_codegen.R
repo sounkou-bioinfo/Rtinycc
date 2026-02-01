@@ -5,7 +5,8 @@
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
-  switch(ffi_type,
+  switch(
+    ffi_type,
     i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
     i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
     i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
@@ -52,7 +53,14 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
     logical_array = sprintf("  int* %s = LOGICAL(%s);", arg_name, r_name),
     character_array = sprintf("  SEXP* %s = STRING_PTR(%s);", arg_name, r_name),
     sexp = sprintf("  SEXP %s = %s;", arg_name, r_name),
-    stop("Unsupported FFI type: ", ffi_type, call. = FALSE)
+    {
+      # Handle enum types
+      if (grepl("^enum:", ffi_type)) {
+        sprintf("  int %s = asInteger(%s);", arg_name, r_name)
+      } else {
+        stop("Unsupported FFI type: ", ffi_type, call. = FALSE)
+      }
+    }
   )
 }
 
@@ -60,7 +68,8 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
 generate_c_return <- function(value_expr, ffi_type) {
   type_info <- check_ffi_type(ffi_type, "return value")
 
-  switch(ffi_type,
+  switch(
+    ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
@@ -92,7 +101,14 @@ generate_c_return <- function(value_expr, ffi_type) {
     ),
     sexp = sprintf("return %s;", value_expr),
     void = sprintf("%s;\n  return R_NilValue;", value_expr),
-    stop("Unsupported FFI return type: ", ffi_type, call. = FALSE)
+    {
+      # Handle enum types (matched via check_ffi_type returning i32 info)
+      if (grepl("^enum:", ffi_type)) {
+        sprintf("return ScalarInteger((int)%s);", value_expr)
+      } else {
+        stop("Unsupported FFI return type: ", ffi_type, call. = FALSE)
+      }
+    }
   )
 }
 
@@ -225,12 +241,534 @@ generate_wrappers <- function(
   paste(wrappers, collapse = "\n")
 }
 
+# ============================================================================
+# Struct Helper Generation
+# ============================================================================
+
+# Generate struct helper functions (new, free, get/set, container_of, etc.)
+generate_struct_helpers <- function(
+  structs,
+  container_of,
+  field_addr,
+  raw_access,
+  introspect
+) {
+  if (is.null(structs) || length(structs) == 0) {
+    return("")
+  }
+
+  helpers <- c("/* Struct helper functions */", "")
+
+  for (struct_name in names(structs)) {
+    fields <- structs[[struct_name]]
+
+    # Finalizer function
+    helpers <- c(helpers, generate_struct_finalizer(struct_name))
+
+    # Constructor
+    helpers <- c(helpers, generate_struct_new(struct_name))
+
+    # Free function
+    helpers <- c(helpers, generate_struct_free(struct_name))
+
+    # Field getters and setters
+    for (field_name in names(fields)) {
+      field_spec <- fields[[field_name]]
+      helpers <- c(
+        helpers,
+        generate_struct_getter(struct_name, field_name, field_spec)
+      )
+      helpers <- c(
+        helpers,
+        generate_struct_setter(struct_name, field_name, field_spec)
+      )
+    }
+
+    # container_of helpers
+    if (!is.null(container_of) && struct_name %in% names(container_of)) {
+      for (member_name in container_of[[struct_name]]) {
+        helpers <- c(helpers, generate_container_of(struct_name, member_name))
+      }
+    }
+
+    # Field address helpers
+    if (!is.null(field_addr) && struct_name %in% names(field_addr)) {
+      for (field_name in field_addr[[struct_name]]) {
+        helpers <- c(helpers, generate_field_addr(struct_name, field_name))
+      }
+    }
+
+    # Raw access helpers
+    if (!is.null(raw_access) && struct_name %in% raw_access) {
+      helpers <- c(helpers, generate_struct_raw_access(struct_name))
+    }
+
+    # Introspection helpers
+    if (!is.null(introspect) && introspect) {
+      helpers <- c(helpers, generate_struct_introspection(struct_name, fields))
+    }
+
+    helpers <- c(helpers, "")
+  }
+
+  paste(helpers, collapse = "\n")
+}
+
+# Generate finalizer for struct
+generate_struct_finalizer <- function(struct_name) {
+  c(
+    sprintf("static void %s_finalizer(SEXP ext) {", struct_name),
+    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+    "  if (p) free(p);",
+    "  R_ClearExternalPtr(ext);",
+    "}",
+    ""
+  )
+}
+
+# Generate constructor
+generate_struct_new <- function(struct_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_new(void) {", struct_name),
+    sprintf(
+      "  struct %s *p = calloc(1, sizeof(struct %s));",
+      struct_name,
+      struct_name
+    ),
+    "  if (!p) Rf_error(\"Out of memory\");",
+    sprintf(
+      "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"%s\"), R_NilValue);",
+      struct_name
+    ),
+    sprintf("  R_RegisterCFinalizerEx(ext, %s_finalizer, TRUE);", struct_name),
+    "  return ext;",
+    "}",
+    ""
+  )
+}
+
+# Generate free function
+generate_struct_free <- function(struct_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_free(SEXP ext) {", struct_name),
+    sprintf("  %s_finalizer(ext);", struct_name),
+    "  return R_NilValue;",
+    "}",
+    ""
+  )
+}
+
+# Generate field getter
+generate_struct_getter <- function(struct_name, field_name, field_spec) {
+  if (is.list(field_spec)) {
+    type_name <- field_spec$type %||% "ptr"
+  } else {
+    type_name <- field_spec
+  }
+
+  return_code <- switch(
+    type_name,
+    i8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
+    i16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
+    i32 = sprintf("return ScalarInteger(p->%s);", field_name),
+    i64 = sprintf("return ScalarReal((double)p->%s);", field_name),
+    u8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
+    u16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
+    u32 = sprintf("return ScalarReal((double)p->%s);", field_name),
+    u64 = sprintf("return ScalarReal((double)p->%s);", field_name),
+    f32 = sprintf("return ScalarReal((double)p->%s);", field_name),
+    f64 = sprintf("return ScalarReal(p->%s);", field_name),
+    bool = sprintf("return ScalarLogical((int)p->%s);", field_name),
+    cstring = c(
+      sprintf("  if (p->%s) {", field_name),
+      sprintf("    SEXP out = PROTECT(mkString(p->%s));", field_name),
+      "    UNPROTECT(1);",
+      "    return out;",
+      "  } else {",
+      "    return R_NilValue;",
+      "  }"
+    ),
+    ptr = sprintf(
+      "return R_MakeExternalPtr(p->%s, R_NilValue, ext);",
+      field_name
+    ),
+    sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", field_name) # Default: return pointer to field
+  )
+
+  c(
+    sprintf("SEXP R_wrap_%s_get_%s(SEXP ext) {", struct_name, field_name),
+    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    paste("  ", return_code, collapse = "\n"),
+    "}",
+    ""
+  )
+}
+
+# Generate field setter
+generate_struct_setter <- function(struct_name, field_name, field_spec) {
+  if (is.list(field_spec)) {
+    type_name <- field_spec$type %||% "ptr"
+    size <- field_spec$size
+  } else {
+    type_name <- field_spec
+    size <- NULL
+  }
+
+  setter_code <- switch(
+    type_name,
+    i8 = sprintf("p->%s = (int8_t)asInteger(val);", field_name),
+    i16 = sprintf("p->%s = (int16_t)asInteger(val);", field_name),
+    i32 = sprintf("p->%s = asInteger(val);", field_name),
+    i64 = sprintf("p->%s = (int64_t)REAL(val)[0];", field_name),
+    u8 = sprintf("p->%s = (uint8_t)asInteger(val);", field_name),
+    u16 = sprintf("p->%s = (uint16_t)asInteger(val);", field_name),
+    u32 = sprintf("p->%s = (uint32_t)REAL(val)[0];", field_name),
+    u64 = sprintf("p->%s = (uint64_t)REAL(val)[0];", field_name),
+    f32 = sprintf("p->%s = (float)asReal(val);", field_name),
+    f64 = sprintf("p->%s = asReal(val);", field_name),
+    bool = sprintf("p->%s = (bool)asLogical(val);", field_name),
+    cstring = if (!is.null(size)) {
+      c(
+        sprintf("  const char *src = CHAR(STRING_ELT(val, 0));"),
+        sprintf("  strncpy(p->%s, src, %d);", field_name, size - 1),
+        sprintf("  p->%s[%d] = '\\0';", field_name, size - 1)
+      )
+    } else {
+      sprintf("p->%s = CHAR(STRING_ELT(val, 0));", field_name)
+    },
+    ptr = sprintf("p->%s = R_ExternalPtrAddr(val);", field_name),
+    sprintf("// Cannot set field of type %s", type_name)
+  )
+
+  c(
+    sprintf(
+      "SEXP R_wrap_%s_set_%s(SEXP ext, SEXP val) {",
+      struct_name,
+      field_name
+    ),
+    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    paste("  ", setter_code, collapse = "\n"),
+    "  return ext;", # Return ext for chaining
+    "}",
+    ""
+  )
+}
+
+# Generate container_of helper
+generate_container_of <- function(struct_name, member_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_from_%s(SEXP ext) {", struct_name, member_name),
+    sprintf("  void *member_ptr = R_ExternalPtrAddr(ext);"),
+    sprintf("  if (!member_ptr) Rf_error(\"Null pointer\");"),
+    sprintf(
+      "  struct %s *p = (struct %s *)((char *)member_ptr - offsetof(struct %s, %s));",
+      struct_name,
+      struct_name,
+      struct_name,
+      member_name
+    ),
+    sprintf(
+      "  return R_MakeExternalPtr(p, Rf_install(\"%s\"), R_NilValue);",
+      struct_name
+    ),
+    "}",
+    ""
+  )
+}
+
+# Generate field address getter
+generate_field_addr <- function(struct_name, field_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_%s_addr(SEXP ext) {", struct_name, field_name),
+    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    sprintf("  void *field_ptr = &p->%s;", field_name),
+    sprintf("  return R_MakeExternalPtr(field_ptr, R_NilValue, ext);"),
+    "}",
+    ""
+  )
+}
+
+# Generate raw access helpers
+generate_struct_raw_access <- function(struct_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_get_raw(SEXP ext, SEXP len) {", struct_name),
+    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    "  int n = asInteger(len);",
+    "  SEXP raw = PROTECT(allocVector(RAWSXP, n));",
+    sprintf(
+      "  memcpy(RAW(raw), p, (n < sizeof(struct %s)) ? n : sizeof(struct %s));",
+      struct_name,
+      struct_name
+    ),
+    "  UNPROTECT(1);",
+    "  return raw;",
+    "}",
+    "",
+    sprintf("SEXP R_wrap_%s_set_raw(SEXP ext, SEXP raw) {", struct_name),
+    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    "  int n = LENGTH(raw);",
+    sprintf(
+      "  memcpy(p, RAW(raw), (n < sizeof(struct %s)) ? n : sizeof(struct %s));",
+      struct_name,
+      struct_name
+    ),
+    "  return R_NilValue;",
+    "}",
+    ""
+  )
+}
+
+# Generate introspection helpers
+generate_struct_introspection <- function(struct_name, fields) {
+  c(
+    sprintf("SEXP R_wrap_%s_sizeof(void) {", struct_name),
+    sprintf("  return ScalarInteger(sizeof(struct %s));", struct_name),
+    "}",
+    "",
+    sprintf("SEXP R_wrap_%s_alignof(void) {", struct_name),
+    sprintf("  return ScalarInteger(_Alignof(struct %s));", struct_name),
+    "}",
+    ""
+  )
+}
+
+# ============================================================================
+# Union Helper Generation
+# ============================================================================
+
+generate_union_helpers <- function(unions, introspect) {
+  if (is.null(unions) || length(unions) == 0) {
+    return("")
+  }
+
+  helpers <- c("/* Union helper functions */", "")
+
+  for (union_name in names(unions)) {
+    union_def <- unions[[union_name]]
+    members <- union_def$members
+
+    # Finalizer
+    helpers <- c(helpers, generate_union_finalizer(union_name))
+
+    # Constructor
+    helpers <- c(helpers, generate_union_new(union_name))
+
+    # Free function
+    helpers <- c(helpers, generate_union_free(union_name))
+
+    # Member getters and setters
+    for (mem_name in names(members)) {
+      mem_spec <- members[[mem_name]]
+      helpers <- c(
+        helpers,
+        generate_union_getter(union_name, mem_name, mem_spec)
+      )
+      helpers <- c(
+        helpers,
+        generate_union_setter(union_name, mem_name, mem_spec)
+      )
+    }
+
+    # Introspection
+    if (!is.null(introspect) && introspect) {
+      helpers <- c(helpers, generate_union_introspection(union_name))
+    }
+
+    helpers <- c(helpers, "")
+  }
+
+  paste(helpers, collapse = "\n")
+}
+
+generate_union_finalizer <- function(union_name) {
+  c(
+    sprintf("static void %s_finalizer(SEXP ext) {", union_name),
+    sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
+    "  if (p) free(p);",
+    "  R_ClearExternalPtr(ext);",
+    "}",
+    ""
+  )
+}
+
+generate_union_new <- function(union_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_new(void) {", union_name),
+    sprintf(
+      "  union %s *p = calloc(1, sizeof(union %s));",
+      union_name,
+      union_name
+    ),
+    "  if (!p) Rf_error(\"Out of memory\");",
+    sprintf(
+      "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"%s\"), R_NilValue);",
+      union_name
+    ),
+    sprintf("  R_RegisterCFinalizerEx(ext, %s_finalizer, TRUE);", union_name),
+    "  return ext;",
+    "}",
+    ""
+  )
+}
+
+generate_union_free <- function(union_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_free(SEXP ext) {", union_name),
+    sprintf("  %s_finalizer(ext);", union_name),
+    "  return R_NilValue;",
+    "}",
+    ""
+  )
+}
+
+generate_union_getter <- function(union_name, mem_name, mem_spec) {
+  if (
+    is.list(mem_spec) && !is.null(mem_spec$type) && mem_spec$type == "struct"
+  ) {
+    # Nested struct in union
+    return(c(
+      sprintf("SEXP R_wrap_%s_get_%s(SEXP ext) {", union_name, mem_name),
+      sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
+      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      sprintf("  return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name),
+      "}",
+      ""
+    ))
+  }
+
+  type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
+
+  return_code <- switch(
+    type_name,
+    i32 = sprintf("return ScalarInteger(p->%s);", mem_name),
+    f32 = sprintf("return ScalarReal((double)p->%s);", mem_name),
+    sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name)
+  )
+
+  c(
+    sprintf("SEXP R_wrap_%s_get_%s(SEXP ext) {", union_name, mem_name),
+    sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    paste("  ", return_code, collapse = "\n"),
+    "}",
+    ""
+  )
+}
+
+generate_union_setter <- function(union_name, mem_name, mem_spec) {
+  if (
+    is.list(mem_spec) && !is.null(mem_spec$type) && mem_spec$type == "struct"
+  ) {
+    return(c()) # Cannot set whole struct easily
+  }
+
+  type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
+
+  setter_code <- switch(
+    type_name,
+    i32 = sprintf("p->%s = asInteger(val);", mem_name),
+    f32 = sprintf("p->%s = (float)asReal(val);", mem_name),
+    sprintf("// Cannot set union member of type %s", type_name)
+  )
+
+  c(
+    sprintf(
+      "SEXP R_wrap_%s_set_%s(SEXP ext, SEXP val) {",
+      union_name,
+      mem_name
+    ),
+    sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
+    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    paste("  ", setter_code, collapse = "\n"),
+    "  return ext;",
+    "}",
+    ""
+  )
+}
+
+generate_union_introspection <- function(union_name) {
+  c(
+    sprintf("SEXP R_wrap_%s_sizeof(void) {", union_name),
+    sprintf("  return ScalarInteger(sizeof(union %s));", union_name),
+    "}",
+    "",
+    sprintf("SEXP R_wrap_%s_alignof(void) {", union_name),
+    sprintf("  return ScalarInteger(_Alignof(union %s));", union_name),
+    "}",
+    ""
+  )
+}
+
+# ============================================================================
+# Enum Helper Generation
+# ============================================================================
+
+generate_enum_helpers <- function(enums, introspect) {
+  if (is.null(enums) || length(enums) == 0) {
+    return("")
+  }
+
+  helpers <- c("/* Enum helper functions */", "")
+
+  for (enum_name in names(enums)) {
+    enum_def <- enums[[enum_name]]
+
+    # Sizeof helper
+    if (!is.null(introspect) && introspect) {
+      helpers <- c(
+        helpers,
+        c(
+          sprintf("SEXP R_wrap_enum_%s_sizeof(void) {", enum_name),
+          sprintf("  return ScalarInteger(sizeof(enum %s));", enum_name),
+          "}",
+          ""
+        )
+      )
+    }
+
+    # Constant export helpers
+    if (!is.null(enum_def$constants)) {
+      for (const_name in enum_def$constants) {
+        helpers <- c(
+          helpers,
+          c(
+            sprintf("SEXP R_wrap_enum_%s_%s(void) {", enum_name, const_name),
+            sprintf("  return ScalarInteger(%s);", const_name),
+            "}",
+            ""
+          )
+        )
+      }
+    }
+
+    helpers <- c(helpers, "")
+  }
+
+  paste(helpers, collapse = "\n")
+}
+
+# ============================================================================
+# Main Code Generation
+# ============================================================================
+
 # Generate complete C code for FFI compilation (always R API mode)
 generate_ffi_code <- function(
   symbols,
   headers = NULL,
   c_code = NULL,
-  is_external = FALSE
+  is_external = FALSE,
+  structs = NULL,
+  unions = NULL,
+  enums = NULL,
+  container_of = NULL,
+  field_addr = NULL,
+  struct_raw_access = NULL,
+  introspect = NULL
 ) {
   parts <- c()
 
@@ -246,7 +784,13 @@ generate_ffi_code <- function(
   # Always include R headers for SEXP-based wrappers
   parts <- c(parts, "#include <R.h>", "#include <Rinternals.h>", "")
 
-  parts <- c(parts, "#include <stdint.h>", "#include <stdbool.h>", "")
+  parts <- c(
+    parts,
+    "#include <stdint.h>",
+    "#include <stdbool.h>",
+    "#include <stddef.h>",
+    ""
+  )
 
   # Custom headers
   if (!is.null(headers) && length(headers) > 0) {
@@ -270,10 +814,34 @@ generate_ffi_code <- function(
     }
   }
 
-  # Wrapper functions
+  # Struct helpers
+  struct_code <- generate_struct_helpers(
+    structs,
+    container_of,
+    field_addr,
+    struct_raw_access,
+    introspect
+  )
+  if (nzchar(struct_code)) {
+    parts <- c(parts, struct_code, "")
+  }
+
+  # Union helpers
+  union_code <- generate_union_helpers(unions, introspect)
+  if (nzchar(union_code)) {
+    parts <- c(parts, union_code, "")
+  }
+
+  # Enum helpers
+  enum_code <- generate_enum_helpers(enums, introspect)
+  if (nzchar(enum_code)) {
+    parts <- c(parts, enum_code, "")
+  }
+
+  # Wrapper functions for bound symbols
   parts <- c(
     parts,
-    "/* R callable wrappers */",
+    "/* R callable wrappers for bound symbols */",
     generate_wrappers(symbols, is_external = is_external)
   )
 
