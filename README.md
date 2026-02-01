@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x59b0387af000>
+#> <pointer: 0x645b79752000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -189,13 +189,50 @@ using `TinyCC` to compile a dll.
 
 #### Type System
 
-The FFI type system maps R types to C types:
+The FFI exposes a small, explicit set of type mappings between R and C.
+Conversions are explicit and predictable so callers know when data is
+shared versus copied.
 
-- **Scalars**: `i8`, `i16`, `i32`, `i64` (integers), `f32`, `f64`
-  (floats), `bool`, `cstring`
-- **Arrays** (zero-copy): `raw` → `uint8_t*`, `integer_array` →
-  `int32_t*`, `numeric_array` → `double*`
-- **Pointers**: `ptr` (externalptr), `sexp` (R object)
+- **Scalars**: `i8`, `i16`, `i32`, `i64` (integers); `f32`, `f64`
+  (floats); `bool` (logical); `cstring` (NUL-terminated C string).
+- **Arrays (zero-copy)**: `raw` → `uint8_t*`; `integer_array` →
+  `int32_t*`; `numeric_array` → `double*`.
+- **Pointers**: `ptr` (opaque `externalptr`), `sexp` (pass `SEXP`
+  directly), `callback` (function pointer token obtained with
+  `tcc_callback()`).
+
+##### Callbacks
+
+R functions can be registered as C function pointers via
+`tcc_callback()` and passed to compiled code. Provide a C signature when
+possible. Use `tcc_callback_ptr()` to obtain the pointer to pass into
+compiled code and `tcc_callback_close()` to release resources.
+
+``` r
+cb <- tcc_callback(function(x) x * 2, signature = "double (*)(double)")
+ptr <- tcc_callback_ptr(cb)
+# pass `ptr` to compiled C code that accepts a function pointer...
+tcc_callback_close(cb)
+```
+
+##### Structs, unions, and bitfields
+
+Complex C types are supported declaratively. Use `tcc_struct()` and
+`tcc_union()` to generate allocation and accessor helpers and
+`tcc_introspect()` for size/alignment information. Bitfields are handled
+by the C compiler and exposed as ordinary accessors.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('struct point { double x; double y; int id; };') |>
+  tcc_struct('point', accessors = c(x = 'f64', y = 'f64', id = 'i32')) |>
+  tcc_bind()
+compiled <- tcc_compile(ffi)
+p <- compiled$point_new()
+p <- compiled$point_set_x(p, 3.14)
+compiled$point_get_x(p)
+#> [1] 3.14
+```
 
 #### Example: Simple Function
 
@@ -337,7 +374,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x59b036219ba8"
+#> [1] "0x645b789e94d8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
