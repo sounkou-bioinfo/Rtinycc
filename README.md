@@ -65,7 +65,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5fba152a8000>
+#> <pointer: 0x64da4c7af000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -248,6 +248,30 @@ ffi$call_cb(cb_ptr, 21.0)
 tcc_callback_close(cb)
 rm(ffi, cb_ptr, cb)
 invisible(gc())
+```
+
+##### Async callbacks (main-thread queue)
+
+For cross-thread scheduling, initialize the async dispatcher and enqueue
+a callback. On Unix-like systems, callbacks are executed on the main
+thread.
+
+``` r
+
+tcc_callback_async_enable()
+
+hits <- 0L
+cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
+
+# Enqueue a callback from R (tests can also enqueue from a worker thread)
+tcc_callback_async_schedule(cb_async, list(2L))
+
+# Drain queued callbacks now (useful in non-interactive sessions)
+tcc_callback_async_drain()
+
+hits
+#> [1] 2
+tcc_callback_close(cb_async)
 ```
 
 ##### Structs, unions, and bitfields
@@ -585,7 +609,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5fba1713f7d8"
+#> [1] "0x64da4c7b42c8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()

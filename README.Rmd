@@ -215,6 +215,28 @@ rm(ffi, cb_ptr, cb)
 invisible(gc())
 ```
 
+##### Async callbacks (main-thread queue)
+
+For cross-thread scheduling, initialize the async dispatcher and enqueue a
+callback. On Unix-like systems, callbacks are executed on the main thread.
+
+```{r callback-async}
+
+tcc_callback_async_enable()
+
+hits <- 0L
+cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
+
+# Enqueue a callback from R (tests can also enqueue from a worker thread)
+tcc_callback_async_schedule(cb_async, list(2L))
+
+# Drain queued callbacks now (useful in non-interactive sessions)
+tcc_callback_async_drain()
+
+hits
+tcc_callback_close(cb_async)
+```
+
 ##### Structs, unions, and bitfields
 
 Complex C types are supported declaratively. Use `tcc_struct()` and `tcc_union()` to generate allocation and accessor helpers and `tcc_introspect()` for size/alignment information. Free struct instances when you are done.
