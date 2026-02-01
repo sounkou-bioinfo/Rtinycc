@@ -283,7 +283,6 @@ int spawn_async(void* cb, int value) {
 
   rc <- ffi_async$spawn_async(cb_ptr, 2L)
   tcc_callback_async_drain()
-  Sys.sleep(0.1)
   print(hits)
   tcc_callback_close(cb_async)
   rm(ffi_async, cb_ptr, cb_async)

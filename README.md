@@ -65,7 +65,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5d07731cf000>
+#> <pointer: 0x617d016e7000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -318,7 +318,6 @@ int spawn_async(void* cb, int value) {
 
   rc <- ffi_async$spawn_async(cb_ptr, 2L)
   tcc_callback_async_drain()
-  Sys.sleep(0.1)
   print(hits)
   tcc_callback_close(cb_async)
   rm(ffi_async, cb_ptr, cb_async)
@@ -662,7 +661,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5d0773d5c628"
+#> [1] "0x617d00d83b88"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
