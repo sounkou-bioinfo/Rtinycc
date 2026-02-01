@@ -63,7 +63,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x59c33ef39000>
+#> <pointer: 0x5b43c2763000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -514,7 +514,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x59c34058e2b8"
+#> [1] "0x5b43c3dbacf8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -555,9 +555,9 @@ void hello_world() {
   Rprintf("Hello World from compiled C code!\\n");
 }
 
-double call_r_sqrt(double x) {
+double call_r_sqrt(void) {
   SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
-  SEXP val = PROTECT(Rf_ScalarReal(x));
+  SEXP val = PROTECT(Rf_ScalarReal(16.0));
   SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));
   SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));
   double res = REAL(out)[0];
@@ -575,7 +575,7 @@ tcc_call_symbol(state, "hello_world", return = "void")
 #> Hello World from compiled C code!
 #> NULL
 tcc_call_symbol(state, "call_r_sqrt", return = "double")
-#> [1] 2.34726e-155
+#> [1] 4
 ```
 
 ## License
