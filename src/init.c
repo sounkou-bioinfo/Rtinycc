@@ -25,6 +25,9 @@ SEXP RC_malloc(SEXP size);
 SEXP RC_free(SEXP ptr);
 SEXP RC_create_cstring(SEXP str);
 SEXP RC_read_cstring(SEXP ptr);
+SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes);
+SEXP RC_read_bytes(SEXP ptr, SEXP nbytes);
+SEXP RC_write_bytes(SEXP ptr, SEXP raw);
 
 // Callback functions
 SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
@@ -61,6 +64,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_free",          (DL_FUNC) &RC_free,          1},
     {"RC_create_cstring",(DL_FUNC) &RC_create_cstring,1},
     {"RC_read_cstring",  (DL_FUNC) &RC_read_cstring,  1},
+    {"RC_read_cstring_n", (DL_FUNC) &RC_read_cstring_n, 2},
+    {"RC_read_bytes",    (DL_FUNC) &RC_read_bytes,    2},
+    {"RC_write_bytes",   (DL_FUNC) &RC_write_bytes,   2},
     
     // Callback functions
     {"RC_register_callback",   (DL_FUNC) &RC_register_callback,   4},

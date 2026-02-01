@@ -8,12 +8,18 @@
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-We provide a simple R interface to the
-[tinycc](https://github.com/TinyCC/tinycc) compiler including the cli
-and the libtcc library. This is mainly a vehicule for the tinycc
-compiler and libtcc library. A simple FFI interface inspired by [bun’s
-FFI](https://bun.com/docs/runtime/ffi) is included. We do not support
-windows.
+## Abstract
+
+Rtinycc is an R interface to [tinycc](https://github.com/TinyCC/tinycc),
+providing both CLI access and a libtcc-backed in-memory compiler. It
+includes a small, explicit FFI inspired by [bun’s
+FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
+predictable conversions and pointer utilities. The package targets
+Unix-like systems (no Windows support) and focuses on embedding TinyCC
+and enabling JIT-compiled bindings directly from R. Combined with
+[treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
+provides C header parsers, it can be used to rapidly generate
+declarative bindings.
 
 ## Installation
 
@@ -21,7 +27,7 @@ windows.
 remotes::install_github("sounkou-bioinfo/Rtinycc")
 ```
 
-## Example
+## Usage
 
 ### CLI
 
@@ -41,7 +47,10 @@ system2(exe, stdout = TRUE)
 #> [1] "42"
 ```
 
-### In memory using libtcc
+Use the CLI when you need an external executable; for in-memory
+workflows, prefer libtcc.
+
+### In-memory using libtcc
 
 ``` r
 # libtcc in-memory compile
@@ -54,9 +63,26 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5cde16509000>
+#> <pointer: 0x56024f70d000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
+```
+
+This is the simplest path for quick, in-process JIT compilation.
+
+### Utilities
+
+Use the pointer utilities to manage external pointers and C strings
+without manual casts.
+
+``` r
+ptr <- tcc_cstring("hello")
+tcc_read_cstring(ptr)
+#> [1] "hello"
+tcc_read_bytes(ptr, 5)
+#> [1] 68 65 6c 6c 6f
+tcc_free(ptr)
+#> NULL
 ```
 
 ### A declarative FFI API
@@ -84,9 +110,8 @@ shared versus copied.
 
 R functions can be registered as C function pointers via
 `tcc_callback()` and passed to compiled code. Provide a C signature that
-matches the actual arguments. Use `tcc_callback_ptr()` to obtain the
-pointer to pass into compiled code and `tcc_callback_close()` to release
-resources.
+matches the actual arguments and always call `tcc_callback_close()` when
+finished.
 
 ``` r
 cb <- tcc_callback(function(x) x * 2, signature = "double (*)(double)")
@@ -131,8 +156,8 @@ invisible(gc())
 
 Complex C types are supported declaratively. Use `tcc_struct()` and
 `tcc_union()` to generate allocation and accessor helpers and
-`tcc_introspect()` for size/alignment information. Bitfields are handled
-by the C compiler and exposed as ordinary accessors.
+`tcc_introspect()` for size/alignment information. Free struct instances
+when you are done.
 
 ``` r
 code <- paste0(
@@ -173,7 +198,7 @@ rm(ffi, p1, p2)
 invisible(gc())
 ```
 
-#### Example: Simple Function
+#### Simple function
 
 ``` r
 
@@ -195,7 +220,7 @@ result
 #> [1] 8
 ```
 
-#### Example: Working with R Arrays
+#### Working with R arrays
 
 Pass R vectors to C with zero-copy:
 
@@ -224,7 +249,7 @@ rm(ffi, x, result)
 invisible(gc())
 ```
 
-#### Linking External Libraries
+#### Linking external libraries
 
 Link against system libraries like libm
 
@@ -242,7 +267,7 @@ math_lib$sqrt(16.0)
 #> [1] 4
 ```
 
-#### SQLite entry point
+##### SQLite entry point
 
 Use SQLite to validate the external library workflow and inspect the
 version string.
@@ -267,7 +292,7 @@ rm(sqlite)
 invisible(gc())
 ```
 
-#### SQLite with an R callback
+##### SQLite with an R callback
 
 Use an R callback from `sqlite3_exec()` via a small C bridge that calls
 `RC_invoke_callback()`.
@@ -354,7 +379,7 @@ rm(sqlite_cb, db_ptr, cb_ptr, cb)
 invisible(gc())
 ```
 
-#### SQLite with an opaque struct wrapper
+##### SQLite with an opaque struct wrapper
 
 Wrap the opaque `sqlite3*` in a small struct so the FFI exercises struct
 allocation and accessors.
@@ -411,7 +436,7 @@ rm(sqlite_struct, h)
 invisible(gc())
 ```
 
-#### Custom wrapper functions: SQLite with Pointer Utilities
+##### Custom wrapper functions: SQLite with pointer utilities
 
 You can also create custom wrapper functions
 
@@ -462,7 +487,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5cde18dcdf98"
+#> [1] "0x56024e4796c8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -473,7 +498,7 @@ rm(sqlite_with_utils, db, result)
 invisible(gc())
 ```
 
-### Low Level API For Calling C code
+### Low-level R C API
 
 Using `#Define _Complex` as workaround of `TinyCC`’s lack of support for
 complex types, we can link against R’s install headers and `libR` to
@@ -492,12 +517,8 @@ tcc_add_include_path(state, r_include)
 tcc_add_library_path(state, r_lib)
 #> [1] 0
 
-# Link against external math library (libm) for real math functions
-tcc_add_library(state, "m")
-#> [1] 0
-
-# C code that demonstrates actual R C API usage
-# Workaround: Define _Complex to empty since TinyCC doesn't support complex types
+# Using #define _Complex as workaround of TinyCC’s lack of support for complex
+# types, we can link against R’s install headers and libR to call the R C API.
 code <- '
 #define _Complex
 #include <R.h>
@@ -507,62 +528,14 @@ void hello_world() {
   Rprintf("Hello World from compiled C code!\\n");
 }
 
-// Create an R numeric vector and calculate its length
-int create_r_vector() {
-  SEXP vec = PROTECT(Rf_allocVector(REALSXP, 5));
-  for(int i = 0; i < 5; i++) {
-    REAL(vec)[i] = (double)(i + 1) * 2.0;  // 2, 4, 6, 8, 10
-  }
-  
-  int length = Rf_length(vec);
-  Rprintf("Created vector length: %d\\n", length);
-  Rprintf("Vector values: ");
-  for(int i = 0; i < length; i++) {
-    Rprintf("%f ", REAL(vec)[i]);
-  }
-  Rprintf("\\n");
-  
-  UNPROTECT(1);
-  return length;
-}
-
-// Use Rf_install to get a function and call it
-double call_r_function() {
-  // Get the sqrt function from R base
+double call_r_sqrt(double x) {
   SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
-  
-  // Create a scalar value
-  SEXP val = PROTECT(Rf_ScalarReal(16.0));
-  
-  // Call the function
-  SEXP result = PROTECT(Rf_lang2(sqrt_fun, val));
-  SEXP eval_result = PROTECT(Rf_eval(result, R_GlobalEnv));
-  
-  double sqrt_val = REAL(eval_result)[0];
-  Rprintf("R sqrt(16.0) = %f\\n", sqrt_val);
-  
+  SEXP val = PROTECT(Rf_ScalarReal(x));
+  SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));
+  SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));
+  double res = REAL(out)[0];
   UNPROTECT(4);
-  return sqrt_val;
-}
-
-// Demonstrate creating different R data types
-void demonstrate_r_types() {
-  // Create different types of R objects
-  SEXP int_vec = PROTECT(Rf_allocVector(INTSXP, 3));
-  INTEGER(int_vec)[0] = 1;
-  INTEGER(int_vec)[1] = 2;
-  INTEGER(int_vec)[2] = 3;
-  Rprintf("Integer vector created with %d elements\\n", Rf_length(int_vec));
-  
-  SEXP str_vec = PROTECT(Rf_allocVector(STRSXP, 2));
-  SET_STRING_ELT(str_vec, 0, Rf_mkChar("Hello"));
-  SET_STRING_ELT(str_vec, 1, Rf_mkChar("R"));
-  Rprintf("String vector created with %d elements\\n", Rf_length(str_vec));
-  
-  SEXP logical = PROTECT(Rf_ScalarLogical(TRUE));
-  Rprintf("Logical value: %d\\n", LOGICAL(logical)[0]);
-  
-  UNPROTECT(3);
+  return res;
 }
 '
 
@@ -571,29 +544,11 @@ tcc_compile_string(state, code)
 tcc_relocate(state)
 #> [1] 0
 
-
-# Call the functions that demonstrate R C API usage
 tcc_call_symbol(state, "hello_world", return = "void")
 #> Hello World from compiled C code!
 #> NULL
-
-result1 <- tcc_call_symbol(state, "create_r_vector", return = "int")
-#> Created vector length: 5
-#> Vector values: 2.000000 4.000000 6.000000 8.000000 10.000000
-result1
-#> [1] 5
-
-result2 <- tcc_call_symbol(state, "call_r_function", return = "double") 
-#> R sqrt(16.0) = 4.000000
-result2
-#> [1] 4
-
-result3 <- tcc_call_symbol(state, "demonstrate_r_types", return = "void")
-#> Integer vector created with 3 elements
-#> String vector created with 2 elements
-#> Logical value: 1
-result3
-#> NULL
+tcc_call_symbol(state, "call_r_sqrt", return = "double")
+#> [1] 2.34726e-155
 ```
 
 ## License

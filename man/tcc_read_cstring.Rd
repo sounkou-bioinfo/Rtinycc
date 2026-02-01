@@ -4,10 +4,18 @@
 \alias{tcc_read_cstring}
 \title{Read C-style string from pointer}
 \usage{
-tcc_read_cstring(ptr)
+tcc_read_cstring(
+  ptr,
+  max_bytes = NULL,
+  null_action = c("na", "empty", "error")
+)
 }
 \arguments{
 \item{ptr}{External pointer to C string}
+
+\item{max_bytes}{Optional maximum number of bytes to read (fixed-length read).}
+
+\item{null_action}{Behavior when ptr is NULL: one of "na", "empty", "error".}
 }
 \value{
 Character string

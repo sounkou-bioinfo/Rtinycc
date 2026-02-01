@@ -315,6 +315,80 @@ SEXP RC_read_cstring(SEXP ptr) {
     return Rf_ScalarString(Rf_mkCharCE(data, CE_UTF8));
 }
 
+SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+    int n = Rf_asInteger(nbytes);
+    if (n < 0) {
+        Rf_error("nbytes must be non-negative");
+    }
+
+    char *data = (char*)R_ExternalPtrAddr(ptr);
+    if (!data) {
+        return Rf_ScalarString(NA_STRING);
+    }
+
+    SEXP out = PROTECT(Rf_allocVector(STRSXP, 1));
+    if (n == 0) {
+        SET_STRING_ELT(out, 0, Rf_mkChar(""));
+        UNPROTECT(1);
+        return out;
+    }
+
+    char *buf = (char*) R_Calloc((size_t)n + 1, char);
+    if (!buf) {
+        Rf_error("memory allocation failed");
+    }
+    memcpy(buf, data, (size_t)n);
+    buf[n] = '\0';
+    SET_STRING_ELT(out, 0, Rf_mkCharCE(buf, CE_UTF8));
+    R_Free(buf);
+    UNPROTECT(1);
+    return out;
+}
+
+SEXP RC_read_bytes(SEXP ptr, SEXP nbytes) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+    int n = Rf_asInteger(nbytes);
+    if (n < 0) {
+        Rf_error("nbytes must be non-negative");
+    }
+
+    unsigned char *data = (unsigned char*)R_ExternalPtrAddr(ptr);
+    if (!data) {
+        return Rf_allocVector(RAWSXP, 0);
+    }
+
+    SEXP out = PROTECT(Rf_allocVector(RAWSXP, n));
+    if (n > 0) {
+        memcpy(RAW(out), data, (size_t)n);
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+SEXP RC_write_bytes(SEXP ptr, SEXP raw) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+    if (TYPEOF(raw) != RAWSXP) {
+        Rf_error("Expected raw vector");
+    }
+
+    unsigned char *data = (unsigned char*)R_ExternalPtrAddr(ptr);
+    if (!data) {
+        Rf_error("Pointer is NULL");
+    }
+    R_xlen_t n = XLENGTH(raw);
+    if (n > 0) {
+        memcpy(data, RAW(raw), (size_t)n);
+    }
+    return R_NilValue;
+}
+
 // ============================================================================
 // Callback Registration and Invocation
 // ============================================================================

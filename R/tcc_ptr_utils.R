@@ -36,10 +36,83 @@ tcc_cstring <- function(str) {
 #' Handles UTF-8 decoding automatically.
 #'
 #' @param ptr External pointer to C string
+#' @param max_bytes Optional maximum number of bytes to read (fixed-length read).
+#' @param null_action Behavior when ptr is NULL: one of "na", "empty", "error".
 #' @return Character string
 #' @export
-tcc_read_cstring <- function(ptr) {
-  .Call(RC_read_cstring, ptr)
+tcc_read_cstring <- function(ptr, max_bytes = NULL, null_action = c("na", "empty", "error")) {
+  null_action <- match.arg(null_action)
+
+  if (is.null(max_bytes)) {
+    out <- .Call(RC_read_cstring, ptr)
+  } else {
+    out <- .Call(RC_read_cstring_n, ptr, as.integer(max_bytes))
+  }
+
+  if (is.na(out) && null_action == "empty") {
+    return("")
+  }
+  if (is.na(out) && null_action == "error") {
+    stop("C string pointer is NULL", call. = FALSE)
+  }
+  out
+}
+
+#' Read raw bytes from a pointer
+#'
+#' Read a fixed number of bytes from an external pointer into a raw vector.
+#'
+#' @param ptr External pointer
+#' @param nbytes Number of bytes to read
+#' @return Raw vector
+#' @export
+tcc_read_bytes <- function(ptr, nbytes) {
+  .Call(RC_read_bytes, ptr, as.integer(nbytes))
+}
+
+#' Write raw bytes to a pointer
+#'
+#' Write a raw vector into memory pointed to by an external pointer.
+#'
+#' @param ptr External pointer
+#' @param raw Raw vector to write
+#' @return NULL (invisibly)
+#' @export
+tcc_write_bytes <- function(ptr, raw) {
+  .Call(RC_write_bytes, ptr, raw)
+}
+
+#' Read unsigned 8-bit values from a pointer
+#'
+#' @param ptr External pointer
+#' @param n Number of values to read
+#' @return Integer vector
+#' @export
+tcc_read_u8 <- function(ptr, n) {
+  raw <- tcc_read_bytes(ptr, n)
+  readBin(raw, integer(), n = length(raw), size = 1, signed = FALSE)
+}
+
+#' Read signed 32-bit integers from a pointer
+#'
+#' @param ptr External pointer
+#' @param n Number of values to read
+#' @return Integer vector
+#' @export
+tcc_read_i32 <- function(ptr, n) {
+  raw <- tcc_read_bytes(ptr, n * 4L)
+  readBin(raw, integer(), n = n, size = 4, signed = TRUE)
+}
+
+#' Read 64-bit doubles from a pointer
+#'
+#' @param ptr External pointer
+#' @param n Number of values to read
+#' @return Numeric vector
+#' @export
+tcc_read_f64 <- function(ptr, n) {
+  raw <- tcc_read_bytes(ptr, n * 8L)
+  readBin(raw, numeric(), n = n, size = 8, endian = .Platform$endian)
 }
 
 #' Allocate memory buffer
