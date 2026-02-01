@@ -33,6 +33,6 @@ Updated tcc_ffi object
 if (FALSE) { # \dontrun{
 ffi <- tcc_ffi() |>
   tcc_struct("point", list(x = "f64", y = "f64")) |>
-  tcc_field_addr("point", c("x", "y"))  # point_x_addr(), point_y_addr()
+  tcc_field_addr("point", c("x", "y")) # point_x_addr(), point_y_addr()
 } # }
 ```

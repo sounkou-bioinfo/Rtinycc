@@ -34,6 +34,6 @@ Updated tcc_ffi object
 if (FALSE) { # \dontrun{
 ffi <- tcc_ffi() |>
   tcc_struct("student", list(id = "i32", marks = "i32")) |>
-  tcc_container_of("student", "marks")  # Creates student_from_marks()
+  tcc_container_of("student", "marks") # Creates student_from_marks()
 } # }
 ```

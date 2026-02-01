@@ -126,7 +126,7 @@ type conversion between R and C automatically.</p>
 <span class="r-in"><span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>    safe_sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="op">)</span>,</span></span>
-<span class="r-in"><span>  user_code <span class="op">=</span> <span class="st">'</span></span></span>
+<span class="r-in"><span>  user_code <span class="op">=</span> <span class="st">"</span></span></span>
 <span class="r-in"><span><span class="st">    #include &lt;math.h&gt;</span></span></span>
 <span class="r-in"><span><span class="st"></span></span></span>
 <span class="r-in"><span><span class="st">    // Helper function that validates input before calling sqrt</span></span></span>
@@ -136,11 +136,11 @@ type conversion between R and C automatically.</p>
 <span class="r-in"><span><span class="st">      }</span></span></span>
 <span class="r-in"><span><span class="st">      return sqrt(x);</span></span></span>
 <span class="r-in"><span><span class="st">    }</span></span></span>
-<span class="r-in"><span><span class="st">  '</span>,</span></span>
+<span class="r-in"><span><span class="st">  "</span>,</span></span>
 <span class="r-in"><span>  libs <span class="op">=</span> <span class="st">"m"</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">math_with_helpers</span><span class="op">$</span><span class="fu">safe_sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">math_with_helpers</span><span class="op">$</span><span class="fu">safe_sqrt</span><span class="op">(</span><span class="op">-</span><span class="fl">4.0</span><span class="op">)</span>  <span class="co"># Returns NaN for negative input</span></span></span>
+<span class="r-in"><span><span class="va">math_with_helpers</span><span class="op">$</span><span class="fu">safe_sqrt</span><span class="op">(</span><span class="op">-</span><span class="fl">4.0</span><span class="op">)</span> <span class="co"># Returns NaN for negative input</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

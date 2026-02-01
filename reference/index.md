@@ -2,6 +2,8 @@
 
 ## All functions
 
+- [`.RtinyccCall()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/dot-RtinyccCall.md)
+  : we are using .Call directly, this is to make R CMD check happy
 - [`generate_trampoline()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/generate_trampoline.md)
   : Generate trampoline code for a callback argument
 - [`get_external_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/get_external_ptr_addr.md)
