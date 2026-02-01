@@ -55,7 +55,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x58a677b8a000>
+#> <pointer: 0x5b43c2763000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -73,8 +73,35 @@ tcc_read_cstring(ptr)
 #> [1] "hello"
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
+tcc_read_u8(ptr, 5)
+#> [1] 104 101 108 108 111
 tcc_free(ptr)
 #> NULL
+```
+
+### Header parsing (treesitter.c)
+
+For header-driven bindings, `treesitter.c` provides C header parsers you
+can use to extract symbols before declaring FFI bindings.
+
+``` r
+library(treesitter.c)
+
+header <- ""
+header <- paste0(
+  "struct point { double x; double y; };\n",
+  "int add(int a, int b);\n",
+  "double scale(double x);\n"
+)
+
+root <- parse_header_text(header)
+get_function_nodes(root)
+#>   capture_name  text start_line start_col params return_type
+#> 1    decl_name   add          2         5               <NA>
+#> 2    decl_name scale          3         8               <NA>
+get_struct_nodes(root)
+#>   capture_name  text start_line
+#> 1  struct_name point          1
 ```
 
 ### A declarative FFI API
@@ -484,7 +511,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x58a6768f66c8"
+#> [1] "0x5b43c3dbacf8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -525,9 +552,9 @@ void hello_world() {
   Rprintf("Hello World from compiled C code!\\n");
 }
 
-double call_r_sqrt(double x) {
+double call_r_sqrt(void) {
   SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
-  SEXP val = PROTECT(Rf_ScalarReal(x));
+  SEXP val = PROTECT(Rf_ScalarReal(16.0));
   SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));
   SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));
   double res = REAL(out)[0];
@@ -545,7 +572,7 @@ tcc_call_symbol(state, "hello_world", return = "void")
 #> Hello World from compiled C code!
 #> NULL
 tcc_call_symbol(state, "call_r_sqrt", return = "double")
-#> [1] 2.34726e-155
+#> [1] 4
 ```
 
 ## License
