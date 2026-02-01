@@ -96,8 +96,16 @@
   : Get pointer address as integer
 - [`tcc_ptr_utils`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_utils.md)
   : Pointer and Buffer Utilities for FFI
+- [`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md)
+  : Read raw bytes from a pointer
 - [`tcc_read_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_cstring.md)
   : Read C-style string from pointer
+- [`tcc_read_f64()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_f64.md)
+  : Read 64-bit doubles from a pointer
+- [`tcc_read_i32()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_i32.md)
+  : Read signed 32-bit integers from a pointer
+- [`tcc_read_u8()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_u8.md)
+  : Read unsigned 8-bit values from a pointer
 - [`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md)
   : Relocate compiled code
 - [`tcc_run_cli()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_run_cli.md)
@@ -114,3 +122,5 @@
   : Check if a tcc_symbol external pointer is valid
 - [`tcc_union()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_union.md)
   : Declare union for FFI helper generation
+- [`tcc_write_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_write_bytes.md)
+  : Write raw bytes to a pointer

@@ -51,7 +51,11 @@
 </h1></div>
 <!-- badges: start -->
 
-<p>We provide a simple R interface to the <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a> compiler including the cli and the libtcc library. This is mainly a vehicule for the tinycc compiler and libtcc library. A simple FFI interface inspired by <a href="https://bun.com/docs/runtime/ffi" class="external-link">bun’s FFI</a> is included. We do not support windows.</p>
+<div class="section level2">
+<h2 id="abstract">Abstract<a class="anchor" aria-label="anchor" href="#abstract"></a>
+</h2>
+<p>Rtinycc is an R interface to <a href="https://github.com/TinyCC/tinycc" class="external-link">tinycc</a>, providing both CLI access and a libtcc-backed in-memory compiler. It includes a small, explicit FFI inspired by <a href="https://bun.com/docs/runtime/ffi" class="external-link">bun’s FFI</a> for binding C symbols with predictable conversions and pointer utilities. The package targets Unix-like systems (no Windows support) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with <a href="https://github.com/sounkou-bioinfo/treesitter.c" class="external-link">treesitter.c</a>, which provides C header parsers, it can be used to rapidly generate declarative bindings.</p>
+</div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -59,7 +63,7 @@
 <code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"sounkou-bioinfo/Rtinycc"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="example">Example<a class="anchor" aria-label="anchor" href="#example"></a>
+<h2 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a>
 </h2>
 <div class="section level3">
 <h3 id="cli">CLI<a class="anchor" aria-label="anchor" href="#cli"></a>
@@ -78,9 +82,10 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">Sys.chmod</a></span><span class="op">(</span><span class="va">exe</span>, mode <span class="op">=</span> <span class="st">"0755"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system2.html" class="external-link">system2</a></span><span class="op">(</span><span class="va">exe</span>, stdout <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "42"</span></span></code></pre></div>
+<p>Use the CLI when you need an external executable; for in-memory workflows, prefer libtcc.</p>
 </div>
 <div class="section level3">
-<h3 id="in-memory-using-libtcc">In memory using libtcc<a class="anchor" aria-label="anchor" href="#in-memory-using-libtcc"></a>
+<h3 id="in-memory-using-libtcc">In-memory using libtcc<a class="anchor" aria-label="anchor" href="#in-memory-using-libtcc"></a>
 </h3>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># libtcc in-memory compile</span></span>
@@ -93,9 +98,23 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5cde16509000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x56024f70d000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
+<p>This is the simplest path for quick, in-process JIT compilation.</p>
+</div>
+<div class="section level3">
+<h3 id="utilities">Utilities<a class="anchor" aria-label="anchor" href="#utilities"></a>
+</h3>
+<p>Use the pointer utilities to manage external pointers and C strings without manual casts.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_cstring.html">tcc_cstring</a></span><span class="op">(</span><span class="st">"hello"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_read_cstring.html">tcc_read_cstring</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "hello"</span></span>
+<span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
+<span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="a-declarative-ffi-api">A declarative FFI API<a class="anchor" aria-label="anchor" href="#a-declarative-ffi-api"></a>
@@ -116,8 +135,8 @@
 <div class="section level5">
 <h5 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
 </h5>
-<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the actual arguments. Use <code><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr()</a></code> to obtain the pointer to pass into compiled code and <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> to release resources.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the actual arguments and always call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when finished.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">2</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
 <span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
 <span></span>
@@ -158,8 +177,8 @@
 <div class="section level5">
 <h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
 </h5>
-<p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Bitfields are handled by the C compiler and exposed as ordinary accessors.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Free struct instances when you are done.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
 <span>  <span class="st">"struct point { double x; double y; int id; };\n\n"</span>,</span>
 <span>  <span class="st">"double point_distance(struct point* a, struct point* b) {\n"</span>,</span>
@@ -199,9 +218,9 @@
 </div>
 </div>
 <div class="section level4">
-<h4 id="example-simple-function">Example: Simple Function<a class="anchor" aria-label="anchor" href="#example-simple-function"></a>
+<h4 id="simple-function">Simple function<a class="anchor" aria-label="anchor" href="#simple-function"></a>
 </h4>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span></span>
 <span><span class="co"># Define and compile in one chain</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -221,10 +240,10 @@
 <span><span class="co">#&gt; [1] 8</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="example-working-with-r-arrays">Example: Working with R Arrays<a class="anchor" aria-label="anchor" href="#example-working-with-r-arrays"></a>
+<h4 id="working-with-r-arrays">Working with R arrays<a class="anchor" aria-label="anchor" href="#working-with-r-arrays"></a>
 </h4>
 <p>Pass R vectors to C with zero-copy:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
 <span>    sum_array <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"integer_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i64"</span><span class="op">)</span></span>
@@ -249,10 +268,10 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="linking-external-libraries">Linking External Libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
+<h4 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
 </h4>
 <p>Link against system libraries like libm</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Link against math library</span></span>
 <span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
 <span>  <span class="st">"libm.so.6"</span>,</span>
@@ -264,12 +283,11 @@
 <span></span>
 <span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="sqlite-entry-point">SQLite entry point<a class="anchor" aria-label="anchor" href="#sqlite-entry-point"></a>
-</h4>
+<div class="section level5">
+<h5 id="sqlite-entry-point">SQLite entry point<a class="anchor" aria-label="anchor" href="#sqlite-entry-point"></a>
+</h5>
 <p>Use SQLite to validate the external library workflow and inspect the version string.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Link the system SQLite3 library and expose a few symbols</span></span>
 <span><span class="va">sqlite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
 <span>  <span class="st">"libsqlite3.so"</span>,</span>
@@ -288,11 +306,11 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
-<div class="section level4">
-<h4 id="sqlite-with-an-r-callback">SQLite with an R callback<a class="anchor" aria-label="anchor" href="#sqlite-with-an-r-callback"></a>
-</h4>
+<div class="section level5">
+<h5 id="sqlite-with-an-r-callback">SQLite with an R callback<a class="anchor" aria-label="anchor" href="#sqlite-with-an-r-callback"></a>
+</h5>
 <p>Use an R callback from <code>sqlite3_exec()</code> via a small C bridge that calls <code>RC_invoke_callback()</code>.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"hello from R callback:"</span>, <span class="va">x</span>, <span class="st">"\n"</span><span class="op">)</span></span>
@@ -373,11 +391,11 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_cb</span>, <span class="va">db_ptr</span>, <span class="va">cb_ptr</span>, <span class="va">cb</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
-<div class="section level4">
-<h4 id="sqlite-with-an-opaque-struct-wrapper">SQLite with an opaque struct wrapper<a class="anchor" aria-label="anchor" href="#sqlite-with-an-opaque-struct-wrapper"></a>
-</h4>
+<div class="section level5">
+<h5 id="sqlite-with-an-opaque-struct-wrapper">SQLite with an opaque struct wrapper<a class="anchor" aria-label="anchor" href="#sqlite-with-an-opaque-struct-wrapper"></a>
+</h5>
 <p>Wrap the opaque <code>sqlite3*</code> in a small struct so the FFI exercises struct allocation and accessors.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sqlite_struct</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -428,11 +446,11 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_struct</span>, <span class="va">h</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
-<div class="section level4">
-<h4 id="custom-wrapper-functions-sqlite-with-pointer-utilities">Custom wrapper functions: SQLite with Pointer Utilities<a class="anchor" aria-label="anchor" href="#custom-wrapper-functions-sqlite-with-pointer-utilities"></a>
-</h4>
+<div class="section level5">
+<h5 id="custom-wrapper-functions-sqlite-with-pointer-utilities">Custom wrapper functions: SQLite with pointer utilities<a class="anchor" aria-label="anchor" href="#custom-wrapper-functions-sqlite-with-pointer-utilities"></a>
+</h5>
 <p>You can also create custom wrapper functions</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create SQLite with pointer utilities integration</span></span>
 <span><span class="va">sqlite_with_utils</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -479,7 +497,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5cde18dcdf98"</span></span>
+<span><span class="co">#&gt; [1] "0x56024e4796c8"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
@@ -490,11 +508,12 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
+</div>
 <div class="section level3">
-<h3 id="low-level-api-for-calling-c-code">Low Level API For Calling C code<a class="anchor" aria-label="anchor" href="#low-level-api-for-calling-c-code"></a>
+<h3 id="low-level-r-c-api">Low-level R C API<a class="anchor" aria-label="anchor" href="#low-level-r-c-api"></a>
 </h3>
 <p>Using <code>#Define _Complex</code> as workaround of <code>TinyCC</code>’s lack of support for complex types, we can link against R’s install headers and <code>libR</code> to call R’s C API function.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create new state for R linking example</span></span>
 <span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
 <span></span>
@@ -507,12 +526,8 @@
 <span><span class="fu"><a href="reference/tcc_add_library_path.html">tcc_add_library_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_lib</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
-<span><span class="co"># Link against external math library (libm) for real math functions</span></span>
-<span><span class="fu"><a href="reference/tcc_add_library.html">tcc_add_library</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"m"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span></span>
-<span><span class="co"># C code that demonstrates actual R C API usage</span></span>
-<span><span class="co"># Workaround: Define _Complex to empty since TinyCC doesn't support complex types</span></span>
+<span><span class="co"># Using #define _Complex as workaround of TinyCC’s lack of support for complex</span></span>
+<span><span class="co"># types, we can link against R’s install headers and libR to call the R C API.</span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">#define _Complex</span></span>
 <span><span class="st">#include &lt;R.h&gt;</span></span>
@@ -522,62 +537,14 @@
 <span><span class="st">  Rprintf("Hello World from compiled C code!\\n");</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">// Create an R numeric vector and calculate its length</span></span>
-<span><span class="st">int create_r_vector() {</span></span>
-<span><span class="st">  SEXP vec = PROTECT(Rf_allocVector(REALSXP, 5));</span></span>
-<span><span class="st">  for(int i = 0; i &lt; 5; i++) {</span></span>
-<span><span class="st">    REAL(vec)[i] = (double)(i + 1) * 2.0;  // 2, 4, 6, 8, 10</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  int length = Rf_length(vec);</span></span>
-<span><span class="st">  Rprintf("Created vector length: %d\\n", length);</span></span>
-<span><span class="st">  Rprintf("Vector values: ");</span></span>
-<span><span class="st">  for(int i = 0; i &lt; length; i++) {</span></span>
-<span><span class="st">    Rprintf("%f ", REAL(vec)[i]);</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  Rprintf("\\n");</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  UNPROTECT(1);</span></span>
-<span><span class="st">  return length;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">// Use Rf_install to get a function and call it</span></span>
-<span><span class="st">double call_r_function() {</span></span>
-<span><span class="st">  // Get the sqrt function from R base</span></span>
+<span><span class="st">double call_r_sqrt(double x) {</span></span>
 <span><span class="st">  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  // Create a scalar value</span></span>
-<span><span class="st">  SEXP val = PROTECT(Rf_ScalarReal(16.0));</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  // Call the function</span></span>
-<span><span class="st">  SEXP result = PROTECT(Rf_lang2(sqrt_fun, val));</span></span>
-<span><span class="st">  SEXP eval_result = PROTECT(Rf_eval(result, R_GlobalEnv));</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  double sqrt_val = REAL(eval_result)[0];</span></span>
-<span><span class="st">  Rprintf("R sqrt(16.0) = %f\\n", sqrt_val);</span></span>
-<span><span class="st">  </span></span>
+<span><span class="st">  SEXP val = PROTECT(Rf_ScalarReal(x));</span></span>
+<span><span class="st">  SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));</span></span>
+<span><span class="st">  SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));</span></span>
+<span><span class="st">  double res = REAL(out)[0];</span></span>
 <span><span class="st">  UNPROTECT(4);</span></span>
-<span><span class="st">  return sqrt_val;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">// Demonstrate creating different R data types</span></span>
-<span><span class="st">void demonstrate_r_types() {</span></span>
-<span><span class="st">  // Create different types of R objects</span></span>
-<span><span class="st">  SEXP int_vec = PROTECT(Rf_allocVector(INTSXP, 3));</span></span>
-<span><span class="st">  INTEGER(int_vec)[0] = 1;</span></span>
-<span><span class="st">  INTEGER(int_vec)[1] = 2;</span></span>
-<span><span class="st">  INTEGER(int_vec)[2] = 3;</span></span>
-<span><span class="st">  Rprintf("Integer vector created with %d elements\\n", Rf_length(int_vec));</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  SEXP str_vec = PROTECT(Rf_allocVector(STRSXP, 2));</span></span>
-<span><span class="st">  SET_STRING_ELT(str_vec, 0, Rf_mkChar("Hello"));</span></span>
-<span><span class="st">  SET_STRING_ELT(str_vec, 1, Rf_mkChar("R"));</span></span>
-<span><span class="st">  Rprintf("String vector created with %d elements\\n", Rf_length(str_vec));</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  SEXP logical = PROTECT(Rf_ScalarLogical(TRUE));</span></span>
-<span><span class="st">  Rprintf("Logical value: %d\\n", LOGICAL(logical)[0]);</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  UNPROTECT(3);</span></span>
+<span><span class="st">  return res;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
 <span></span>
@@ -586,29 +553,11 @@
 <span><span class="fu"><a href="reference/tcc_relocate.html">tcc_relocate</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span></span>
-<span></span>
-<span><span class="co"># Call the functions that demonstrate R C API usage</span></span>
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Hello World from compiled C code!</span></span>
 <span><span class="co">#&gt; NULL</span></span>
-<span></span>
-<span><span class="va">result1</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"create_r_vector"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Created vector length: 5</span></span>
-<span><span class="co">#&gt; Vector values: 2.000000 4.000000 6.000000 8.000000 10.000000</span></span>
-<span><span class="va">result1</span></span>
-<span><span class="co">#&gt; [1] 5</span></span>
-<span></span>
-<span><span class="va">result2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"call_r_function"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span> </span>
-<span><span class="co">#&gt; R sqrt(16.0) = 4.000000</span></span>
-<span><span class="va">result2</span></span>
-<span><span class="co">#&gt; [1] 4</span></span>
-<span></span>
-<span><span class="va">result3</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"demonstrate_r_types"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Integer vector created with 3 elements</span></span>
-<span><span class="co">#&gt; String vector created with 2 elements</span></span>
-<span><span class="co">#&gt; Logical value: 1</span></span>
-<span><span class="va">result3</span></span>
-<span><span class="co">#&gt; NULL</span></span></code></pre></div>
+<span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"call_r_sqrt"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 2.34726e-155</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
