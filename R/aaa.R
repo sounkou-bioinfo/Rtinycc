@@ -3,10 +3,5 @@
 ## usethis namespace: end
 NULL
 
-#' Dummy function for internal use
-#'
-#' This is a placeholder function to satisfy R CMD check.
-#' @keywords internal
-RC_dummy <- function() {
-  .Call(RC_dummy)
-}
+#' we are using .Call directly, this is to make R CMD check happy
+.RtinyccCall <- .Call

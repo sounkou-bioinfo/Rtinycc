@@ -547,17 +547,17 @@ make_callable <- function(fn_ptr, sym, state) {
     # Call the wrapper function pointer directly using .Call()
     # R's .Call() can invoke external pointers as functions!
     if (n_args == 0) {
-      .Call(fn_ptr)
+      .RtinyccCall(fn_ptr)
     } else if (n_args == 1) {
-      .Call(fn_ptr, args[[1]])
+      .RtinyccCall(fn_ptr, args[[1]])
     } else if (n_args == 2) {
-      .Call(fn_ptr, args[[1]], args[[2]])
+      .RtinyccCall(fn_ptr, args[[1]], args[[2]])
     } else if (n_args == 3) {
-      .Call(fn_ptr, args[[1]], args[[2]], args[[3]])
+      .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]])
     } else if (n_args == 4) {
-      .Call(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]])
+      .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]])
     } else if (n_args == 5) {
-      .Call(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]], args[[5]])
+      .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]], args[[5]])
     } else {
       # For more than 5 arguments, use do.call
       do.call(.Call, c(list(fn_ptr), args))
@@ -625,8 +625,7 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(
-    sysname,
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -679,8 +678,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(
-      sysname,
+    lib_name <- switch(sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
@@ -744,7 +742,7 @@ tcc_find_library <- function(name) {
 #'     sqrt = list(args = list("f64"), returns = "f64"),
 #'     safe_sqrt = list(args = list("f64"), returns = "f64")
 #'   ),
-#'   user_code = '
+#'   user_code = "
 #'     #include <math.h>
 #'
 #'     // Helper function that validates input before calling sqrt
@@ -754,11 +752,11 @@ tcc_find_library <- function(name) {
 #'       }
 #'       return sqrt(x);
 #'     }
-#'   ',
+#'   ",
 #'   libs = "m"
 #' )
 #' math_with_helpers$safe_sqrt(16.0)
-#' math_with_helpers$safe_sqrt(-4.0)  # Returns NaN for negative input
+#' math_with_helpers$safe_sqrt(-4.0) # Returns NaN for negative input
 #' }
 tcc_link <- function(
   path,
@@ -1145,7 +1143,7 @@ tcc_enum <- function(ffi, name, constants = NULL, export_constants = FALSE) {
 #' \dontrun{
 #' ffi <- tcc_ffi() |>
 #'   tcc_struct("student", list(id = "i32", marks = "i32")) |>
-#'   tcc_container_of("student", "marks")  # Creates student_from_marks()
+#'   tcc_container_of("student", "marks") # Creates student_from_marks()
 #' }
 tcc_container_of <- function(ffi, struct_name, member_name) {
   if (!inherits(ffi, "tcc_ffi")) {
@@ -1177,7 +1175,7 @@ tcc_container_of <- function(ffi, struct_name, member_name) {
 #' \dontrun{
 #' ffi <- tcc_ffi() |>
 #'   tcc_struct("point", list(x = "f64", y = "f64")) |>
-#'   tcc_field_addr("point", c("x", "y"))  # point_x_addr(), point_y_addr()
+#'   tcc_field_addr("point", c("x", "y")) # point_x_addr(), point_y_addr()
 #' }
 tcc_field_addr <- function(ffi, struct_name, fields) {
   if (!inherits(ffi, "tcc_ffi")) {
