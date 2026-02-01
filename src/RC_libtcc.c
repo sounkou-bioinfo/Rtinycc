@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 #endif
 #include <stdint.h>
 #include <inttypes.h>
@@ -833,6 +834,10 @@ SEXP RC_callback_async_init() {
     }
     if (pipe(cbq_pipe) != 0) {
         Rf_error("Failed to create async pipe: %s", strerror(errno));
+    }
+    int flags = fcntl(cbq_pipe[0], F_GETFL, 0);
+    if (flags < 0 || fcntl(cbq_pipe[0], F_SETFL, flags | O_NONBLOCK) < 0) {
+        Rf_error("Failed to set async pipe non-blocking: %s", strerror(errno));
     }
     cbq_ih = addInputHandler(R_InputHandlers, cbq_pipe[0], cbq_input_handler, 10);
     if (!cbq_ih) {

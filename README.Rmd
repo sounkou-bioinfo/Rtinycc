@@ -82,11 +82,11 @@ For header-driven bindings, `treesitter.c` provides C header parsers you can use
 ```{r ffi-treesitter}
 library(treesitter.c)
 
-header <- paste0(
-  "struct point { double x; double y; };\n",
-  "int add(int a, int b);\n",
-  "double scale(double x);\n"
-)
+header <- '
+struct point { double x; double y; };
+int add(int a, int b);
+double scale(double x);
+'
 
 root <- parse_header_text(header)
 funcs <- get_function_nodes(root, extract_params = TRUE, extract_return = TRUE)
@@ -149,11 +149,11 @@ symbols <- setNames(
 ffi <- tcc_ffi()
 ffi <- tcc_source(
   ffi,
-  "int add(int a, int b) { return a + b; }\n"
+  "int add(int a, int b) { return a + b; }"
 )
 ffi <- tcc_source(
   ffi,
-  "double scale(double x) { return x * 2.0; }\n"
+  "double scale(double x) { return x * 2.0; }"
 )
 ffi <- do.call(tcc_bind, c(list(ffi), symbols))
 ffi <- tcc_compile(ffi)
@@ -229,35 +229,39 @@ if (.Platform$OS.type != "windows") {
   cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
   cb_ptr <- tcc_callback_ptr(cb_async)
 
-  code_async <- '#define _Complex
-  #include <R.h>
-  #include <Rinternals.h>
-  #include <pthread.h>
-  
-  typedef struct { int id; int refs; } callback_token_t;
-  
-  typedef enum {
-      CB_ARG_INT = 0,
-      CB_ARG_REAL = 1,
-      CB_ARG_LOGICAL = 2,
-      CB_ARG_PTR = 3,
-      CB_ARG_CSTRING = 4
+  code_async <- '
+#define _Complex
+#include <R.h>
+#include <Rinternals.h>
+#include <pthread.h>
+
+typedef struct { int id; int refs; } callback_token_t;
+
+typedef enum {
+  CB_ARG_INT = 0,
+  CB_ARG_REAL = 1,
+  CB_ARG_LOGICAL = 2,
+  CB_ARG_PTR = 3,
+  CB_ARG_CSTRING = 4
 } cb_arg_kind_t;
 
-typedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;
+typedef struct {
+  cb_arg_kind_t kind;
+  union { int i; double d; void* p; char* s; } v;
+} cb_arg_t;
 
 extern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 
 struct task { int id; int value; };
 
 static void* worker(void* data) {
-    struct task* t = (struct task*) data;
-      cb_arg_t arg;
-      arg.kind = CB_ARG_INT;
-      arg.v.i = t->value;
-      RC_callback_async_schedule_c(t->id, 1, &arg);
-      return NULL;
-  }
+  struct task* t = (struct task*) data;
+  cb_arg_t arg;
+  arg.kind = CB_ARG_INT;
+  arg.v.i = t->value;
+  RC_callback_async_schedule_c(t->id, 1, &arg);
+  return NULL;
+}
 
 int spawn_async(void* cb, int value) {
   callback_token_t* tok = (callback_token_t*) cb;
@@ -266,10 +270,10 @@ int spawn_async(void* cb, int value) {
   t.id = tok->id;
   t.value = value;
   pthread_t th;
-  if (pthread_create(&th, NULL, worker, &t) != 0) {return -2;}
+  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;
   pthread_join(th, NULL);
   return 0;
-  }
+}
 '
   ffi_async <- tcc_ffi() |>
     tcc_source(code_async) |>
@@ -279,8 +283,8 @@ int spawn_async(void* cb, int value) {
 
   rc <- ffi_async$spawn_async(cb_ptr, 2L)
   tcc_callback_async_drain()
-
-  hits
+  Sys.sleep(0.1)
+  print(hits)
   tcc_callback_close(cb_async)
   rm(ffi_async, cb_ptr, cb_async)
   invisible(gc())
@@ -292,14 +296,14 @@ int spawn_async(void* cb, int value) {
 Complex C types are supported declaratively. Use `tcc_struct()` and `tcc_union()` to generate allocation and accessor helpers and `tcc_introspect()` for size/alignment information. Free struct instances when you are done.
 
 ```{r struct-example}
-code <- paste0(
-  "struct point { double x; double y; int id; };\n",
-  "double point_distance(struct point* a, struct point* b) {\n",
-  "  double dx = a->x - b->x;\n",
-  "  double dy = a->y - b->y;\n",
-  "  return dx * dx + dy * dy;\n",
-  "}\n"
-)
+code <- '
+struct point { double x; double y; int id; };
+double point_distance(struct point* a, struct point* b) {
+  double dx = a->x - b->x;
+  double dy = a->y - b->y;
+  return dx * dx + dy * dy;
+}
+'
 
 ffi <- tcc_ffi() |>
   tcc_source(code) |>
