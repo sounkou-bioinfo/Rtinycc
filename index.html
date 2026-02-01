@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x59b0387af000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x645b79752000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
@@ -222,22 +222,45 @@
 <div class="section level4">
 <h4 id="type-system">Type System<a class="anchor" aria-label="anchor" href="#type-system"></a>
 </h4>
-<p>The FFI type system maps R types to C types:</p>
+<p>The FFI exposes a small, explicit set of type mappings between R and C. Conversions are explicit and predictable so callers know when data is shared versus copied.</p>
 <ul>
 <li>
-<strong>Scalars</strong>: <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code> (integers), <code>f32</code>, <code>f64</code> (floats), <code>bool</code>, <code>cstring</code>
-</li>
+<strong>Scalars</strong>: <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code> (integers); <code>f32</code>, <code>f64</code> (floats); <code>bool</code> (logical); <code>cstring</code> (NUL-terminated C string).</li>
 <li>
-<strong>Arrays</strong> (zero-copy): <code>raw</code> → <code>uint8_t*</code>, <code>integer_array</code> → <code>int32_t*</code>, <code>numeric_array</code> → <code>double*</code>
-</li>
+<strong>Arrays (zero-copy)</strong>: <code>raw</code> → <code>uint8_t*</code>; <code>integer_array</code> → <code>int32_t*</code>; <code>numeric_array</code> → <code>double*</code>.</li>
 <li>
-<strong>Pointers</strong>: <code>ptr</code> (externalptr), <code>sexp</code> (R object)</li>
+<strong>Pointers</strong>: <code>ptr</code> (opaque <code>externalptr</code>), <code>sexp</code> (pass <code>SEXP</code> directly), <code>callback</code> (function pointer token obtained with <code><a href="reference/tcc_callback.html">tcc_callback()</a></code>).</li>
 </ul>
+<div class="section level5">
+<h5 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
+</h5>
+<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature when possible. Use <code><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr()</a></code> to obtain the pointer to pass into compiled code and <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> to release resources.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">2</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
+<span><span class="va">ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
+<span><span class="co"># pass `ptr` to compiled C code that accepts a function pointer...</span></span>
+<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
+</h5>
+<p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Bitfields are handled by the C compiler and exposed as ordinary accessors.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct point { double x; double y; int id; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">'point'</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">'f64'</span>, y <span class="op">=</span> <span class="st">'f64'</span>, id <span class="op">=</span> <span class="st">'i32'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span></span>
+<span><span class="va">p</span> <span class="op">&lt;-</span> <span class="va">compiled</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">p</span> <span class="op">&lt;-</span> <span class="va">compiled</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p</span>, <span class="fl">3.14</span><span class="op">)</span></span>
+<span><span class="va">compiled</span><span class="op">$</span><span class="fu">point_get_x</span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3.14</span></span></code></pre></div>
+</div>
 </div>
 <div class="section level4">
 <h4 id="example-simple-function">Example: Simple Function<a class="anchor" aria-label="anchor" href="#example-simple-function"></a>
 </h4>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span></span>
 <span><span class="co"># Define and compile in one chain</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -260,7 +283,7 @@
 <h4 id="example-working-with-r-arrays">Example: Working with R Arrays<a class="anchor" aria-label="anchor" href="#example-working-with-r-arrays"></a>
 </h4>
 <p>Pass R vectors to C with zero-copy:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
 <span>    sum_array <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"integer_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i64"</span><span class="op">)</span></span>
@@ -286,7 +309,7 @@
 <h4 id="linking-external-libraries">Linking External Libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
 </h4>
 <p>Link against system libraries like libm</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Link against math library</span></span>
 <span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
 <span>  <span class="st">"libm.so.6"</span>,</span>
@@ -303,7 +326,7 @@
 <h4 id="linking-sqlite3">Linking SQLite3<a class="anchor" aria-label="anchor" href="#linking-sqlite3"></a>
 </h4>
 <p>you can link again the libraries and access the exported symbol</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Link the system SQLite3 library and expose a few symbols</span></span>
 <span><span class="va">sqlite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
 <span>  <span class="st">"libsqlite3.so"</span>,</span>
@@ -324,7 +347,7 @@
 <h4 id="custom-wrapper-functions-sqlite-with-pointer-utilities">Custom wrapper functions: SQLite with Pointer Utilities<a class="anchor" aria-label="anchor" href="#custom-wrapper-functions-sqlite-with-pointer-utilities"></a>
 </h4>
 <p>You can also create custom wrapper functions</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create SQLite with pointer utilities integration</span></span>
 <span><span class="va">sqlite_with_utils</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -371,7 +394,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x59b036219ba8"</span></span>
+<span><span class="co">#&gt; [1] "0x645b789e94d8"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
