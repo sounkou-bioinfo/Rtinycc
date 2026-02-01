@@ -9,7 +9,9 @@ tcc_struct(ffi, name, accessors)
 \arguments{
 \item{ffi}{A tcc_ffi object}
 
-\item{...}{Named list of struct definitions. Each is a named list where
+\item{name}{Struct name (as defined in C header)}
+
+\item{accessors}{Named list of field accessors where
 names are field names and values are FFI types (e.g., list(x="f64", y="f64"))}
 }
 \value{
@@ -20,7 +22,9 @@ Generate R-callable helpers for struct allocation, field access,
 and pointer management. The struct must be defined in a header.
 }
 \examples{
-ffi <- tcc_ffi() \%>\%
-  tcc_header("#include <point.h>") \%>\%
-  tcc_struct(point = list(x = "f64", y = "f64", id = "i32"))
+\dontrun{
+ffi <- tcc_ffi() |>
+  tcc_header("#include <point.h>") |>
+  tcc_struct("point", list(x = "f64", y = "f64", id = "i32"))
+}
 }

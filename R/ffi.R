@@ -917,7 +917,7 @@ tcc_link <- function(
 #' @param owned Whether R should free the C memory when done
 #' @return A tcc_cstring object
 #' @export
-tcc_cstring <- function(ptr, clone = TRUE, owned = FALSE) {
+tcc_cstring_object <- function(ptr, clone = TRUE, owned = FALSE) {
   if (!inherits(ptr, "externalptr")) {
     stop("Expected external pointer", call. = FALSE)
   }
@@ -983,14 +983,17 @@ read_c_string <- function(ptr) {
 #' and pointer management. The struct must be defined in a header.
 #'
 #' @param ffi A tcc_ffi object
-#' @param ... Named list of struct definitions. Each is a named list where
+#' @param name Struct name (as defined in C header)
+#' @param accessors Named list of field accessors where
 #'   names are field names and values are FFI types (e.g., list(x="f64", y="f64"))
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples
-#' ffi <- tcc_ffi() %>%
-#'   tcc_header("#include <point.h>") %>%
-#'   tcc_struct(point = list(x = "f64", y = "f64", id = "i32"))
+#' \dontrun{
+#' ffi <- tcc_ffi() |>
+#'   tcc_header("#include <point.h>") |>
+#'   tcc_struct("point", list(x = "f64", y = "f64", id = "i32"))
+#' }
 tcc_struct <- function(ffi, name, accessors) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
@@ -1052,11 +1055,13 @@ tcc_struct <- function(ffi, name, accessors) {
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples
-#' ffi <- tcc_ffi() %>%
+#' \dontrun{
+#' ffi <- tcc_ffi() |>
 #'   tcc_union("data_variant",
 #'     members = list(as_int = "i32", as_float = "f32"),
 #'     active = "as_int"
 #'   )
+#' }
 tcc_union <- function(ffi, name, members, active = NULL) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
@@ -1099,13 +1104,16 @@ tcc_union <- function(ffi, name, members, active = NULL) {
 #'
 #' @param ffi A tcc_ffi object
 #' @param name Enum name (as defined in C header)
+#' @param constants Character vector of constant names to export
 #' @param export_constants Whether to export enum constants as R functions
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples
-#' ffi <- tcc_ffi() %>%
-#'   tcc_header("#include <errors.h>") %>%
-#'   tcc_enum("error_code", export_constants = TRUE)
+#' \dontrun{
+#' ffi <- tcc_ffi() |>
+#'   tcc_header("#include <errors.h>") |>
+#'   tcc_enum("error_code", constants = c("OK", "ERROR"), export_constants = TRUE)
+#' }
 tcc_enum <- function(ffi, name, constants = NULL, export_constants = FALSE) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
@@ -1134,9 +1142,11 @@ tcc_enum <- function(ffi, name, constants = NULL, export_constants = FALSE) {
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples
-#' ffi <- tcc_ffi() %>%
-#'   tcc_struct(student = list(id = "i32", marks = "i32")) %>%
+#' \dontrun{
+#' ffi <- tcc_ffi() |>
+#'   tcc_struct("student", list(id = "i32", marks = "i32")) |>
 #'   tcc_container_of("student", "marks")  # Creates student_from_marks()
+#' }
 tcc_container_of <- function(ffi, struct_name, member_name) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
@@ -1164,9 +1174,11 @@ tcc_container_of <- function(ffi, struct_name, member_name) {
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples
-#' ffi <- tcc_ffi() %>%
-#'   tcc_struct(point = list(x = "f64", y = "f64")) %>%
+#' \dontrun{
+#' ffi <- tcc_ffi() |>
+#'   tcc_struct("point", list(x = "f64", y = "f64")) |>
 #'   tcc_field_addr("point", c("x", "y"))  # point_x_addr(), point_y_addr()
+#' }
 tcc_field_addr <- function(ffi, struct_name, fields) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)

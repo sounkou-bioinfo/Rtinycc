@@ -445,8 +445,8 @@ SEXP RC_unregister_callback(SEXP callback_ext) {
         Rf_error("Callback is already closed");
     }
     
-    // The finalizer will handle cleanup, we just trigger it
-    R_ClearExternalPtr(callback_ext);
+    // Call finalizer directly to clean up resources
+    // The finalizer will clear the external ptr and free the token
     RC_callback_finalizer(callback_ext);
     
     return R_NilValue;
@@ -550,4 +550,36 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     
     UNPROTECT(2);  // call and result
     return converted;
+}
+
+// Cleanup all callbacks during package unload
+SEXP RC_cleanup_callbacks() {
+    // Clean up all valid callbacks in the registry
+    for (int i = 0; i < next_callback_id; i++) {
+        callback_entry_t *entry = &callback_registry[i];
+        if (entry->valid && entry->fun != NULL) {
+            R_ReleaseObject(entry->fun);
+            entry->valid = 0;
+            if (entry->return_type) {
+                free(entry->return_type);
+                entry->return_type = NULL;
+            }
+            if (entry->arg_types) {
+                for (int j = 0; j < entry->n_args; j++) {
+                    if (entry->arg_types[j]) {
+                        free(entry->arg_types[j]);
+                    }
+                }
+                free(entry->arg_types);
+                entry->arg_types = NULL;
+            }
+        }
+    }
+    next_callback_id = 0;
+    return R_NilValue;
+}
+
+// Dummy function to suppress R CMD check warnings
+SEXP RC_dummy() {
+    return R_NilValue;
 }

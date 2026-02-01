@@ -135,7 +135,15 @@ FFI_TYPES <- list(
   ),
 
   # Void (return only)
-  void = list(c_type = "void", r_type = "NULL", size = 0L, kind = "scalar")
+  void = list(c_type = "void", r_type = "NULL", size = 0L, kind = "scalar"),
+
+  # Callback type - function pointer passed from R
+  callback = list(
+    c_type = "void*",
+    r_type = "externalptr",
+    size = NA_integer_,
+    kind = "scalar"
+  )
 )
 
 # Valid FFI type names
@@ -151,6 +159,17 @@ check_ffi_type <- function(type, context = "argument") {
   if (grepl("^enum:", type)) {
     # Enum types are always i32 (int)
     return(list(c_type = "int", r_type = "integer", size = 4L, kind = "scalar"))
+  }
+
+  # Check for callback:type pattern (e.g., callback:double(int,int))
+  if (grepl("^callback", type)) {
+    # Callback types are always void* (function pointer)
+    return(list(
+      c_type = "void*",
+      r_type = "externalptr",
+      size = NA_integer_,
+      kind = "scalar"
+    ))
   }
 
   if (!type %in% VALID_FFI_TYPES) {

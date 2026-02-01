@@ -102,6 +102,7 @@ if [ -x "${THISDir}/tools/run_tcc_minimal_test.sh" ]; then
     else
         echo "Minimal TCC JIT test succeeded" >> "$THISDir/config.log"
     fi
+    rm -f  ${THISDir}/tools/tcc_minimal_test || true
 else
     echo "Minimal TCC JIT test script not found or not executable" >> "$THISDir/config.log"
 fi

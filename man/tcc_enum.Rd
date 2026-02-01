@@ -11,6 +11,8 @@ tcc_enum(ffi, name, constants = NULL, export_constants = FALSE)
 
 \item{name}{Enum name (as defined in C header)}
 
+\item{constants}{Character vector of constant names to export}
+
 \item{export_constants}{Whether to export enum constants as R functions}
 }
 \value{
@@ -21,7 +23,9 @@ Generate R-callable helpers for enum constants and type conversions.
 The enum must be defined in a header.
 }
 \examples{
-ffi <- tcc_ffi() \%>\%
-  tcc_header("#include <errors.h>") \%>\%
-  tcc_enum("error_code", export_constants = TRUE)
+\dontrun{
+ffi <- tcc_ffi() |>
+  tcc_header("#include <errors.h>") |>
+  tcc_enum("error_code", constants = c("OK", "ERROR"), export_constants = TRUE)
+}
 }

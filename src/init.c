@@ -32,6 +32,10 @@ SEXP RC_unregister_callback(SEXP callback_ext);
 SEXP RC_get_callback_ptr(SEXP callback_ext);
 SEXP RC_callback_is_valid(SEXP callback_ext);
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
+SEXP RC_cleanup_callbacks();
+
+// Dummy function
+SEXP RC_dummy();
 
 // .Call entries
 static const R_CallMethodDef CallEntries[] = {
@@ -64,6 +68,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_get_callback_ptr",    (DL_FUNC) &RC_get_callback_ptr,    1},
     {"RC_callback_is_valid",   (DL_FUNC) &RC_callback_is_valid,   1},
     {"RC_invoke_callback",     (DL_FUNC) &RC_invoke_callback,     2},
+    {"RC_cleanup_callbacks",   (DL_FUNC) &RC_cleanup_callbacks,   0},
+    
+    // Dummy function
+    {"RC_dummy", (DL_FUNC) &RC_dummy, 0},
     {NULL, NULL, 0}
 };
 

@@ -23,9 +23,11 @@ Generate R-callable helpers for union allocation and member access.
 The union must be defined in a header.
 }
 \examples{
-ffi <- tcc_ffi() \%>\%
+\dontrun{
+ffi <- tcc_ffi() |>
   tcc_union("data_variant",
     members = list(as_int = "i32", as_float = "f32"),
     active = "as_int"
   )
+}
 }

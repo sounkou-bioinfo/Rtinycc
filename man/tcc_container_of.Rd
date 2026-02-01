@@ -22,7 +22,9 @@ a pointer to one of its members. This is the classic Linux kernel
 container_of macro made accessible from R.
 }
 \examples{
-ffi <- tcc_ffi() \%>\%
-  tcc_struct(student = list(id = "i32", marks = "i32")) \%>\%
+\dontrun{
+ffi <- tcc_ffi() |>
+  tcc_struct("student", list(id = "i32", marks = "i32")) |>
   tcc_container_of("student", "marks")  # Creates student_from_marks()
+}
 }

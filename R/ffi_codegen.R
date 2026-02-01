@@ -53,10 +53,14 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
     logical_array = sprintf("  int* %s = LOGICAL(%s);", arg_name, r_name),
     character_array = sprintf("  SEXP* %s = STRING_PTR(%s);", arg_name, r_name),
     sexp = sprintf("  SEXP %s = %s;", arg_name, r_name),
+    callback = sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name),
     {
       # Handle enum types
       if (grepl("^enum:", ffi_type)) {
         sprintf("  int %s = asInteger(%s);", arg_name, r_name)
+      } else if (grepl("^callback(:|$)", ffi_type)) {
+        # Callback type - extract pointer from external ptr
+        sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
       } else {
         stop("Unsupported FFI type: ", ffi_type, call. = FALSE)
       }
