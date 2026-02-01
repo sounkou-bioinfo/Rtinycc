@@ -24,5 +24,9 @@ An external pointer (address of the callback token)
 ## Details
 
 Pointer arguments and return values are treated as external pointers.
-Use \codetcc_read_bytes() or \codetcc_read\_\*() helpers to inspect
-pointed data when needed.
+Use
+[`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md),
+[`tcc_read_u8()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_u8.md),
+or
+[`tcc_read_f64()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_f64.md)
+to inspect pointed data when needed.

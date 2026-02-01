@@ -1,5 +1,9 @@
 # Changelog
 
+## Rtinycc 0.0.1.9000 (development version)
+
+- Enhance Callback using `background`/`later` pattern
+
 ## Rtinycc 0.0.1
 
 - First release
