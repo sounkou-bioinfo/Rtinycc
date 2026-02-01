@@ -397,6 +397,8 @@ GPL-3
   : Generate container_of helper for struct member
 - [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md)
   : Create a C-style string pointer
+- [`tcc_cstring_object()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring_object.md)
+  : CString S3 Class
 - [`tcc_enum()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_enum.md)
   : Declare enum for FFI helper generation
 - [`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md)
