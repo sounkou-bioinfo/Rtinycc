@@ -4,4 +4,4 @@
 NULL
 
 #' we are using .Call directly, this is to make R CMD check happy
-.RtinyccCall <- .Call
+.RtinyccCall <- base::.Call
