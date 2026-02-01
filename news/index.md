@@ -1,5 +1,9 @@
 # Changelog
 
+## Rtinycc 0.0.1
+
+- First release
+
 ## Rtinycc 0.0.0.9000 (development version)
 
 - Added a bun:ffi inspired FFI API
