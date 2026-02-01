@@ -36,6 +36,10 @@ SEXP RC_get_callback_ptr(SEXP callback_ext);
 SEXP RC_callback_is_valid(SEXP callback_ext);
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
 SEXP RC_cleanup_callbacks();
+SEXP RC_callback_async_init();
+SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
+SEXP RC_callback_async_drain();
+int RC_callback_async_schedule_c(int id, int n_args, const void *args);
 
 // Dummy function
 SEXP RC_dummy();
@@ -75,6 +79,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_callback_is_valid",   (DL_FUNC) &RC_callback_is_valid,   1},
     {"RC_invoke_callback",     (DL_FUNC) &RC_invoke_callback,     2},
     {"RC_cleanup_callbacks",   (DL_FUNC) &RC_cleanup_callbacks,   0},
+    {"RC_callback_async_init", (DL_FUNC) &RC_callback_async_init, 0},
+    {"RC_callback_async_schedule", (DL_FUNC) &RC_callback_async_schedule, 2},
+    {"RC_callback_async_drain", (DL_FUNC) &RC_callback_async_drain, 0},
     
     // Dummy function
     {"RC_dummy", (DL_FUNC) &RC_dummy, 0},

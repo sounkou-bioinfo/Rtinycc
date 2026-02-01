@@ -20,6 +20,6 @@ collected, even if the original callback is closed.
 }
 \details{
 Pointer arguments and return values are treated as external pointers.
-Use \\code{tcc_read_bytes()} or \\code{tcc_read_*()} helpers to inspect
-pointed data when needed.
+Use \code{tcc_read_bytes()}, \code{tcc_read_u8()}, or \code{tcc_read_f64()}
+to inspect pointed data when needed.
 }

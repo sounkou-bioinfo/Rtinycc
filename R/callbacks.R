@@ -8,15 +8,18 @@
 #' that marshals arguments between C and R.
 #'
 #' @details
-#' Callbacks are executed on the R main thread only. If a callback raises an
-#' error, it is propagated to the caller as an R error.
+#' Thread safety: callbacks are executed on the R main thread only. Invoking
+#' a callback from a worker thread is unsupported and may crash R. The
+#' \code{threadsafe} flag is currently informational only.
 #'
-#' Pointer arguments (e.g., \\code{double*}, \\code{int*}) are passed as
+#' If a callback raises an error, it is propagated to the caller as an R error.
+#'
+#' Pointer arguments (e.g., \code{double*}, \code{int*}) are passed as
 #' external pointers. Lengths must be supplied separately if needed.
 #'
 #' The return type may be any scalar type supported by the FFI mappings
-#' (e.g., \\code{i32}, \\code{f64}, \\code{bool}, \\code{cstring}), or
-#' \\code{SEXP} to return an R object directly.
+#' (e.g., \code{i32}, \code{f64}, \code{bool}, \code{cstring}), or
+#' \code{SEXP} to return an R object directly.
 #'
 #' @param fun An R function to be called from C
 #' @param signature C function signature string (e.g., "double (*)(int, double)")
@@ -78,8 +81,8 @@ tcc_callback_close <- function(callback) {
 #' collected, even if the original callback is closed.
 #'
 #' Pointer arguments and return values are treated as external pointers.
-#' Use \\code{tcc_read_bytes()} or \\code{tcc_read_*()} helpers to inspect
-#' pointed data when needed.
+#' Use \code{tcc_read_bytes()}, \code{tcc_read_u8()}, or \code{tcc_read_f64()}
+#' to inspect pointed data when needed.
 #'
 #' @param callback A tcc_callback object
 #' @return An external pointer (address of the callback token)
@@ -267,6 +270,51 @@ parse_callback_type <- function(type) {
   NULL
 }
 
+#' Enable async callback dispatcher (main-thread queue)
+#'
+#' Initializes an event-loop handler so callbacks can be scheduled from
+#' non-R threads and executed on the main R thread. This is currently
+#' supported on Unix-like systems only.
+#'
+#' @return NULL (invisible)
+#' @export
+tcc_callback_async_enable <- function() {
+  .Call(RC_callback_async_init)
+  invisible(NULL)
+}
+
+#' Schedule a callback to run on the main thread
+#'
+#' Enqueue a callback for main-thread execution. Arguments must be basic
+#' scalars or external pointers.
+#'
+#' @param callback A tcc_callback object
+#' @param args List of arguments to pass to the callback
+#' @return NULL (invisible)
+#' @export
+tcc_callback_async_schedule <- function(callback, args = list()) {
+  if (!inherits(callback, "tcc_callback")) {
+    stop("Expected tcc_callback object", call. = FALSE)
+  }
+  if (!is.list(args)) {
+    stop("args must be a list", call. = FALSE)
+  }
+  .Call(RC_callback_async_schedule, callback, args)
+  invisible(NULL)
+}
+
+#' Drain the async callback queue
+#'
+#' This is mainly useful for tests; normally callbacks are executed by the
+#' event loop once scheduled.
+#'
+#' @return NULL (invisible)
+#' @export
+tcc_callback_async_drain <- function() {
+  .Call(RC_callback_async_drain)
+  invisible(NULL)
+}
+
 #' Generate trampoline code for a callback argument
 #'
 #' @param callback_id Unique identifier for this callback
@@ -353,11 +401,25 @@ map_c_to_sexp_type <- function(c_type) {
 
   if (is_ptr) {
     "void*"
-  } else if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
+  } else if (
+    c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
+  ) {
     "int"
   } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
     "long long"
-  } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32", "uint64_t", "u64")) {
+  } else if (
+    c_type %in%
+      c(
+        "uint8_t",
+        "u8",
+        "uint16_t",
+        "u16",
+        "uint32_t",
+        "u32",
+        "uint64_t",
+        "u64"
+      )
+  ) {
     "long long"
   } else if (c_type %in% c("double", "float", "f64", "f32")) {
     "double"
@@ -382,10 +444,25 @@ map_c_to_r_type <- function(c_type) {
   } else if (
     c_type %in%
       c(
-        "int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8",
-        "long", "long long", "int64_t", "i64",
-        "uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32",
-        "uint64_t", "u64"
+        "int",
+        "int32_t",
+        "i32",
+        "int16_t",
+        "i16",
+        "int8_t",
+        "i8",
+        "long",
+        "long long",
+        "int64_t",
+        "i64",
+        "uint8_t",
+        "u8",
+        "uint16_t",
+        "u16",
+        "uint32_t",
+        "u32",
+        "uint64_t",
+        "u64"
       )
   ) {
     "i32"
@@ -413,7 +490,9 @@ get_sexp_constructor <- function(c_type) {
 
   if (is_ptr) {
     "R_MakeExternalPtr"
-  } else if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
+  } else if (
+    c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
+  ) {
     "ScalarInteger"
   } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
     "ScalarReal" # R doesn't have 64-bit integers, use double
@@ -441,7 +520,9 @@ get_r_to_c_converter <- function(c_type) {
 
   if (is_ptr) {
     "R_ExternalPtrAddr"
-  } else if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
+  } else if (
+    c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
+  ) {
     "asInteger"
   } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
     "asReal" # Convert to double then cast

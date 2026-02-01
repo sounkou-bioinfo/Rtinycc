@@ -40,7 +40,11 @@ tcc_cstring <- function(str) {
 #' @param null_action Behavior when ptr is NULL: one of "na", "empty", "error".
 #' @return Character string
 #' @export
-tcc_read_cstring <- function(ptr, max_bytes = NULL, null_action = c("na", "empty", "error")) {
+tcc_read_cstring <- function(
+  ptr,
+  max_bytes = NULL,
+  null_action = c("na", "empty", "error")
+) {
   null_action <- match.arg(null_action)
 
   if (is.null(max_bytes)) {
