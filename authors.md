@@ -10,7 +10,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/v0.0.1/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/main/DESCRIPTION)
 
 Toure S (2026). *Rtinycc: Builds 'tinycc' Cli and Library for R Package
 Use*. R package version 0.0.0.1,
