@@ -535,9 +535,9 @@ rm(sqlite_with_utils, db, result)
 invisible(gc())
 ```
 
-### Low-level R C API
+### Lower level API
 
-Using `#Define _Complex` as workaround of  `TinyCC`'s lack of support for complex types, we can link against R's install headers and `libR` to call R's C API function.
+Using `#Define _Complex` as workaround of  `TinyCC`'s lack of support for [complex types](https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html), we  link against R's install headers and `libR` to call R's C API function. This workaround is used in the binding generation too.
 
 ```{r call-R-C-API}
 # Create new state for R linking example

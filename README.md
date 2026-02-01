@@ -63,7 +63,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5f7bb1344000>
+#> <pointer: 0x60d8711ba000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -583,7 +583,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5f7bb2a24fc8"
+#> [1] "0x60d8741c2698"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -594,11 +594,13 @@ rm(sqlite_with_utils, db, result)
 invisible(gc())
 ```
 
-### Low-level R C API
+### Lower level API
 
 Using `#Define _Complex` as workaround of `TinyCC`’s lack of support for
-complex types, we can link against R’s install headers and `libR` to
-call R’s C API function.
+[complex
+types](https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
+we link against R’s install headers and `libR` to call R’s C API
+function. This workaround is used in the binding generation too.
 
 ``` r
 # Create new state for R linking example
