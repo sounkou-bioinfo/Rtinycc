@@ -27,17 +27,6 @@ static void RC_free_finalizer(SEXP ext) {
     }
 }
 
-static void RC_cstring_finalizer(SEXP ext) {
-    char **ptr = (char**)R_ExternalPtrAddr(ext);
-    if (ptr) {
-        if (*ptr) {
-            free(*ptr);
-        }
-        free(ptr);
-        R_ClearExternalPtr(ext);
-    }
-}
-
 static inline TCCState *RC_tcc_state(SEXP ext) {
     if (!Rf_inherits(ext, "tcc_state")) {
         Rf_error("expected a 'tcc_state' external pointer");
