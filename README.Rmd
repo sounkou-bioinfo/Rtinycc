@@ -82,7 +82,6 @@ For header-driven bindings, `treesitter.c` provides C header parsers you can use
 ```{r ffi-treesitter}
 library(treesitter.c)
 
-header <- ""
 header <- paste0(
   "struct point { double x; double y; };\n",
   "int add(int a, int b);\n",

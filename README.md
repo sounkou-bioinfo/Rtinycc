@@ -63,7 +63,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x59a1e1c1c000>
+#> <pointer: 0x5f7bb1344000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -95,7 +95,6 @@ can use to extract symbols before declaring FFI bindings.
 ``` r
 library(treesitter.c)
 
-header <- ""
 header <- paste0(
   "struct point { double x; double y; };\n",
   "int add(int a, int b);\n",
@@ -584,7 +583,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x59a1e2803988"
+#> [1] "0x5f7bb2a24fc8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
