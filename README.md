@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5fe8543de000>
+#> <pointer: 0x5b1aeaae9000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -204,14 +204,45 @@ shared versus copied.
 ##### Callbacks
 
 R functions can be registered as C function pointers via
-`tcc_callback()` and passed to compiled code. Provide a C signature when
-possible. Use `tcc_callback_ptr()` to obtain the pointer to pass into
-compiled code and `tcc_callback_close()` to release resources.
+`tcc_callback()` and passed to compiled code. Provide a C signature that
+matches the actual arguments. Use `tcc_callback_ptr()` to obtain the
+pointer to pass into compiled code and `tcc_callback_close()` to release
+resources.
 
 ``` r
 cb <- tcc_callback(function(x) x * 2, signature = "double (*)(double)")
-ptr <- tcc_callback_ptr(cb)
-# pass `ptr` to compiled C code that accepts a function pointer...
+cb_ptr <- tcc_callback_ptr(cb)
+
+code <- '
+#define _Complex
+#include <R.h>
+#include <Rinternals.h>
+#include <stdio.h>
+
+typedef struct { int id; } callback_token_t;
+
+SEXP RC_invoke_callback(SEXP, SEXP);
+
+double call_cb(void* cb, double x) {
+  int id = ((callback_token_t*)cb)->id;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", id);
+  SEXP idstr = mkString(buf);
+  SEXP args = PROTECT(allocVector(VECSXP, 1));
+  SET_VECTOR_ELT(args, 0, ScalarReal(x));
+  SEXP res = RC_invoke_callback(idstr, args);
+  UNPROTECT(1);
+  return asReal(res);
+}
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_bind(call_cb = list(args = list("ptr", "f64"), returns = "f64")) |>
+  tcc_compile()
+
+ffi$call_cb(cb_ptr, 21.0)
+#> [1] 42
 tcc_callback_close(cb)
 ```
 
@@ -223,16 +254,46 @@ Complex C types are supported declaratively. Use `tcc_struct()` and
 by the C compiler and exposed as ordinary accessors.
 
 ``` r
+code <- paste0(
+  "struct point { double x; double y; int id; };\n\n",
+  "double point_distance(struct point* a, struct point* b) {\n",
+  "  double dx = a->x - b->x;\n",
+  "  double dy = a->y - b->y;\n",
+  "  return dx * dx + dy * dy;\n",
+  "}\n"
+)
+
 ffi <- tcc_ffi() |>
-  tcc_source('struct point { double x; double y; int id; };') |>
+  tcc_source(code) |>
   tcc_struct('point', accessors = c(x = 'f64', y = 'f64', id = 'i32')) |>
-  tcc_bind()
-compiled <- tcc_compile(ffi)
-p <- compiled$point_new()
-p <- compiled$point_set_x(p, 3.14)
-compiled$point_get_x(p)
-#> [1] 3.14
+  tcc_bind(point_distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
+  tcc_compile()
+
+p1 <- ffi$point_new()
+p1 <- ffi$point_set_x(p1, 0.0)
+p1 <- ffi$point_set_y(p1, 0.0)
+p1 <- ffi$point_set_id(p1, 1L)
+
+p2 <- ffi$point_new()
+p2 <- ffi$point_set_x(p2, 3.0)
+p2 <- ffi$point_set_y(p2, 4.0)
+p2 <- ffi$point_set_id(p2, 2L)
+
+ffi$point_get_x(p1)
+#> [1] 0
+ffi$point_distance(p1, p2)
+#> [1] 25
+
+ffi$point_free(p1)
+#> NULL
+ffi$point_free(p2)
+#> NULL
 ```
+
+Setter/getter helpers and functions that take struct pointers are
+exercised in the test suite (see
+[inst/tinytest/test_structs.R](inst/tinytest/test_structs.R) and
+[inst/tinytest/test_complex_types_clean.R](inst/tinytest/test_complex_types_clean.R)).
 
 #### Example: Simple Function
 
@@ -301,9 +362,10 @@ math_lib$sqrt(16.0)
 #> [1] 4
 ```
 
-#### Linking SQLite3
+#### SQLite entry point
 
-you can link again the libraries and access the exported symbol
+Use SQLite to validate the external library workflow and inspect the
+version string.
 
 ``` r
 # Link the system SQLite3 library and expose a few symbols
@@ -357,7 +419,7 @@ sqlite_with_utils <- tcc_ffi() |>
     sqlite3_open(":memory:", &db);
     if (db) {
       sqlite3_exec(db, "CREATE TABLE items (id INTEGER, name TEXT);", NULL, NULL, NULL);
-      sqlite3_exec(db, "INSERT INTO items VALUES (1, test);", NULL, NULL, NULL);
+      sqlite3_exec(db, "INSERT INTO items VALUES (1, \'test\');", NULL, NULL, NULL);
     }
     return db;
   }
@@ -374,7 +436,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5fe851df5dd8"
+#> [1] "0x5b1aea16ced8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
