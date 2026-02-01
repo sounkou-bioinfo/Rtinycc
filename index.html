@@ -93,7 +93,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5fe8543de000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5b1aeaae9000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 </div>
@@ -234,11 +234,41 @@
 <div class="section level5">
 <h5 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
 </h5>
-<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature when possible. Use <code><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr()</a></code> to obtain the pointer to pass into compiled code and <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> to release resources.</p>
+<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the actual arguments. Use <code><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr()</a></code> to obtain the pointer to pass into compiled code and <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> to release resources.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">2</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
-<span><span class="va">ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
-<span><span class="co"># pass `ptr` to compiled C code that accepts a function pointer...</span></span>
+<span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">#define _Complex</span></span>
+<span><span class="st">#include &lt;R.h&gt;</span></span>
+<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
+<span><span class="st">#include &lt;stdio.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">typedef struct { int id; } callback_token_t;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">SEXP RC_invoke_callback(SEXP, SEXP);</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">double call_cb(void* cb, double x) {</span></span>
+<span><span class="st">  int id = ((callback_token_t*)cb)-&gt;id;</span></span>
+<span><span class="st">  char buf[32];</span></span>
+<span><span class="st">  snprintf(buf, sizeof(buf), "%d", id);</span></span>
+<span><span class="st">  SEXP idstr = mkString(buf);</span></span>
+<span><span class="st">  SEXP args = PROTECT(allocVector(VECSXP, 1));</span></span>
+<span><span class="st">  SET_VECTOR_ELT(args, 0, ScalarReal(x));</span></span>
+<span><span class="st">  SEXP res = RC_invoke_callback(idstr, args);</span></span>
+<span><span class="st">  UNPROTECT(1);</span></span>
+<span><span class="st">  return asReal(res);</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>call_cb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">call_cb</span><span class="op">(</span><span class="va">cb_ptr</span>, <span class="fl">21.0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level5">
@@ -246,15 +276,41 @@
 </h5>
 <p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Bitfields are handled by the C compiler and exposed as ordinary accessors.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct point { double x; double y; int id; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
+<span>  <span class="st">"struct point { double x; double y; int id; };\n\n"</span>,</span>
+<span>  <span class="st">"double point_distance(struct point* a, struct point* b) {\n"</span>,</span>
+<span>  <span class="st">"  double dx = a-&gt;x - b-&gt;x;\n"</span>,</span>
+<span>  <span class="st">"  double dy = a-&gt;y - b-&gt;y;\n"</span>,</span>
+<span>  <span class="st">"  return dx * dx + dy * dy;\n"</span>,</span>
+<span>  <span class="st">"}\n"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">'point'</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">'f64'</span>, y <span class="op">=</span> <span class="st">'f64'</span>, id <span class="op">=</span> <span class="st">'i32'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">compiled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span></span>
-<span><span class="va">p</span> <span class="op">&lt;-</span> <span class="va">compiled</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">p</span> <span class="op">&lt;-</span> <span class="va">compiled</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p</span>, <span class="fl">3.14</span><span class="op">)</span></span>
-<span><span class="va">compiled</span><span class="op">$</span><span class="fu">point_get_x</span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 3.14</span></span></code></pre></div>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>point_distance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_id</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">1L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_id</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">2L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_get_x</span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 25</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_free</span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_free</span><span class="op">(</span><span class="va">p2</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span></code></pre></div>
+<p>Setter/getter helpers and functions that take struct pointers are exercised in the test suite (see <a href="inst/tinytest/test_structs.R">inst/tinytest/test_structs.R</a> and <a href="inst/tinytest/test_complex_types_clean.R">inst/tinytest/test_complex_types_clean.R</a>).</p>
 </div>
 </div>
 <div class="section level4">
@@ -323,9 +379,9 @@
 <span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="linking-sqlite3">Linking SQLite3<a class="anchor" aria-label="anchor" href="#linking-sqlite3"></a>
+<h4 id="sqlite-entry-point">SQLite entry point<a class="anchor" aria-label="anchor" href="#sqlite-entry-point"></a>
 </h4>
-<p>you can link again the libraries and access the exported symbol</p>
+<p>Use SQLite to validate the external library workflow and inspect the version string.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Link the system SQLite3 library and expose a few symbols</span></span>
 <span><span class="va">sqlite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
@@ -377,7 +433,7 @@
 <span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
 <span><span class="st">    if (db) {</span></span>
 <span><span class="st">      sqlite3_exec(db, "CREATE TABLE items (id INTEGER, name TEXT);", NULL, NULL, NULL);</span></span>
-<span><span class="st">      sqlite3_exec(db, "INSERT INTO items VALUES (1, test);", NULL, NULL, NULL);</span></span>
+<span><span class="st">      sqlite3_exec(db, "INSERT INTO items VALUES (1, \'test\');", NULL, NULL, NULL);</span></span>
 <span><span class="st">    }</span></span>
 <span><span class="st">    return db;</span></span>
 <span><span class="st">  }</span></span>
@@ -394,7 +450,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5fe851df5dd8"</span></span>
+<span><span class="co">#&gt; [1] "0x5b1aea16ced8"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
