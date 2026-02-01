@@ -10,16 +10,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/v0.0.1/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/main/DESCRIPTION)
 
 Toure S (2026). *Rtinycc: Builds 'tinycc' Cli and Library for R Package
-Use*. R package version 0.0.0.1,
+Use*. R package version 0.0.1,
 <https://github.com/sounkou-bioinfo/Rtinycc>.
 
     @Manual{,
       title = {Rtinycc: Builds `tinycc` Cli and Library for R Package Use},
       author = {Sounkou Mahamane Toure},
       year = {2026},
-      note = {R package version 0.0.0.1},
+      note = {R package version 0.0.1},
       url = {https://github.com/sounkou-bioinfo/Rtinycc},
     }
