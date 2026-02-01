@@ -557,7 +557,14 @@ make_callable <- function(fn_ptr, sym, state) {
     } else if (n_args == 4) {
       .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]])
     } else if (n_args == 5) {
-      .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]], args[[5]])
+      .RtinyccCall(
+        fn_ptr,
+        args[[1]],
+        args[[2]],
+        args[[3]],
+        args[[4]],
+        args[[5]]
+      )
     } else {
       # For more than 5 arguments, use do.call
       do.call(.Call, c(list(fn_ptr), args))
@@ -625,7 +632,8 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(sysname,
+  switch(
+    sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -678,7 +686,8 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(sysname,
+    lib_name <- switch(
+      sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),

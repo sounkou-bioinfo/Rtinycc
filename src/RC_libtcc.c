@@ -502,19 +502,28 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     
     callback_entry_t *entry = &callback_registry[id];
     
-    // Build the call
-    SEXP call = PROTECT(Rf_lang1(entry->fun));
-    
-    // Add arguments
+    // Build the call with the function as head and arguments following
+    SEXP call = R_NilValue;
     if (args != R_NilValue && TYPEOF(args) == VECSXP) {
         int n_args = (int)XLENGTH(args);
-        for (int i = 0; i < n_args; i++) {
-            call = PROTECT(Rf_lang2(call, VECTOR_ELT(args, i)));
-        }
-        // Unprotect the intermediate calls (keep final call protected)
-        if (n_args > 0) {
+        if (n_args == 0) {
+            call = PROTECT(Rf_lang1(entry->fun));
+        } else if (n_args == 1) {
+            call = PROTECT(Rf_lang2(entry->fun, VECTOR_ELT(args, 0)));
+        } else if (n_args == 2) {
+            call = PROTECT(Rf_lang3(entry->fun, VECTOR_ELT(args, 0), VECTOR_ELT(args, 1)));
+        } else if (n_args == 3) {
+            call = PROTECT(Rf_lang4(entry->fun, VECTOR_ELT(args, 0), VECTOR_ELT(args, 1), VECTOR_ELT(args, 2)));
+        } else {
+            SEXP pair = R_NilValue;
+            for (int i = n_args - 1; i >= 0; i--) {
+                pair = PROTECT(Rf_cons(VECTOR_ELT(args, i), pair));
+            }
+            call = PROTECT(Rf_lcons(entry->fun, pair));
             UNPROTECT(n_args);
         }
+    } else {
+        call = PROTECT(Rf_lang1(entry->fun));
     }
     
     // Evaluate the call

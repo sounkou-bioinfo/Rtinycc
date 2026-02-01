@@ -67,7 +67,7 @@ math_with_helpers <- tcc_link(
     sqrt = list(args = list("f64"), returns = "f64"),
     safe_sqrt = list(args = list("f64"), returns = "f64")
   ),
-  user_code = '
+  user_code = "
     #include <math.h>
 
     // Helper function that validates input before calling sqrt
@@ -77,10 +77,10 @@ math_with_helpers <- tcc_link(
       }
       return sqrt(x);
     }
-  ',
+  ",
   libs = "m"
 )
 math_with_helpers$safe_sqrt(16.0)
-math_with_helpers$safe_sqrt(-4.0)  # Returns NaN for negative input
+math_with_helpers$safe_sqrt(-4.0) # Returns NaN for negative input
 }
 }
