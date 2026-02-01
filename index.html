@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x6521db998000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5d07731cf000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -125,22 +125,22 @@
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/treesitter.c/" class="external-link">treesitter.c</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">header</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
-<span>  <span class="st">"struct point { double x; double y; };\n"</span>,</span>
-<span>  <span class="st">"int add(int a, int b);\n"</span>,</span>
-<span>  <span class="st">"double scale(double x);\n"</span></span>
-<span><span class="op">)</span></span>
+<span><span class="va">header</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">struct point { double x; double y; };</span></span>
+<span><span class="st">int add(int a, int b);</span></span>
+<span><span class="st">double scale(double x);</span></span>
+<span><span class="st">'</span></span>
 <span></span>
 <span><span class="va">root</span> <span class="op">&lt;-</span> <span class="fu">parse_header_text</span><span class="op">(</span><span class="va">header</span><span class="op">)</span></span>
 <span><span class="va">funcs</span> <span class="op">&lt;-</span> <span class="fu">get_function_nodes</span><span class="op">(</span><span class="va">root</span>, extract_params <span class="op">=</span> <span class="cn">TRUE</span>, extract_return <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="va">structs</span> <span class="op">&lt;-</span> <span class="fu">get_struct_nodes</span><span class="op">(</span><span class="va">root</span><span class="op">)</span></span>
 <span><span class="va">funcs</span></span>
 <span><span class="co">#&gt;   capture_name  text start_line start_col   params return_type</span></span>
-<span><span class="co">#&gt; 1    decl_name   add          2         5 int, int         int</span></span>
-<span><span class="co">#&gt; 2    decl_name scale          3         8   double      double</span></span>
+<span><span class="co">#&gt; 1    decl_name   add          3         5 int, int         int</span></span>
+<span><span class="co">#&gt; 2    decl_name scale          4         8   double      double</span></span>
 <span><span class="va">structs</span></span>
 <span><span class="co">#&gt;   capture_name  text start_line</span></span>
-<span><span class="co">#&gt; 1  struct_name point          1</span></span>
+<span><span class="co">#&gt; 1  struct_name point          2</span></span>
 <span></span>
 <span><span class="co"># Example: generate bindings from parsed signatures</span></span>
 <span><span class="va">clean_type</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
@@ -197,11 +197,11 @@
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>
 <span>  <span class="va">ffi</span>,</span>
-<span>  <span class="st">"int add(int a, int b) { return a + b; }\n"</span></span>
+<span>  <span class="st">"int add(int a, int b) { return a + b; }"</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>
 <span>  <span class="va">ffi</span>,</span>
-<span>  <span class="st">"double scale(double x) { return x * 2.0; }\n"</span></span>
+<span>  <span class="st">"double scale(double x) { return x * 2.0; }"</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">tcc_bind</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span>, <span class="va">symbols</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span></span>
@@ -280,35 +280,39 @@
 <span>  <span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span> <span class="va">hits</span> <span class="op">&lt;&lt;-</span> <span class="va">hits</span> <span class="op">+</span> <span class="va">x</span>; <span class="cn">NULL</span> <span class="op">}</span>, signature <span class="op">=</span> <span class="st">"void (*)(int)"</span><span class="op">)</span></span>
 <span>  <span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span>
 <span></span>
-<span>  <span class="va">code_async</span> <span class="op">&lt;-</span> <span class="st">'#define _Complex</span></span>
-<span><span class="st">  #include &lt;R.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">  #include &lt;pthread.h&gt;</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  typedef struct { int id; int refs; } callback_token_t;</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  typedef enum {</span></span>
-<span><span class="st">      CB_ARG_INT = 0,</span></span>
-<span><span class="st">      CB_ARG_REAL = 1,</span></span>
-<span><span class="st">      CB_ARG_LOGICAL = 2,</span></span>
-<span><span class="st">      CB_ARG_PTR = 3,</span></span>
-<span><span class="st">      CB_ARG_CSTRING = 4</span></span>
+<span>  <span class="va">code_async</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">#define _Complex</span></span>
+<span><span class="st">#include &lt;R.h&gt;</span></span>
+<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
+<span><span class="st">#include &lt;pthread.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">typedef struct { int id; int refs; } callback_token_t;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">typedef enum {</span></span>
+<span><span class="st">  CB_ARG_INT = 0,</span></span>
+<span><span class="st">  CB_ARG_REAL = 1,</span></span>
+<span><span class="st">  CB_ARG_LOGICAL = 2,</span></span>
+<span><span class="st">  CB_ARG_PTR = 3,</span></span>
+<span><span class="st">  CB_ARG_CSTRING = 4</span></span>
 <span><span class="st">} cb_arg_kind_t;</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">typedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;</span></span>
+<span><span class="st">typedef struct {</span></span>
+<span><span class="st">  cb_arg_kind_t kind;</span></span>
+<span><span class="st">  union { int i; double d; void* p; char* s; } v;</span></span>
+<span><span class="st">} cb_arg_t;</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">extern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">struct task { int id; int value; };</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">static void* worker(void* data) {</span></span>
-<span><span class="st">    struct task* t = (struct task*) data;</span></span>
-<span><span class="st">      cb_arg_t arg;</span></span>
-<span><span class="st">      arg.kind = CB_ARG_INT;</span></span>
-<span><span class="st">      arg.v.i = t-&gt;value;</span></span>
-<span><span class="st">      RC_callback_async_schedule_c(t-&gt;id, 1, &amp;arg);</span></span>
-<span><span class="st">      return NULL;</span></span>
-<span><span class="st">  }</span></span>
+<span><span class="st">  struct task* t = (struct task*) data;</span></span>
+<span><span class="st">  cb_arg_t arg;</span></span>
+<span><span class="st">  arg.kind = CB_ARG_INT;</span></span>
+<span><span class="st">  arg.v.i = t-&gt;value;</span></span>
+<span><span class="st">  RC_callback_async_schedule_c(t-&gt;id, 1, &amp;arg);</span></span>
+<span><span class="st">  return NULL;</span></span>
+<span><span class="st">}</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">int spawn_async(void* cb, int value) {</span></span>
 <span><span class="st">  callback_token_t* tok = (callback_token_t*) cb;</span></span>
@@ -317,10 +321,10 @@
 <span><span class="st">  t.id = tok-&gt;id;</span></span>
 <span><span class="st">  t.value = value;</span></span>
 <span><span class="st">  pthread_t th;</span></span>
-<span><span class="st">  if (pthread_create(&amp;th, NULL, worker, &amp;t) != 0) {return -2;}</span></span>
+<span><span class="st">  if (pthread_create(&amp;th, NULL, worker, &amp;t) != 0) return -2;</span></span>
 <span><span class="st">  pthread_join(th, NULL);</span></span>
 <span><span class="st">  return 0;</span></span>
-<span><span class="st">  }</span></span>
+<span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
 <span>  <span class="va">ffi_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>    <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_async</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -330,26 +334,27 @@
 <span></span>
 <span>  <span class="va">rc</span> <span class="op">&lt;-</span> <span class="va">ffi_async</span><span class="op">$</span><span class="fu">spawn_async</span><span class="op">(</span><span class="va">cb_ptr</span>, <span class="fl">2L</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">hits</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/Sys.sleep.html" class="external-link">Sys.sleep</a></span><span class="op">(</span><span class="fl">0.1</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">hits</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_async</span>, <span class="va">cb_ptr</span>, <span class="va">cb_async</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; [1] 2</span></span></code></pre></div>
 </div>
 <div class="section level5">
 <h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
 </h5>
 <p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Free struct instances when you are done.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
-<span>  <span class="st">"struct point { double x; double y; int id; };\n"</span>,</span>
-<span>  <span class="st">"double point_distance(struct point* a, struct point* b) {\n"</span>,</span>
-<span>  <span class="st">"  double dx = a-&gt;x - b-&gt;x;\n"</span>,</span>
-<span>  <span class="st">"  double dy = a-&gt;y - b-&gt;y;\n"</span>,</span>
-<span>  <span class="st">"  return dx * dx + dy * dy;\n"</span>,</span>
-<span>  <span class="st">"}\n"</span></span>
-<span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">struct point { double x; double y; int id; };</span></span>
+<span><span class="st">double point_distance(struct point* a, struct point* b) {</span></span>
+<span><span class="st">  double dx = a-&gt;x - b-&gt;x;</span></span>
+<span><span class="st">  double dy = a-&gt;y - b-&gt;y;</span></span>
+<span><span class="st">  return dx * dx + dy * dy;</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
 <span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -660,7 +665,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x6521d8362fe8"</span></span>
+<span><span class="co">#&gt; [1] "0x5d0773d5c628"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
