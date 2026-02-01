@@ -229,8 +229,48 @@ if (.Platform$OS.type != "windows") {
   cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
   cb_ptr <- tcc_callback_ptr(cb_async)
 
-  code_async <- '\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <pthread.h>\n\ntypedef struct { int id; int refs; } callback_token_t;\n\ntypedef enum {\n  CB_ARG_INT = 0,\n  CB_ARG_REAL = 1,\n  CB_ARG_LOGICAL = 2,\n  CB_ARG_PTR = 3,\n  CB_ARG_CSTRING = 4\n} cb_arg_kind_t;\n\ntypedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;\n\nextern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);\n\nstruct task { int id; int value; };\n\nstatic void* worker(void* data) {\n  struct task* t = (struct task*) data;\n  cb_arg_t arg;\n  arg.kind = CB_ARG_INT;\n  arg.v.i = t->value;\n  RC_callback_async_schedule_c(t->id, 1, &arg);\n  return NULL;\n}\n\nint spawn_async(void* cb, int value) {\n  callback_token_t* tok = (callback_token_t*) cb;\n  if (!tok) return -1;\n  struct task t;\n  t.id = tok->id;\n  t.value = value;\n  pthread_t th;\n  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;\n  pthread_join(th, NULL);\n  return 0;\n}\n'
+  code_async <- '#define _Complex
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <pthread.h>
+  
+  typedef struct { int id; int refs; } callback_token_t;
+  
+  typedef enum {
+      CB_ARG_INT = 0,
+      CB_ARG_REAL = 1,
+      CB_ARG_LOGICAL = 2,
+      CB_ARG_PTR = 3,
+      CB_ARG_CSTRING = 4
+} cb_arg_kind_t;
 
+typedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;
+
+extern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
+
+struct task { int id; int value; };
+
+static void* worker(void* data) {
+    struct task* t = (struct task*) data;
+      cb_arg_t arg;
+      arg.kind = CB_ARG_INT;
+      arg.v.i = t->value;
+      RC_callback_async_schedule_c(t->id, 1, &arg);
+      return NULL;
+  }
+
+int spawn_async(void* cb, int value) {
+  callback_token_t* tok = (callback_token_t*) cb;
+  if (!tok) return -1;
+  struct task t;
+  t.id = tok->id;
+  t.value = value;
+  pthread_t th;
+  if (pthread_create(&th, NULL, worker, &t) != 0) {return -2;}
+  pthread_join(th, NULL);
+  return 0;
+  }
+'
   ffi_async <- tcc_ffi() |>
     tcc_source(code_async) |>
     tcc_library("pthread") |>
@@ -253,7 +293,7 @@ Complex C types are supported declaratively. Use `tcc_struct()` and `tcc_union()
 
 ```{r struct-example}
 code <- paste0(
-  "struct point { double x; double y; int id; };\n\n",
+  "struct point { double x; double y; int id; };\n",
   "double point_distance(struct point* a, struct point* b) {\n",
   "  double dx = a->x - b->x;\n",
   "  double dy = a->y - b->y;\n",

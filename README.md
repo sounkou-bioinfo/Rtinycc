@@ -65,7 +65,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x64da4c7af000>
+#> <pointer: 0x6521db998000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -253,25 +253,73 @@ invisible(gc())
 ##### Async callbacks (main-thread queue)
 
 For cross-thread scheduling, initialize the async dispatcher and enqueue
-a callback. On Unix-like systems, callbacks are executed on the main
-thread.
+a callback from C on a worker thread. On Unix-like systems, callbacks
+are executed on the main thread.
 
 ``` r
+if (.Platform$OS.type != "windows") {
+  tcc_callback_async_enable()
 
-tcc_callback_async_enable()
+  hits <- 0L
+  cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
+  cb_ptr <- tcc_callback_ptr(cb_async)
 
-hits <- 0L
-cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
+  code_async <- '#define _Complex
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <pthread.h>
+  
+  typedef struct { int id; int refs; } callback_token_t;
+  
+  typedef enum {
+      CB_ARG_INT = 0,
+      CB_ARG_REAL = 1,
+      CB_ARG_LOGICAL = 2,
+      CB_ARG_PTR = 3,
+      CB_ARG_CSTRING = 4
+} cb_arg_kind_t;
 
-# Enqueue a callback from R (tests can also enqueue from a worker thread)
-tcc_callback_async_schedule(cb_async, list(2L))
+typedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;
 
-# Drain queued callbacks now (useful in non-interactive sessions)
-tcc_callback_async_drain()
+extern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 
-hits
-#> [1] 2
-tcc_callback_close(cb_async)
+struct task { int id; int value; };
+
+static void* worker(void* data) {
+    struct task* t = (struct task*) data;
+      cb_arg_t arg;
+      arg.kind = CB_ARG_INT;
+      arg.v.i = t->value;
+      RC_callback_async_schedule_c(t->id, 1, &arg);
+      return NULL;
+  }
+
+int spawn_async(void* cb, int value) {
+  callback_token_t* tok = (callback_token_t*) cb;
+  if (!tok) return -1;
+  struct task t;
+  t.id = tok->id;
+  t.value = value;
+  pthread_t th;
+  if (pthread_create(&th, NULL, worker, &t) != 0) {return -2;}
+  pthread_join(th, NULL);
+  return 0;
+  }
+'
+  ffi_async <- tcc_ffi() |>
+    tcc_source(code_async) |>
+    tcc_library("pthread") |>
+    tcc_bind(spawn_async = list(args = list("ptr", "i32"), returns = "i32")) |>
+    tcc_compile()
+
+  rc <- ffi_async$spawn_async(cb_ptr, 2L)
+  tcc_callback_async_drain()
+
+  hits
+  tcc_callback_close(cb_async)
+  rm(ffi_async, cb_ptr, cb_async)
+  invisible(gc())
+}
 ```
 
 ##### Structs, unions, and bitfields
@@ -283,7 +331,7 @@ when you are done.
 
 ``` r
 code <- paste0(
-  "struct point { double x; double y; int id; };\n\n",
+  "struct point { double x; double y; int id; };\n",
   "double point_distance(struct point* a, struct point* b) {\n",
   "  double dx = a->x - b->x;\n",
   "  double dy = a->y - b->y;\n",
@@ -609,7 +657,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x64da4c7b42c8"
+#> [1] "0x6521d8362fe8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
