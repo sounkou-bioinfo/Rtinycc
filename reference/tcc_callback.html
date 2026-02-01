@@ -68,6 +68,16 @@ that marshals arguments between C and R.</p>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A tcc_callback object (externalptr wrapper)</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Callbacks are executed on the R main thread only. If a callback raises an
+error, it is propagated to the caller as an R error.</p>
+<p>Pointer arguments (e.g., \codedouble*, \codeint*) are passed as
+external pointers. Lengths must be supplied separately if needed.</p>
+<p>The return type may be any scalar type supported by the FFI mappings
+(e.g., \codei32, \codef64, \codebool, \codecstring), or
+\codeSEXP to return an R object directly.</p>
+    </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>

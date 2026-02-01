@@ -751,6 +751,8 @@ GPL-3
   : TinyCC paths
 - [`tcc_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_addr.md)
   : Get pointer address as integer
+- [`tcc_ptr_is_null()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_null.md)
+  : Check whether an external pointer is NULL
 - [`tcc_ptr_utils`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_utils.md)
   : Pointer and Buffer Utilities for FFI
 - [`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md)

@@ -27,3 +27,15 @@ tcc_callback(fun, signature, threadsafe = FALSE)
 ## Value
 
 A tcc_callback object (externalptr wrapper)
+
+## Details
+
+Callbacks are executed on the R main thread only. If a callback raises
+an error, it is propagated to the caller as an R error.
+
+Pointer arguments (e.g., \codedouble\*, \codeint\*) are passed as
+external pointers. Lengths must be supplied separately if needed.
+
+The return type may be any scalar type supported by the FFI mappings
+(e.g., \codei32, \codef64, \codebool, \codecstring), or \codeSEXP to
+return an R object directly.
