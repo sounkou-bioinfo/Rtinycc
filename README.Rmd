@@ -218,23 +218,33 @@ invisible(gc())
 ##### Async callbacks (main-thread queue)
 
 For cross-thread scheduling, initialize the async dispatcher and enqueue a
-callback. On Unix-like systems, callbacks are executed on the main thread.
+callback from C on a worker thread. On Unix-like systems, callbacks are
+executed on the main thread.
 
 ```{r callback-async}
+if (.Platform$OS.type != "windows") {
+  tcc_callback_async_enable()
 
-tcc_callback_async_enable()
+  hits <- 0L
+  cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
+  cb_ptr <- tcc_callback_ptr(cb_async)
 
-hits <- 0L
-cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
+  code_async <- '\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <pthread.h>\n\ntypedef struct { int id; int refs; } callback_token_t;\n\ntypedef enum {\n  CB_ARG_INT = 0,\n  CB_ARG_REAL = 1,\n  CB_ARG_LOGICAL = 2,\n  CB_ARG_PTR = 3,\n  CB_ARG_CSTRING = 4\n} cb_arg_kind_t;\n\ntypedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;\n\nextern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);\n\nstruct task { int id; int value; };\n\nstatic void* worker(void* data) {\n  struct task* t = (struct task*) data;\n  cb_arg_t arg;\n  arg.kind = CB_ARG_INT;\n  arg.v.i = t->value;\n  RC_callback_async_schedule_c(t->id, 1, &arg);\n  return NULL;\n}\n\nint spawn_async(void* cb, int value) {\n  callback_token_t* tok = (callback_token_t*) cb;\n  if (!tok) return -1;\n  struct task t;\n  t.id = tok->id;\n  t.value = value;\n  pthread_t th;\n  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;\n  pthread_join(th, NULL);\n  return 0;\n}\n'
 
-# Enqueue a callback from R (tests can also enqueue from a worker thread)
-tcc_callback_async_schedule(cb_async, list(2L))
+  ffi_async <- tcc_ffi() |>
+    tcc_source(code_async) |>
+    tcc_library("pthread") |>
+    tcc_bind(spawn_async = list(args = list("ptr", "i32"), returns = "i32")) |>
+    tcc_compile()
 
-# Drain queued callbacks now (useful in non-interactive sessions)
-tcc_callback_async_drain()
+  rc <- ffi_async$spawn_async(cb_ptr, 2L)
+  tcc_callback_async_drain()
 
-hits
-tcc_callback_close(cb_async)
+  hits
+  tcc_callback_close(cb_async)
+  rm(ffi_async, cb_ptr, cb_async)
+  invisible(gc())
+}
 ```
 
 ##### Structs, unions, and bitfields
