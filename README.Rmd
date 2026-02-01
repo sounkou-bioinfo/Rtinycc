@@ -71,7 +71,27 @@ Use the pointer utilities to manage external pointers and C strings without manu
 ptr <- tcc_cstring("hello")
 tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
+tcc_read_u8(ptr, 5)
 tcc_free(ptr)
+```
+
+### Header parsing (treesitter.c)
+
+For header-driven bindings, `treesitter.c` provides C header parsers you can use to extract symbols before declaring FFI bindings.
+
+```{r ffi-treesitter}
+library(treesitter.c)
+
+header <- ""
+header <- paste0(
+  "struct point { double x; double y; };\n",
+  "int add(int a, int b);\n",
+  "double scale(double x);\n"
+)
+
+root <- parse_header_text(header)
+get_function_nodes(root)
+get_struct_nodes(root)
 ```
 
 ### A declarative FFI API 
@@ -474,9 +494,9 @@ void hello_world() {
   Rprintf("Hello World from compiled C code!\\n");
 }
 
-double call_r_sqrt(double x) {
+double call_r_sqrt(void) {
   SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
-  SEXP val = PROTECT(Rf_ScalarReal(x));
+  SEXP val = PROTECT(Rf_ScalarReal(16.0));
   SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));
   SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));
   double res = REAL(out)[0];
