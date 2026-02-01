@@ -54,7 +54,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5b1aeaae9000>
+#> <pointer: 0x560428579000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -244,6 +244,8 @@ ffi <- tcc_ffi() |>
 ffi$call_cb(cb_ptr, 21.0)
 #> [1] 42
 tcc_callback_close(cb)
+rm(ffi, cb_ptr, cb)
+invisible(gc())
 ```
 
 ##### Structs, unions, and bitfields
@@ -288,12 +290,9 @@ ffi$point_free(p1)
 #> NULL
 ffi$point_free(p2)
 #> NULL
+rm(ffi, p1, p2)
+invisible(gc())
 ```
-
-Setter/getter helpers and functions that take struct pointers are
-exercised in the test suite (see
-[inst/tinytest/test_structs.R](inst/tinytest/test_structs.R) and
-[inst/tinytest/test_complex_types_clean.R](inst/tinytest/test_complex_types_clean.R)).
 
 #### Example: Simple Function
 
@@ -342,6 +341,8 @@ x <- 1:100
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
+rm(ffi, x, result)
+invisible(gc())
 ```
 
 #### Linking External Libraries
@@ -383,6 +384,152 @@ sqlite <- tcc_link(
 # Query the SQLite library version
 sqlite$sqlite3_libversion()
 #> [1] "3.45.1"
+rm(sqlite)
+invisible(gc())
+```
+
+#### SQLite with an R callback
+
+Use an R callback from `sqlite3_exec()` via a small C bridge that calls
+`RC_invoke_callback()`.
+
+``` r
+cb <- tcc_callback(
+  function(x) {
+    cat("hello from R callback:", x, "\n")
+    0L
+  },
+  signature = "int (*)(cstring)"
+)
+
+cb_ptr <- tcc_callback_ptr(cb)
+
+sqlite_cb <- tcc_ffi() |>
+  tcc_header('#include <sqlite3.h>') |>
+  tcc_library("sqlite3") |>
+  tcc_source('  
+  #define _Complex
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <stdio.h>
+
+  typedef struct { int id; } callback_token_t;
+
+  SEXP RC_invoke_callback(SEXP, SEXP);
+
+  static int r_callback(void* ctx, int argc, char** argv, char** col) {
+    callback_token_t* tok = (callback_token_t*)ctx;
+    int id = tok->id;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d", id);
+    SEXP idstr = mkString(buf);
+    SEXP args = PROTECT(allocVector(VECSXP, 1));
+    const char* val = (argc > 0 && argv && argv[0]) ? argv[0] : "";
+    SET_VECTOR_ELT(args, 0, mkString(val));
+    SEXP res = RC_invoke_callback(idstr, args);
+    UNPROTECT(1);
+    return asInteger(res);
+  }
+
+  void* open_inmemory_db() {
+    sqlite3* db = NULL;
+    sqlite3_open(":memory:", &db);
+    return db;
+  }
+
+  int close_db(void* db_ptr) {
+    sqlite3* db = (sqlite3*)db_ptr;
+    return sqlite3_close(db);
+  }
+
+  int exec_with_r_callback(void* db_ptr, const char* sql, void* cb_ptr) {
+    sqlite3* db = (sqlite3*)db_ptr;
+    char* err_msg = NULL;
+    int rc = sqlite3_exec(db, sql, r_callback, cb_ptr, &err_msg);
+    if (err_msg) {
+      sqlite3_free(err_msg);
+    }
+    return rc;
+  }
+  ') |>
+  tcc_bind(
+    open_inmemory_db = list(args = list(), returns = "ptr"),
+    close_db = list(args = list("ptr"), returns = "i32"),
+    exec_with_r_callback = list(args = list("ptr", "cstring", "ptr"), returns = "i32")
+  ) |>
+  tcc_compile()
+
+db_ptr <- sqlite_cb$open_inmemory_db()
+sqlite_cb$exec_with_r_callback(db_ptr, "CREATE TABLE items (id INTEGER, name TEXT);", cb_ptr)
+#> [1] 0
+sqlite_cb$exec_with_r_callback(db_ptr, "INSERT INTO items VALUES (1, \'test\');", cb_ptr)
+#> [1] 0
+sqlite_cb$exec_with_r_callback(db_ptr, "SELECT name FROM items;", cb_ptr)
+#> hello from R callback: test
+#> [1] 0
+sqlite_cb$close_db(db_ptr)
+#> [1] 0
+
+tcc_callback_close(cb)
+rm(sqlite_cb, db_ptr, cb_ptr, cb)
+invisible(gc())
+```
+
+#### SQLite with an opaque struct wrapper
+
+Wrap the opaque `sqlite3*` in a small struct so the FFI exercises struct
+allocation and accessors.
+
+``` r
+sqlite_struct <- tcc_ffi() |>
+  tcc_header('#include <sqlite3.h>') |>
+  tcc_library("sqlite3") |>
+  tcc_source('
+  struct sqlite_handle { sqlite3* db; };
+
+  int sqlite_handle_open(struct sqlite_handle* h, const char* path) {
+    return sqlite3_open(path, &h->db);
+  }
+
+  int sqlite_handle_close(struct sqlite_handle* h) {
+    if (h->db) {
+      int rc = sqlite3_close(h->db);
+      h->db = NULL;
+      return rc;
+    }
+    return 0;
+  }
+
+  int sqlite_handle_exec(struct sqlite_handle* h, const char* sql) {
+    char* err_msg = NULL;
+    int rc = sqlite3_exec(h->db, sql, NULL, NULL, &err_msg);
+    if (err_msg) {
+      sqlite3_free(err_msg);
+    }
+    return rc;
+  }
+  ') |>
+  tcc_struct('sqlite_handle', accessors = c(db = 'ptr')) |>
+  tcc_bind(
+    sqlite_handle_open = list(args = list("ptr", "cstring"), returns = "i32"),
+    sqlite_handle_close = list(args = list("ptr"), returns = "i32"),
+    sqlite_handle_exec = list(args = list("ptr", "cstring"), returns = "i32")
+  ) |>
+  tcc_compile()
+
+h <- sqlite_struct$sqlite_handle_new()
+sqlite_struct$sqlite_handle_open(h, ":memory:")
+#> [1] 0
+sqlite_struct$sqlite_handle_exec(h, "CREATE TABLE items (id INTEGER, name TEXT);")
+#> [1] 0
+sqlite_struct$sqlite_handle_exec(h, "INSERT INTO items VALUES (1, \'test\');")
+#> [1] 0
+sqlite_struct$sqlite_handle_close(h)
+#> [1] 0
+sqlite_struct$sqlite_handle_free(h)
+#> NULL
+rm(sqlite_struct, h)
+invisible(gc())
 ```
 
 #### Custom wrapper functions: SQLite with Pointer Utilities
@@ -436,13 +583,15 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5b1aea16ced8"
+#> [1] "0x5604272d6ce8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
 #> [1] "3.45.1"
 sqlite_with_utils$sqlite3_close(db)
 #> [1] 0
+rm(sqlite_with_utils, db, result)
+invisible(gc())
 ```
 
 ## License
