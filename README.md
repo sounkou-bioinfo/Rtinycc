@@ -63,7 +63,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5b43c2763000>
+#> <pointer: 0x59a1e1c1c000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_free(ptr)
 #> NULL
 ```
 
-### Header parsing (treesitter.c)
+### Header parsing with `treesitter.c` and generate bindings
 
 For header-driven bindings, `treesitter.c` provides C header parsers you
 can use to extract symbols before declaring FFI bindings.
@@ -103,13 +103,83 @@ header <- paste0(
 )
 
 root <- parse_header_text(header)
-get_function_nodes(root)
-#>   capture_name  text start_line start_col params return_type
-#> 1    decl_name   add          2         5               <NA>
-#> 2    decl_name scale          3         8               <NA>
-get_struct_nodes(root)
+funcs <- get_function_nodes(root, extract_params = TRUE, extract_return = TRUE)
+structs <- get_struct_nodes(root)
+funcs
+#>   capture_name  text start_line start_col   params return_type
+#> 1    decl_name   add          2         5 int, int         int
+#> 2    decl_name scale          3         8   double      double
+structs
 #>   capture_name  text start_line
 #> 1  struct_name point          1
+
+# Example: generate bindings from parsed signatures
+clean_type <- function(x) {
+  x <- trimws(x)
+  x <- gsub("\\s+", " ", x)
+  x <- sub("\\s+[A-Za-z_][A-Za-z0-9_]*$", "", x)
+  trimws(x)
+}
+
+map_type <- function(x) {
+  x <- clean_type(x)
+  if (x %in% c("int", "int32_t")) return("i32")
+  if (x %in% c("unsigned int", "uint32_t")) return("u32")
+  if (x %in% c("double", "float")) return("f64")
+  if (grepl("char\\s*\\*", x)) return("cstring")
+  if (x %in% c("void")) return("void")
+  "ptr"
+}
+
+signature_to_bind <- function(row) {
+  args <- character(0)
+  params <- row$params
+  if (is.list(params)) {
+    params <- params[[1]]
+  }
+  params <- as.character(params)
+  if (length(params) == 1 && grepl(",", params)) {
+    params <- unlist(strsplit(params, ","))
+  }
+  if (length(params) > 1) {
+    params <- params
+  }
+  if (length(params) == 1 && !is.na(params) && nzchar(params)) {
+    args <- vapply(params, map_type, character(1), USE.NAMES = FALSE)
+  } else if (length(params) > 1) {
+    args <- vapply(params, map_type, character(1), USE.NAMES = FALSE)
+  }
+  ret <- row$return_type
+  if (is.list(ret)) {
+    ret <- ret[[1]]
+  }
+  ret <- as.character(ret)
+  if (length(ret) > 1) {
+    ret <- ret[[1]]
+  }
+  list(args = as.list(args), returns = map_type(ret))
+}
+
+symbols <- setNames(
+  lapply(seq_len(nrow(funcs)), function(i) signature_to_bind(funcs[i, ])),
+  funcs$text
+)
+
+ffi <- tcc_ffi()
+ffi <- tcc_source(
+  ffi,
+  "int add(int a, int b) { return a + b; }\n"
+)
+ffi <- tcc_source(
+  ffi,
+  "double scale(double x) { return x * 2.0; }\n"
+)
+ffi <- do.call(tcc_bind, c(list(ffi), symbols))
+ffi <- tcc_compile(ffi)
+ffi$add(1L, 2L)
+#> [1] 3
+ffi$scale(2.0)
+#> [1] 4
 ```
 
 ### A declarative FFI API
@@ -514,7 +584,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5b43c3dbacf8"
+#> [1] "0x59a1e2803988"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()

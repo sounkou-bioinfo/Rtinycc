@@ -13,7 +13,8 @@ Description: Builds TinyCC (Tiny C Compiler) cli and library for R package use.
 License: GPL (>= 3)
 Depends: R (>= 4.4.0)
 Suggests:
-    tinytest
+    tinytest,
+    treesitter.c
 SystemRequirements: GNU make
 OS_type: unix
 Encoding: UTF-8
