@@ -15,4 +15,11 @@ An external pointer (address of the callback token)
 \description{
 Returns an external pointer that can be passed to compiled C code
 as a function pointer. This is the opaque pointer used by trampolines.
+The pointer handle keeps the underlying token alive until it is garbage
+collected, even if the original callback is closed.
+}
+\details{
+Pointer arguments and return values are treated as external pointers.
+Use \\code{tcc_read_bytes()} or \\code{tcc_read_*()} helpers to inspect
+pointed data when needed.
 }

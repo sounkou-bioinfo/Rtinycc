@@ -193,5 +193,8 @@ tcc_callback_close(cb3)
 tcc_callback_close(cb4)
 tcc_callback_close(cb5)
 
+rm(ptr)
+gc()
+
 # Final validation
 expect_false(tcc_callback_valid(cb), info = "All callbacks cleaned up")

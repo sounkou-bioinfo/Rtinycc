@@ -2,6 +2,7 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Error.h>
+#include <R_ext/Parse.h>
 #include <stdint.h>
 #include <inttypes.h>
 
@@ -400,7 +401,8 @@ static int next_callback_id = 0;
 
 // Callback token structure - passed back to R as external ptr
 typedef struct {
-    int id;                // Index into callback_registry
+    int id;                // Index into callback_registry (or -1 when closed)
+    int refs;              // Reference count for outstanding external pointers
 } callback_token_t;
 
 // Finalizer for callback tokens
@@ -412,6 +414,7 @@ static void RC_callback_finalizer(SEXP ext) {
             callback_entry_t *entry = &callback_registry[token->id];
             if (entry->valid) {
                 R_ReleaseObject(entry->fun);
+                entry->fun = NULL;
                 entry->valid = 0;
                 if (entry->return_type) {
                     free(entry->return_type);
@@ -428,7 +431,23 @@ static void RC_callback_finalizer(SEXP ext) {
                 }
             }
         }
-        free(token);
+        token->id = -1;
+        token->refs -= 1;
+        if (token->refs <= 0) {
+            free(token);
+        }
+        R_ClearExternalPtr(ext);
+    }
+}
+
+// Finalizer for callback pointer handles
+static void RC_callback_ptr_finalizer(SEXP ext) {
+    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
+    if (token) {
+        token->refs -= 1;
+        if (token->refs <= 0) {
+            free(token);
+        }
         R_ClearExternalPtr(ext);
     }
 }
@@ -488,6 +507,7 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
         Rf_error("Memory allocation failed");
     }
     token->id = id;
+    token->refs = 1;
     
     SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_callback"));
@@ -527,8 +547,10 @@ SEXP RC_get_callback_ptr(SEXP callback_ext) {
     }
     
     // Return the token address as external pointer (this is what trampolines use)
+    token->refs += 1;
     SEXP ptr = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_callback_ptr"));
+    R_RegisterCFinalizerEx(ptr, RC_callback_ptr_finalizer, TRUE);
     UNPROTECT(1);
     return ptr;
 }
@@ -590,31 +612,66 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     }
     
     // Evaluate the call
-    SEXP result = PROTECT(Rf_eval(call, R_GlobalEnv));
+    int err = 0;
+    SEXP result = PROTECT(R_tryEval(call, R_GlobalEnv, &err));
+    if (err) {
+        UNPROTECT(2);  // call and result
+        Rf_error("Callback raised an error");
+    }
     
     // Convert result based on expected return type
     SEXP converted = R_NilValue;
     if (strcmp(entry->return_type, "void") == 0) {
         converted = R_NilValue;
-    } else if (strcmp(entry->return_type, "int") == 0 || 
+    } else if (strcmp(entry->return_type, "int") == 0 ||
                strcmp(entry->return_type, "i32") == 0 ||
-               strcmp(entry->return_type, "int32_t") == 0) {
+               strcmp(entry->return_type, "int32_t") == 0 ||
+               strcmp(entry->return_type, "i8") == 0 ||
+               strcmp(entry->return_type, "int8_t") == 0 ||
+               strcmp(entry->return_type, "i16") == 0 ||
+               strcmp(entry->return_type, "int16_t") == 0) {
         converted = Rf_ScalarInteger(Rf_asInteger(result));
-    } else if (strcmp(entry->return_type, "double") == 0 ||
+    } else if (strcmp(entry->return_type, "i64") == 0 ||
+               strcmp(entry->return_type, "int64_t") == 0 ||
+               strcmp(entry->return_type, "u32") == 0 ||
+               strcmp(entry->return_type, "uint32_t") == 0 ||
+               strcmp(entry->return_type, "u64") == 0 ||
+               strcmp(entry->return_type, "uint64_t") == 0 ||
+               strcmp(entry->return_type, "double") == 0 ||
                strcmp(entry->return_type, "f64") == 0 ||
-               strcmp(entry->return_type, "float") == 0) {
+               strcmp(entry->return_type, "float") == 0 ||
+               strcmp(entry->return_type, "f32") == 0) {
         converted = Rf_ScalarReal(Rf_asReal(result));
+    } else if (strcmp(entry->return_type, "u8") == 0 ||
+               strcmp(entry->return_type, "uint8_t") == 0 ||
+               strcmp(entry->return_type, "u16") == 0 ||
+               strcmp(entry->return_type, "uint16_t") == 0) {
+        converted = Rf_ScalarInteger(Rf_asInteger(result));
     } else if (strcmp(entry->return_type, "bool") == 0 ||
                strcmp(entry->return_type, "logical") == 0) {
         converted = Rf_ScalarLogical(Rf_asLogical(result));
+    } else if (strcmp(entry->return_type, "sexp") == 0 ||
+               strcmp(entry->return_type, "SEXP") == 0) {
+        converted = result;
     } else if (strcmp(entry->return_type, "string") == 0 ||
                strcmp(entry->return_type, "cstring") == 0 ||
-               strcmp(entry->return_type, "char*") == 0) {
+               strcmp(entry->return_type, "char*") == 0 ||
+               strcmp(entry->return_type, "const char*") == 0) {
         if (Rf_isString(result)) {
             converted = result;
         } else {
-            converted = Rf_asChar(result);
+            converted = Rf_ScalarString(Rf_asChar(result));
         }
+    } else if (strcmp(entry->return_type, "ptr") == 0 ||
+               strcmp(entry->return_type, "void*") == 0 ||
+               strcmp(entry->return_type, "void *") == 0 ||
+               (strstr(entry->return_type, "*") != NULL &&
+                strstr(entry->return_type, "char") == NULL)) {
+        if (TYPEOF(result) != EXTPTRSXP) {
+            UNPROTECT(2);
+            Rf_error("Callback return is not an external pointer");
+        }
+        converted = result;
     } else {
         // Default: return as-is
         converted = result;

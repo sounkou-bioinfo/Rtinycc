@@ -21,3 +21,14 @@ Wraps an R function so it can be passed as a C function pointer
 to compiled code. The callback will be invoked via a trampoline
 that marshals arguments between C and R.
 }
+\details{
+Callbacks are executed on the R main thread only. If a callback raises an
+error, it is propagated to the caller as an R error.
+
+Pointer arguments (e.g., \\code{double*}, \\code{int*}) are passed as
+external pointers. Lengths must be supplied separately if needed.
+
+The return type may be any scalar type supported by the FFI mappings
+(e.g., \\code{i32}, \\code{f64}, \\code{bool}, \\code{cstring}), or
+\\code{SEXP} to return an R object directly.
+}

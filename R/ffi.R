@@ -632,8 +632,7 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(
-    sysname,
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -686,8 +685,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(
-      sysname,
+    lib_name <- switch(sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
@@ -940,7 +938,7 @@ tcc_cstring_object <- function(ptr, clone = TRUE, owned = FALSE) {
     addr <- get_external_ptr_addr(ptr)
     if (addr > 0) {
       # Read C string at address
-      obj$cached_string <- read_c_string(ptr)
+      obj$cached_string <- tcc_read_cstring(ptr)
     }
   }
 
@@ -963,7 +961,7 @@ as.character.tcc_cstring <- function(x, ...) {
   if (!is.null(x$cached_string)) {
     return(x$cached_string)
   }
-  read_c_string(x$ptr)
+  tcc_read_cstring(x$ptr)
 }
 
 #' @export
@@ -974,10 +972,8 @@ print.tcc_cstring <- function(x, ...) {
 }
 
 # Helper to read C string from external pointer
-# This would need a C implementation
 read_c_string <- function(ptr) {
-  # Placeholder - would use C code to read null-terminated string
-  stop("read_c_string not yet implemented - requires C helper", call. = FALSE)
+  tcc_read_cstring(ptr)
 }
 
 # ============================================================================

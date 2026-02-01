@@ -155,3 +155,15 @@ tcc_ptr_addr <- function(ptr, hex = FALSE) {
     as.character(addr)
   }
 }
+
+#' Check whether an external pointer is NULL
+#'
+#' Returns TRUE if the external pointer address is NULL, FALSE otherwise.
+#'
+#' @param ptr External pointer
+#' @return Logical scalar
+#' @export
+tcc_ptr_is_null <- function(ptr) {
+  stopifnot(inherits(ptr, "externalptr"))
+  !.Call(RC_libtcc_ptr_valid, ptr)
+}

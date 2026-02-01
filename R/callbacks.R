@@ -7,6 +7,17 @@
 #' to compiled code. The callback will be invoked via a trampoline
 #' that marshals arguments between C and R.
 #'
+#' @details
+#' Callbacks are executed on the R main thread only. If a callback raises an
+#' error, it is propagated to the caller as an R error.
+#'
+#' Pointer arguments (e.g., \\code{double*}, \\code{int*}) are passed as
+#' external pointers. Lengths must be supplied separately if needed.
+#'
+#' The return type may be any scalar type supported by the FFI mappings
+#' (e.g., \\code{i32}, \\code{f64}, \\code{bool}, \\code{cstring}), or
+#' \\code{SEXP} to return an R object directly.
+#'
 #' @param fun An R function to be called from C
 #' @param signature C function signature string (e.g., "double (*)(int, double)")
 #' @param threadsafe Whether to enable thread-safe invocation (experimental)
@@ -63,6 +74,12 @@ tcc_callback_close <- function(callback) {
 #'
 #' Returns an external pointer that can be passed to compiled C code
 #' as a function pointer. This is the opaque pointer used by trampolines.
+#' The pointer handle keeps the underlying token alive until it is garbage
+#' collected, even if the original callback is closed.
+#'
+#' Pointer arguments and return values are treated as external pointers.
+#' Use \\code{tcc_read_bytes()} or \\code{tcc_read_*()} helpers to inspect
+#' pointed data when needed.
 #'
 #' @param callback A tcc_callback object
 #' @return An external pointer (address of the callback token)
@@ -315,6 +332,8 @@ generate_trampoline <- function(callback_id, sig) {
   # Convert result back to C type
   if (sig$return_type == "void") {
     lines <- c(lines, "  return;")
+  } else if (sig$return_type %in% c("SEXP", "sexp")) {
+    lines <- c(lines, "  return result;")
   } else {
     lines <- c(
       lines,
@@ -330,10 +349,15 @@ generate_trampoline <- function(callback_id, sig) {
 # Map C types to R SEXP types for trampoline arguments
 map_c_to_sexp_type <- function(c_type) {
   c_type <- trimws(c_type)
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
 
-  if (c_type %in% c("int", "int32_t", "i32")) {
+  if (is_ptr) {
+    "void*"
+  } else if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
     "int"
   } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
+    "long long"
+  } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32", "uint64_t", "u64")) {
     "long long"
   } else if (c_type %in% c("double", "float", "f64", "f32")) {
     "double"
@@ -351,10 +375,18 @@ map_c_to_sexp_type <- function(c_type) {
 # Map C types to FFI types
 map_c_to_r_type <- function(c_type) {
   c_type <- trimws(c_type)
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
 
-  if (
+  if (is_ptr) {
+    "ptr"
+  } else if (
     c_type %in%
-      c("int", "int32_t", "i32", "long", "long long", "int64_t", "i64")
+      c(
+        "int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8",
+        "long", "long long", "int64_t", "i64",
+        "uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32",
+        "uint64_t", "u64"
+      )
   ) {
     "i32"
   } else if (c_type %in% c("double", "float", "f64", "f32")) {
@@ -367,6 +399,8 @@ map_c_to_r_type <- function(c_type) {
     "bool"
   } else if (c_type == "void") {
     "void"
+  } else if (c_type %in% c("SEXP", "sexp")) {
+    "sexp"
   } else {
     "ptr"
   }
@@ -375,11 +409,18 @@ map_c_to_r_type <- function(c_type) {
 # Get SEXP constructor for C type
 get_sexp_constructor <- function(c_type) {
   c_type <- trimws(c_type)
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
 
-  if (c_type %in% c("int", "int32_t", "i32")) {
+  if (is_ptr) {
+    "R_MakeExternalPtr"
+  } else if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
     "ScalarInteger"
   } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
     "ScalarReal" # R doesn't have 64-bit integers, use double
+  } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16")) {
+    "ScalarInteger"
+  } else if (c_type %in% c("uint32_t", "u32", "uint64_t", "u64")) {
+    "ScalarReal"
   } else if (c_type %in% c("double", "float", "f64", "f32")) {
     "ScalarReal"
   } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
@@ -396,11 +437,18 @@ get_sexp_constructor <- function(c_type) {
 # Get R to C converter function
 get_r_to_c_converter <- function(c_type) {
   c_type <- trimws(c_type)
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
 
-  if (c_type %in% c("int", "int32_t", "i32")) {
+  if (is_ptr) {
+    "R_ExternalPtrAddr"
+  } else if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
     "asInteger"
   } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
     "asReal" # Convert to double then cast
+  } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16")) {
+    "asInteger"
+  } else if (c_type %in% c("uint32_t", "u32", "uint64_t", "u64")) {
+    "asReal"
   } else if (c_type %in% c("double", "float", "f64", "f32")) {
     "asReal"
   } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
