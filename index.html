@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64da4c7af000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6521db998000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -271,23 +271,71 @@
 <div class="section level5">
 <h5 id="async-callbacks-main-thread-queue">Async callbacks (main-thread queue)<a class="anchor" aria-label="anchor" href="#async-callbacks-main-thread-queue"></a>
 </h5>
-<p>For cross-thread scheduling, initialize the async dispatcher and enqueue a callback. On Unix-like systems, callbacks are executed on the main thread.</p>
+<p>For cross-thread scheduling, initialize the async dispatcher and enqueue a callback from C on a worker thread. On Unix-like systems, callbacks are executed on the main thread.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span></span>
-<span><span class="fu"><a href="reference/tcc_callback_async_enable.html">tcc_callback_async_enable</a></span><span class="op">(</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="va">.Platform</span><span class="op">$</span><span class="va">OS.type</span> <span class="op">!=</span> <span class="st">"windows"</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="reference/tcc_callback_async_enable.html">tcc_callback_async_enable</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
-<span><span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span> <span class="va">hits</span> <span class="op">&lt;&lt;-</span> <span class="va">hits</span> <span class="op">+</span> <span class="va">x</span>; <span class="cn">NULL</span> <span class="op">}</span>, signature <span class="op">=</span> <span class="st">"void (*)(int)"</span><span class="op">)</span></span>
+<span>  <span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
+<span>  <span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span> <span class="va">hits</span> <span class="op">&lt;&lt;-</span> <span class="va">hits</span> <span class="op">+</span> <span class="va">x</span>; <span class="cn">NULL</span> <span class="op">}</span>, signature <span class="op">=</span> <span class="st">"void (*)(int)"</span><span class="op">)</span></span>
+<span>  <span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Enqueue a callback from R (tests can also enqueue from a worker thread)</span></span>
-<span><span class="fu"><a href="reference/tcc_callback_async_schedule.html">tcc_callback_async_schedule</a></span><span class="op">(</span><span class="va">cb_async</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fl">2L</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">code_async</span> <span class="op">&lt;-</span> <span class="st">'#define _Complex</span></span>
+<span><span class="st">  #include &lt;R.h&gt;</span></span>
+<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
+<span><span class="st">  #include &lt;pthread.h&gt;</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  typedef struct { int id; int refs; } callback_token_t;</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  typedef enum {</span></span>
+<span><span class="st">      CB_ARG_INT = 0,</span></span>
+<span><span class="st">      CB_ARG_REAL = 1,</span></span>
+<span><span class="st">      CB_ARG_LOGICAL = 2,</span></span>
+<span><span class="st">      CB_ARG_PTR = 3,</span></span>
+<span><span class="st">      CB_ARG_CSTRING = 4</span></span>
+<span><span class="st">} cb_arg_kind_t;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">typedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">extern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">struct task { int id; int value; };</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">static void* worker(void* data) {</span></span>
+<span><span class="st">    struct task* t = (struct task*) data;</span></span>
+<span><span class="st">      cb_arg_t arg;</span></span>
+<span><span class="st">      arg.kind = CB_ARG_INT;</span></span>
+<span><span class="st">      arg.v.i = t-&gt;value;</span></span>
+<span><span class="st">      RC_callback_async_schedule_c(t-&gt;id, 1, &amp;arg);</span></span>
+<span><span class="st">      return NULL;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">int spawn_async(void* cb, int value) {</span></span>
+<span><span class="st">  callback_token_t* tok = (callback_token_t*) cb;</span></span>
+<span><span class="st">  if (!tok) return -1;</span></span>
+<span><span class="st">  struct task t;</span></span>
+<span><span class="st">  t.id = tok-&gt;id;</span></span>
+<span><span class="st">  t.value = value;</span></span>
+<span><span class="st">  pthread_t th;</span></span>
+<span><span class="st">  if (pthread_create(&amp;th, NULL, worker, &amp;t) != 0) {return -2;}</span></span>
+<span><span class="st">  pthread_join(th, NULL);</span></span>
+<span><span class="st">  return 0;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">'</span></span>
+<span>  <span class="va">ffi_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_async</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"pthread"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>spawn_async <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Drain queued callbacks now (useful in non-interactive sessions)</span></span>
-<span><span class="fu"><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="va">rc</span> <span class="op">&lt;-</span> <span class="va">ffi_async</span><span class="op">$</span><span class="fu">spawn_async</span><span class="op">(</span><span class="va">cb_ptr</span>, <span class="fl">2L</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">hits</span></span>
-<span><span class="co">#&gt; [1] 2</span></span>
-<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="va">hits</span></span>
+<span>  <span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_async</span>, <span class="va">cb_ptr</span>, <span class="va">cb_async</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
 </div>
 <div class="section level5">
 <h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
@@ -295,7 +343,7 @@
 <p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Free struct instances when you are done.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
-<span>  <span class="st">"struct point { double x; double y; int id; };\n\n"</span>,</span>
+<span>  <span class="st">"struct point { double x; double y; int id; };\n"</span>,</span>
 <span>  <span class="st">"double point_distance(struct point* a, struct point* b) {\n"</span>,</span>
 <span>  <span class="st">"  double dx = a-&gt;x - b-&gt;x;\n"</span>,</span>
 <span>  <span class="st">"  double dy = a-&gt;y - b-&gt;y;\n"</span>,</span>
@@ -612,7 +660,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x64da4c7b42c8"</span></span>
+<span><span class="co">#&gt; [1] "0x6521d8362fe8"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
