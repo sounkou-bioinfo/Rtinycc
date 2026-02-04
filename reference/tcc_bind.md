@@ -25,6 +25,11 @@ tcc_bind(ffi, ...)
 
   - code: Optional C code for the symbol (for embedded functions)
 
+  Callback arguments should use the form `callback:<signature>` (e.g.,
+  `callback:double(double)`). The generated trampoline expects a `void*`
+  user-data pointer as its first argument; pass `tcc_callback_ptr(cb)`
+  to the corresponding user-data parameter in the C API.
+
 ## Value
 
 Updated tcc_ffi object (for chaining)

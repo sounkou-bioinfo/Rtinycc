@@ -57,7 +57,11 @@ This is the core of the declarative FFI API.</p>
 <dd><p>Named list of symbol definitions. Each definition is a list with:</p><ul><li><p>args: List of FFI types for arguments (e.g., list("i32", "f64"))</p></li>
 <li><p>returns: FFI type for return value (e.g., "f64", "cstring")</p></li>
 <li><p>code: Optional C code for the symbol (for embedded functions)</p></li>
-</ul></dd>
+</ul><p>Callback arguments should use the form <code>callback:&lt;signature&gt;</code> (e.g.,
+<code>callback:double(double)</code>). The generated trampoline expects a
+<code>void*</code> user-data pointer as its first argument; pass
+<code>tcc_callback_ptr(cb)</code> to the corresponding user-data parameter in
+the C API.</p></dd>
 
 </dl></div>
     <div class="section level2">

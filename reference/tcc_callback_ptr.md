@@ -1,9 +1,10 @@
 # Get the C-compatible function pointer
 
-Returns an external pointer that can be passed to compiled C code as a
-function pointer. This is the opaque pointer used by trampolines. The
-pointer handle keeps the underlying token alive until it is garbage
-collected, even if the original callback is closed.
+Returns an external pointer that can be passed to compiled C code as
+user data for trampolines. Keep this handle (and the original
+`tcc_callback`) alive for as long as C may call back. The pointer handle
+keeps the underlying token alive until it is garbage collected, even if
+the original callback is closed.
 
 ## Usage
 

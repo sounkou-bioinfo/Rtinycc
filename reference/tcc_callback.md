@@ -34,8 +34,15 @@ Thread safety: callbacks are executed on the R main thread only.
 Invoking a callback from a worker thread is unsupported and may crash R.
 The `threadsafe` flag is currently informational only.
 
-If a callback raises an error, it is propagated to the caller as an R
-error.
+If a callback raises an error, a warning is emitted and a
+type-appropriate default value is returned.
+
+When binding callbacks with
+[`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md),
+use a `callback:<signature>` argument type so a trampoline is generated.
+The trampoline expects a `void*` user-data pointer as its first
+argument; pass `tcc_callback_ptr(cb)` as the user-data argument to the C
+API.
 
 Pointer arguments (e.g., `double*`, `int*`) are passed as external
 pointers. Lengths must be supplied separately if needed.

@@ -5,14 +5,14 @@ Generate trampoline code for a callback argument
 ## Usage
 
 ``` r
-generate_trampoline(callback_id, sig)
+generate_trampoline(trampoline_name, sig)
 ```
 
 ## Arguments
 
-- callback_id:
+- trampoline_name:
 
-  Unique identifier for this callback
+  Name of the trampoline function
 
 - sig:
 

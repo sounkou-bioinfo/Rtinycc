@@ -73,7 +73,12 @@ that marshals arguments between C and R.</p>
     <p>Thread safety: callbacks are executed on the R main thread only. Invoking
 a callback from a worker thread is unsupported and may crash R. The
 <code>threadsafe</code> flag is currently informational only.</p>
-<p>If a callback raises an error, it is propagated to the caller as an R error.</p>
+<p>If a callback raises an error, a warning is emitted and a type-appropriate
+default value is returned.</p>
+<p>When binding callbacks with <code><a href="tcc_bind.html">tcc_bind()</a></code>, use a <code>callback:&lt;signature&gt;</code>
+argument type so a trampoline is generated. The trampoline expects a
+<code>void*</code> user-data pointer as its first argument; pass <code>tcc_callback_ptr(cb)</code>
+as the user-data argument to the C API.</p>
 <p>Pointer arguments (e.g., <code>double*</code>, <code>int*</code>) are passed as
 external pointers. Lengths must be supplied separately if needed.</p>
 <p>The return type may be any scalar type supported by the FFI mappings

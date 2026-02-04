@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5cc0e4eb5000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x56a4a95c5000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -224,45 +224,35 @@
 <li>
 <strong>Arrays (zero-copy)</strong>: <code>raw</code> → <code>uint8_t*</code>; <code>integer_array</code> → <code>int32_t*</code>; <code>numeric_array</code> → <code>double*</code>.</li>
 <li>
-<strong>Pointers</strong>: <code>ptr</code> (opaque <code>externalptr</code>), <code>sexp</code> (pass <code>SEXP</code> directly), <code>callback</code> (function pointer token obtained with <code><a href="reference/tcc_callback.html">tcc_callback()</a></code>).</li>
+<strong>Pointers</strong>: <code>ptr</code> (opaque <code>externalptr</code>), <code>sexp</code> (pass <code>SEXP</code> directly), <code>callback:&lt;signature&gt;</code> (trampoline for <code><a href="reference/tcc_callback.html">tcc_callback()</a></code>).</li>
 </ul>
 <div class="section level5">
 <h5 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
 </h5>
-<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the actual arguments and always call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when finished.</p>
+<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the R callback arguments and always call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when finished. When using <code><a href="reference/tcc_bind.html">tcc_bind()</a></code>, specify a <code>callback:&lt;signature&gt;</code> argument so the trampoline can be generated, and pass <code>tcc_callback_ptr(cb)</code> as the user data pointer to the C API.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">2</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
 <span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">#define _Complex</span></span>
-<span><span class="st">#include &lt;R.h&gt;</span></span>
-<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">#include &lt;stdio.h&gt;</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">typedef struct { int id; } callback_token_t;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">SEXP RC_invoke_callback(SEXP, SEXP);</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">double call_cb(void* cb, double x) {</span></span>
-<span><span class="st">  int id = ((callback_token_t*)cb)-&gt;id;</span></span>
-<span><span class="st">  char buf[32];</span></span>
-<span><span class="st">  snprintf(buf, sizeof(buf), "%d", id);</span></span>
-<span><span class="st">  SEXP idstr = mkString(buf);</span></span>
-<span><span class="st">  SEXP args = PROTECT(allocVector(VECSXP, 1));</span></span>
-<span><span class="st">  SET_VECTOR_ELT(args, 0, ScalarReal(x));</span></span>
-<span><span class="st">  SEXP res = RC_invoke_callback(idstr, args);</span></span>
-<span><span class="st">  UNPROTECT(1);</span></span>
-<span><span class="st">  return asReal(res);</span></span>
+<span><span class="st">double call_cb(double (*cb)(void* ctx, double), void* ctx, double x) {</span></span>
+<span><span class="st">  return cb(ctx, x);</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
 <span></span>
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>call_cb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    call_cb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"f64"</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">call_cb</span><span class="op">(</span><span class="va">cb_ptr</span>, <span class="fl">21.0</span><span class="op">)</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">call_cb</span><span class="op">(</span><span class="va">cb</span>, <span class="va">cb_ptr</span>, <span class="fl">21.0</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">cb_ptr</span>, <span class="va">cb</span><span class="op">)</span></span>
@@ -271,7 +261,7 @@
 <div class="section level5">
 <h5 id="callback-errors">Callback errors<a class="anchor" aria-label="anchor" href="#callback-errors"></a>
 </h5>
-<p>If the callback throws, the error bubbles back to R:</p>
+<p>If the callback throws, a warning is emitted and a type-appropriate default value is returned:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"boom"</span><span class="op">)</span>,</span>
@@ -281,38 +271,36 @@
 <span></span>
 <span><span class="va">code_err</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">#define _Complex</span></span>
-<span><span class="st">#include &lt;R.h&gt;</span></span>
-<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">#include &lt;stdio.h&gt;</span></span>
 <span><span class="st"></span></span>
-<span><span class="st">typedef struct { int id; } callback_token_t;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">SEXP RC_invoke_callback(SEXP, SEXP);</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">double call_cb_err(void* cb, double x) {</span></span>
-<span><span class="st">  int id = ((callback_token_t*)cb)-&gt;id;</span></span>
-<span><span class="st">  char buf[32];</span></span>
-<span><span class="st">  snprintf(buf, sizeof(buf), "%d", id);</span></span>
-<span><span class="st">  SEXP idstr = mkString(buf);</span></span>
-<span><span class="st">  SEXP args = PROTECT(allocVector(VECSXP, 1));</span></span>
-<span><span class="st">  SET_VECTOR_ELT(args, 0, ScalarReal(x));</span></span>
-<span><span class="st">  SEXP res = RC_invoke_callback(idstr, args);</span></span>
-<span><span class="st">  UNPROTECT(1);</span></span>
-<span><span class="st">  return asReal(res);</span></span>
+<span><span class="st">double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {</span></span>
+<span><span class="st">  return cb(ctx, x);</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
 <span></span>
 <span><span class="va">ffi_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_err</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>call_cb_err <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    call_cb_err <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"f64"</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">msg</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
-<span>  <span class="va">ffi_err</span><span class="op">$</span><span class="fu">call_cb_err</span><span class="op">(</span><span class="va">cb_ptr_err</span>, <span class="fl">1.0</span><span class="op">)</span>,</span>
-<span>  error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="va">e</span><span class="op">$</span><span class="va">message</span></span>
+<span><span class="va">warned</span> <span class="op">&lt;-</span> <span class="cn">FALSE</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">withCallingHandlers</a></span><span class="op">(</span></span>
+<span>  <span class="va">ffi_err</span><span class="op">$</span><span class="fu">call_cb_err</span><span class="op">(</span><span class="va">cb_err</span>, <span class="va">cb_ptr_err</span>, <span class="fl">1.0</span><span class="op">)</span>,</span>
+<span>  warning <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">w</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">warned</span> <span class="op">&lt;&lt;-</span> <span class="cn">TRUE</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">invokeRestart</a></span><span class="op">(</span><span class="st">"muffleWarning"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">msg</span></span>
-<span><span class="co">#&gt; [1] "Callback raised an error"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>warned <span class="op">=</span> <span class="va">warned</span>, result <span class="op">=</span> <span class="va">res</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $warned</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $result</span></span>
+<span><span class="co">#&gt; [1] NA</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_err</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_err</span>, <span class="va">cb_ptr_err</span>, <span class="va">cb_err</span><span class="op">)</span></span>
@@ -724,7 +712,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5cc0e1801fe8"</span></span>
+<span><span class="co">#&gt; [1] "0x56a4a7de8268"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
