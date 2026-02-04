@@ -61,7 +61,9 @@ This is the core of the declarative FFI API.</p>
 <code>callback:double(double)</code>). The generated trampoline expects a
 <code>void*</code> user-data pointer as its first argument; pass
 <code>tcc_callback_ptr(cb)</code> to the corresponding user-data parameter in
-the C API.</p></dd>
+the C API. For thread-safe scheduling, use
+<code>callback_async:&lt;signature&gt;</code> which enqueues the call on the main
+thread and returns a default value immediately.</p></dd>
 
 </dl></div>
     <div class="section level2">

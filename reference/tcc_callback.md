@@ -39,10 +39,12 @@ type-appropriate default value is returned.
 
 When binding callbacks with
 [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md),
-use a `callback:<signature>` argument type so a trampoline is generated.
-The trampoline expects a `void*` user-data pointer as its first
-argument; pass `tcc_callback_ptr(cb)` as the user-data argument to the C
-API.
+use a `callback:<signature>` argument type so a synchronous trampoline
+is generated. The trampoline expects a `void*` user-data pointer as its
+first argument; pass `tcc_callback_ptr(cb)` as the user-data argument to
+the C API. For thread-safe usage from worker threads, use
+`callback_async:<signature>` which schedules the call on the main thread
+and returns a default value.
 
 Pointer arguments (e.g., `double*`, `int*`) are passed as external
 pointers. Lengths must be supplied separately if needed.
