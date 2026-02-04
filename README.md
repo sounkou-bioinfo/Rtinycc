@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x60630dfb6000>
+#> <pointer: 0x609399ffe000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -302,8 +302,8 @@ static void* worker(void* data) {
 int spawn_async(void* cb, int value) {
   callback_token_t* tok = (callback_token_t*) cb;
   if (!tok) return -1;
-  const int n = 100;
-  struct task tasks[100];
+  const int n = 1000;
+  struct task tasks[1000];
   pthread_t th[100];
   for (int i = 0; i < n; i++) {
     tasks[i].id = tok->id;
@@ -334,7 +334,7 @@ int spawn_async(void* cb, int value) {
   rm(ffi_async, cb_ptr, cb_async)
   invisible(gc())
 }
-#> [1] 200
+#> [1] 2000
 ```
 
 ##### Structs, unions, and bitfields
@@ -672,7 +672,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x60630a89dfe8"
+#> [1] "0x6093968e5fe8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()

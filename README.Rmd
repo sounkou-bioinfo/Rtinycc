@@ -266,8 +266,8 @@ static void* worker(void* data) {
 int spawn_async(void* cb, int value) {
   callback_token_t* tok = (callback_token_t*) cb;
   if (!tok) return -1;
-  const int n = 100;
-  struct task tasks[100];
+  const int n = 1000;
+  struct task tasks[1000];
   pthread_t th[100];
   for (int i = 0; i < n; i++) {
     tasks[i].id = tok->id;
