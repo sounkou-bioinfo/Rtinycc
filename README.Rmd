@@ -357,6 +357,53 @@ rm(ffi, p1, p2)
 invisible(gc())
 ```
 
+##### Enums
+
+Enums are supported via `tcc_enum()` and exported as helper functions:
+
+```{r enum-example}
+code <- '
+enum status { OK = 0, ERROR = 1, PENDING = 2 };
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_enum("status", constants = c("OK", "ERROR", "PENDING")) |>
+  tcc_compile()
+
+ffi$enum_status_OK()
+ffi$enum_status_ERROR()
+rm(ffi)
+invisible(gc())
+```
+
+##### Bitfields
+
+Bitfields are handled by the C compiler; accessors read/write them like normal fields:
+
+```{r bitfield-example}
+code <- '
+struct status {
+  unsigned int flag : 1;
+  unsigned int code : 6;
+};
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_struct("status", accessors = c(flag = "u8", code = "u8")) |>
+  tcc_compile()
+
+s <- ffi$status_new()
+s <- ffi$status_set_flag(s, 1)
+s <- ffi$status_set_code(s, 42)
+ffi$status_get_flag(s)
+ffi$status_get_code(s)
+ffi$status_free(s)
+rm(ffi, s)
+invisible(gc())
+```
+
 #### Simple function
 
 ```{r ffi-simple}

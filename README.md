@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x58183c598000>
+#> <pointer: 0x600cac559000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -408,6 +408,59 @@ rm(ffi, p1, p2)
 invisible(gc())
 ```
 
+##### Enums
+
+Enums are supported via `tcc_enum()` and exported as helper functions:
+
+``` r
+code <- '
+enum status { OK = 0, ERROR = 1, PENDING = 2 };
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_enum("status", constants = c("OK", "ERROR", "PENDING")) |>
+  tcc_compile()
+
+ffi$enum_status_OK()
+#> [1] 0
+ffi$enum_status_ERROR()
+#> [1] 1
+rm(ffi)
+invisible(gc())
+```
+
+##### Bitfields
+
+Bitfields are handled by the C compiler; accessors read/write them like
+normal fields:
+
+``` r
+code <- '
+struct status {
+  unsigned int flag : 1;
+  unsigned int code : 6;
+};
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_struct("status", accessors = c(flag = "u8", code = "u8")) |>
+  tcc_compile()
+
+s <- ffi$status_new()
+s <- ffi$status_set_flag(s, 1)
+s <- ffi$status_set_code(s, 42)
+ffi$status_get_flag(s)
+#> [1] 1
+ffi$status_get_code(s)
+#> [1] 42
+ffi$status_free(s)
+#> NULL
+rm(ffi, s)
+invisible(gc())
+```
+
 #### Simple function
 
 ``` r
@@ -697,7 +750,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x58183e44da28"
+#> [1] "0x600cadbb37f8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
