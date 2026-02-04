@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x600cac559000>
+#> <pointer: 0x56f39dc2d000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -300,7 +300,6 @@ a callback from C on a worker thread using `callback_async:<signature>`.
 On Unix-like systems, callbacks are executed on the main thread.
 
 ``` r
-if (.Platform$OS.type != "windows") {
   tcc_callback_async_enable()
 
   hits <- 0L
@@ -341,7 +340,7 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   return 0;
 }
 '
-  ffi_async <- tcc_ffi() |>
+ffi_async <- tcc_ffi() |>
     tcc_source(code_async) |>
     tcc_library("pthread") |>
     tcc_bind(
@@ -352,14 +351,13 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
     ) |>
     tcc_compile()
 
-  rc <- ffi_async$spawn_async(cb_async, cb_ptr, 2L)
-  tcc_callback_async_drain()
-  print(hits)
-  tcc_callback_close(cb_async)
-  rm(ffi_async, cb_ptr, cb_async)
-  invisible(gc())
-}
+rc <- ffi_async$spawn_async(cb_async, cb_ptr, 2L)
+tcc_callback_async_drain()
+print(hits)
 #> [1] 200
+tcc_callback_close(cb_async)
+rm(ffi_async, cb_ptr, cb_async)
+invisible(gc())
 ```
 
 ##### Structs, unions, and bitfields
@@ -750,7 +748,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x600cadbb37f8"
+#> [1] "0x56f39c450268"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()

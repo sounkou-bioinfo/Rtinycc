@@ -257,7 +257,6 @@ callback from C on a worker thread using `callback_async:<signature>`. On
 Unix-like systems, callbacks are executed on the main thread.
 
 ```{r callback-async}
-if (.Platform$OS.type != "windows") {
   tcc_callback_async_enable()
 
   hits <- 0L
@@ -298,7 +297,7 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   return 0;
 }
 '
-  ffi_async <- tcc_ffi() |>
+ffi_async <- tcc_ffi() |>
     tcc_source(code_async) |>
     tcc_library("pthread") |>
     tcc_bind(
@@ -309,13 +308,13 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
     ) |>
     tcc_compile()
 
-  rc <- ffi_async$spawn_async(cb_async, cb_ptr, 2L)
-  tcc_callback_async_drain()
-  print(hits)
-  tcc_callback_close(cb_async)
-  rm(ffi_async, cb_ptr, cb_async)
-  invisible(gc())
-}
+rc <- ffi_async$spawn_async(cb_async, cb_ptr, 2L)
+tcc_callback_async_drain()
+print(hits)
+tcc_callback_close(cb_async)
+rm(ffi_async, cb_ptr, cb_async)
+invisible(gc())
+
 ```
 
 ##### Structs, unions, and bitfields
