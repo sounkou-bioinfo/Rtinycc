@@ -234,7 +234,7 @@ R/C focused with explicit type mappings for efficient interop:
 
 **Array Types**: `raw` (uint8_t*), `integer_array` (int32_t*), `numeric_array` (double*), `logical_array` (int32_t*), `complex_array` (Rcomplex*)
 
-**Pointer Types**: `ptr` (externalptr), `sexp` (SEXP), `callback` (function pointer)
+**Pointer Types**: `ptr` (externalptr), `sexp` (SEXP), `callback:<signature>` (sync trampoline), `callback_async:<signature>` (async trampoline)
 
 ### Key Features
 
@@ -269,7 +269,8 @@ R/C focused with explicit type mappings for efficient interop:
 
 - **All 141 tests pass** across type system, code generation, compilation, external linking, callbacks, and complex types
 - **Complete Bun-style FFI API** working in R with modern declarative syntax
-- **R Callbacks implemented** - pass R functions as C callbacks via trampolines
+- **R Callbacks implemented** - pass R functions as C callbacks via generated trampolines
+- **Async callbacks** - `callback_async:<signature>` schedules calls on the main thread and returns default values immediately
 - **Struct/Union/Enum support** with generated helper functions
 - **Zero-copy performance** for array operations with proper memory safety
 - **Cross-platform compatibility** for Linux, macOS, and Windows
@@ -322,14 +323,14 @@ Ready for production use with a modern, declarative FFI interface that seamlessl
 
 ## Callback System (Implemented)
 
-The Rtinycc package now supports passing R functions as callbacks to compiled C code via the `callback` FFI type. This is implemented using a runtime callback registry with proper memory management via `R_PreserveObject`/`R_ReleaseObject`.
+The Rtinycc package now supports passing R functions as callbacks to compiled C code via `callback:<signature>` and `callback_async:<signature>` FFI types. Trampolines are generated at compile time and use the runtime callback registry with proper memory management via `R_PreserveObject`/`R_ReleaseObject`.
 
 ### API Overview
 
 **R Functions:**
 - `tcc_callback(fun, signature, threadsafe = FALSE)` - Register an R function as a C callback
 - `tcc_callback_close(callback)` - Unregister and cleanup callback resources
-- `tcc_callback_ptr(callback)` - Get the C-compatible pointer for passing to compiled code
+- `tcc_callback_ptr(callback)` - Get the user-data pointer for passing to compiled code
 - `tcc_callback_valid(callback)` - Check if a callback is still valid
 
 **C Runtime Functions:**
@@ -338,6 +339,7 @@ The Rtinycc package now supports passing R functions as callbacks to compiled C 
 - `RC_get_callback_ptr()` - Return external pointer to callback token
 - `RC_callback_is_valid()` - Check callback validity
 - `RC_invoke_callback()` - Invoke the R function (called from generated trampolines)
+- `RC_callback_async_schedule_c()` - Enqueue callback on main thread (async trampolines)
 
 ### Usage Example
 
@@ -350,9 +352,8 @@ cb <- tcc_callback(function(x) x * 2, signature = "double (*)(double)")
 # Get pointer to pass to C code
 ptr <- tcc_callback_ptr(cb)
 
-# Use in FFI binding - note: trampolines for callback invocation
-# in compiled FFI code are planned for future implementation
-# For now, callbacks can be passed to C code and called directly
+# Use in FFI binding with trampolines generated via callback:<signature>
+# or callback_async:<signature> in tcc_bind()
 
 # Cleanup when done
 tcc_callback_close(cb)
@@ -367,7 +368,7 @@ The `callback` type is now part of the FFI type system in `R/ffi_types.R`:
 ffi <- tcc_ffi() |>
   tcc_bind(
     process_data = list(
-      args = list("ptr", "i32", "callback"),  # callback as last arg
+      args = list("callback:double(double)", "ptr", "i32"),
       returns = "i32"
     )
   )
@@ -375,8 +376,8 @@ ffi <- tcc_ffi() |>
 
 ### Thread-Safety
 
-- **Default (`threadsafe = FALSE`)**: Callbacks must be invoked from the R main thread. This is the safe default and recommended for most use cases.
-- **Experimental (`threadsafe = TRUE`)**: Reserved for future implementation of cross-thread marshaling. Currently has no effect beyond documentation.
+- **Default (`threadsafe = FALSE`)**: Use `callback:<signature>` for same-thread invocation.
+- **Async (`callback_async:<signature>`)**: Thread-safe scheduling from worker threads; returns default values immediately.
 
 ### Memory Management
 

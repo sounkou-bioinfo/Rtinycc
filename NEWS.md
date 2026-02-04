@@ -1,6 +1,9 @@
 # Rtinycc 0.0.1.9000 (development version)
 
-- Enhance Callback using `background`/`later` pattern
+- Generate callback trampolines from `callback:<signature>` bindings so C APIs can accept function pointers directly
+- Add `callback_async:<signature>` for thread-safe scheduling on the main thread
+- Callback errors now warn and return type-appropriate defaults (avoid longjmp)
+- Update README examples for callbacks, async callbacks, enums, and bitfields
 
 # Rtinycc 0.0.1
 
