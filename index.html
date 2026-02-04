@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56f39dc2d000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x64890af29000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -119,10 +119,605 @@
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 <div class="section level3">
+<h3 id="a-declarative-ffi-api">A declarative FFI API<a class="anchor" aria-label="anchor" href="#a-declarative-ffi-api"></a>
+</h3>
+<p>A declarative interface inspired by <a href="https://bun.com/docs/runtime/ffi" class="external-link">Bun:FFI</a> is provided. Define types explicitly and let <code>Rtinycc</code> generate the binding code automatically by using <code>TinyCC</code> to compile a dll.</p>
+<div class="section level4">
+<h4 id="type-system">Type System<a class="anchor" aria-label="anchor" href="#type-system"></a>
+</h4>
+<p>The FFI exposes a small, explicit set of type mappings between R and C. Conversions are explicit and predictable so callers know when data is shared versus copied.</p>
+<ul>
+<li>
+<strong>Scalars</strong>: <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code> (integers); <code>f32</code>, <code>f64</code> (floats); <code>bool</code> (logical); <code>cstring</code> (NUL-terminated C string).</li>
+<li>
+<strong>Arrays (zero-copy)</strong>: <code>raw</code> → <code>uint8_t*</code>; <code>integer_array</code> → <code>int32_t*</code>; <code>numeric_array</code> → <code>double*</code>.</li>
+<li>
+<strong>Pointers</strong>: <code>ptr</code> (opaque <code>externalptr</code>), <code>sexp</code> (pass <code>SEXP</code> directly), <code>callback:&lt;signature&gt;</code> (sync trampoline), <code>callback_async:&lt;signature&gt;</code> (async trampoline).</li>
+</ul>
+<div class="section level5">
+<h5 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
+</h5>
+<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the R callback arguments and always call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when finished. When using <code><a href="reference/tcc_bind.html">tcc_bind()</a></code>, specify a <code>callback:&lt;signature&gt;</code> argument so the trampoline can be generated, and pass <code>tcc_callback_ptr(cb)</code> as the user data pointer to the C API.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">2</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
+<span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">#define _Complex</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">double call_cb(double (*cb)(void* ctx, double), void* ctx, double x) {</span></span>
+<span><span class="st">  return cb(ctx, x);</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    call_cb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"f64"</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">call_cb</span><span class="op">(</span><span class="va">cb</span>, <span class="va">cb_ptr</span>, <span class="fl">21.0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 42</span></span>
+<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">cb_ptr</span>, <span class="va">cb</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="callback-errors">Callback errors<a class="anchor" aria-label="anchor" href="#callback-errors"></a>
+</h5>
+<p>If the callback throws, a warning is emitted and a type-appropriate default value is returned:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cb_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"boom"</span><span class="op">)</span>,</span>
+<span>  signature <span class="op">=</span> <span class="st">"double (*)(double)"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">cb_ptr_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb_err</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">code_err</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">#define _Complex</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {</span></span>
+<span><span class="st">  return cb(ctx, x);</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="va">ffi_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_err</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    call_cb_err <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"f64"</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">warned</span> <span class="op">&lt;-</span> <span class="cn">FALSE</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">withCallingHandlers</a></span><span class="op">(</span></span>
+<span>  <span class="va">ffi_err</span><span class="op">$</span><span class="fu">call_cb_err</span><span class="op">(</span><span class="va">cb_err</span>, <span class="va">cb_ptr_err</span>, <span class="fl">1.0</span><span class="op">)</span>,</span>
+<span>  warning <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">w</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">warned</span> <span class="op">&lt;&lt;-</span> <span class="cn">TRUE</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">invokeRestart</a></span><span class="op">(</span><span class="st">"muffleWarning"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>warned <span class="op">=</span> <span class="va">warned</span>, result <span class="op">=</span> <span class="va">res</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $warned</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $result</span></span>
+<span><span class="co">#&gt; [1] NA</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_err</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_err</span>, <span class="va">cb_ptr_err</span>, <span class="va">cb_err</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="async-callbacks-main-thread-queue">Async callbacks (main-thread queue)<a class="anchor" aria-label="anchor" href="#async-callbacks-main-thread-queue"></a>
+</h5>
+<p>For cross-thread scheduling, initialize the async dispatcher and enqueue a callback from C on a worker thread using <code>callback_async:&lt;signature&gt;</code>. On Unix-like systems, callbacks are executed on the main thread.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span>  <span class="fu"><a href="reference/tcc_callback_async_enable.html">tcc_callback_async_enable</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
+<span>  <span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span> <span class="va">hits</span> <span class="op">&lt;&lt;-</span> <span class="va">hits</span> <span class="op">+</span> <span class="va">x</span>; <span class="cn">NULL</span> <span class="op">}</span>, signature <span class="op">=</span> <span class="st">"void (*)(int)"</span><span class="op">)</span></span>
+<span>  <span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span>  <span class="co"># user-data token for async scheduling</span></span>
+<span></span>
+<span>  <span class="va">code_async</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">#define _Complex</span></span>
+<span><span class="st">#include &lt;pthread.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">struct task { void (*cb)(void* ctx, int); void* ctx; int value; };</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">static void* worker(void* data) {</span></span>
+<span><span class="st">  struct task* t = (struct task*) data;</span></span>
+<span><span class="st">  t-&gt;cb(t-&gt;ctx, t-&gt;value);</span></span>
+<span><span class="st">  return NULL;</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {</span></span>
+<span><span class="st">  if (!cb || !ctx) return -1;</span></span>
+<span><span class="st">  const int n = 100;</span></span>
+<span><span class="st">  struct task tasks[100];</span></span>
+<span><span class="st">  pthread_t th[100];</span></span>
+<span><span class="st">  for (int i = 0; i &lt; n; i++) {</span></span>
+<span><span class="st">    tasks[i].cb = cb;</span></span>
+<span><span class="st">    tasks[i].ctx = ctx;</span></span>
+<span><span class="st">    tasks[i].value = value;</span></span>
+<span><span class="st">    if (pthread_create(&amp;th[i], NULL, worker, &amp;tasks[i]) != 0) {</span></span>
+<span><span class="st">      for (int j = 0; j &lt; i; j++) {</span></span>
+<span><span class="st">        pthread_join(th[j], NULL);</span></span>
+<span><span class="st">      }</span></span>
+<span><span class="st">      return -2;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  for (int i = 0; i &lt; n; i++) {</span></span>
+<span><span class="st">    pthread_join(th[i], NULL);</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  return 0;</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
+<span><span class="va">ffi_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_async</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"pthread"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>      spawn_async <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback_async:void(int)"</span>, <span class="st">"ptr"</span>, <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>        returns <span class="op">=</span> <span class="st">"i32"</span></span>
+<span>      <span class="op">)</span></span>
+<span>    <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">rc</span> <span class="op">&lt;-</span> <span class="va">ffi_async</span><span class="op">$</span><span class="fu">spawn_async</span><span class="op">(</span><span class="va">cb_async</span>, <span class="va">cb_ptr</span>, <span class="fl">2L</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">hits</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 200</span></span>
+<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_async</span>, <span class="va">cb_ptr</span>, <span class="va">cb_async</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
+</h5>
+<p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Free struct instances when you are done.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">struct point { double x; double y; int id; };</span></span>
+<span><span class="st">double point_distance(struct point* a, struct point* b) {</span></span>
+<span><span class="st">  double dx = a-&gt;x - b-&gt;x;</span></span>
+<span><span class="st">  double dy = a-&gt;y - b-&gt;y;</span></span>
+<span><span class="st">  return dx * dx + dy * dy;</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">'point'</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">'f64'</span>, y <span class="op">=</span> <span class="st">'f64'</span>, id <span class="op">=</span> <span class="st">'i32'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>point_distance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
+<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_id</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">1L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
+<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_id</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">2L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_get_x</span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 25</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_free</span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_free</span><span class="op">(</span><span class="va">p2</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="enums">Enums<a class="anchor" aria-label="anchor" href="#enums"></a>
+</h5>
+<p>Enums are supported via <code><a href="reference/tcc_enum.html">tcc_enum()</a></code> and exported as helper functions:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">enum status { OK = 0, ERROR = 1, PENDING = 2 };</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_enum.html">tcc_enum</a></span><span class="op">(</span><span class="st">"status"</span>, constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"OK"</span>, <span class="st">"ERROR"</span>, <span class="st">"PENDING"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_ERROR</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="bitfields">Bitfields<a class="anchor" aria-label="anchor" href="#bitfields"></a>
+</h5>
+<p>Bitfields are handled by the C compiler; accessors read/write them like normal fields:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">struct status {</span></span>
+<span><span class="st">  unsigned int flag : 1;</span></span>
+<span><span class="st">  unsigned int code : 6;</span></span>
+<span><span class="st">};</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"status"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>flag <span class="op">=</span> <span class="st">"u8"</span>, code <span class="op">=</span> <span class="st">"u8"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">status_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">status_set_flag</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">status_set_code</span><span class="op">(</span><span class="va">s</span>, <span class="fl">42</span><span class="op">)</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">status_get_flag</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">status_get_code</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 42</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">status_free</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">s</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+</div>
+<div class="section level4">
+<h4 id="simple-function">Simple function<a class="anchor" aria-label="anchor" href="#simple-function"></a>
+</h4>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span></span>
+<span><span class="co"># Define and compile in one chain</span></span>
+<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    add <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
+<span><span class="st">    int add(int a, int b) {</span></span>
+<span><span class="st">      return a + b;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  "</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Call directly with type conversion</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="fl">5L</span>, <span class="fl">3L</span><span class="op">)</span></span>
+<span><span class="va">result</span></span>
+<span><span class="co">#&gt; [1] 8</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="working-with-r-arrays">Working with R arrays<a class="anchor" aria-label="anchor" href="#working-with-r-arrays"></a>
+</h4>
+<p>Pass R vectors to C with zero-copy:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    sum_array <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"integer_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i64"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
+<span><span class="st">    int64_t sum_array(int32_t* arr, int32_t n) {</span></span>
+<span><span class="st">      int64_t sum = 0;</span></span>
+<span><span class="st">      for(int i = 0; i &lt; n; i++) {</span></span>
+<span><span class="st">        sum += arr[i];</span></span>
+<span><span class="st">      }</span></span>
+<span><span class="st">      return sum;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  "</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Pass R integer vector directly</span></span>
+<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fl">1</span><span class="op">:</span><span class="fl">100</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">result</span></span>
+<span><span class="co">#&gt; [1] 5050</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">x</span>, <span class="va">result</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
+</h4>
+<p>Link against system libraries like libm</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Link against math library</span></span>
+<span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
+<span>  <span class="st">"libm.so.6"</span>,</span>
+<span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span>
+<span>    sin <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
+<div class="section level5">
+<h5 id="sqlite-entry-point">SQLite entry point<a class="anchor" aria-label="anchor" href="#sqlite-entry-point"></a>
+</h5>
+<p>Use SQLite to validate the external library workflow and inspect the version string.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Link the system SQLite3 library and expose a few symbols</span></span>
+<span><span class="va">sqlite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
+<span>  <span class="st">"libsqlite3.so"</span>,</span>
+<span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    sqlite3_libversion <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"cstring"</span><span class="op">)</span>,</span>
+<span>    sqlite3_open <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"cstring"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    sqlite3_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    sqlite3_exec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span>, <span class="st">"ptr"</span>, <span class="st">"ptr"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  libs <span class="op">=</span> <span class="st">"sqlite3"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Query the SQLite library version</span></span>
+<span><span class="va">sqlite</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "3.45.1"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="sqlite-with-an-r-callback">SQLite with an R callback<a class="anchor" aria-label="anchor" href="#sqlite-with-an-r-callback"></a>
+</h5>
+<p>Use an R callback from <code>sqlite3_exec()</code> via a small C bridge that calls <code>RC_invoke_callback()</code>.</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"hello from R callback:"</span>, <span class="va">x</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span>    <span class="fl">0L</span></span>
+<span>  <span class="op">}</span>,</span>
+<span>  signature <span class="op">=</span> <span class="st">"int (*)(cstring)"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">sqlite_cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'  </span></span>
+<span><span class="st">  #define _Complex</span></span>
+<span><span class="st">  #include &lt;R.h&gt;</span></span>
+<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
+<span><span class="st">  #include &lt;stdio.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  typedef struct { int id; } callback_token_t;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  SEXP RC_invoke_callback(SEXP, SEXP);</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  static int r_callback(void* ctx, int argc, char** argv, char** col) {</span></span>
+<span><span class="st">    callback_token_t* tok = (callback_token_t*)ctx;</span></span>
+<span><span class="st">    int id = tok-&gt;id;</span></span>
+<span><span class="st">    char buf[32];</span></span>
+<span><span class="st">    snprintf(buf, sizeof(buf), "%d", id);</span></span>
+<span><span class="st">    SEXP idstr = mkString(buf);</span></span>
+<span><span class="st">    SEXP args = PROTECT(allocVector(VECSXP, 1));</span></span>
+<span><span class="st">    const char* val = (argc &gt; 0 &amp;&amp; argv &amp;&amp; argv[0]) ? argv[0] : "";</span></span>
+<span><span class="st">    SET_VECTOR_ELT(args, 0, mkString(val));</span></span>
+<span><span class="st">    SEXP res = RC_invoke_callback(idstr, args);</span></span>
+<span><span class="st">    UNPROTECT(1);</span></span>
+<span><span class="st">    return asInteger(res);</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  void* open_inmemory_db() {</span></span>
+<span><span class="st">    sqlite3* db = NULL;</span></span>
+<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
+<span><span class="st">    return db;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  int close_db(void* db_ptr) {</span></span>
+<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
+<span><span class="st">    return sqlite3_close(db);</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  int exec_with_r_callback(void* db_ptr, const char* sql, void* cb_ptr) {</span></span>
+<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
+<span><span class="st">    char* err_msg = NULL;</span></span>
+<span><span class="st">    int rc = sqlite3_exec(db, sql, r_callback, cb_ptr, &amp;err_msg);</span></span>
+<span><span class="st">    if (err_msg) {</span></span>
+<span><span class="st">      sqlite3_free(err_msg);</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    return rc;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    open_inmemory_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
+<span>    close_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    exec_with_r_callback <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">db_ptr</span> <span class="op">&lt;-</span> <span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">open_inmemory_db</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"CREATE TABLE items (id INTEGER, name TEXT);"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"INSERT INTO items VALUES (1, \'test\');"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"SELECT name FROM items;"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; hello from R callback: test</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">close_db</span><span class="op">(</span><span class="va">db_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_cb</span>, <span class="va">db_ptr</span>, <span class="va">cb_ptr</span>, <span class="va">cb</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="sqlite-with-an-opaque-struct-wrapper">SQLite with an opaque struct wrapper<a class="anchor" aria-label="anchor" href="#sqlite-with-an-opaque-struct-wrapper"></a>
+</h5>
+<p>Wrap the opaque <code>sqlite3*</code> in a small struct so the FFI exercises struct allocation and accessors.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">sqlite_struct</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
+<span><span class="st">  struct sqlite_handle { sqlite3* db; };</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  int sqlite_handle_open(struct sqlite_handle* h, const char* path) {</span></span>
+<span><span class="st">    return sqlite3_open(path, &amp;h-&gt;db);</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  int sqlite_handle_close(struct sqlite_handle* h) {</span></span>
+<span><span class="st">    if (h-&gt;db) {</span></span>
+<span><span class="st">      int rc = sqlite3_close(h-&gt;db);</span></span>
+<span><span class="st">      h-&gt;db = NULL;</span></span>
+<span><span class="st">      return rc;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    return 0;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  int sqlite_handle_exec(struct sqlite_handle* h, const char* sql) {</span></span>
+<span><span class="st">    char* err_msg = NULL;</span></span>
+<span><span class="st">    int rc = sqlite3_exec(h-&gt;db, sql, NULL, NULL, &amp;err_msg);</span></span>
+<span><span class="st">    if (err_msg) {</span></span>
+<span><span class="st">      sqlite3_free(err_msg);</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    return rc;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">'sqlite_handle'</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>db <span class="op">=</span> <span class="st">'ptr'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    sqlite_handle_open <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    sqlite_handle_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    sqlite_handle_exec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">h</span> <span class="op">&lt;-</span> <span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_open</span><span class="op">(</span><span class="va">h</span>, <span class="st">":memory:"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_exec</span><span class="op">(</span><span class="va">h</span>, <span class="st">"CREATE TABLE items (id INTEGER, name TEXT);"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_exec</span><span class="op">(</span><span class="va">h</span>, <span class="st">"INSERT INTO items VALUES (1, \'test\');"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_close</span><span class="op">(</span><span class="va">h</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_free</span><span class="op">(</span><span class="va">h</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_struct</span>, <span class="va">h</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="custom-wrapper-functions-sqlite-with-pointer-utilities">Custom wrapper functions: SQLite with pointer utilities<a class="anchor" aria-label="anchor" href="#custom-wrapper-functions-sqlite-with-pointer-utilities"></a>
+</h5>
+<p>You can also create custom wrapper functions</p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create SQLite with pointer utilities integration</span></span>
+<span><span class="va">sqlite_with_utils</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'  </span></span>
+<span><span class="st">  // Helper to create in-memory database</span></span>
+<span><span class="st">  void* tcc_create_inmemory_db_with_utils() {</span></span>
+<span><span class="st">    sqlite3* db = NULL;</span></span>
+<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
+<span><span class="st">    return db;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  // Helper that executes SQL</span></span>
+<span><span class="st">  int tcc_exec_with_utils(void* db_ptr, const char* sql) {</span></span>
+<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
+<span><span class="st">    char* err_msg = NULL;</span></span>
+<span><span class="st">    int rc = sqlite3_exec(db, sql, NULL, NULL, &amp;err_msg);</span></span>
+<span><span class="st">    if (err_msg) {</span></span>
+<span><span class="st">      sqlite3_free(err_msg);</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    return rc;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  </span></span>
+<span><span class="st">  // Helper to create and populate database</span></span>
+<span><span class="st">  void* tcc_setup_test_db() {</span></span>
+<span><span class="st">    sqlite3* db = NULL;</span></span>
+<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
+<span><span class="st">    if (db) {</span></span>
+<span><span class="st">      sqlite3_exec(db, "CREATE TABLE items (id INTEGER, name TEXT);", NULL, NULL, NULL);</span></span>
+<span><span class="st">      sqlite3_exec(db, "INSERT INTO items VALUES (1, \'test\');", NULL, NULL, NULL);</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    return db;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    sqlite3_libversion <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"cstring"</span><span class="op">)</span>,</span>
+<span>    sqlite3_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    tcc_create_inmemory_db_with_utils <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
+<span>    tcc_exec_with_utils <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    tcc_setup_test_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Use pointer utilities with SQLite</span></span>
+<span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "0x64890c4f9c68"</span></span>
+<span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
+<span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "3.45.1"</span></span>
+<span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_close</span><span class="op">(</span><span class="va">db</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_with_utils</span>, <span class="va">db</span>, <span class="va">result</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+</div>
+</div>
+<div class="section level3">
+<h3 id="lower-level-api">Lower level API<a class="anchor" aria-label="anchor" href="#lower-level-api"></a>
+</h3>
+<p>Using <code>#Define _Complex</code> as workaround of <code>TinyCC</code>’s lack of support for <a href="https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html" class="external-link">complex types</a>, we link against R’s install headers and <code>libR</code> to call R’s C API function. This workaround is used in the binding generation too.</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create new state for R linking example</span></span>
+<span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Add R include and library paths using Rtinycc functions</span></span>
+<span><span class="va">r_include</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Rhome.html" class="external-link">R.home</a></span><span class="op">(</span><span class="st">"include"</span><span class="op">)</span></span>
+<span><span class="va">r_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Rhome.html" class="external-link">R.home</a></span><span class="op">(</span><span class="st">"lib"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/tcc_add_include_path.html">tcc_add_include_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_include</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="reference/tcc_add_library_path.html">tcc_add_library_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_lib</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span></span>
+<span><span class="co"># Using #define _Complex as workaround of TinyCC’s lack of support for complex</span></span>
+<span><span class="co"># types, we can link against R’s install headers and libR to call the R C API.</span></span>
+<span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
+<span><span class="st">#define _Complex</span></span>
+<span><span class="st">#include &lt;R.h&gt;</span></span>
+<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">void hello_world() {</span></span>
+<span><span class="st">  Rprintf("Hello World from compiled C code!\\n");</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">double call_r_sqrt(void) {</span></span>
+<span><span class="st">  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));</span></span>
+<span><span class="st">  SEXP val = PROTECT(Rf_ScalarReal(16.0));</span></span>
+<span><span class="st">  SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));</span></span>
+<span><span class="st">  SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));</span></span>
+<span><span class="st">  double res = REAL(out)[0];</span></span>
+<span><span class="st">  UNPROTECT(4);</span></span>
+<span><span class="st">  return res;</span></span>
+<span><span class="st">}</span></span>
+<span><span class="st">'</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/tcc_compile_string.html">tcc_compile_string</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">code</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="reference/tcc_relocate.html">tcc_relocate</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Hello World from compiled C code!</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"call_r_sqrt"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
+</div>
+<div class="section level3">
 <h3 id="header-parsing-with-treesitterc-and-generate-bindings">Header parsing with <code>treesitter.c</code> and generate bindings<a class="anchor" aria-label="anchor" href="#header-parsing-with-treesitterc-and-generate-bindings"></a>
 </h3>
 <p>For header-driven bindings, <code>treesitter.c</code> provides C header parsers you can use to extract symbols before declaring FFI bindings.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/treesitter.c/" class="external-link">treesitter.c</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">header</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
@@ -208,601 +803,6 @@
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">2L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 3</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">scale</span><span class="op">(</span><span class="fl">2.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="a-declarative-ffi-api">A declarative FFI API<a class="anchor" aria-label="anchor" href="#a-declarative-ffi-api"></a>
-</h3>
-<p>A declarative interface inspired by <a href="https://bun.com/docs/runtime/ffi" class="external-link">Bun:FFI</a> is provided. Define types explicitly and let <code>Rtinycc</code> generate the binding code automatically by using <code>TinyCC</code> to compile a dll.</p>
-<div class="section level4">
-<h4 id="type-system">Type System<a class="anchor" aria-label="anchor" href="#type-system"></a>
-</h4>
-<p>The FFI exposes a small, explicit set of type mappings between R and C. Conversions are explicit and predictable so callers know when data is shared versus copied.</p>
-<ul>
-<li>
-<strong>Scalars</strong>: <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code> (integers); <code>f32</code>, <code>f64</code> (floats); <code>bool</code> (logical); <code>cstring</code> (NUL-terminated C string).</li>
-<li>
-<strong>Arrays (zero-copy)</strong>: <code>raw</code> → <code>uint8_t*</code>; <code>integer_array</code> → <code>int32_t*</code>; <code>numeric_array</code> → <code>double*</code>.</li>
-<li>
-<strong>Pointers</strong>: <code>ptr</code> (opaque <code>externalptr</code>), <code>sexp</code> (pass <code>SEXP</code> directly), <code>callback:&lt;signature&gt;</code> (sync trampoline), <code>callback_async:&lt;signature&gt;</code> (async trampoline).</li>
-</ul>
-<div class="section level5">
-<h5 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
-</h5>
-<p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Provide a C signature that matches the R callback arguments and always call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when finished. When using <code><a href="reference/tcc_bind.html">tcc_bind()</a></code>, specify a <code>callback:&lt;signature&gt;</code> argument so the trampoline can be generated, and pass <code>tcc_callback_ptr(cb)</code> as the user data pointer to the C API.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">2</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
-<span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">#define _Complex</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">double call_cb(double (*cb)(void* ctx, double), void* ctx, double x) {</span></span>
-<span><span class="st">  return cb(ctx, x);</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    call_cb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>,</span>
-<span>      returns <span class="op">=</span> <span class="st">"f64"</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">call_cb</span><span class="op">(</span><span class="va">cb</span>, <span class="va">cb_ptr</span>, <span class="fl">21.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 42</span></span>
-<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">cb_ptr</span>, <span class="va">cb</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="callback-errors">Callback errors<a class="anchor" aria-label="anchor" href="#callback-errors"></a>
-</h5>
-<p>If the callback throws, a warning is emitted and a type-appropriate default value is returned:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cb_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"boom"</span><span class="op">)</span>,</span>
-<span>  signature <span class="op">=</span> <span class="st">"double (*)(double)"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">cb_ptr_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb_err</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">code_err</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">#define _Complex</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {</span></span>
-<span><span class="st">  return cb(ctx, x);</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">ffi_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_err</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    call_cb_err <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"f64"</span><span class="op">)</span>,</span>
-<span>      returns <span class="op">=</span> <span class="st">"f64"</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">warned</span> <span class="op">&lt;-</span> <span class="cn">FALSE</span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">withCallingHandlers</a></span><span class="op">(</span></span>
-<span>  <span class="va">ffi_err</span><span class="op">$</span><span class="fu">call_cb_err</span><span class="op">(</span><span class="va">cb_err</span>, <span class="va">cb_ptr_err</span>, <span class="fl">1.0</span><span class="op">)</span>,</span>
-<span>  warning <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">w</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">warned</span> <span class="op">&lt;&lt;-</span> <span class="cn">TRUE</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">invokeRestart</a></span><span class="op">(</span><span class="st">"muffleWarning"</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>warned <span class="op">=</span> <span class="va">warned</span>, result <span class="op">=</span> <span class="va">res</span><span class="op">)</span></span>
-<span><span class="co">#&gt; $warned</span></span>
-<span><span class="co">#&gt; [1] TRUE</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $result</span></span>
-<span><span class="co">#&gt; [1] NA</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_err</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_err</span>, <span class="va">cb_ptr_err</span>, <span class="va">cb_err</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="async-callbacks-main-thread-queue">Async callbacks (main-thread queue)<a class="anchor" aria-label="anchor" href="#async-callbacks-main-thread-queue"></a>
-</h5>
-<p>For cross-thread scheduling, initialize the async dispatcher and enqueue a callback from C on a worker thread using <code>callback_async:&lt;signature&gt;</code>. On Unix-like systems, callbacks are executed on the main thread.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span>  <span class="fu"><a href="reference/tcc_callback_async_enable.html">tcc_callback_async_enable</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
-<span>  <span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span> <span class="va">hits</span> <span class="op">&lt;&lt;-</span> <span class="va">hits</span> <span class="op">+</span> <span class="va">x</span>; <span class="cn">NULL</span> <span class="op">}</span>, signature <span class="op">=</span> <span class="st">"void (*)(int)"</span><span class="op">)</span></span>
-<span>  <span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span>  <span class="co"># user-data token for async scheduling</span></span>
-<span></span>
-<span>  <span class="va">code_async</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">#define _Complex</span></span>
-<span><span class="st">#include &lt;pthread.h&gt;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">struct task { void (*cb)(void* ctx, int); void* ctx; int value; };</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">static void* worker(void* data) {</span></span>
-<span><span class="st">  struct task* t = (struct task*) data;</span></span>
-<span><span class="st">  t-&gt;cb(t-&gt;ctx, t-&gt;value);</span></span>
-<span><span class="st">  return NULL;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {</span></span>
-<span><span class="st">  if (!cb || !ctx) return -1;</span></span>
-<span><span class="st">  const int n = 100;</span></span>
-<span><span class="st">  struct task tasks[100];</span></span>
-<span><span class="st">  pthread_t th[100];</span></span>
-<span><span class="st">  for (int i = 0; i &lt; n; i++) {</span></span>
-<span><span class="st">    tasks[i].cb = cb;</span></span>
-<span><span class="st">    tasks[i].ctx = ctx;</span></span>
-<span><span class="st">    tasks[i].value = value;</span></span>
-<span><span class="st">    if (pthread_create(&amp;th[i], NULL, worker, &amp;tasks[i]) != 0) {</span></span>
-<span><span class="st">      for (int j = 0; j &lt; i; j++) {</span></span>
-<span><span class="st">        pthread_join(th[j], NULL);</span></span>
-<span><span class="st">      }</span></span>
-<span><span class="st">      return -2;</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  for (int i = 0; i &lt; n; i++) {</span></span>
-<span><span class="st">    pthread_join(th[i], NULL);</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  return 0;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st">'</span></span>
-<span><span class="va">ffi_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code_async</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"pthread"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>      spawn_async <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback_async:void(int)"</span>, <span class="st">"ptr"</span>, <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>        returns <span class="op">=</span> <span class="st">"i32"</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">rc</span> <span class="op">&lt;-</span> <span class="va">ffi_async</span><span class="op">$</span><span class="fu">spawn_async</span><span class="op">(</span><span class="va">cb_async</span>, <span class="va">cb_ptr</span>, <span class="fl">2L</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">hits</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 200</span></span>
-<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_async</span>, <span class="va">cb_ptr</span>, <span class="va">cb_async</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
-</h5>
-<p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> and <code><a href="reference/tcc_union.html">tcc_union()</a></code> to generate allocation and accessor helpers and <code><a href="reference/tcc_introspect.html">tcc_introspect()</a></code> for size/alignment information. Free struct instances when you are done.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">struct point { double x; double y; int id; };</span></span>
-<span><span class="st">double point_distance(struct point* a, struct point* b) {</span></span>
-<span><span class="st">  double dx = a-&gt;x - b-&gt;x;</span></span>
-<span><span class="st">  double dy = a-&gt;y - b-&gt;y;</span></span>
-<span><span class="st">  return dx * dx + dy * dy;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">'point'</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">'f64'</span>, y <span class="op">=</span> <span class="st">'f64'</span>, id <span class="op">=</span> <span class="st">'i32'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>point_distance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_id</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">point_set_id</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">2L</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_get_x</span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 25</span></span>
-<span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_free</span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
-<span><span class="co">#&gt; NULL</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">point_free</span><span class="op">(</span><span class="va">p2</span><span class="op">)</span></span>
-<span><span class="co">#&gt; NULL</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="enums">Enums<a class="anchor" aria-label="anchor" href="#enums"></a>
-</h5>
-<p>Enums are supported via <code><a href="reference/tcc_enum.html">tcc_enum()</a></code> and exported as helper functions:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">enum status { OK = 0, ERROR = 1, PENDING = 2 };</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_enum.html">tcc_enum</a></span><span class="op">(</span><span class="st">"status"</span>, constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"OK"</span>, <span class="st">"ERROR"</span>, <span class="st">"PENDING"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_ERROR</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 1</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="bitfields">Bitfields<a class="anchor" aria-label="anchor" href="#bitfields"></a>
-</h5>
-<p>Bitfields are handled by the C compiler; accessors read/write them like normal fields:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">struct status {</span></span>
-<span><span class="st">  unsigned int flag : 1;</span></span>
-<span><span class="st">  unsigned int code : 6;</span></span>
-<span><span class="st">};</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"status"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>flag <span class="op">=</span> <span class="st">"u8"</span>, code <span class="op">=</span> <span class="st">"u8"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">status_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">status_set_flag</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">status_set_code</span><span class="op">(</span><span class="va">s</span>, <span class="fl">42</span><span class="op">)</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">status_get_flag</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 1</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">status_get_code</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 42</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">status_free</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
-<span><span class="co">#&gt; NULL</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">s</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-</div>
-<div class="section level4">
-<h4 id="simple-function">Simple function<a class="anchor" aria-label="anchor" href="#simple-function"></a>
-</h4>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span></span>
-<span><span class="co"># Define and compile in one chain</span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    add <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
-<span><span class="st">    int add(int a, int b) {</span></span>
-<span><span class="st">      return a + b;</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">  "</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Call directly with type conversion</span></span>
-<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="fl">5L</span>, <span class="fl">3L</span><span class="op">)</span></span>
-<span><span class="va">result</span></span>
-<span><span class="co">#&gt; [1] 8</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="working-with-r-arrays">Working with R arrays<a class="anchor" aria-label="anchor" href="#working-with-r-arrays"></a>
-</h4>
-<p>Pass R vectors to C with zero-copy:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    sum_array <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"integer_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i64"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
-<span><span class="st">    int64_t sum_array(int32_t* arr, int32_t n) {</span></span>
-<span><span class="st">      int64_t sum = 0;</span></span>
-<span><span class="st">      for(int i = 0; i &lt; n; i++) {</span></span>
-<span><span class="st">        sum += arr[i];</span></span>
-<span><span class="st">      }</span></span>
-<span><span class="st">      return sum;</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">  "</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Pass R integer vector directly</span></span>
-<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fl">1</span><span class="op">:</span><span class="fl">100</span></span>
-<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">result</span></span>
-<span><span class="co">#&gt; [1] 5050</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="va">x</span>, <span class="va">result</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
-</h4>
-<p>Link against system libraries like libm</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Link against math library</span></span>
-<span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
-<span>  <span class="st">"libm.so.6"</span>,</span>
-<span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span>
-<span>    sin <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
-<div class="section level5">
-<h5 id="sqlite-entry-point">SQLite entry point<a class="anchor" aria-label="anchor" href="#sqlite-entry-point"></a>
-</h5>
-<p>Use SQLite to validate the external library workflow and inspect the version string.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Link the system SQLite3 library and expose a few symbols</span></span>
-<span><span class="va">sqlite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
-<span>  <span class="st">"libsqlite3.so"</span>,</span>
-<span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    sqlite3_libversion <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"cstring"</span><span class="op">)</span>,</span>
-<span>    sqlite3_open <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"cstring"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    sqlite3_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    sqlite3_exec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span>, <span class="st">"ptr"</span>, <span class="st">"ptr"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  libs <span class="op">=</span> <span class="st">"sqlite3"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Query the SQLite library version</span></span>
-<span><span class="va">sqlite</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "3.45.1"</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="sqlite-with-an-r-callback">SQLite with an R callback<a class="anchor" aria-label="anchor" href="#sqlite-with-an-r-callback"></a>
-</h5>
-<p>Use an R callback from <code>sqlite3_exec()</code> via a small C bridge that calls <code>RC_invoke_callback()</code>.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"hello from R callback:"</span>, <span class="va">x</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span>    <span class="fl">0L</span></span>
-<span>  <span class="op">}</span>,</span>
-<span>  signature <span class="op">=</span> <span class="st">"int (*)(cstring)"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">sqlite_cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'  </span></span>
-<span><span class="st">  #define _Complex</span></span>
-<span><span class="st">  #include &lt;R.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">  #include &lt;stdio.h&gt;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  typedef struct { int id; } callback_token_t;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  SEXP RC_invoke_callback(SEXP, SEXP);</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  static int r_callback(void* ctx, int argc, char** argv, char** col) {</span></span>
-<span><span class="st">    callback_token_t* tok = (callback_token_t*)ctx;</span></span>
-<span><span class="st">    int id = tok-&gt;id;</span></span>
-<span><span class="st">    char buf[32];</span></span>
-<span><span class="st">    snprintf(buf, sizeof(buf), "%d", id);</span></span>
-<span><span class="st">    SEXP idstr = mkString(buf);</span></span>
-<span><span class="st">    SEXP args = PROTECT(allocVector(VECSXP, 1));</span></span>
-<span><span class="st">    const char* val = (argc &gt; 0 &amp;&amp; argv &amp;&amp; argv[0]) ? argv[0] : "";</span></span>
-<span><span class="st">    SET_VECTOR_ELT(args, 0, mkString(val));</span></span>
-<span><span class="st">    SEXP res = RC_invoke_callback(idstr, args);</span></span>
-<span><span class="st">    UNPROTECT(1);</span></span>
-<span><span class="st">    return asInteger(res);</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  void* open_inmemory_db() {</span></span>
-<span><span class="st">    sqlite3* db = NULL;</span></span>
-<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
-<span><span class="st">    return db;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  int close_db(void* db_ptr) {</span></span>
-<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
-<span><span class="st">    return sqlite3_close(db);</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  int exec_with_r_callback(void* db_ptr, const char* sql, void* cb_ptr) {</span></span>
-<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
-<span><span class="st">    char* err_msg = NULL;</span></span>
-<span><span class="st">    int rc = sqlite3_exec(db, sql, r_callback, cb_ptr, &amp;err_msg);</span></span>
-<span><span class="st">    if (err_msg) {</span></span>
-<span><span class="st">      sqlite3_free(err_msg);</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    return rc;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    open_inmemory_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
-<span>    close_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    exec_with_r_callback <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">db_ptr</span> <span class="op">&lt;-</span> <span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">open_inmemory_db</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"CREATE TABLE items (id INTEGER, name TEXT);"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"INSERT INTO items VALUES (1, \'test\');"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"SELECT name FROM items;"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; hello from R callback: test</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">close_db</span><span class="op">(</span><span class="va">db_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_cb</span>, <span class="va">db_ptr</span>, <span class="va">cb_ptr</span>, <span class="va">cb</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="sqlite-with-an-opaque-struct-wrapper">SQLite with an opaque struct wrapper<a class="anchor" aria-label="anchor" href="#sqlite-with-an-opaque-struct-wrapper"></a>
-</h5>
-<p>Wrap the opaque <code>sqlite3*</code> in a small struct so the FFI exercises struct allocation and accessors.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">sqlite_struct</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
-<span><span class="st">  struct sqlite_handle { sqlite3* db; };</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  int sqlite_handle_open(struct sqlite_handle* h, const char* path) {</span></span>
-<span><span class="st">    return sqlite3_open(path, &amp;h-&gt;db);</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  int sqlite_handle_close(struct sqlite_handle* h) {</span></span>
-<span><span class="st">    if (h-&gt;db) {</span></span>
-<span><span class="st">      int rc = sqlite3_close(h-&gt;db);</span></span>
-<span><span class="st">      h-&gt;db = NULL;</span></span>
-<span><span class="st">      return rc;</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    return 0;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  int sqlite_handle_exec(struct sqlite_handle* h, const char* sql) {</span></span>
-<span><span class="st">    char* err_msg = NULL;</span></span>
-<span><span class="st">    int rc = sqlite3_exec(h-&gt;db, sql, NULL, NULL, &amp;err_msg);</span></span>
-<span><span class="st">    if (err_msg) {</span></span>
-<span><span class="st">      sqlite3_free(err_msg);</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    return rc;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">'sqlite_handle'</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>db <span class="op">=</span> <span class="st">'ptr'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    sqlite_handle_open <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    sqlite_handle_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    sqlite_handle_exec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">h</span> <span class="op">&lt;-</span> <span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_open</span><span class="op">(</span><span class="va">h</span>, <span class="st">":memory:"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_exec</span><span class="op">(</span><span class="va">h</span>, <span class="st">"CREATE TABLE items (id INTEGER, name TEXT);"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_exec</span><span class="op">(</span><span class="va">h</span>, <span class="st">"INSERT INTO items VALUES (1, \'test\');"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_close</span><span class="op">(</span><span class="va">h</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_struct</span><span class="op">$</span><span class="fu">sqlite_handle_free</span><span class="op">(</span><span class="va">h</span><span class="op">)</span></span>
-<span><span class="co">#&gt; NULL</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_struct</span>, <span class="va">h</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level5">
-<h5 id="custom-wrapper-functions-sqlite-with-pointer-utilities">Custom wrapper functions: SQLite with pointer utilities<a class="anchor" aria-label="anchor" href="#custom-wrapper-functions-sqlite-with-pointer-utilities"></a>
-</h5>
-<p>You can also create custom wrapper functions</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Create SQLite with pointer utilities integration</span></span>
-<span><span class="va">sqlite_with_utils</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'  </span></span>
-<span><span class="st">  // Helper to create in-memory database</span></span>
-<span><span class="st">  void* tcc_create_inmemory_db_with_utils() {</span></span>
-<span><span class="st">    sqlite3* db = NULL;</span></span>
-<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
-<span><span class="st">    return db;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  // Helper that executes SQL</span></span>
-<span><span class="st">  int tcc_exec_with_utils(void* db_ptr, const char* sql) {</span></span>
-<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
-<span><span class="st">    char* err_msg = NULL;</span></span>
-<span><span class="st">    int rc = sqlite3_exec(db, sql, NULL, NULL, &amp;err_msg);</span></span>
-<span><span class="st">    if (err_msg) {</span></span>
-<span><span class="st">      sqlite3_free(err_msg);</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    return rc;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">  </span></span>
-<span><span class="st">  // Helper to create and populate database</span></span>
-<span><span class="st">  void* tcc_setup_test_db() {</span></span>
-<span><span class="st">    sqlite3* db = NULL;</span></span>
-<span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
-<span><span class="st">    if (db) {</span></span>
-<span><span class="st">      sqlite3_exec(db, "CREATE TABLE items (id INTEGER, name TEXT);", NULL, NULL, NULL);</span></span>
-<span><span class="st">      sqlite3_exec(db, "INSERT INTO items VALUES (1, \'test\');", NULL, NULL, NULL);</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    return db;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    sqlite3_libversion <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"cstring"</span><span class="op">)</span>,</span>
-<span>    sqlite3_close <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    tcc_create_inmemory_db_with_utils <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
-<span>    tcc_exec_with_utils <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    tcc_setup_test_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Use pointer utilities with SQLite</span></span>
-<span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x56f39c450268"</span></span>
-<span></span>
-<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
-<span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "3.45.1"</span></span>
-<span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_close</span><span class="op">(</span><span class="va">db</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">sqlite_with_utils</span>, <span class="va">db</span>, <span class="va">result</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-</div>
-</div>
-</div>
-<div class="section level3">
-<h3 id="lower-level-api">Lower level API<a class="anchor" aria-label="anchor" href="#lower-level-api"></a>
-</h3>
-<p>Using <code>#Define _Complex</code> as workaround of <code>TinyCC</code>’s lack of support for <a href="https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html" class="external-link">complex types</a>, we link against R’s install headers and <code>libR</code> to call R’s C API function. This workaround is used in the binding generation too.</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Create new state for R linking example</span></span>
-<span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Add R include and library paths using Rtinycc functions</span></span>
-<span><span class="va">r_include</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Rhome.html" class="external-link">R.home</a></span><span class="op">(</span><span class="st">"include"</span><span class="op">)</span></span>
-<span><span class="va">r_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Rhome.html" class="external-link">R.home</a></span><span class="op">(</span><span class="st">"lib"</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/tcc_add_include_path.html">tcc_add_include_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_include</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="fu"><a href="reference/tcc_add_library_path.html">tcc_add_library_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">r_lib</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span></span>
-<span><span class="co"># Using #define _Complex as workaround of TinyCC’s lack of support for complex</span></span>
-<span><span class="co"># types, we can link against R’s install headers and libR to call the R C API.</span></span>
-<span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">#define _Complex</span></span>
-<span><span class="st">#include &lt;R.h&gt;</span></span>
-<span><span class="st">#include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">void hello_world() {</span></span>
-<span><span class="st">  Rprintf("Hello World from compiled C code!\\n");</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">double call_r_sqrt(void) {</span></span>
-<span><span class="st">  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));</span></span>
-<span><span class="st">  SEXP val = PROTECT(Rf_ScalarReal(16.0));</span></span>
-<span><span class="st">  SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));</span></span>
-<span><span class="st">  SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));</span></span>
-<span><span class="st">  double res = REAL(out)[0];</span></span>
-<span><span class="st">  UNPROTECT(4);</span></span>
-<span><span class="st">  return res;</span></span>
-<span><span class="st">}</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/tcc_compile_string.html">tcc_compile_string</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">code</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="fu"><a href="reference/tcc_relocate.html">tcc_relocate</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"hello_world"</span>, return <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Hello World from compiled C code!</span></span>
-<span><span class="co">#&gt; NULL</span></span>
-<span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"call_r_sqrt"</span>, return <span class="op">=</span> <span class="st">"double"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
 </div>
 </div>
