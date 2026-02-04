@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x571fb8659000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x60630dfb6000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -317,12 +317,22 @@
 <span><span class="st">int spawn_async(void* cb, int value) {</span></span>
 <span><span class="st">  callback_token_t* tok = (callback_token_t*) cb;</span></span>
 <span><span class="st">  if (!tok) return -1;</span></span>
-<span><span class="st">  struct task t;</span></span>
-<span><span class="st">  t.id = tok-&gt;id;</span></span>
-<span><span class="st">  t.value = value;</span></span>
-<span><span class="st">  pthread_t th;</span></span>
-<span><span class="st">  if (pthread_create(&amp;th, NULL, worker, &amp;t) != 0) return -2;</span></span>
-<span><span class="st">  pthread_join(th, NULL);</span></span>
+<span><span class="st">  const int n = 100;</span></span>
+<span><span class="st">  struct task tasks[100];</span></span>
+<span><span class="st">  pthread_t th[100];</span></span>
+<span><span class="st">  for (int i = 0; i &lt; n; i++) {</span></span>
+<span><span class="st">    tasks[i].id = tok-&gt;id;</span></span>
+<span><span class="st">    tasks[i].value = value;</span></span>
+<span><span class="st">    if (pthread_create(&amp;th[i], NULL, worker, &amp;tasks[i]) != 0) {</span></span>
+<span><span class="st">      for (int j = 0; j &lt; i; j++) {</span></span>
+<span><span class="st">        pthread_join(th[j], NULL);</span></span>
+<span><span class="st">      }</span></span>
+<span><span class="st">      return -2;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st">  for (int i = 0; i &lt; n; i++) {</span></span>
+<span><span class="st">    pthread_join(th[i], NULL);</span></span>
+<span><span class="st">  }</span></span>
 <span><span class="st">  return 0;</span></span>
 <span><span class="st">}</span></span>
 <span><span class="st">'</span></span>
@@ -339,7 +349,7 @@
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">ffi_async</span>, <span class="va">cb_ptr</span>, <span class="va">cb_async</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
-<span><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 200</span></span></code></pre></div>
 </div>
 <div class="section level5">
 <h5 id="structs-unions-and-bitfields">Structs, unions, and bitfields<a class="anchor" aria-label="anchor" href="#structs-unions-and-bitfields"></a>
@@ -664,7 +674,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x571fb7025df8"</span></span>
+<span><span class="co">#&gt; [1] "0x60630a89dfe8"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
