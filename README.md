@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x64890af29000>
+#> <pointer: 0x607ba37c8000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -111,7 +111,58 @@ shared versus copied.
   directly), `callback:<signature>` (sync trampoline),
   `callback_async:<signature>` (async trampoline).
 
-##### Callbacks
+#### Simple function
+
+``` r
+
+# Define and compile in one chain
+ffi <- tcc_ffi() |>
+  tcc_bind(
+    add = list(args = list("i32", "i32"), returns = "i32")
+  ) |>
+  tcc_source("
+    int add(int a, int b) {
+      return a + b;
+    }
+  ") |>
+  tcc_compile()
+
+# Call directly with type conversion
+result <- ffi$add(5L, 3L)
+result
+#> [1] 8
+```
+
+#### Working with R arrays
+
+Pass R vectors to C with zero-copy:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_bind(
+    sum_array = list(args = list("integer_array", "i32"), returns = "i64")
+  ) |>
+  tcc_source("
+    int64_t sum_array(int32_t* arr, int32_t n) {
+      int64_t sum = 0;
+      for(int i = 0; i < n; i++) {
+        sum += arr[i];
+      }
+      return sum;
+    }
+  ") |>
+  tcc_compile()
+
+# Pass R integer vector directly
+x <- 1:100
+result <- ffi$sum_array(x, length(x))
+result
+#> [1] 5050
+rm(ffi, x, result)
+invisible(gc())
+```
+
+#### Callbacks
 
 R functions can be registered as C function pointers via
 `tcc_callback()` and passed to compiled code. Provide a C signature that
@@ -149,7 +200,7 @@ rm(ffi, cb_ptr, cb)
 invisible(gc())
 ```
 
-##### Callback errors
+#### Callback errors
 
 If the callback throws, a warning is emitted and a type-appropriate
 default value is returned:
@@ -199,7 +250,7 @@ rm(ffi_err, cb_ptr_err, cb_err)
 invisible(gc())
 ```
 
-##### Async callbacks (main-thread queue)
+#### Async callbacks (main-thread queue)
 
 For cross-thread scheduling, initialize the async dispatcher and enqueue
 a callback from C on a worker thread using `callback_async:<signature>`.
@@ -266,7 +317,7 @@ rm(ffi_async, cb_ptr, cb_async)
 invisible(gc())
 ```
 
-##### Structs, unions, and bitfields
+#### Structs, unions, and bitfields
 
 Complex C types are supported declaratively. Use `tcc_struct()` and
 `tcc_union()` to generate allocation and accessor helpers and
@@ -312,7 +363,7 @@ rm(ffi, p1, p2)
 invisible(gc())
 ```
 
-##### Enums
+#### Enums
 
 Enums are supported via `tcc_enum()` and exported as helper functions:
 
@@ -334,7 +385,7 @@ rm(ffi)
 invisible(gc())
 ```
 
-##### Bitfields
+#### Bitfields
 
 Bitfields are handled by the C compiler; accessors read/write them like
 normal fields:
@@ -365,60 +416,9 @@ rm(ffi, s)
 invisible(gc())
 ```
 
-#### Simple function
+### Linking external libraries
 
-``` r
-
-# Define and compile in one chain
-ffi <- tcc_ffi() |>
-  tcc_bind(
-    add = list(args = list("i32", "i32"), returns = "i32")
-  ) |>
-  tcc_source("
-    int add(int a, int b) {
-      return a + b;
-    }
-  ") |>
-  tcc_compile()
-
-# Call directly with type conversion
-result <- ffi$add(5L, 3L)
-result
-#> [1] 8
-```
-
-#### Working with R arrays
-
-Pass R vectors to C with zero-copy:
-
-``` r
-ffi <- tcc_ffi() |>
-  tcc_bind(
-    sum_array = list(args = list("integer_array", "i32"), returns = "i64")
-  ) |>
-  tcc_source("
-    int64_t sum_array(int32_t* arr, int32_t n) {
-      int64_t sum = 0;
-      for(int i = 0; i < n; i++) {
-        sum += arr[i];
-      }
-      return sum;
-    }
-  ") |>
-  tcc_compile()
-
-# Pass R integer vector directly
-x <- 1:100
-result <- ffi$sum_array(x, length(x))
-result
-#> [1] 5050
-rm(ffi, x, result)
-invisible(gc())
-```
-
-#### Linking external libraries
-
-Link against system libraries like libm
+We can link against system libraries like libm
 
 ``` r
 # Link against math library
@@ -434,7 +434,7 @@ math_lib$sqrt(16.0)
 #> [1] 4
 ```
 
-##### SQLite entry point
+#### SQLite entry point
 
 Use SQLite to validate the external library workflow and inspect the
 version string.
@@ -459,7 +459,7 @@ rm(sqlite)
 invisible(gc())
 ```
 
-##### SQLite with an R callback
+#### SQLite with an R callback
 
 Use an R callback from `sqlite3_exec()` via a small C bridge that calls
 `RC_invoke_callback()`.
@@ -546,7 +546,7 @@ rm(sqlite_cb, db_ptr, cb_ptr, cb)
 invisible(gc())
 ```
 
-##### SQLite with an opaque struct wrapper
+#### SQLite with an opaque struct wrapper
 
 Wrap the opaque `sqlite3*` in a small struct so the FFI exercises struct
 allocation and accessors.
@@ -603,7 +603,7 @@ rm(sqlite_struct, h)
 invisible(gc())
 ```
 
-##### Custom wrapper functions: SQLite with pointer utilities
+#### Custom wrapper functions: SQLite with pointer utilities
 
 You can also create custom wrapper functions
 
@@ -654,7 +654,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x64890c4f9c68"
+#> [1] "0x607ba1e97338"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
