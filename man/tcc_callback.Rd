@@ -26,7 +26,13 @@ Thread safety: callbacks are executed on the R main thread only. Invoking
 a callback from a worker thread is unsupported and may crash R. The
 \code{threadsafe} flag is currently informational only.
 
-If a callback raises an error, it is propagated to the caller as an R error.
+If a callback raises an error, a warning is emitted and a type-appropriate
+default value is returned.
+
+When binding callbacks with \code{tcc_bind()}, use a \verb{callback:<signature>}
+argument type so a trampoline is generated. The trampoline expects a
+\verb{void*} user-data pointer as its first argument; pass \code{tcc_callback_ptr(cb)}
+as the user-data argument to the C API.
 
 Pointer arguments (e.g., \code{double*}, \code{int*}) are passed as
 external pointers. Lengths must be supplied separately if needed.

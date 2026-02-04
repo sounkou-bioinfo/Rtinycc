@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5cc0e4eb5000>
+#> <pointer: 0x56a4a95c5000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -202,15 +202,16 @@ shared versus copied.
 - **Arrays (zero-copy)**: `raw` → `uint8_t*`; `integer_array` →
   `int32_t*`; `numeric_array` → `double*`.
 - **Pointers**: `ptr` (opaque `externalptr`), `sexp` (pass `SEXP`
-  directly), `callback` (function pointer token obtained with
-  `tcc_callback()`).
+  directly), `callback:<signature>` (trampoline for `tcc_callback()`).
 
 ##### Callbacks
 
 R functions can be registered as C function pointers via
 `tcc_callback()` and passed to compiled code. Provide a C signature that
-matches the actual arguments and always call `tcc_callback_close()` when
-finished.
+matches the R callback arguments and always call `tcc_callback_close()`
+when finished. When using `tcc_bind()`, specify a `callback:<signature>`
+argument so the trampoline can be generated, and pass
+`tcc_callback_ptr(cb)` as the user data pointer to the C API.
 
 ``` r
 cb <- tcc_callback(function(x) x * 2, signature = "double (*)(double)")
@@ -218,33 +219,23 @@ cb_ptr <- tcc_callback_ptr(cb)
 
 code <- '
 #define _Complex
-#include <R.h>
-#include <Rinternals.h>
-#include <stdio.h>
 
-typedef struct { int id; } callback_token_t;
-
-SEXP RC_invoke_callback(SEXP, SEXP);
-
-double call_cb(void* cb, double x) {
-  int id = ((callback_token_t*)cb)->id;
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", id);
-  SEXP idstr = mkString(buf);
-  SEXP args = PROTECT(allocVector(VECSXP, 1));
-  SET_VECTOR_ELT(args, 0, ScalarReal(x));
-  SEXP res = RC_invoke_callback(idstr, args);
-  UNPROTECT(1);
-  return asReal(res);
+double call_cb(double (*cb)(void* ctx, double), void* ctx, double x) {
+  return cb(ctx, x);
 }
 '
 
 ffi <- tcc_ffi() |>
   tcc_source(code) |>
-  tcc_bind(call_cb = list(args = list("ptr", "f64"), returns = "f64")) |>
+  tcc_bind(
+    call_cb = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
   tcc_compile()
 
-ffi$call_cb(cb_ptr, 21.0)
+ffi$call_cb(cb, cb_ptr, 21.0)
 #> [1] 42
 tcc_callback_close(cb)
 rm(ffi, cb_ptr, cb)
@@ -253,7 +244,8 @@ invisible(gc())
 
 ##### Callback errors
 
-If the callback throws, the error bubbles back to R:
+If the callback throws, a warning is emitted and a type-appropriate
+default value is returned:
 
 ``` r
 cb_err <- tcc_callback(
@@ -264,38 +256,36 @@ cb_ptr_err <- tcc_callback_ptr(cb_err)
 
 code_err <- '
 #define _Complex
-#include <R.h>
-#include <Rinternals.h>
-#include <stdio.h>
 
-typedef struct { int id; } callback_token_t;
-
-SEXP RC_invoke_callback(SEXP, SEXP);
-
-double call_cb_err(void* cb, double x) {
-  int id = ((callback_token_t*)cb)->id;
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", id);
-  SEXP idstr = mkString(buf);
-  SEXP args = PROTECT(allocVector(VECSXP, 1));
-  SET_VECTOR_ELT(args, 0, ScalarReal(x));
-  SEXP res = RC_invoke_callback(idstr, args);
-  UNPROTECT(1);
-  return asReal(res);
+double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {
+  return cb(ctx, x);
 }
 '
 
 ffi_err <- tcc_ffi() |>
   tcc_source(code_err) |>
-  tcc_bind(call_cb_err = list(args = list("ptr", "f64"), returns = "f64")) |>
+  tcc_bind(
+    call_cb_err = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
   tcc_compile()
 
-msg <- tryCatch(
-  ffi_err$call_cb_err(cb_ptr_err, 1.0),
-  error = function(e) e$message
+warned <- FALSE
+res <- withCallingHandlers(
+  ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
+  warning = function(w) {
+    warned <<- TRUE
+    invokeRestart("muffleWarning")
+  }
 )
-msg
-#> [1] "Callback raised an error"
+list(warned = warned, result = res)
+#> $warned
+#> [1] TRUE
+#> 
+#> $result
+#> [1] NA
 
 tcc_callback_close(cb_err)
 rm(ffi_err, cb_ptr_err, cb_err)
@@ -723,7 +713,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5cc0e1801fe8"
+#> [1] "0x56a4a7de8268"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()

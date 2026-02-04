@@ -20,23 +20,28 @@ expect_true({
     add = TRUE
   )
 
-  code <- '\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <stdio.h>\n\ntypedef struct { int id; } callback_token_t;\n\nSEXP RC_invoke_callback(SEXP, SEXP);\n\ndouble call_cb(void* cb, double x) {\n  int id = ((callback_token_t*)cb)->id;\n  char buf[32];\n  snprintf(buf, sizeof(buf), "%d", id);\n  SEXP idstr = mkString(buf);\n  SEXP args = PROTECT(allocVector(VECSXP, 1));\n  SET_VECTOR_ELT(args, 0, ScalarReal(x));\n  SEXP res = RC_invoke_callback(idstr, args);\n  UNPROTECT(1);\n  return asReal(res);\n}\n'
+  code <- "\n#define _Complex\n\ndouble call_cb(double (*cb)(void* ctx, double), void* ctx, double x) {\n  return cb(ctx, x);\n}\n"
 
   ffi <- tcc_ffi() |>
     tcc_source(code) |>
-    tcc_bind(call_cb = list(args = list("ptr", "f64"), returns = "f64")) |>
+    tcc_bind(
+      call_cb = list(
+        args = list("callback:double(double)", "ptr", "f64"),
+        returns = "f64"
+      )
+    ) |>
     tcc_compile()
 
   expect_true(inherits(ffi, "tcc_compiled"), info = "Compiled FFI object")
 
-  res <- ffi$call_cb(cb_ptr, 21.0)
+  res <- ffi$call_cb(cb, cb_ptr, 21.0)
   rm(ffi)
   gc()
   isTRUE(all.equal(res, 42.0, tolerance = 1e-12))
 })
 
-# Test: callback error propagates via R_tryEval
-expect_error(
+# Test: callback error yields warning and default
+expect_true(
   {
     cb_err <- tcc_callback(
       function(x) stop("boom"),
@@ -52,20 +57,32 @@ expect_error(
       add = TRUE
     )
 
-    code_err <- '\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <stdio.h>\n\ntypedef struct { int id; } callback_token_t;\n\nSEXP RC_invoke_callback(SEXP, SEXP);\n\ndouble call_cb_err(void* cb, double x) {\n  int id = ((callback_token_t*)cb)->id;\n  char buf[32];\n  snprintf(buf, sizeof(buf), "%d", id);\n  SEXP idstr = mkString(buf);\n  SEXP args = PROTECT(allocVector(VECSXP, 1));\n  SET_VECTOR_ELT(args, 0, ScalarReal(x));\n  SEXP res = RC_invoke_callback(idstr, args);\n  UNPROTECT(1);\n  return asReal(res);\n}\n'
+    code_err <- "\n#define _Complex\n\ndouble call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {\n  return cb(ctx, x);\n}\n"
 
     ffi_err <- tcc_ffi() |>
       tcc_source(code_err) |>
       tcc_bind(
-        call_cb_err = list(args = list("ptr", "f64"), returns = "f64")
+        call_cb_err = list(
+          args = list("callback:double(double)", "ptr", "f64"),
+          returns = "f64"
+        )
       ) |>
       tcc_compile()
 
-    ffi_err$call_cb_err(cb_ptr_err, 1.0)
+    warned <- FALSE
+    res <- withCallingHandlers(
+      ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
+      warning = function(w) {
+        warned <<- TRUE
+        invokeRestart("muffleWarning")
+      }
+    )
+    ok <- isTRUE(warned && is.na(res))
     rm(ffi_err)
     gc()
+    ok
   },
-  info = "Callback errors propagate to R"
+  info = "Callback errors yield warning and NA"
 )
 
 # Test: pointer return and pointer args use externalptr
@@ -81,15 +98,20 @@ expect_true({
     add = TRUE
   )
 
-  code_ptr <- '\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <stdio.h>\n\ntypedef struct { int id; } callback_token_t;\n\nSEXP RC_invoke_callback(SEXP, SEXP);\n\nvoid* echo_ptr(void* cb, void* x) {\n  int id = ((callback_token_t*)cb)->id;\n  char buf[32];\n  snprintf(buf, sizeof(buf), "%d", id);\n  SEXP idstr = mkString(buf);\n  SEXP args = PROTECT(allocVector(VECSXP, 1));\n  SET_VECTOR_ELT(args, 0, R_MakeExternalPtr(x, R_NilValue, R_NilValue));\n  SEXP res = RC_invoke_callback(idstr, args);\n  UNPROTECT(1);\n  return R_ExternalPtrAddr(res);\n}\n'
+  code_ptr <- "\n#define _Complex\n\nvoid* echo_ptr(void* (*cb)(void* ctx, void* x), void* ctx, void* x) {\n  return cb(ctx, x);\n}\n"
 
   ffi_ptr <- tcc_ffi() |>
     tcc_source(code_ptr) |>
-    tcc_bind(echo_ptr = list(args = list("ptr", "ptr"), returns = "ptr")) |>
+    tcc_bind(
+      echo_ptr = list(
+        args = list("callback:void*(void*)", "ptr", "ptr"),
+        returns = "ptr"
+      )
+    ) |>
     tcc_compile()
 
   buf <- tcc_malloc(8)
-  out <- ffi_ptr$echo_ptr(cb_ptr_handle, buf)
+  out <- ffi_ptr$echo_ptr(cb_ptr_rt, cb_ptr_handle, buf)
   ok <- inherits(out, "externalptr")
   tcc_free(buf)
   rm(out)
@@ -99,7 +121,7 @@ expect_true({
 })
 
 # Test: ptr handle stays alive but callback is invalid after close
-expect_error(
+expect_true(
   {
     cb_closed <- tcc_callback(function(x) x, signature = "double (*)(double)")
     cb_ptr_closed <- tcc_callback_ptr(cb_closed)
@@ -112,21 +134,33 @@ expect_error(
       add = TRUE
     )
 
-    code_closed <- '\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <stdio.h>\n\ntypedef struct { int id; } callback_token_t;\n\nSEXP RC_invoke_callback(SEXP, SEXP);\n\ndouble call_cb_closed(void* cb, double x) {\n  int id = ((callback_token_t*)cb)->id;\n  char buf[32];\n  snprintf(buf, sizeof(buf), "%d", id);\n  SEXP idstr = mkString(buf);\n  SEXP args = PROTECT(allocVector(VECSXP, 1));\n  SET_VECTOR_ELT(args, 0, ScalarReal(x));\n  SEXP res = RC_invoke_callback(idstr, args);\n  UNPROTECT(1);\n  return asReal(res);\n}\n'
+    code_closed <- "\n#define _Complex\n\ndouble call_cb_closed(double (*cb)(void* ctx, double), void* ctx, double x) {\n  return cb(ctx, x);\n}\n"
 
     ffi_closed <- tcc_ffi() |>
       tcc_source(code_closed) |>
       tcc_bind(
-        call_cb_closed = list(args = list("ptr", "f64"), returns = "f64")
+        call_cb_closed = list(
+          args = list("callback:double(double)", "ptr", "f64"),
+          returns = "f64"
+        )
       ) |>
       tcc_compile()
 
     tcc_callback_close(cb_closed)
-    ffi_closed$call_cb_closed(cb_ptr_closed, 1.0)
+    warned <- FALSE
+    res <- withCallingHandlers(
+      ffi_closed$call_cb_closed(cb_closed, cb_ptr_closed, 1.0),
+      warning = function(w) {
+        warned <<- TRUE
+        invokeRestart("muffleWarning")
+      }
+    )
+    ok <- isTRUE(warned && is.na(res))
     rm(ffi_closed)
     gc()
+    ok
   },
-  info = "Closed callback ptr yields error"
+  info = "Closed callback yields warning and NA"
 )
 
 # Test: async scheduling from worker thread (Unix-like only)

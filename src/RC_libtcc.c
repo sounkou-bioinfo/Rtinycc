@@ -632,12 +632,83 @@ SEXP RC_callback_is_valid(SEXP callback_ext) {
 
 // Invoke callback from trampoline
 // This is called by generated trampolines
+static SEXP RC_callback_default_sexp(const char *return_type) {
+    if (return_type == NULL) {
+        return R_NilValue;
+    }
+
+    if (strcmp(return_type, "void") == 0) {
+        return R_NilValue;
+    }
+
+    if (strcmp(return_type, "int") == 0 ||
+        strcmp(return_type, "i32") == 0 ||
+        strcmp(return_type, "int32_t") == 0 ||
+        strcmp(return_type, "i8") == 0 ||
+        strcmp(return_type, "int8_t") == 0 ||
+        strcmp(return_type, "i16") == 0 ||
+        strcmp(return_type, "int16_t") == 0 ||
+        strcmp(return_type, "u8") == 0 ||
+        strcmp(return_type, "uint8_t") == 0 ||
+        strcmp(return_type, "u16") == 0 ||
+        strcmp(return_type, "uint16_t") == 0) {
+        return Rf_ScalarInteger(NA_INTEGER);
+    }
+
+    if (strcmp(return_type, "i64") == 0 ||
+        strcmp(return_type, "int64_t") == 0 ||
+        strcmp(return_type, "u32") == 0 ||
+        strcmp(return_type, "uint32_t") == 0 ||
+        strcmp(return_type, "u64") == 0 ||
+        strcmp(return_type, "uint64_t") == 0 ||
+        strcmp(return_type, "double") == 0 ||
+        strcmp(return_type, "f64") == 0 ||
+        strcmp(return_type, "float") == 0 ||
+        strcmp(return_type, "f32") == 0) {
+        return Rf_ScalarReal(NA_REAL);
+    }
+
+    if (strcmp(return_type, "bool") == 0 ||
+        strcmp(return_type, "logical") == 0) {
+        return Rf_ScalarLogical(NA_LOGICAL);
+    }
+
+    if (strcmp(return_type, "sexp") == 0 ||
+        strcmp(return_type, "SEXP") == 0) {
+        return R_NilValue;
+    }
+
+    if (strcmp(return_type, "string") == 0 ||
+        strcmp(return_type, "cstring") == 0 ||
+        strcmp(return_type, "char*") == 0 ||
+        strcmp(return_type, "const char*") == 0) {
+        return Rf_ScalarString(NA_STRING);
+    }
+
+    if (strcmp(return_type, "ptr") == 0 ||
+        strcmp(return_type, "void*") == 0 ||
+        strcmp(return_type, "void *") == 0 ||
+        (strstr(return_type, "*") != NULL && strstr(return_type, "char") == NULL)) {
+        return R_MakeExternalPtr(NULL, R_NilValue, R_NilValue);
+    }
+
+    return R_NilValue;
+}
+
 static SEXP RC_invoke_callback_internal(int id, SEXP args) {
-    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
-        Rf_error("Invalid or expired callback: %d", id);
+    if (id < 0 || id >= MAX_CALLBACKS) {
+        Rf_warning("Invalid or expired callback: %d", id);
+        return R_NilValue;
     }
 
     callback_entry_t *entry = &callback_registry[id];
+    if (!entry->valid) {
+        Rf_warning("Invalid or expired callback: %d", id);
+        if (entry->return_type) {
+            return RC_callback_default_sexp(entry->return_type);
+        }
+        return R_NilValue;
+    }
 
     // Build the call with the function as head and arguments following
     SEXP call = R_NilValue;
@@ -668,7 +739,8 @@ static SEXP RC_invoke_callback_internal(int id, SEXP args) {
     SEXP result = PROTECT(R_tryEval(call, R_GlobalEnv, &err));
     if (err) {
         UNPROTECT(2);  // call and result
-        Rf_error("Callback raised an error");
+        Rf_warning("Callback raised an error");
+        return RC_callback_default_sexp(entry->return_type);
     }
     
     // Convert result based on expected return type
@@ -721,7 +793,8 @@ static SEXP RC_invoke_callback_internal(int id, SEXP args) {
                 strstr(entry->return_type, "char") == NULL)) {
         if (TYPEOF(result) != EXTPTRSXP) {
             UNPROTECT(2);
-            Rf_error("Callback return is not an external pointer");
+            Rf_warning("Callback return is not an external pointer");
+            return RC_callback_default_sexp(entry->return_type);
         }
         converted = result;
     } else {

@@ -130,6 +130,11 @@ tcc_source <- function(ffi, code) {
 #'     \item returns: FFI type for return value (e.g., "f64", "cstring")
 #'     \item code: Optional C code for the symbol (for embedded functions)
 #'   }
+#'   Callback arguments should use the form \code{callback:<signature>} (e.g.,
+#'   \code{callback:double(double)}). The generated trampoline expects a
+#'   \code{void*} user-data pointer as its first argument; pass
+#'   \code{tcc_callback_ptr(cb)} to the corresponding user-data parameter in
+#'   the C API.
 #' @return Updated tcc_ffi object (for chaining)
 #' @export
 #' @examples
@@ -632,8 +637,7 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(
-    sysname,
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -686,8 +690,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(
-      sysname,
+    lib_name <- switch(sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),

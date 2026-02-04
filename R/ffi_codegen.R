@@ -5,8 +5,7 @@
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
     i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
     i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
@@ -72,8 +71,7 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
 generate_c_return <- function(value_expr, ffi_type) {
   type_info <- check_ffi_type(ffi_type, "return value")
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
@@ -116,6 +114,28 @@ generate_c_return <- function(value_expr, ffi_type) {
   )
 }
 
+# Callback helper: generate a unique trampoline name per wrapper argument
+callback_trampoline_name <- function(wrapper_name, arg_index) {
+  paste0("trampoline_", wrapper_name, "_arg", arg_index)
+}
+
+# Callback helper: declare a function pointer bound to a trampoline
+callback_funptr_decl <- function(arg_name, sig, trampoline_name) {
+  arg_types <- sig$arg_types
+  c_args <- if (length(arg_types) > 0) {
+    paste(c("void*", arg_types), collapse = ", ")
+  } else {
+    "void*"
+  }
+  sprintf(
+    "  %s (*%s)(%s) = %s;",
+    sig$return_type,
+    arg_name,
+    c_args,
+    trampoline_name
+  )
+}
+
 # Generate full C wrapper function (SEXP-based only)
 generate_c_wrapper <- function(
   symbol_name,
@@ -135,16 +155,39 @@ generate_c_wrapper <- function(
     r_arg_names <- paste0("arg", seq_len(n_args), "_")
 
     # Input conversions from SEXP to C types
-    input_conversions <- paste(
-      mapply(
-        generate_c_input,
-        arg_names,
-        r_arg_names,
-        arg_types,
-        USE.NAMES = FALSE
-      ),
-      collapse = "\n"
-    )
+    input_lines <- character(0)
+    for (i in seq_len(n_args)) {
+      ffi_type <- arg_types[[i]]
+      arg_name <- arg_names[[i]]
+      r_name <- r_arg_names[[i]]
+
+      if (is_callback_type(ffi_type)) {
+        sig <- parse_callback_type(ffi_type)
+        if (is.null(sig)) {
+          stop(
+            "callback type requires signature, e.g. callback:double(int)",
+            call. = FALSE
+          )
+        }
+        tramp_name <- callback_trampoline_name(wrapper_name, i)
+        input_lines <- c(
+          input_lines,
+          sprintf(
+            "  if (!Rf_inherits(%s, \"tcc_callback\")) Rf_error(\"expected tcc_callback for argument '%s'\");",
+            r_name,
+            arg_name
+          ),
+          callback_funptr_decl(arg_name, sig, tramp_name)
+        )
+      } else {
+        input_lines <- c(
+          input_lines,
+          generate_c_input(arg_name, r_name, ffi_type)
+        )
+      }
+    }
+
+    input_conversions <- paste(input_lines, collapse = "\n")
 
     # Call the actual function
     call_expr <- sprintf(
@@ -370,8 +413,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec
   }
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i32 = sprintf("return ScalarInteger(p->%s);", field_name),
@@ -419,8 +461,7 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
     size <- NULL
   }
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i8 = sprintf("p->%s = (int8_t)asInteger(val);", field_name),
     i16 = sprintf("p->%s = (int16_t)asInteger(val);", field_name),
     i32 = sprintf("p->%s = asInteger(val);", field_name),
@@ -647,8 +688,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i32 = sprintf("return ScalarInteger(p->%s);", mem_name),
     f32 = sprintf("return ScalarReal((double)p->%s);", mem_name),
     sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name)
@@ -673,8 +713,7 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i32 = sprintf("p->%s = asInteger(val);", mem_name),
     f32 = sprintf("p->%s = (float)asReal(val);", mem_name),
     sprintf("// Cannot set union member of type %s", type_name)
@@ -796,6 +835,21 @@ generate_ffi_code <- function(
     ""
   )
 
+  callback_trampolines <- generate_callback_trampolines(symbols)
+  if (nzchar(callback_trampolines)) {
+    parts <- c(
+      parts,
+      "#include <stdio.h>",
+      "",
+      "/* Callback trampoline support */",
+      "typedef struct { int id; int refs; } callback_token_t;",
+      "SEXP RC_invoke_callback(SEXP, SEXP);",
+      "",
+      callback_trampolines,
+      ""
+    )
+  }
+
   # Custom headers
   if (!is.null(headers) && length(headers) > 0) {
     parts <- c(parts, "/* User headers */", headers, "")
@@ -850,4 +904,41 @@ generate_ffi_code <- function(
   )
 
   paste(parts, collapse = "\n")
+}
+
+# Generate trampoline functions for callback arguments
+generate_callback_trampolines <- function(symbols) {
+  if (is.null(symbols) || length(symbols) == 0) {
+    return("")
+  }
+
+  trampolines <- character(0)
+  for (sym_name in names(symbols)) {
+    sym <- symbols[[sym_name]]
+    arg_types <- sym$args
+    if (length(arg_types) == 0) {
+      next
+    }
+    for (i in seq_along(arg_types)) {
+      ffi_type <- arg_types[[i]]
+      if (is_callback_type(ffi_type)) {
+        sig <- parse_callback_type(ffi_type)
+        if (is.null(sig)) {
+          stop(
+            "callback type requires signature, e.g. callback:double(int)",
+            call. = FALSE
+          )
+        }
+        wrapper_name <- paste0("R_wrap_", sym_name)
+        tramp_name <- callback_trampoline_name(wrapper_name, i)
+        trampolines <- c(
+          trampolines,
+          generate_trampoline(tramp_name, sig),
+          ""
+        )
+      }
+    }
+  }
+
+  paste(trampolines, collapse = "\n")
 }

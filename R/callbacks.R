@@ -12,7 +12,13 @@
 #' a callback from a worker thread is unsupported and may crash R. The
 #' \code{threadsafe} flag is currently informational only.
 #'
-#' If a callback raises an error, it is propagated to the caller as an R error.
+#' If a callback raises an error, a warning is emitted and a type-appropriate
+#' default value is returned.
+#'
+#' When binding callbacks with `tcc_bind()`, use a `callback:<signature>`
+#' argument type so a trampoline is generated. The trampoline expects a
+#' `void*` user-data pointer as its first argument; pass `tcc_callback_ptr(cb)`
+#' as the user-data argument to the C API.
 #'
 #' Pointer arguments (e.g., \code{double*}, \code{int*}) are passed as
 #' external pointers. Lengths must be supplied separately if needed.
@@ -76,7 +82,8 @@ tcc_callback_close <- function(callback) {
 #' Get the C-compatible function pointer
 #'
 #' Returns an external pointer that can be passed to compiled C code
-#' as a function pointer. This is the opaque pointer used by trampolines.
+#' as user data for trampolines. Keep this handle (and the original
+#' `tcc_callback`) alive for as long as C may call back.
 #' The pointer handle keeps the underlying token alive until it is garbage
 #' collected, even if the original callback is closed.
 #'
@@ -317,49 +324,60 @@ tcc_callback_async_drain <- function() {
 
 #' Generate trampoline code for a callback argument
 #'
-#' @param callback_id Unique identifier for this callback
+#' @param trampoline_name Name of the trampoline function
 #' @param sig Parsed signature
 #' @return C code string for the trampoline
-generate_trampoline <- function(callback_id, sig) {
+generate_trampoline <- function(trampoline_name, sig) {
   # Generate a trampoline function that:
-  # 1. Takes C arguments
-  # 2. Calls RC_invoke_callback_* to invoke the R function
+  # 1. Takes a user data pointer + C arguments
+  # 2. Calls RC_invoke_callback() to invoke the R function
   # 3. Returns the result
 
-  return_type <- map_c_to_r_type(sig$return_type)
   n_args <- length(sig$arg_types)
 
   # Build argument list for C function signature
-  c_args <- character(n_args)
-  for (i in seq_len(n_args)) {
-    c_args[i] <- paste(map_c_to_sexp_type(sig$arg_types[i]), "arg", i, sep = "")
+  c_args <- c("void* cb")
+  if (n_args > 0) {
+    for (i in seq_len(n_args)) {
+      c_args <- c(
+        c_args,
+        sprintf("%s arg%d", map_c_to_sexp_type(sig$arg_types[i]), i)
+      )
+    }
   }
 
   # Build the trampoline
   lines <- c(
-    sprintf("// Trampoline for callback %s", callback_id),
+    sprintf("// Trampoline %s", trampoline_name),
     sprintf(
-      "%s trampoline_%s(%s) {",
+      "%s %s(%s) {",
       sig$return_type,
-      callback_id,
-      if (n_args > 0) paste(c_args, collapse = ", ") else "void"
-    )
+      trampoline_name,
+      if (length(c_args) > 0) paste(c_args, collapse = ", ") else "void"
+    ),
+    "  callback_token_t* tok = (callback_token_t*)cb;",
+    "  if (!tok || tok->id < 0) {",
+    sprintf("    Rf_warning(\"Invalid callback token in %s\");", trampoline_name),
+    get_c_default_return(sig$return_type, indent = 4L),
+    "  }",
+    "  char buf[32];",
+    "  snprintf(buf, sizeof(buf), \"%d\", tok->id);",
+    "  SEXP idstr = PROTECT(mkString(buf));"
   )
 
   # Build argument conversion
   if (n_args > 0) {
     lines <- c(
       lines,
-      "  SEXP args = PROTECT(allocVector(VECSXP, " %||% n_args %||% "));"
+      sprintf("  SEXP args = PROTECT(allocVector(VECSXP, %d));", n_args)
     )
     for (i in seq_len(n_args)) {
       lines <- c(
         lines,
         sprintf(
-          "  SET_VECTOR_ELT(args, %d, %s(arg%d));",
+          "  SET_VECTOR_ELT(args, %d, %s);",
           i - 1,
-          get_sexp_constructor(sig$arg_types[i]),
-          i
+          get_sexp_constructor_call(sig$arg_types[i], paste0("arg", i))
         )
       )
     }
@@ -368,12 +386,11 @@ generate_trampoline <- function(callback_id, sig) {
   }
 
   # Call the runtime
-  lines <- c(
-    lines,
-    sprintf("  SEXP result = RC_invoke_callback(\"%s\", args);", callback_id)
-  )
+  lines <- c(lines, "  SEXP result = RC_invoke_callback(idstr, args);")
 
   if (n_args > 0) {
+    lines <- c(lines, "  UNPROTECT(2);")
+  } else {
     lines <- c(lines, "  UNPROTECT(1);")
   }
 
@@ -392,6 +409,32 @@ generate_trampoline <- function(callback_id, sig) {
   lines <- c(lines, "}")
 
   paste(lines, collapse = "\n")
+}
+
+# Get default C return statement for a type
+get_c_default_return <- function(c_type, indent = 2L) {
+  c_type <- trimws(c_type)
+  pad <- paste(rep(" ", indent), collapse = "")
+  if (c_type == "void") {
+    return(paste0(pad, "return;"))
+  }
+  if (c_type %in% c("SEXP", "sexp")) {
+    return(paste0(pad, "return R_NilValue;"))
+  }
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
+    return(paste0(pad, "return NULL;"))
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return(paste0(pad, "return NULL;"))
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return(paste0(pad, "return NA_REAL;"))
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return(paste0(pad, "return NA_LOGICAL;"))
+  }
+  return(paste0(pad, "return NA_INTEGER;"))
 }
 
 # Map C types to R SEXP types for trampoline arguments
@@ -511,6 +554,15 @@ get_sexp_constructor <- function(c_type) {
   } else {
     "R_MakeExternalPtr"
   }
+}
+
+# Get SEXP constructor call for a C expression
+get_sexp_constructor_call <- function(c_type, arg_expr) {
+  ctor <- get_sexp_constructor(c_type)
+  if (ctor == "R_MakeExternalPtr") {
+    return(sprintf("R_MakeExternalPtr(%s, R_NilValue, R_NilValue)", arg_expr))
+  }
+  sprintf("%s(%s)", ctor, arg_expr)
 }
 
 # Get R to C converter function

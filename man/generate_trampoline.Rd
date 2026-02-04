@@ -4,10 +4,10 @@
 \alias{generate_trampoline}
 \title{Generate trampoline code for a callback argument}
 \usage{
-generate_trampoline(callback_id, sig)
+generate_trampoline(trampoline_name, sig)
 }
 \arguments{
-\item{callback_id}{Unique identifier for this callback}
+\item{trampoline_name}{Name of the trampoline function}
 
 \item{sig}{Parsed signature}
 }

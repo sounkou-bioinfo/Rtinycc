@@ -14,7 +14,12 @@ tcc_bind(ffi, ...)
 \item args: List of FFI types for arguments (e.g., list("i32", "f64"))
 \item returns: FFI type for return value (e.g., "f64", "cstring")
 \item code: Optional C code for the symbol (for embedded functions)
-}}
+}
+Callback arguments should use the form \code{callback:<signature>} (e.g.,
+\code{callback:double(double)}). The generated trampoline expects a
+\code{void*} user-data pointer as its first argument; pass
+\code{tcc_callback_ptr(cb)} to the corresponding user-data parameter in
+the C API.}
 }
 \value{
 Updated tcc_ffi object (for chaining)
