@@ -215,6 +215,56 @@ rm(ffi, cb_ptr, cb)
 invisible(gc())
 ```
 
+##### Callback errors
+
+If the callback throws, the error bubbles back to R:
+
+```{r callback-error}
+cb_err <- tcc_callback(
+  function(x) stop("boom"),
+  signature = "double (*)(double)"
+)
+cb_ptr_err <- tcc_callback_ptr(cb_err)
+
+code_err <- '
+#define _Complex
+#include <R.h>
+#include <Rinternals.h>
+#include <stdio.h>
+
+typedef struct { int id; } callback_token_t;
+
+SEXP RC_invoke_callback(SEXP, SEXP);
+
+double call_cb_err(void* cb, double x) {
+  int id = ((callback_token_t*)cb)->id;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", id);
+  SEXP idstr = mkString(buf);
+  SEXP args = PROTECT(allocVector(VECSXP, 1));
+  SET_VECTOR_ELT(args, 0, ScalarReal(x));
+  SEXP res = RC_invoke_callback(idstr, args);
+  UNPROTECT(1);
+  return asReal(res);
+}
+'
+
+ffi_err <- tcc_ffi() |>
+  tcc_source(code_err) |>
+  tcc_bind(call_cb_err = list(args = list("ptr", "f64"), returns = "f64")) |>
+  tcc_compile()
+
+msg <- tryCatch(
+  ffi_err$call_cb_err(cb_ptr_err, 1.0),
+  error = function(e) e$message
+)
+msg
+
+tcc_callback_close(cb_err)
+rm(ffi_err, cb_ptr_err, cb_err)
+invisible(gc())
+```
+
 ##### Async callbacks (main-thread queue)
 
 For cross-thread scheduling, initialize the async dispatcher and enqueue a
