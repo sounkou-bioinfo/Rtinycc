@@ -266,12 +266,22 @@ static void* worker(void* data) {
 int spawn_async(void* cb, int value) {
   callback_token_t* tok = (callback_token_t*) cb;
   if (!tok) return -1;
-  struct task t;
-  t.id = tok->id;
-  t.value = value;
-  pthread_t th;
-  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;
-  pthread_join(th, NULL);
+  const int n = 100;
+  struct task tasks[100];
+  pthread_t th[100];
+  for (int i = 0; i < n; i++) {
+    tasks[i].id = tok->id;
+    tasks[i].value = value;
+    if (pthread_create(&th[i], NULL, worker, &tasks[i]) != 0) {
+      for (int j = 0; j < i; j++) {
+        pthread_join(th[j], NULL);
+      }
+      return -2;
+    }
+  }
+  for (int i = 0; i < n; i++) {
+    pthread_join(th[i], NULL);
+  }
   return 0;
 }
 '
