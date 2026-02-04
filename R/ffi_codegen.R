@@ -5,7 +5,8 @@
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
-  switch(ffi_type,
+  switch(
+    ffi_type,
     i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
     i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
     i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
@@ -71,7 +72,8 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
 generate_c_return <- function(value_expr, ffi_type) {
   type_info <- check_ffi_type(ffi_type, "return value")
 
-  switch(ffi_type,
+  switch(
+    ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
@@ -413,7 +415,8 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec
   }
 
-  return_code <- switch(type_name,
+  return_code <- switch(
+    type_name,
     i8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i32 = sprintf("return ScalarInteger(p->%s);", field_name),
@@ -461,7 +464,8 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
     size <- NULL
   }
 
-  setter_code <- switch(type_name,
+  setter_code <- switch(
+    type_name,
     i8 = sprintf("p->%s = (int8_t)asInteger(val);", field_name),
     i16 = sprintf("p->%s = (int16_t)asInteger(val);", field_name),
     i32 = sprintf("p->%s = asInteger(val);", field_name),
@@ -688,7 +692,8 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  return_code <- switch(type_name,
+  return_code <- switch(
+    type_name,
     i32 = sprintf("return ScalarInteger(p->%s);", mem_name),
     f32 = sprintf("return ScalarReal((double)p->%s);", mem_name),
     sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name)
@@ -713,7 +718,8 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  setter_code <- switch(type_name,
+  setter_code <- switch(
+    type_name,
     i32 = sprintf("p->%s = asInteger(val);", mem_name),
     f32 = sprintf("p->%s = (float)asReal(val);", mem_name),
     sprintf("// Cannot set union member of type %s", type_name)
@@ -835,17 +841,41 @@ generate_ffi_code <- function(
     ""
   )
 
-  callback_trampolines <- generate_callback_trampolines(symbols)
-  if (nzchar(callback_trampolines)) {
+  cb_tramps <- generate_callback_trampolines(symbols)
+  if (nzchar(cb_tramps$code)) {
     parts <- c(
       parts,
       "#include <stdio.h>",
       "",
       "/* Callback trampoline support */",
       "typedef struct { int id; int refs; } callback_token_t;",
-      "SEXP RC_invoke_callback(SEXP, SEXP);",
+      if (cb_tramps$needs_sync) {
+        "SEXP RC_invoke_callback(SEXP, SEXP);"
+      } else {
+        NULL
+      },
+      if (cb_tramps$needs_async) {
+        c(
+          "typedef enum {",
+          "  CB_ARG_INT = 0,",
+          "  CB_ARG_REAL = 1,",
+          "  CB_ARG_LOGICAL = 2,",
+          "  CB_ARG_PTR = 3,",
+          "  CB_ARG_CSTRING = 4",
+          "} cb_arg_kind_t;",
+          "",
+          "typedef struct {",
+          "  cb_arg_kind_t kind;",
+          "  union { int i; double d; void* p; char* s; } v;",
+          "} cb_arg_t;",
+          "",
+          "int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);"
+        )
+      } else {
+        NULL
+      },
       "",
-      callback_trampolines,
+      cb_tramps$code,
       ""
     )
   }
@@ -909,10 +939,12 @@ generate_ffi_code <- function(
 # Generate trampoline functions for callback arguments
 generate_callback_trampolines <- function(symbols) {
   if (is.null(symbols) || length(symbols) == 0) {
-    return("")
+    return(list(code = "", needs_sync = FALSE, needs_async = FALSE))
   }
 
   trampolines <- character(0)
+  needs_sync <- FALSE
+  needs_async <- FALSE
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
     arg_types <- sym$args
@@ -931,14 +963,28 @@ generate_callback_trampolines <- function(symbols) {
         }
         wrapper_name <- paste0("R_wrap_", sym_name)
         tramp_name <- callback_trampoline_name(wrapper_name, i)
-        trampolines <- c(
-          trampolines,
-          generate_trampoline(tramp_name, sig),
-          ""
-        )
+        if (is_callback_async_type(ffi_type)) {
+          needs_async <- TRUE
+          trampolines <- c(
+            trampolines,
+            generate_async_trampoline(tramp_name, sig),
+            ""
+          )
+        } else {
+          needs_sync <- TRUE
+          trampolines <- c(
+            trampolines,
+            generate_trampoline(tramp_name, sig),
+            ""
+          )
+        }
       }
     }
   }
 
-  paste(trampolines, collapse = "\n")
+  list(
+    code = paste(trampolines, collapse = "\n"),
+    needs_sync = needs_sync,
+    needs_async = needs_async
+  )
 }

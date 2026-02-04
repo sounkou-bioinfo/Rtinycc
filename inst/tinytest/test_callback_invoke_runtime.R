@@ -188,17 +188,20 @@ if (.Platform$OS.type != "windows") {
         add = TRUE
       )
 
-      code_async <- "\n#define _Complex\n#include <R.h>\n#include <Rinternals.h>\n#include <pthread.h>\n\ntypedef struct { int id; int refs; } callback_token_t;\n\ntypedef enum {\n  CB_ARG_INT = 0,\n  CB_ARG_REAL = 1,\n  CB_ARG_LOGICAL = 2,\n  CB_ARG_PTR = 3,\n  CB_ARG_CSTRING = 4\n} cb_arg_kind_t;\n\ntypedef struct {\n  cb_arg_kind_t kind;\n  union { int i; double d; void* p; char* s; } v;\n} cb_arg_t;\n\nextern int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);\n\nstruct task { int id; int value; };\n\nstatic void* worker(void* data) {\n  struct task* t = (struct task*) data;\n  cb_arg_t arg;\n  arg.kind = CB_ARG_INT;\n  arg.v.i = t->value;\n  RC_callback_async_schedule_c(t->id, 1, &arg);\n  return NULL;\n}\n\nint spawn_async(void* cb, int value) {\n  callback_token_t* tok = (callback_token_t*) cb;\n  if (!tok) return -1;\n  struct task t;\n  t.id = tok->id;\n  t.value = value;\n  pthread_t th;\n  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;\n  pthread_join(th, NULL);\n  return 0;\n}\n"
+      code_async <- "\n#define _Complex\n#include <pthread.h>\n\nstruct task { void (*cb)(void* ctx, int); void* ctx; int value; };\n\nstatic void* worker(void* data) {\n  struct task* t = (struct task*) data;\n  t->cb(t->ctx, t->value);\n  return NULL;\n}\n\nint spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {\n  if (!cb || !ctx) return -1;\n  struct task t;\n  t.cb = cb;\n  t.ctx = ctx;\n  t.value = value;\n  pthread_t th;\n  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;\n  pthread_join(th, NULL);\n  return 0;\n}\n"
 
       ffi_async <- tcc_ffi() |>
         tcc_source(code_async) |>
         tcc_library("pthread") |>
         tcc_bind(
-          spawn_async = list(args = list("ptr", "i32"), returns = "i32")
+          spawn_async = list(
+            args = list("callback_async:void(int)", "ptr", "i32"),
+            returns = "i32"
+          )
         ) |>
         tcc_compile()
 
-      rc <- ffi_async$spawn_async(cb_ptr_async, 2L)
+      rc <- ffi_async$spawn_async(cb_async, cb_ptr_async, 2L)
       tcc_callback_async_drain()
 
       rm(ffi_async)

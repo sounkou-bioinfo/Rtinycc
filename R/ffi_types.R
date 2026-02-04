@@ -162,7 +162,7 @@ check_ffi_type <- function(type, context = "argument") {
   }
 
   # Check for callback:type pattern (e.g., callback:double(int,int))
-  if (grepl("^callback", type)) {
+  if (grepl("^callback", type) || grepl("^callback_async", type)) {
     # Callback types are always void* (function pointer)
     return(list(
       c_type = "void*",

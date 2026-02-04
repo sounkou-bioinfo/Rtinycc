@@ -30,9 +30,11 @@ If a callback raises an error, a warning is emitted and a type-appropriate
 default value is returned.
 
 When binding callbacks with \code{tcc_bind()}, use a \verb{callback:<signature>}
-argument type so a trampoline is generated. The trampoline expects a
-\verb{void*} user-data pointer as its first argument; pass \code{tcc_callback_ptr(cb)}
-as the user-data argument to the C API.
+argument type so a synchronous trampoline is generated. The trampoline
+expects a \verb{void*} user-data pointer as its first argument; pass
+\code{tcc_callback_ptr(cb)} as the user-data argument to the C API. For
+thread-safe usage from worker threads, use \verb{callback_async:<signature>}
+which schedules the call on the main thread and returns a default value.
 
 Pointer arguments (e.g., \code{double*}, \code{int*}) are passed as
 external pointers. Lengths must be supplied separately if needed.

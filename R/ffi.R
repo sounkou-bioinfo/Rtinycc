@@ -134,7 +134,9 @@ tcc_source <- function(ffi, code) {
 #'   \code{callback:double(double)}). The generated trampoline expects a
 #'   \code{void*} user-data pointer as its first argument; pass
 #'   \code{tcc_callback_ptr(cb)} to the corresponding user-data parameter in
-#'   the C API.
+#'   the C API. For thread-safe scheduling, use
+#'   \code{callback_async:<signature>} which enqueues the call on the main
+#'   thread and returns a default value immediately.
 #' @return Updated tcc_ffi object (for chaining)
 #' @export
 #' @examples
@@ -637,7 +639,8 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(sysname,
+  switch(
+    sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -690,7 +693,8 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(sysname,
+    lib_name <- switch(
+      sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),

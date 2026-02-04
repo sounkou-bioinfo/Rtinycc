@@ -16,9 +16,11 @@
 #' default value is returned.
 #'
 #' When binding callbacks with `tcc_bind()`, use a `callback:<signature>`
-#' argument type so a trampoline is generated. The trampoline expects a
-#' `void*` user-data pointer as its first argument; pass `tcc_callback_ptr(cb)`
-#' as the user-data argument to the C API.
+#' argument type so a synchronous trampoline is generated. The trampoline
+#' expects a `void*` user-data pointer as its first argument; pass
+#' `tcc_callback_ptr(cb)` as the user-data argument to the C API. For
+#' thread-safe usage from worker threads, use `callback_async:<signature>`
+#' which schedules the call on the main thread and returns a default value.
 #'
 #' Pointer arguments (e.g., \code{double*}, \code{int*}) are passed as
 #' external pointers. Lengths must be supplied separately if needed.
@@ -255,7 +257,16 @@ is_callback_type <- function(type) {
   if (!is.character(type)) {
     return(FALSE)
   }
-  type == "callback" || grepl("^callback:", type)
+  type == "callback" ||
+    grepl("^callback:", type) ||
+    grepl("^callback_async:", type)
+}
+
+is_callback_async_type <- function(type) {
+  if (!is.character(type)) {
+    return(FALSE)
+  }
+  grepl("^callback_async:", type)
 }
 
 #' Parse callback type specification
@@ -271,6 +282,11 @@ parse_callback_type <- function(type) {
   if (grepl("^callback:", type)) {
     # Extract signature after "callback:"
     sig_str <- sub("^callback:", "", type)
+    return(parse_callback_signature(sig_str))
+  }
+
+  if (grepl("^callback_async:", type)) {
+    sig_str <- sub("^callback_async:", "", type)
     return(parse_callback_signature(sig_str))
   }
 
@@ -357,7 +373,10 @@ generate_trampoline <- function(trampoline_name, sig) {
     ),
     "  callback_token_t* tok = (callback_token_t*)cb;",
     "  if (!tok || tok->id < 0) {",
-    sprintf("    Rf_warning(\"Invalid callback token in %s\");", trampoline_name),
+    sprintf(
+      "    Rf_warning(\"Invalid callback token in %s\");",
+      trampoline_name
+    ),
     get_c_default_return(sig$return_type, indent = 4L),
     "  }",
     "  char buf[32];",
@@ -411,6 +430,121 @@ generate_trampoline <- function(trampoline_name, sig) {
   paste(lines, collapse = "\n")
 }
 
+# Generate async trampoline that schedules on main thread
+generate_async_trampoline <- function(trampoline_name, sig) {
+  n_args <- length(sig$arg_types)
+
+  c_args <- c("void* cb")
+  if (n_args > 0) {
+    for (i in seq_len(n_args)) {
+      c_args <- c(
+        c_args,
+        sprintf("%s arg%d", map_c_to_sexp_type(sig$arg_types[i]), i)
+      )
+    }
+  }
+
+  lines <- c(
+    sprintf("// Async trampoline %s", trampoline_name),
+    sprintf(
+      "%s %s(%s) {",
+      sig$return_type,
+      trampoline_name,
+      if (length(c_args) > 0) paste(c_args, collapse = ", ") else "void"
+    ),
+    "  callback_token_t* tok = (callback_token_t*)cb;",
+    "  if (!tok || tok->id < 0) {",
+    sprintf(
+      "    Rf_warning(\"Invalid callback token in %s\");",
+      trampoline_name
+    ),
+    get_c_default_return(sig$return_type, indent = 4L),
+    "  }"
+  )
+
+  if (n_args > 0) {
+    lines <- c(lines, sprintf("  cb_arg_t args[%d];", n_args))
+    for (i in seq_len(n_args)) {
+      lines <- c(lines, generate_cb_arg_assignment(i, sig$arg_types[i]))
+    }
+  } else {
+    lines <- c(lines, "  cb_arg_t* args = NULL;")
+  }
+
+  lines <- c(
+    lines,
+    sprintf(
+      "  int rc = RC_callback_async_schedule_c(tok->id, %d, %s);",
+      n_args,
+      if (n_args > 0) "args" else "NULL"
+    ),
+    "  if (rc != 0) {",
+    sprintf(
+      "    Rf_warning(\"Async schedule failed (rc=%%d) in %s\", rc);",
+      trampoline_name
+    ),
+    get_c_default_return(sig$return_type, indent = 4L),
+    "  }"
+  )
+
+  if (sig$return_type == "void") {
+    lines <- c(lines, "  return;")
+  } else {
+    lines <- c(lines, get_c_default_return(sig$return_type, indent = 2L))
+  }
+
+  lines <- c(lines, "}")
+
+  paste(lines, collapse = "\n")
+}
+
+generate_cb_arg_assignment <- function(index, c_type) {
+  kind <- map_c_to_cb_arg_kind(c_type)
+  value <- map_c_to_cb_arg_value(c_type, paste0("arg", index))
+  c(
+    sprintf("  args[%d].kind = %s;", index - 1, kind),
+    sprintf("  args[%d].v.%s = %s;", index - 1, value$field, value$expr)
+  )
+}
+
+map_c_to_cb_arg_kind <- function(c_type) {
+  c_type <- trimws(c_type)
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+
+  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
+    return("CB_ARG_PTR")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("CB_ARG_CSTRING")
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return("CB_ARG_REAL")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("CB_ARG_LOGICAL")
+  }
+  "CB_ARG_INT"
+}
+
+map_c_to_cb_arg_value <- function(c_type, arg_expr) {
+  c_type <- trimws(c_type)
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+
+  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
+    return(list(field = "p", expr = arg_expr))
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return(list(field = "s", expr = arg_expr))
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return(list(field = "d", expr = arg_expr))
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return(list(field = "i", expr = arg_expr))
+  }
+  list(field = "i", expr = arg_expr)
+}
+
 # Get default C return statement for a type
 get_c_default_return <- function(c_type, indent = 2L) {
   c_type <- trimws(c_type)
@@ -432,7 +566,7 @@ get_c_default_return <- function(c_type, indent = 2L) {
     return(paste0(pad, "return NA_REAL;"))
   }
   if (c_type %in% c("bool", "_Bool")) {
-    return(paste0(pad, "return NA_LOGICAL;"))
+    return(paste0(pad, "return -1;"))
   }
   return(paste0(pad, "return NA_INTEGER;"))
 }
