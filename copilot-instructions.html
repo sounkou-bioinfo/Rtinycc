@@ -294,7 +294,7 @@
 <p>R/C focused with explicit type mappings for efficient interop:</p>
 <p><strong>Scalar Types</strong>: <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, <code>f64</code>, <code>bool</code>, <code>cstring</code></p>
 <p><strong>Array Types</strong>: <code>raw</code> (uint8_t<em>), <code>integer_array</code> (int32_t</em>), <code>numeric_array</code> (double<em>), <code>logical_array</code> (int32_t</em>), <code>complex_array</code> (Rcomplex*)</p>
-<p><strong>Pointer Types</strong>: <code>ptr</code> (externalptr), <code>sexp</code> (SEXP), <code>callback</code> (function pointer)</p>
+<p><strong>Pointer Types</strong>: <code>ptr</code> (externalptr), <code>sexp</code> (SEXP), <code>callback:&lt;signature&gt;</code> (sync trampoline), <code>callback_async:&lt;signature&gt;</code> (async trampoline)</p>
 </div>
 <div class="section level3">
 <h3 id="key-features">Key Features<a class="anchor" aria-label="anchor" href="#key-features"></a></h3>
@@ -324,7 +324,9 @@
 <li>
 <strong>Complete Bun-style FFI API</strong> working in R with modern declarative syntax</li>
 <li>
-<strong>R Callbacks implemented</strong> - pass R functions as C callbacks via trampolines</li>
+<strong>R Callbacks implemented</strong> - pass R functions as C callbacks via generated trampolines</li>
+<li>
+<strong>Async callbacks</strong> - <code>callback_async:&lt;signature&gt;</code> schedules calls on the main thread and returns default values immediately</li>
 <li>
 <strong>Struct/Union/Enum support</strong> with generated helper functions</li>
 <li>
@@ -369,11 +371,11 @@
 </div>
 <div class="section level2">
 <h2 id="callback-system-implemented">Callback System (Implemented)<a class="anchor" aria-label="anchor" href="#callback-system-implemented"></a></h2>
-<p>The Rtinycc package now supports passing R functions as callbacks to compiled C code via the <code>callback</code> FFI type. This is implemented using a runtime callback registry with proper memory management via <code>R_PreserveObject</code>/<code>R_ReleaseObject</code>.</p>
+<p>The Rtinycc package now supports passing R functions as callbacks to compiled C code via <code>callback:&lt;signature&gt;</code> and <code>callback_async:&lt;signature&gt;</code> FFI types. Trampolines are generated at compile time and use the runtime callback registry with proper memory management via <code>R_PreserveObject</code>/<code>R_ReleaseObject</code>.</p>
 <div class="section level3">
 <h3 id="api-overview">API Overview<a class="anchor" aria-label="anchor" href="#api-overview"></a></h3>
-<p><strong>R Functions:</strong> - <code>tcc_callback(fun, signature, threadsafe = FALSE)</code> - Register an R function as a C callback - <code>tcc_callback_close(callback)</code> - Unregister and cleanup callback resources - <code>tcc_callback_ptr(callback)</code> - Get the C-compatible pointer for passing to compiled code - <code>tcc_callback_valid(callback)</code> - Check if a callback is still valid</p>
-<p><strong>C Runtime Functions:</strong> - <code>RC_register_callback()</code> - Preserve R function, create callback token - <code>RC_unregister_callback()</code> - Release R function, cleanup resources - <code>RC_get_callback_ptr()</code> - Return external pointer to callback token - <code>RC_callback_is_valid()</code> - Check callback validity - <code>RC_invoke_callback()</code> - Invoke the R function (called from generated trampolines)</p>
+<p><strong>R Functions:</strong> - <code>tcc_callback(fun, signature, threadsafe = FALSE)</code> - Register an R function as a C callback - <code>tcc_callback_close(callback)</code> - Unregister and cleanup callback resources - <code>tcc_callback_ptr(callback)</code> - Get the user-data pointer for passing to compiled code - <code>tcc_callback_valid(callback)</code> - Check if a callback is still valid</p>
+<p><strong>C Runtime Functions:</strong> - <code>RC_register_callback()</code> - Preserve R function, create callback token - <code>RC_unregister_callback()</code> - Release R function, cleanup resources - <code>RC_get_callback_ptr()</code> - Return external pointer to callback token - <code>RC_callback_is_valid()</code> - Check callback validity - <code>RC_invoke_callback()</code> - Invoke the R function (called from generated trampolines) - <code>RC_callback_async_schedule_c()</code> - Enqueue callback on main thread (async trampolines)</p>
 </div>
 <div class="section level3">
 <h3 id="usage-example">Usage Example<a class="anchor" aria-label="anchor" href="#usage-example"></a></h3>
@@ -386,9 +388,8 @@
 <span><span class="co"># Get pointer to pass to C code</span></span>
 <span><span class="va">ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Use in FFI binding - note: trampolines for callback invocation</span></span>
-<span><span class="co"># in compiled FFI code are planned for future implementation</span></span>
-<span><span class="co"># For now, callbacks can be passed to C code and called directly</span></span>
+<span><span class="co"># Use in FFI binding with trampolines generated via callback:&lt;signature&gt;</span></span>
+<span><span class="co"># or callback_async:&lt;signature&gt; in tcc_bind()</span></span>
 <span></span>
 <span><span class="co"># Cleanup when done</span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span></code></pre></div>
@@ -401,7 +402,7 @@
 <span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
 <span>    process_data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"i32"</span>, <span class="st">"callback"</span><span class="op">)</span>,  <span class="co"># callback as last arg</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"callback:double(double)"</span>, <span class="st">"ptr"</span>, <span class="st">"i32"</span><span class="op">)</span>,</span>
 <span>      returns <span class="op">=</span> <span class="st">"i32"</span></span>
 <span>    <span class="op">)</span></span>
 <span>  <span class="op">)</span></span></code></pre></div>
@@ -409,9 +410,9 @@
 <div class="section level3">
 <h3 id="thread-safety">Thread-Safety<a class="anchor" aria-label="anchor" href="#thread-safety"></a></h3>
 <ul><li>
-<strong>Default (<code>threadsafe = FALSE</code>)</strong>: Callbacks must be invoked from the R main thread. This is the safe default and recommended for most use cases.</li>
+<strong>Default (<code>threadsafe = FALSE</code>)</strong>: Use <code>callback:&lt;signature&gt;</code> for same-thread invocation.</li>
 <li>
-<strong>Experimental (<code>threadsafe = TRUE</code>)</strong>: Reserved for future implementation of cross-thread marshaling. Currently has no effect beyond documentation.</li>
+<strong>Async (<code>callback_async:&lt;signature&gt;</code>)</strong>: Thread-safe scheduling from worker threads; returns default values immediately.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="memory-management-1">Memory Management<a class="anchor" aria-label="anchor" href="#memory-management-1"></a></h3>
