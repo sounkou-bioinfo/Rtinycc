@@ -40,6 +40,27 @@ expect_equal(tcc_read_u8(mem_ptr, 4), c(0L, 1L, 2L, 3L))
 result <- tcc_free(mem_ptr)
 expect_true(is.null(result))
 
+# Test pointer-to-pointer helpers
+ptr_size <- if (!is.null(.Machine$sizeof.pointer)) .Machine$sizeof.pointer else 8L
+ptr_ref <- tcc_malloc(ptr_size)
+target <- tcc_malloc(16)
+
+tcc_ptr_set(ptr_ref, target)
+data <- tcc_data_ptr(ptr_ref)
+expect_equal(tcc_ptr_addr(data), tcc_ptr_addr(target))
+expect_true(tcc_ptr_is_owned(target))
+
+tcc_ptr_set(ptr_ref, tcc_null_ptr())
+expect_true(tcc_ptr_is_null(tcc_data_ptr(ptr_ref)))
+
+expect_true(tcc_ptr_is_null(tcc_data_ptr(ptr_ref)))
+
+# Only use ptr_free_set_null when the pointed memory is unmanaged
+tcc_ptr_free_set_null(ptr_ref)
+expect_true(tcc_ptr_is_null(tcc_data_ptr(ptr_ref)))
+
+tcc_free(ptr_ref)
+
 # Test multiple string creation
 strings <- c("first", "second", "third")
 for (i in seq_along(strings)) {

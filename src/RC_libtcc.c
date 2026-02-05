@@ -249,7 +249,7 @@ SEXP RC_get_external_ptr_hex(SEXP ext) {
 
 // Pointer utility functions
 SEXP RC_null_pointer() {
-    SEXP ptr = R_MakeExternalPtr(NULL, R_NilValue, R_NilValue);
+    SEXP ptr = R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
     R_RegisterCFinalizerEx(ptr, RC_null_finalizer, TRUE);
     return ptr;
 }
@@ -265,7 +265,7 @@ SEXP RC_malloc(SEXP size) {
         Rf_error("Memory allocation failed");
     }
     
-    SEXP ptr = R_MakeExternalPtr(data, R_NilValue, R_NilValue);
+    SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, TRUE);
     return ptr;
 }
@@ -273,6 +273,11 @@ SEXP RC_malloc(SEXP size) {
 SEXP RC_free(SEXP ptr) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
         Rf_error("Expected external pointer");
+    }
+
+    SEXP tag = R_ExternalPtrTag(ptr);
+    if (!Rf_isNull(tag) && tag != Rf_install("rtinycc_owned")) {
+        Rf_error("Pointer is not owned by Rtinycc; refusing to free");
     }
     
     void *data = R_ExternalPtrAddr(ptr);
@@ -282,6 +287,69 @@ SEXP RC_free(SEXP ptr) {
     }
     
     return R_NilValue;
+}
+
+SEXP RC_data_ptr(SEXP ptr_ref) {
+    if (TYPEOF(ptr_ref) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+
+    void *ref = R_ExternalPtrAddr(ptr_ref);
+    if (!ref) {
+        SEXP out = R_MakeExternalPtr(NULL, Rf_install("rtinycc_borrowed"), R_NilValue);
+        R_RegisterCFinalizerEx(out, RC_null_finalizer, TRUE);
+        return out;
+    }
+
+    void *data = *((void**)ref);
+    SEXP out = R_MakeExternalPtr(data, Rf_install("rtinycc_borrowed"), R_NilValue);
+    R_RegisterCFinalizerEx(out, RC_null_finalizer, TRUE);
+    return out;
+}
+
+SEXP RC_ptr_set(SEXP ptr_ref, SEXP ptr_value) {
+    if (TYPEOF(ptr_ref) != EXTPTRSXP || TYPEOF(ptr_value) != EXTPTRSXP) {
+        Rf_error("Expected external pointers");
+    }
+
+    void *ref = R_ExternalPtrAddr(ptr_ref);
+    if (!ref) {
+        Rf_error("Pointer reference is NULL");
+    }
+
+    void *value = R_ExternalPtrAddr(ptr_value);
+    *((void**)ref) = value;
+    return ptr_ref;
+}
+
+SEXP RC_ptr_free_set_null(SEXP ptr_ref) {
+    if (TYPEOF(ptr_ref) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+
+    void *ref = R_ExternalPtrAddr(ptr_ref);
+    if (!ref) {
+        return ptr_ref;
+    }
+
+    void **slot = (void**)ref;
+    if (*slot) {
+        free(*slot);
+        *slot = NULL;
+    }
+
+    return ptr_ref;
+}
+
+SEXP RC_ptr_is_owned(SEXP ptr) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rf_error("Expected external pointer");
+    }
+    SEXP tag = R_ExternalPtrTag(ptr);
+    if (Rf_isNull(tag)) {
+        return Rf_ScalarLogical(FALSE);
+    }
+    return Rf_ScalarLogical(tag == Rf_install("rtinycc_owned"));
 }
 
 SEXP RC_create_cstring(SEXP str) {
@@ -297,7 +365,7 @@ SEXP RC_create_cstring(SEXP str) {
     
     strcpy(data, c_str);
     
-    SEXP ptr = R_MakeExternalPtr(data, R_NilValue, R_NilValue);
+    SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, TRUE);
     return ptr;
 }

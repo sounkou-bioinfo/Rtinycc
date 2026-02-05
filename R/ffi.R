@@ -411,10 +411,12 @@ tcc_compiled_object <- function(
       )
       # getters and setters
       for (field_name in names(fields)) {
+        field_spec <- fields[[field_name]]
+        is_array <- is.list(field_spec) && isTRUE(field_spec$array)
+
         helper_names <- c(
           helper_names,
-          paste0("struct_", struct_name, "_get_", field_name),
-          paste0("struct_", struct_name, "_set_", field_name)
+          paste0("struct_", struct_name, "_get_", field_name)
         )
         helper_specs[[paste0(
           "struct_",
@@ -425,15 +427,48 @@ tcc_compiled_object <- function(
           args = list("sexp"),
           returns = "sexp"
         )
-        helper_specs[[paste0(
-          "struct_",
-          struct_name,
-          "_set_",
-          field_name
-        )]] <- list(
-          args = list("sexp", "sexp"),
-          returns = "sexp"
-        )
+
+        if (is_array) {
+          helper_names <- c(
+            helper_names,
+            paste0("struct_", struct_name, "_get_", field_name, "_elt"),
+            paste0("struct_", struct_name, "_set_", field_name, "_elt")
+          )
+          helper_specs[[paste0(
+            "struct_",
+            struct_name,
+            "_get_",
+            field_name,
+            "_elt"
+          )]] <- list(
+            args = list("sexp", "i32"),
+            returns = "sexp"
+          )
+          helper_specs[[paste0(
+            "struct_",
+            struct_name,
+            "_set_",
+            field_name,
+            "_elt"
+          )]] <- list(
+            args = list("sexp", "i32", "sexp"),
+            returns = "sexp"
+          )
+        } else {
+          helper_names <- c(
+            helper_names,
+            paste0("struct_", struct_name, "_set_", field_name)
+          )
+          helper_specs[[paste0(
+            "struct_",
+            struct_name,
+            "_set_",
+            field_name
+          )]] <- list(
+            args = list("sexp", "sexp"),
+            returns = "sexp"
+          )
+        }
       }
       # container_of helpers
       if (!is.null(container_of) && struct_name %in% names(container_of)) {
@@ -1187,6 +1222,16 @@ tcc_struct <- function(ffi, name, accessors) {
     # Handle complex field specs like list(type="cstring", size=20)
     if (is.list(field_type)) {
       type_name <- field_type$type %||% "ptr"
+      if (isTRUE(field_type$array)) {
+        if (is.null(field_type$size) || !is.numeric(field_type$size)) {
+          stop(
+            "Array field '",
+            field_name,
+            "' must include numeric 'size'",
+            call. = FALSE
+          )
+        }
+      }
     } else {
       type_name <- field_type
     }

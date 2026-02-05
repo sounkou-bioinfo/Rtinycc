@@ -122,3 +122,25 @@ expect_true(
   },
   info = "Struct introspection - size and alignment"
 )
+
+# Test 4: Array element getters/setters
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source("struct buf { unsigned char data[8]; };") |>
+      tcc_struct(
+        "buf",
+        accessors = list(data = list(type = "u8", size = 8, array = TRUE))
+      )
+
+    compiled <- tcc_compile(ffi)
+
+    b <- compiled$struct_buf_new()
+    compiled$struct_buf_set_data_elt(b, 0L, 200L)
+    v <- compiled$struct_buf_get_data_elt(b, 0L)
+    compiled$struct_buf_free(b)
+
+    v == 200L
+  },
+  info = "Array element accessors"
+)

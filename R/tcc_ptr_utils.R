@@ -86,6 +86,43 @@ tcc_write_bytes <- function(ptr, raw) {
   .Call(RC_write_bytes, ptr, raw)
 }
 
+#' Dereference a pointer-to-pointer
+#'
+#' Treats `ptr_ref` as a pointer to a pointer and returns the pointed address
+#' as an external pointer. This is useful for fields like `void**` or `T**`.
+#'
+#' @param ptr_ref External pointer to a pointer value (e.g., address of a field).
+#' @return External pointer to the referenced address.
+#' @export
+tcc_data_ptr <- function(ptr_ref) {
+  .Call(RC_data_ptr, ptr_ref)
+}
+
+#' Set a pointer-to-pointer value
+#'
+#' Assigns the address in `ptr_value` to the location pointed to by `ptr_ref`.
+#'
+#' @param ptr_ref External pointer to a pointer value (e.g., address of a field).
+#' @param ptr_value External pointer to store.
+#' @return The updated pointer reference (invisibly).
+#' @export
+tcc_ptr_set <- function(ptr_ref, ptr_value) {
+  .Call(RC_ptr_set, ptr_ref, ptr_value)
+}
+
+#' Free the pointed memory and set to NULL
+#'
+#' Frees the memory pointed to by `ptr_ref` and sets the pointer to NULL.
+#' Use this only when the pointed memory is not already owned by another
+#' external pointer with its own finalizer.
+#'
+#' @param ptr_ref External pointer to a pointer value.
+#' @return The updated pointer reference (invisibly).
+#' @export
+tcc_ptr_free_set_null <- function(ptr_ref) {
+  .Call(RC_ptr_free_set_null, ptr_ref)
+}
+
 #' Read unsigned 8-bit values from a pointer
 #'
 #' @param ptr External pointer
@@ -170,4 +207,14 @@ tcc_ptr_addr <- function(ptr, hex = FALSE) {
 tcc_ptr_is_null <- function(ptr) {
   stopifnot(inherits(ptr, "externalptr"))
   !.Call(RC_libtcc_ptr_valid, ptr)
+}
+
+#' Check whether an external pointer is owned by Rtinycc
+#'
+#' @param ptr External pointer
+#' @return Logical scalar
+#' @export
+tcc_ptr_is_owned <- function(ptr) {
+  stopifnot(inherits(ptr, "externalptr"))
+  .Call(RC_ptr_is_owned, ptr)
 }
