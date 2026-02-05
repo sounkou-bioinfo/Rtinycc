@@ -66,6 +66,8 @@
   : Generate field address getter helpers
 - [`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md)
   : Free allocated memory
+- [`tcc_generate_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_generate_bindings.md)
+  : Generate bindings from header declarations
 - [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md)
   : Get a symbol pointer from a libtcc state
 - [`tcc_global()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_global.md)
@@ -138,10 +140,14 @@
   : Extract macro defines from a header file
 - [`tcc_treesitter_enum_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enum_bindings.md)
   : Apply tcc_enum() bindings from a header
+- [`tcc_treesitter_enum_members()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enum_members.md)
+  : Parse enum members with treesitter.c
 - [`tcc_treesitter_enums()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enums.md)
   : Parse enum declarations with treesitter.c
 - [`tcc_treesitter_functions()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_functions.md)
   : Parse function declarations with treesitter.c
+- [`tcc_treesitter_global_types()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_global_types.md)
+  : Parse global declarations with types using treesitter.c
 - [`tcc_treesitter_globals()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_globals.md)
   : Parse global declarations with treesitter.c
 - [`tcc_treesitter_struct_accessors()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_accessors.md)
@@ -152,6 +158,12 @@
   : Parse struct members (including bitfields) with treesitter.c
 - [`tcc_treesitter_structs()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_structs.md)
   : Parse struct declarations with treesitter.c
+- [`tcc_treesitter_union_accessors()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_union_accessors.md)
+  : Generate tcc_union() accessors from header unions
+- [`tcc_treesitter_union_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_union_bindings.md)
+  : Apply tcc_union() bindings from a header
+- [`tcc_treesitter_union_members()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_union_members.md)
+  : Parse union members with treesitter.c
 - [`tcc_treesitter_unions()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_unions.md)
   : Parse union declarations with treesitter.c
 - [`tcc_union()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_union.md)

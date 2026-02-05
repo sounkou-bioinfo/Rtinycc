@@ -38,6 +38,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_field_addr.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_generate_bindings.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_global.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_header.html</loc></url>
@@ -71,14 +72,19 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_bindings.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_defines.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enum_bindings.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enum_members.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enums.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_functions.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_global_types.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_globals.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_helpers.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_accessors.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_bindings.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_members.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_structs.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_union_accessors.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_union_bindings.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_union_members.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_unions.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_union.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_write_bytes.html</loc></url>
