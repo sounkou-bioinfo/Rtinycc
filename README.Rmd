@@ -132,8 +132,7 @@ ffi <- tcc_ffi() |>
 x <- 1:100
 result <- ffi$sum_array(x, length(x))
 result
-rm(ffi, x, result)
-invisible(gc())
+
 ```
 
 
@@ -165,8 +164,7 @@ ffi <- tcc_ffi() |>
 
 ffi$call_cb(cb, cb_ptr, 21.0)
 tcc_callback_close(cb)
-rm(ffi, cb_ptr, cb)
-invisible(gc())
+
 ```
 
 #### Callback errors
@@ -210,8 +208,7 @@ res <- withCallingHandlers(
 list(warned = warned, result = res)
 
 tcc_callback_close(cb_err)
-rm(ffi_err, cb_ptr_err, cb_err)
-invisible(gc())
+
 ```
 
 #### Async callbacks (main-thread queue)
@@ -276,8 +273,7 @@ rc <- ffi_async$spawn_async(cb_async, cb_ptr, 2L)
 tcc_callback_async_drain()
 print(hits)
 tcc_callback_close(cb_async)
-rm(ffi_async, cb_ptr, cb_async)
-invisible(gc())
+
 
 ```
 
@@ -316,8 +312,7 @@ ffi$point_distance(p1, p2)
 
 ffi$point_free(p1)
 ffi$point_free(p2)
-rm(ffi, p1, p2)
-invisible(gc())
+
 ```
 
 #### Enums
@@ -336,8 +331,7 @@ ffi <- tcc_ffi() |>
 
 ffi$enum_status_OK()
 ffi$enum_status_ERROR()
-rm(ffi)
-invisible(gc())
+
 ```
 
 #### Bitfields
@@ -363,8 +357,7 @@ s <- ffi$status_set_code(s, 42)
 ffi$status_get_flag(s)
 ffi$status_get_code(s)
 ffi$status_free(s)
-rm(ffi, s)
-invisible(gc())
+
 ```
 
 
@@ -404,8 +397,7 @@ sqlite <- tcc_link(
 
 # Query the SQLite library version
 sqlite$sqlite3_libversion()
-rm(sqlite)
-invisible(gc())
+
 ```
 
 #### SQLite with an R callback
@@ -485,8 +477,7 @@ sqlite_cb$exec_with_r_callback(db_ptr, "SELECT name FROM items;", cb_ptr)
 sqlite_cb$close_db(db_ptr)
 
 tcc_callback_close(cb)
-rm(sqlite_cb, db_ptr, cb_ptr, cb)
-invisible(gc())
+
 ```
 
 #### SQLite with an opaque struct wrapper
@@ -536,8 +527,7 @@ sqlite_struct$sqlite_handle_exec(h, "CREATE TABLE items (id INTEGER, name TEXT);
 sqlite_struct$sqlite_handle_exec(h, "INSERT INTO items VALUES (1, \'test\');")
 sqlite_struct$sqlite_handle_close(h)
 sqlite_struct$sqlite_handle_free(h)
-rm(sqlite_struct, h)
-invisible(gc())
+
 ```
 
 
@@ -596,8 +586,7 @@ tcc_ptr_addr(db, hex = TRUE)
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
 sqlite_with_utils$sqlite3_close(db)
-rm(sqlite_with_utils, db, result)
-invisible(gc())
+
 ```
 
 ### Lower level API

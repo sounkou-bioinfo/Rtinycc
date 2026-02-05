@@ -27,7 +27,7 @@ static void RC_null_finalizer(SEXP ext) {
     R_ClearExternalPtr(ext);
 }
 
-static void RC_free_finalizer(SEXP ext) {
+void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         free(ptr);

@@ -14,8 +14,8 @@ expect_true({
   on.exit(
     {
       close_if_valid(cb)
-      rm(cb_ptr)
-      gc()
+      # rm(cb_ptr)
+      # gc()
     },
     add = TRUE
   )
@@ -35,8 +35,8 @@ expect_true({
   expect_true(inherits(ffi, "tcc_compiled"), info = "Compiled FFI object")
 
   res <- ffi$call_cb(cb, cb_ptr, 21.0)
-  rm(ffi)
-  gc()
+  # rm(ffi)
+  # gc()
   isTRUE(all.equal(res, 42.0, tolerance = 1e-12))
 })
 
@@ -51,8 +51,8 @@ expect_true(
     on.exit(
       {
         close_if_valid(cb_err)
-        rm(cb_ptr_err)
-        gc()
+        # rm(cb_ptr_err)
+        # gc()
       },
       add = TRUE
     )
@@ -78,8 +78,8 @@ expect_true(
       }
     )
     ok <- isTRUE(warned && is.na(res))
-    rm(ffi_err)
-    gc()
+    # rm(ffi_err)
+    # gc()
     ok
   },
   info = "Callback errors yield warning and NA"
@@ -92,8 +92,8 @@ expect_true({
   on.exit(
     {
       close_if_valid(cb_ptr_rt)
-      rm(cb_ptr_handle)
-      gc()
+      # rm(cb_ptr_handle)
+      # gc()
     },
     add = TRUE
   )
@@ -114,9 +114,9 @@ expect_true({
   out <- ffi_ptr$echo_ptr(cb_ptr_rt, cb_ptr_handle, buf)
   ok <- inherits(out, "externalptr")
   tcc_free(buf)
-  rm(out)
-  rm(ffi_ptr)
-  gc()
+  # rm(out)
+  # rm(ffi_ptr)
+  # gc()
   ok
 })
 
@@ -128,8 +128,8 @@ expect_true(
     on.exit(
       {
         close_if_valid(cb_closed)
-        rm(cb_ptr_closed)
-        gc()
+        # rm(cb_ptr_closed)
+        # gc()
       },
       add = TRUE
     )
@@ -156,8 +156,8 @@ expect_true(
       }
     )
     ok <- isTRUE(warned && is.na(res))
-    rm(ffi_closed)
-    gc()
+    # rm(ffi_closed)
+    # gc()
     ok
   },
   info = "Closed callback yields warning and NA"
@@ -182,8 +182,8 @@ if (.Platform$OS.type != "windows") {
       on.exit(
         {
           close_if_valid(cb_async)
-          rm(cb_ptr_async)
-          gc()
+          # rm(cb_ptr_async)
+          # gc()
         },
         add = TRUE
       )
@@ -204,8 +204,8 @@ if (.Platform$OS.type != "windows") {
       rc <- ffi_async$spawn_async(cb_async, cb_ptr_async, 2L)
       tcc_callback_async_drain()
 
-      rm(ffi_async)
-      gc()
+      # rm(ffi_async)
+      # gc()
 
       isTRUE(rc == 0L && hits == 2L)
     },

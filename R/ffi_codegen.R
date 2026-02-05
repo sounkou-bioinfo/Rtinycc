@@ -5,8 +5,7 @@
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
     i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
     i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
@@ -72,8 +71,7 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
 generate_c_return <- function(value_expr, ffi_type) {
   type_info <- check_ffi_type(ffi_type, "return value")
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
@@ -311,9 +309,6 @@ generate_struct_helpers <- function(
   for (struct_name in names(structs)) {
     fields <- structs[[struct_name]]
 
-    # Finalizer function
-    helpers <- c(helpers, generate_struct_finalizer(struct_name))
-
     # Constructor
     helpers <- c(helpers, generate_struct_new(struct_name))
 
@@ -363,18 +358,6 @@ generate_struct_helpers <- function(
   paste(helpers, collapse = "\n")
 }
 
-# Generate finalizer for struct
-generate_struct_finalizer <- function(struct_name) {
-  c(
-    sprintf("static void %s_finalizer(SEXP ext) {", struct_name),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    "  if (p) free(p);",
-    "  R_ClearExternalPtr(ext);",
-    "}",
-    ""
-  )
-}
-
 # Generate constructor
 generate_struct_new <- function(struct_name) {
   c(
@@ -389,7 +372,7 @@ generate_struct_new <- function(struct_name) {
       "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"%s\"), R_NilValue);",
       struct_name
     ),
-    sprintf("  R_RegisterCFinalizerEx(ext, %s_finalizer, TRUE);", struct_name),
+    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);",
     "  return ext;",
     "}",
     ""
@@ -400,7 +383,7 @@ generate_struct_new <- function(struct_name) {
 generate_struct_free <- function(struct_name) {
   c(
     sprintf("SEXP R_wrap_%s_free(SEXP ext) {", struct_name),
-    sprintf("  %s_finalizer(ext);", struct_name),
+    "  RC_free_finalizer(ext);",
     "  return R_NilValue;",
     "}",
     ""
@@ -415,8 +398,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec
   }
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i32 = sprintf("return ScalarInteger(p->%s);", field_name),
@@ -464,8 +446,7 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
     size <- NULL
   }
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i8 = sprintf("p->%s = (int8_t)asInteger(val);", field_name),
     i16 = sprintf("p->%s = (int16_t)asInteger(val);", field_name),
     i32 = sprintf("p->%s = asInteger(val);", field_name),
@@ -601,9 +582,6 @@ generate_union_helpers <- function(unions, introspect) {
     union_def <- unions[[union_name]]
     members <- union_def$members
 
-    # Finalizer
-    helpers <- c(helpers, generate_union_finalizer(union_name))
-
     # Constructor
     helpers <- c(helpers, generate_union_new(union_name))
 
@@ -634,17 +612,6 @@ generate_union_helpers <- function(unions, introspect) {
   paste(helpers, collapse = "\n")
 }
 
-generate_union_finalizer <- function(union_name) {
-  c(
-    sprintf("static void %s_finalizer(SEXP ext) {", union_name),
-    sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
-    "  if (p) free(p);",
-    "  R_ClearExternalPtr(ext);",
-    "}",
-    ""
-  )
-}
-
 generate_union_new <- function(union_name) {
   c(
     sprintf("SEXP R_wrap_%s_new(void) {", union_name),
@@ -658,7 +625,7 @@ generate_union_new <- function(union_name) {
       "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"%s\"), R_NilValue);",
       union_name
     ),
-    sprintf("  R_RegisterCFinalizerEx(ext, %s_finalizer, TRUE);", union_name),
+    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);",
     "  return ext;",
     "}",
     ""
@@ -668,7 +635,7 @@ generate_union_new <- function(union_name) {
 generate_union_free <- function(union_name) {
   c(
     sprintf("SEXP R_wrap_%s_free(SEXP ext) {", union_name),
-    sprintf("  %s_finalizer(ext);", union_name),
+    "  RC_free_finalizer(ext);",
     "  return R_NilValue;",
     "}",
     ""
@@ -692,8 +659,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i32 = sprintf("return ScalarInteger(p->%s);", mem_name),
     f32 = sprintf("return ScalarReal((double)p->%s);", mem_name),
     sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name)
@@ -718,8 +684,7 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i32 = sprintf("p->%s = asInteger(val);", mem_name),
     f32 = sprintf("p->%s = (float)asReal(val);", mem_name),
     sprintf("// Cannot set union member of type %s", type_name)
@@ -831,7 +796,13 @@ generate_ffi_code <- function(
   )
 
   # Always include R headers for SEXP-based wrappers
-  parts <- c(parts, "#include <R.h>", "#include <Rinternals.h>", "")
+  parts <- c(
+    parts,
+    "#include <R.h>",
+    "#include <Rinternals.h>",
+    "void RC_free_finalizer(SEXP ext);",
+    ""
+  )
 
   parts <- c(
     parts,

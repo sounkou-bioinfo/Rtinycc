@@ -4,6 +4,7 @@
 - Add `callback_async:<signature>` for thread-safe scheduling on the main thread
 - Callback errors now warn and return type-appropriate defaults (avoid longjmp)
 - Update README examples for callbacks, async callbacks, enums, and bitfields
+- Fix potential exit-time segfaults by using a package-level finalizer (`RC_free_finalizer`) for generated struct/union helpers instead of JIT-local finalizers
 
 # Rtinycc 0.0.1
 
