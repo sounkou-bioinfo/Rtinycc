@@ -2,6 +2,8 @@
 
 This file is the minimum guidance for agentic work on Rtinycc. Read relevant code before changes, keep edits small and focused, and update tests/docs when you change behavior.
 
+Agents must read actual implementations before guessing. If you need third-party code or headers, check the `.sync` directory for local copies of libraries we depend on so you can read them directly instead of assuming behavior. We also generate `<package>.llm.txt` files for R package docs; for example, treesitter.c docs can be found in `treesitter.llm.txt`.
+
 ## What this package does
 
 Rtinycc embeds TinyCC and exposes both CLI and libtcc APIs to R. It provides a Bun-style FFI that generates SEXP wrappers at runtime, compiles them with TinyCC, and calls them via `.Call`.
@@ -27,7 +29,7 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership is tracke
 - `make rd` regenerates roxygen output.
 - `make test` runs tinytest.
 - For a single file: `R -e "tinytest::run_test_file('inst/tinytest/<file>.R')"`.
-- Development plumbing: run `air format .` after edits, use `make install` for local installs, `make check` for CRAN-style checks, and `make rdm` to regenerate README. Always add or update tinytests for behavior changes.
+- Development plumbing: run `air format` after edits, use `make install` for local installs, `make check` for CRAN-style checks, and `make rdm` to regenerate README. Always add or update tinytests for behavior changes.
 
 ## Editing rules
 
