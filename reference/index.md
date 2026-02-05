@@ -58,6 +58,8 @@
   : Create a C-style string pointer
 - [`tcc_cstring_object()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring_object.md)
   : CString S3 Class
+- [`tcc_data_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_data_ptr.md)
+  : Dereference a pointer-to-pointer
 - [`tcc_enum()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_enum.md)
   : Declare enum for FFI helper generation
 - [`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md)
@@ -106,8 +108,14 @@
   : TinyCC paths
 - [`tcc_ptr_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_addr.md)
   : Get pointer address as integer
+- [`tcc_ptr_free_set_null()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_free_set_null.md)
+  : Free the pointed memory and set to NULL
 - [`tcc_ptr_is_null()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_null.md)
   : Check whether an external pointer is NULL
+- [`tcc_ptr_is_owned()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_owned.md)
+  : Check whether an external pointer is owned by Rtinycc
+- [`tcc_ptr_set()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_set.md)
+  : Set a pointer-to-pointer value
 - [`tcc_ptr_utils`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_utils.md)
   : Pointer and Buffer Utilities for FFI
 - [`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md)

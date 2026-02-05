@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5af394b7e000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bddc6000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -116,10 +116,24 @@
 <span><span class="fu"><a href="reference/tcc_read_u8.html">tcc_read_u8</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 104 101 108 108 111</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5af393537de0"</span></span>
+<span><span class="co">#&gt; [1] "0x5eb4bb215dc0"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span></span>
+<span><span class="co"># Pointer-to-pointer helpers</span></span>
+<span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
+<span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4ba9f9190&gt;</span></span>
+<span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bd04c4f0&gt;</span></span>
+<span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4ba9f9190&gt;</span></span>
+<span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 <div class="section level3">
@@ -612,7 +626,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5af3975d6358"</span></span>
+<span><span class="co">#&gt; [1] "0x5eb4bf9a16b8"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
@@ -752,7 +766,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5af39664eb30&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bd731a70&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -764,59 +778,53 @@
 <div class="section level4">
 <h4 id="nested-structsunions-by-value">Nested structs/unions by value<a class="anchor" aria-label="anchor" href="#nested-structsunions-by-value"></a>
 </h4>
-<p>Use field addresses and wrap the nested type explicitly:</p>
+<p>Use pointer utilities for pointer fields, and small wrappers for by-value fields:</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    struct inner { int a; };</span></span>
-<span><span class="st">    struct outer { struct inner in; };</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    struct outer* outer_new(void) { return (struct outer*)calloc(1, sizeof(struct outer)); }</span></span>
-<span><span class="st">    void outer_free(struct outer* o) { free(o); }</span></span>
-<span><span class="st">    void* outer_in_addr(struct outer* o) { return (void*) &amp;o-&gt;in; }</span></span>
+<span><span class="st">    struct outer { struct inner* in; };</span></span>
 <span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"inner"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    outer_new <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
-<span>    outer_free <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>    outer_in_addr <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"outer"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>`in` <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_field_addr.html">tcc_field_addr</a></span><span class="op">(</span><span class="st">"outer"</span>, <span class="st">"in"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">o</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">outer_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">in_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_set_a</span><span class="op">(</span><span class="va">in_ptr</span>, <span class="fl">42L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5af397ddc030&gt;</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">outer_free</span><span class="op">(</span><span class="va">o</span><span class="op">)</span></span>
+<span><span class="va">o</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">in_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span>, <span class="va">in_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bfee7fa0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_set_a</span><span class="op">(</span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span><span class="op">)</span>, <span class="fl">42L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bf366dc0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_free</span><span class="op">(</span><span class="va">in_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_free</span><span class="op">(</span><span class="va">o</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 <div class="section level4">
 <h4 id="anonymous-nested-structsunions">Anonymous nested structs/unions<a class="anchor" aria-label="anchor" href="#anonymous-nested-structsunions"></a>
 </h4>
-<p>Name the type in <code><a href="reference/tcc_source.html">tcc_source()</a></code> and bind it:</p>
+<p>Name the type in <code><a href="reference/tcc_source.html">tcc_source()</a></code> and bind it (still uses helpers to reach fields):</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    typedef struct anon_t { int a; } anon_t;</span></span>
-<span><span class="st">    struct wrapper { anon_t anon; };</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    struct wrapper* wrapper_new(void) { return (struct wrapper*)calloc(1, sizeof(struct wrapper)); }</span></span>
-<span><span class="st">    void wrapper_free(struct wrapper* w) { free(w); }</span></span>
-<span><span class="st">    void* wrapper_anon_addr(struct wrapper* w) { return (void*) &amp;w-&gt;anon; }</span></span>
+<span><span class="st">    struct wrapper { anon_t* anon; };</span></span>
 <span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"anon_t"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    wrapper_new <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
-<span>    wrapper_free <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>    wrapper_anon_addr <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"wrapper"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>anon <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_field_addr.html">tcc_field_addr</a></span><span class="op">(</span><span class="st">"wrapper"</span>, <span class="st">"anon"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">w</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">wrapper_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">anon_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">wrapper_anon_addr</span><span class="op">(</span><span class="va">w</span><span class="op">)</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_set_a</span><span class="op">(</span><span class="va">anon_ptr</span>, <span class="fl">7L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5af39331e100&gt;</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">wrapper_free</span><span class="op">(</span><span class="va">w</span><span class="op">)</span></span>
+<span><span class="va">w</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">anon_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_anon_addr</span><span class="op">(</span><span class="va">w</span><span class="op">)</span>, <span class="va">anon_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bf366dc0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_set_a</span><span class="op">(</span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_anon_addr</span><span class="op">(</span><span class="va">w</span><span class="op">)</span><span class="op">)</span>, <span class="fl">7L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4c060a3e0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_free</span><span class="op">(</span><span class="va">anon_ptr</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_free</span><span class="op">(</span><span class="va">w</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 <div class="section level4">
@@ -843,29 +851,19 @@
 <div class="section level4">
 <h4 id="complex-composite-layouts-arrays-in-structs">Complex composite layouts (arrays in structs)<a class="anchor" aria-label="anchor" href="#complex-composite-layouts-arrays-in-structs"></a>
 </h4>
-<p>Use <code><a href="reference/tcc_field_addr.html">tcc_field_addr()</a></code> and raw byte helpers:</p>
+<p>Use pointer utilities and raw byte helpers:</p>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
-<span><span class="st">    struct buf { unsigned char data[16]; };</span></span>
-<span><span class="st">    struct buf* buf_new(void) { return (struct buf*)calloc(1, sizeof(struct buf)); }</span></span>
-<span><span class="st">    void buf_free(struct buf* b) { free(b); }</span></span>
-<span><span class="st">    void* buf_data_addr(struct buf* b) { return (void*) b-&gt;data; }</span></span>
-<span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    buf_new <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
-<span>    buf_free <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>    buf_data_addr <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct buf { unsigned char data[16]; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"buf"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"u8"</span>, size <span class="op">=</span> <span class="fl">16</span>, array <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">buf_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">data_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">buf_data_addr</span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/tcc_write_bytes.html">tcc_write_bytes</a></span><span class="op">(</span><span class="va">data_ptr</span>, <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">as.raw</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">16</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; NULL</span></span>
-<span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">data_ptr</span>, <span class="fl">16</span><span class="op">)</span></span>
-<span><span class="co">#&gt;  [1] 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">buf_free</span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
+<span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">255L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5eb4bcfe31b0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 255</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_free</span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 </div>
