@@ -5,6 +5,8 @@
 - Callback errors now warn and return type-appropriate defaults (avoid longjmp)
 - Update README examples for callbacks, async callbacks, enums, and bitfields
 - Fix potential exit-time segfaults by using a package-level finalizer (`RC_free_finalizer`) for generated struct/union helpers instead of JIT-local finalizers
+- Add treesitter.c helpers (`tcc_treesitter_functions()`, `tcc_treesitter_structs()`, `tcc_treesitter_bindings()`) aligned with Rtinycc type mappings
+- Require treesitter.c (>= 0.0.3) for header parsing helpers
 
 # Rtinycc 0.0.1
 

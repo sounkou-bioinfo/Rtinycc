@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x581513160000>
+#> <pointer: 0x619fbff8d000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -610,7 +610,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x58151482a948"
+#> [1] "0x619fc2f64248"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -681,62 +681,18 @@ signatures and bind to an existing shared library (no manual
 `tcc_source()` bodies needed).
 
 ``` r
-library(treesitter.c)
-
 header <- '
 double sqrt(double x);
 double sin(double x);
 '
 
-root <- parse_header_text(header)
-funcs <- get_function_nodes(root, extract_params = TRUE, extract_return = TRUE)
+funcs <- tcc_treesitter_functions(header)
 funcs
 #>   capture_name text start_line start_col params return_type
 #> 1    decl_name sqrt          2         8 double      double
 #> 2    decl_name  sin          3         8 double      double
 
-clean_type <- function(x) {
-  x <- trimws(x)
-  x <- gsub("\\s+", " ", x)
-  x <- sub("\\s+[A-Za-z_][A-Za-z0-9_]*$", "", x)
-  trimws(x)
-}
-
-map_type <- function(x) {
-  x <- clean_type(x)
-  if (x %in% c("int", "int32_t")) return("i32")
-  if (x %in% c("unsigned int", "uint32_t")) return("u32")
-  if (x %in% c("double", "float")) return("f64")
-  if (grepl("char\\s*\\*", x)) return("cstring")
-  if (x %in% c("void")) return("void")
-  "ptr"
-}
-
-signature_to_bind <- function(row) {
-  params <- row$params
-  if (is.list(params)) params <- params[[1]]
-  params <- as.character(params)
-  if (length(params) == 1 && grepl(",", params)) {
-    params <- unlist(strsplit(params, ","))
-  }
-  args <- if (length(params) == 1 && !is.na(params) && nzchar(params)) {
-    vapply(params, map_type, character(1), USE.NAMES = FALSE)
-  } else if (length(params) > 1) {
-    vapply(params, map_type, character(1), USE.NAMES = FALSE)
-  } else {
-    character(0)
-  }
-  ret <- row$return_type
-  if (is.list(ret)) ret <- ret[[1]]
-  ret <- as.character(ret)
-  if (length(ret) > 1) ret <- ret[[1]]
-  list(args = as.list(args), returns = map_type(ret))
-}
-
-symbols <- setNames(
-  lapply(seq_len(nrow(funcs)), function(i) signature_to_bind(funcs[i, ])),
-  funcs$text
-)
+symbols <- tcc_treesitter_bindings(header)
 
 math_lib <- tcc_link(
   "libm.so.6",
