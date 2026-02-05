@@ -38,6 +38,7 @@
 <li>Add <code>callback_async:&lt;signature&gt;</code> for thread-safe scheduling on the main thread</li>
 <li>Callback errors now warn and return type-appropriate defaults (avoid longjmp)</li>
 <li>Update README examples for callbacks, async callbacks, enums, and bitfields</li>
+<li>Fix potential exit-time segfaults by using a package-level finalizer (<code>RC_free_finalizer</code>) for generated struct/union helpers instead of JIT-local finalizers</li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.1" id="rtinycc-001">Rtinycc 0.0.1<a class="anchor" aria-label="anchor" href="#rtinycc-001"></a></h2>

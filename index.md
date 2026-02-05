@@ -56,7 +56,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x607ba37c8000>
+#> <pointer: 0x5b0ea434c000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -148,8 +148,6 @@ x <- 1:100
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
-rm(ffi, x, result)
-invisible(gc())
 ```
 
 #### Callbacks
@@ -190,8 +188,6 @@ ffi <- tcc_ffi() |>
 ffi$call_cb(cb, cb_ptr, 21.0)
 #> [1] 42
 tcc_callback_close(cb)
-rm(ffi, cb_ptr, cb)
-invisible(gc())
 ```
 
 #### Callback errors
@@ -240,8 +236,6 @@ list(warned = warned, result = res)
 #> [1] NA
 
 tcc_callback_close(cb_err)
-rm(ffi_err, cb_ptr_err, cb_err)
-invisible(gc())
 ```
 
 #### Async callbacks (main-thread queue)
@@ -307,8 +301,6 @@ tcc_callback_async_drain()
 print(hits)
 #> [1] 200
 tcc_callback_close(cb_async)
-rm(ffi_async, cb_ptr, cb_async)
-invisible(gc())
 ```
 
 #### Structs, unions, and bitfields
@@ -356,8 +348,6 @@ ffi$point_free(p1)
 #> NULL
 ffi$point_free(p2)
 #> NULL
-rm(ffi, p1, p2)
-invisible(gc())
 ```
 
 #### Enums
@@ -380,8 +370,6 @@ ffi$enum_status_OK()
 #> [1] 0
 ffi$enum_status_ERROR()
 #> [1] 1
-rm(ffi)
-invisible(gc())
 ```
 
 #### Bitfields
@@ -411,8 +399,6 @@ ffi$status_get_code(s)
 #> [1] 42
 ffi$status_free(s)
 #> NULL
-rm(ffi, s)
-invisible(gc())
 ```
 
 ### Linking external libraries
@@ -454,8 +440,6 @@ sqlite <- tcc_link(
 # Query the SQLite library version
 sqlite$sqlite3_libversion()
 #> [1] "3.45.1"
-rm(sqlite)
-invisible(gc())
 ```
 
 #### SQLite with an R callback
@@ -541,8 +525,6 @@ sqlite_cb$close_db(db_ptr)
 #> [1] 0
 
 tcc_callback_close(cb)
-rm(sqlite_cb, db_ptr, cb_ptr, cb)
-invisible(gc())
 ```
 
 #### SQLite with an opaque struct wrapper
@@ -598,8 +580,6 @@ sqlite_struct$sqlite_handle_close(h)
 #> [1] 0
 sqlite_struct$sqlite_handle_free(h)
 #> NULL
-rm(sqlite_struct, h)
-invisible(gc())
 ```
 
 #### Custom wrapper functions: SQLite with pointer utilities
@@ -653,15 +633,13 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x607ba1e97338"
+#> [1] "0x5b0ea2cd1b58"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
 #> [1] "3.45.1"
 sqlite_with_utils$sqlite3_close(db)
 #> [1] 0
-rm(sqlite_with_utils, db, result)
-invisible(gc())
 ```
 
 ### Lower level API
