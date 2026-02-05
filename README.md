@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x63e1285ef000>
+#> <pointer: 0x56d5bb561000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -610,7 +610,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x63e12a148d28"
+#> [1] "0x56d5be945028"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -672,6 +672,30 @@ tcc_call_symbol(state, "hello_world", return = "void")
 #> NULL
 tcc_call_symbol(state, "call_r_sqrt", return = "double")
 #> [1] 4
+```
+
+### Global getters and setters
+
+You can expose globals with explicit getters and setters:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    int global_counter = 7;
+    double global_pi = 3.14159;
+  ') |>
+  tcc_global("global_counter", "i32") |>
+  tcc_global("global_pi", "f64") |>
+  tcc_compile()
+
+ffi$global_global_counter_get()
+#> [1] 7
+ffi$global_global_pi_get()
+#> [1] 3.14159
+ffi$global_global_counter_set(9L)
+#> [1] 9
+ffi$global_global_counter_get()
+#> [1] 9
 ```
 
 ### Header parsing with `treesitter.c` and generate bindings

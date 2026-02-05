@@ -17,7 +17,6 @@ tcc_bind(ffi, ...)
 }
 Callback arguments should use the form \code{callback:<signature>} (e.g.,
 \code{callback:double(double)}). The generated trampoline expects a
-\code{void*} user-data pointer as its first argument; pass
 \code{tcc_callback_ptr(cb)} to the corresponding user-data parameter in
 the C API. For thread-safe scheduling, use
 \code{callback_async:<signature>} which enqueues the call on the main

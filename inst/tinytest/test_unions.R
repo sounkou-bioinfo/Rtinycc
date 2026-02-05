@@ -18,10 +18,10 @@ expect_true(
     ffi <- tcc_bind(ffi)
 
     compiled <- tcc_compile(ffi)
-    u <- compiled$data_new()
-    u <- compiled$data_set_i(u, 42L)
-    v <- compiled$data_get_i(u)
-    compiled$data_free(u)
+    u <- compiled$union_data_new()
+    u <- compiled$union_data_set_i(u, 42L)
+    v <- compiled$union_data_get_i(u)
+    compiled$union_data_free(u)
     v == 42L
   },
   info = "Basic union"
@@ -42,8 +42,8 @@ expect_true(
     ffi <- tcc_bind(ffi)
 
     compiled <- tcc_compile(ffi)
-    s <- compiled$data_sizeof()
-    a <- compiled$data_alignof()
+    s <- compiled$union_data_sizeof()
+    a <- compiled$union_data_alignof()
     s == 4 && a == 4
   },
   info = "Union introspection"
@@ -59,14 +59,14 @@ expect_true(
     ffi <- tcc_bind(ffi)
 
     compiled <- tcc_compile(ffi)
-    u1 <- compiled$u1_new()
-    u2 <- compiled$u2_new()
-    u1 <- compiled$u1_set_i(u1, 100L)
-    u2 <- compiled$u2_set_i(u2, 200L)
-    v1 <- compiled$u1_get_i(u1)
-    v2 <- compiled$u2_get_i(u2)
-    compiled$u1_free(u1)
-    compiled$u2_free(u2)
+    u1 <- compiled$union_u1_new()
+    u2 <- compiled$union_u2_new()
+    u1 <- compiled$union_u1_set_i(u1, 100L)
+    u2 <- compiled$union_u2_set_i(u2, 200L)
+    v1 <- compiled$union_u1_get_i(u1)
+    v2 <- compiled$union_u2_get_i(u2)
+    compiled$union_u1_free(u1)
+    compiled$union_u2_free(u2)
     v1 == 100L && v2 == 200L
   },
   info = "Multiple unions"

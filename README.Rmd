@@ -297,21 +297,21 @@ ffi <- tcc_ffi() |>
   tcc_bind(point_distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
   tcc_compile()
 
-p1 <- ffi$point_new()
-p1 <- ffi$point_set_x(p1, 0.0)
-p1 <- ffi$point_set_y(p1, 0.0)
-p1 <- ffi$point_set_id(p1, 1L)
+p1 <- ffi$struct_point_new()
+p1 <- ffi$struct_point_set_x(p1, 0.0)
+p1 <- ffi$struct_point_set_y(p1, 0.0)
+p1 <- ffi$struct_point_set_id(p1, 1L)
 
-p2 <- ffi$point_new()
-p2 <- ffi$point_set_x(p2, 3.0)
-p2 <- ffi$point_set_y(p2, 4.0)
-p2 <- ffi$point_set_id(p2, 2L)
+p2 <- ffi$struct_point_new()
+p2 <- ffi$struct_point_set_x(p2, 3.0)
+p2 <- ffi$struct_point_set_y(p2, 4.0)
+p2 <- ffi$struct_point_set_id(p2, 2L)
 
-ffi$point_get_x(p1)
+ffi$struct_point_get_x(p1)
 ffi$point_distance(p1, p2)
 
-ffi$point_free(p1)
-ffi$point_free(p2)
+ffi$struct_point_free(p1)
+ffi$struct_point_free(p2)
 
 ```
 
@@ -351,12 +351,12 @@ ffi <- tcc_ffi() |>
   tcc_struct("status", accessors = c(flag = "u8", code = "u8")) |>
   tcc_compile()
 
-s <- ffi$status_new()
-s <- ffi$status_set_flag(s, 1)
-s <- ffi$status_set_code(s, 42)
-ffi$status_get_flag(s)
-ffi$status_get_code(s)
-ffi$status_free(s)
+s <- ffi$struct_status_new()
+s <- ffi$struct_status_set_flag(s, 1)
+s <- ffi$struct_status_set_code(s, 42)
+ffi$struct_status_get_flag(s)
+ffi$struct_status_get_code(s)
+ffi$struct_status_free(s)
 
 ```
 
@@ -497,12 +497,12 @@ sqlite_struct <- tcc_ffi() |>
   ) |>
   tcc_compile()
 
-h <- sqlite_struct$sqlite_handle_new()
+h <- sqlite_struct$struct_sqlite_handle_new()
 sqlite_struct$sqlite_handle_open(h, ":memory:")
 sqlite_struct$sqlite_handle_exec(h, "CREATE TABLE items (id INTEGER, name TEXT);")
 sqlite_struct$sqlite_handle_exec(h, "INSERT INTO items VALUES (1, \'test\');")
 sqlite_struct$sqlite_handle_close(h)
-sqlite_struct$sqlite_handle_free(h)
+sqlite_struct$struct_sqlite_handle_free(h)
 
 ```
 
@@ -607,6 +607,26 @@ tcc_relocate(state)
 
 tcc_call_symbol(state, "hello_world", return = "void")
 tcc_call_symbol(state, "call_r_sqrt", return = "double")
+```
+
+### Global getters and setters
+
+You can expose globals with explicit getters and setters:
+
+```{r globals-example}
+ffi <- tcc_ffi() |>
+  tcc_source('
+    int global_counter = 7;
+    double global_pi = 3.14159;
+  ') |>
+  tcc_global("global_counter", "i32") |>
+  tcc_global("global_pi", "f64") |>
+  tcc_compile()
+
+ffi$global_global_counter_get()
+ffi$global_global_pi_get()
+ffi$global_global_counter_set(9L)
+ffi$global_global_counter_get()
 ```
 
 

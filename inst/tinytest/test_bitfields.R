@@ -28,18 +28,18 @@ expect_true(
 
     compiled <- tcc_compile(ffi)
 
-    s <- compiled$status_new()
-    s <- compiled$status_set_flag1(s, 1)
-    s <- compiled$status_set_flag2(s, 0)
-    s <- compiled$status_set_code(s, 42)
-    s <- compiled$status_set_value(s, 255)
+    s <- compiled$struct_status_new()
+    s <- compiled$struct_status_set_flag1(s, 1)
+    s <- compiled$struct_status_set_flag2(s, 0)
+    s <- compiled$struct_status_set_code(s, 42)
+    s <- compiled$struct_status_set_value(s, 255)
 
-    f1 <- compiled$status_get_flag1(s)
-    f2 <- compiled$status_get_flag2(s)
-    c <- compiled$status_get_code(s)
-    v <- compiled$status_get_value(s)
+    f1 <- compiled$struct_status_get_flag1(s)
+    f2 <- compiled$struct_status_get_flag2(s)
+    c <- compiled$struct_status_get_code(s)
+    v <- compiled$struct_status_get_value(s)
 
-    compiled$status_free(s)
+    compiled$struct_status_free(s)
 
     f1 == 1 && f2 == 0 && c == 42 && v == 255
   },
@@ -67,7 +67,7 @@ expect_true(
 
     compiled <- tcc_compile(ffi)
 
-    size <- compiled$status_sizeof()
+    size <- compiled$struct_status_sizeof()
 
     # Should be 4 bytes (all bitfields packed into one int)
     size == 4
@@ -93,14 +93,14 @@ expect_true(
 
     compiled <- tcc_compile(ffi)
 
-    s <- compiled$status_new()
-    s <- compiled$status_set_flag(s, 2) # Should be masked to 0 (2 & 1)
-    s <- compiled$status_set_code(s, 100) # Should be masked to 36 (100 & 63)
+    s <- compiled$struct_status_new()
+    s <- compiled$struct_status_set_flag(s, 2) # Should be masked to 0 (2 & 1)
+    s <- compiled$struct_status_set_code(s, 100) # Should be masked to 36 (100 & 63)
 
-    f <- compiled$status_get_flag(s)
-    c <- compiled$status_get_code(s)
+    f <- compiled$struct_status_get_flag(s)
+    c <- compiled$struct_status_get_code(s)
 
-    compiled$status_free(s)
+    compiled$struct_status_free(s)
 
     f == 0 && c == 36
   },

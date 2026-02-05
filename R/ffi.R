@@ -14,7 +14,8 @@ tcc_ffi_object <- function() {
       include_paths = character(0),
       output = "memory",
       compiled = FALSE,
-      wrapper_symbols = character(0)
+      wrapper_symbols = character(0),
+      globals = list()
     ),
     class = "tcc_ffi"
   )
@@ -90,6 +91,49 @@ tcc_library <- function(ffi, library) {
   ffi
 }
 
+#' Declare a global variable getter
+#'
+#' Register a global C symbol so the compiled object exposes getter/setter
+#' functions `global_<name>_get()` and `global_<name>_set()`.
+#'
+#' @param ffi A tcc_ffi object
+#' @param name Global symbol name
+#' @param type FFI type for the global (scalar types only)
+#' @return Updated tcc_ffi object (for chaining)
+#' @export
+#'
+#' @examples
+#' ffi <- tcc_ffi() |>
+#'   tcc_source("int global_counter = 7;") |>
+#'   tcc_global("global_counter", "i32") |>
+#'   tcc_compile()
+#' ffi$global_global_counter_get()
+tcc_global <- function(ffi, name, type) {
+  if (!inherits(ffi, "tcc_ffi")) {
+    stop("Expected tcc_ffi object", call. = FALSE)
+  }
+  if (!is.character(name) || length(name) != 1 || !nzchar(name)) {
+    stop("Global name must be a non-empty string", call. = FALSE)
+  }
+  if (!is.character(type) || length(type) != 1 || !nzchar(type)) {
+    stop("Global type must be a non-empty string", call. = FALSE)
+  }
+
+  type_info <- check_ffi_type(type, "global")
+  if (!is.null(type_info$kind) && type_info$kind == "array") {
+    stop("Global type cannot be an array type", call. = FALSE)
+  }
+  if (type == "void") {
+    stop("Global type cannot be void", call. = FALSE)
+  }
+
+  if (is.null(ffi$globals)) {
+    ffi$globals <- list()
+  }
+  ffi$globals[[name]] <- type
+  ffi
+}
+
 #' Add C headers
 #'
 #' @param ffi A tcc_ffi object
@@ -132,7 +176,6 @@ tcc_source <- function(ffi, code) {
 #'   }
 #'   Callback arguments should use the form \code{callback:<signature>} (e.g.,
 #'   \code{callback:double(double)}). The generated trampoline expects a
-#'   \code{void*} user-data pointer as its first argument; pass
 #'   \code{tcc_callback_ptr(cb)} to the corresponding user-data parameter in
 #'   the C API. For thread-safe scheduling, use
 #'   \code{callback_async:<signature>} which enqueues the call on the main
@@ -204,10 +247,11 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     length(ffi$symbols) == 0 &&
       length(ffi$structs) == 0 &&
       length(ffi$unions) == 0 &&
-      length(ffi$enums) == 0
+      length(ffi$enums) == 0 &&
+      length(ffi$globals) == 0
   ) {
     stop(
-      "No symbols, structs, unions, or enums defined. Use tcc_bind(), tcc_struct(), tcc_union(), or tcc_enum() first.",
+      "No symbols, structs, unions, enums, or globals defined. Use tcc_bind(), tcc_struct(), tcc_union(), tcc_enum(), or tcc_global() first.",
       call. = FALSE
     )
   }
@@ -221,6 +265,7 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     structs = ffi$structs,
     unions = ffi$unions,
     enums = ffi$enums,
+    globals = ffi$globals,
     container_of = ffi$container_of,
     field_addr = ffi$field_addr,
     struct_raw_access = ffi$struct_raw_access,
@@ -272,6 +317,7 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     ffi$structs,
     ffi$unions,
     ffi$enums,
+    ffi$globals,
     ffi$container_of,
     ffi$field_addr,
     ffi$struct_raw_access,
@@ -289,6 +335,7 @@ tcc_compiled_object <- function(
   structs = NULL,
   unions = NULL,
   enums = NULL,
+  globals = NULL,
   container_of = NULL,
   field_addr = NULL,
   struct_raw_access = NULL,
@@ -303,6 +350,7 @@ tcc_compiled_object <- function(
 
   # Build helper names for struct/union/enum helpers
   helper_names <- character()
+  helper_specs <- list()
 
   # Struct helpers
   if (!is.null(structs)) {
@@ -311,15 +359,41 @@ tcc_compiled_object <- function(
       # new, free
       helper_names <- c(
         helper_names,
-        paste0(struct_name, "_new"),
-        paste0(struct_name, "_free")
+        paste0("struct_", struct_name, "_new"),
+        paste0("struct_", struct_name, "_free")
+      )
+      helper_specs[[paste0("struct_", struct_name, "_new")]] <- list(
+        args = list(),
+        returns = "sexp"
+      )
+      helper_specs[[paste0("struct_", struct_name, "_free")]] <- list(
+        args = list("sexp"),
+        returns = "sexp"
       )
       # getters and setters
       for (field_name in names(fields)) {
         helper_names <- c(
           helper_names,
-          paste0(struct_name, "_get_", field_name),
-          paste0(struct_name, "_set_", field_name)
+          paste0("struct_", struct_name, "_get_", field_name),
+          paste0("struct_", struct_name, "_set_", field_name)
+        )
+        helper_specs[[paste0(
+          "struct_",
+          struct_name,
+          "_get_",
+          field_name
+        )]] <- list(
+          args = list("sexp"),
+          returns = "sexp"
+        )
+        helper_specs[[paste0(
+          "struct_",
+          struct_name,
+          "_set_",
+          field_name
+        )]] <- list(
+          args = list("sexp", "sexp"),
+          returns = "sexp"
         )
       }
       # container_of helpers
@@ -327,7 +401,16 @@ tcc_compiled_object <- function(
         for (member_name in container_of[[struct_name]]) {
           helper_names <- c(
             helper_names,
-            paste0(struct_name, "_from_", member_name)
+            paste0("struct_", struct_name, "_from_", member_name)
+          )
+          helper_specs[[paste0(
+            "struct_",
+            struct_name,
+            "_from_",
+            member_name
+          )]] <- list(
+            args = list("sexp"),
+            returns = "sexp"
           )
         }
       }
@@ -336,7 +419,17 @@ tcc_compiled_object <- function(
         for (field_name in field_addr[[struct_name]]) {
           helper_names <- c(
             helper_names,
-            paste0(struct_name, "_", field_name, "_addr")
+            paste0("struct_", struct_name, "_", field_name, "_addr")
+          )
+          helper_specs[[paste0(
+            "struct_",
+            struct_name,
+            "_",
+            field_name,
+            "_addr"
+          )]] <- list(
+            args = list("sexp"),
+            returns = "sexp"
           )
         }
       }
@@ -344,16 +437,32 @@ tcc_compiled_object <- function(
       if (!is.null(struct_raw_access) && struct_name %in% struct_raw_access) {
         helper_names <- c(
           helper_names,
-          paste0(struct_name, "_get_raw"),
-          paste0(struct_name, "_set_raw")
+          paste0("struct_", struct_name, "_get_raw"),
+          paste0("struct_", struct_name, "_set_raw")
+        )
+        helper_specs[[paste0("struct_", struct_name, "_get_raw")]] <- list(
+          args = list("sexp", "i32"),
+          returns = "sexp"
+        )
+        helper_specs[[paste0("struct_", struct_name, "_set_raw")]] <- list(
+          args = list("sexp", "raw"),
+          returns = "sexp"
         )
       }
       # introspection helpers
       if (!is.null(introspect) && introspect) {
         helper_names <- c(
           helper_names,
-          paste0(struct_name, "_sizeof"),
-          paste0(struct_name, "_alignof")
+          paste0("struct_", struct_name, "_sizeof"),
+          paste0("struct_", struct_name, "_alignof")
+        )
+        helper_specs[[paste0("struct_", struct_name, "_sizeof")]] <- list(
+          args = list(),
+          returns = "sexp"
+        )
+        helper_specs[[paste0("struct_", struct_name, "_alignof")]] <- list(
+          args = list(),
+          returns = "sexp"
         )
       }
     }
@@ -366,23 +475,47 @@ tcc_compiled_object <- function(
       # new, free
       helper_names <- c(
         helper_names,
-        paste0(union_name, "_new"),
-        paste0(union_name, "_free")
+        paste0("union_", union_name, "_new"),
+        paste0("union_", union_name, "_free")
+      )
+      helper_specs[[paste0("union_", union_name, "_new")]] <- list(
+        args = list(),
+        returns = "sexp"
+      )
+      helper_specs[[paste0("union_", union_name, "_free")]] <- list(
+        args = list("sexp"),
+        returns = "sexp"
       )
       # getters and setters for members
       for (mem_name in names(union_def$members)) {
         helper_names <- c(
           helper_names,
-          paste0(union_name, "_get_", mem_name),
-          paste0(union_name, "_set_", mem_name)
+          paste0("union_", union_name, "_get_", mem_name),
+          paste0("union_", union_name, "_set_", mem_name)
+        )
+        helper_specs[[paste0("union_", union_name, "_get_", mem_name)]] <- list(
+          args = list("sexp"),
+          returns = "sexp"
+        )
+        helper_specs[[paste0("union_", union_name, "_set_", mem_name)]] <- list(
+          args = list("sexp", "sexp"),
+          returns = "sexp"
         )
       }
       # introspection
       if (!is.null(introspect) && introspect) {
         helper_names <- c(
           helper_names,
-          paste0(union_name, "_sizeof"),
-          paste0(union_name, "_alignof")
+          paste0("union_", union_name, "_sizeof"),
+          paste0("union_", union_name, "_alignof")
+        )
+        helper_specs[[paste0("union_", union_name, "_sizeof")]] <- list(
+          args = list(),
+          returns = "sexp"
+        )
+        helper_specs[[paste0("union_", union_name, "_alignof")]] <- list(
+          args = list(),
+          returns = "sexp"
         )
       }
     }
@@ -395,6 +528,10 @@ tcc_compiled_object <- function(
       # introspection
       if (!is.null(introspect) && introspect) {
         helper_names <- c(helper_names, paste0("enum_", enum_name, "_sizeof"))
+        helper_specs[[paste0("enum_", enum_name, "_sizeof")]] <- list(
+          args = list(),
+          returns = "sexp"
+        )
       }
       # constant export
       if (!is.null(enum_def$constants)) {
@@ -403,8 +540,31 @@ tcc_compiled_object <- function(
             helper_names,
             paste0("enum_", enum_name, "_", const_name)
           )
+          helper_specs[[paste0("enum_", enum_name, "_", const_name)]] <- list(
+            args = list(),
+            returns = "sexp"
+          )
         }
       }
+    }
+  }
+
+  # Global helpers
+  if (!is.null(globals) && length(globals) > 0) {
+    for (global_name in names(globals)) {
+      helper_names <- c(
+        helper_names,
+        paste0("global_", global_name, "_get"),
+        paste0("global_", global_name, "_set")
+      )
+      helper_specs[[paste0("global_", global_name, "_get")]] <- list(
+        args = list(),
+        returns = "sexp"
+      )
+      helper_specs[[paste0("global_", global_name, "_set")]] <- list(
+        args = list("sexp"),
+        returns = "sexp"
+      )
     }
   }
 
@@ -418,62 +578,16 @@ tcc_compiled_object <- function(
     sym_name <- all_sym_names[i]
     wrapper_name <- all_wrapper_names[i]
 
-    # Get symbol info if available
     if (i <= length(symbols)) {
       sym <- symbols[[i]]
       sym$name <- sym_name
     } else {
-      # Helper function - determine signature from name
-      # All struct helpers take at least SEXP ext as first arg
-      # Additional args depend on function type:
-      if (grepl("_set_", sym_name)) {
-        # Setters: SEXP ext, SEXP val -> 2 args total
-        sym <- list(
-          name = sym_name,
-          args = list("sexp", "sexp"),
-          returns = "sexp"
-        )
-      } else if (grepl("_get_raw$", sym_name)) {
-        # get_raw: SEXP ext, SEXP len -> 2 args
-        sym <- list(
-          name = sym_name,
-          args = list("sexp", "i32"),
-          returns = "sexp"
-        )
-      } else if (grepl("_set_raw$", sym_name)) {
-        # set_raw: SEXP ext, SEXP raw -> 2 args
-        sym <- list(
-          name = sym_name,
-          args = list("sexp", "raw"),
-          returns = "sexp"
-        )
-      } else if (grepl("_new$|sizeof|alignof", sym_name)) {
-        # Constructors and introspection: no args
-        sym <- list(name = sym_name, args = list(), returns = "sexp")
-      } else if (grepl("_free$", sym_name)) {
-        # Destructors: 1 arg (ext)
-        sym <- list(name = sym_name, args = list("sexp"), returns = "sexp")
-      } else if (grepl("^enum_", sym_name)) {
-        # Enum constants: no args
-        sym <- list(name = sym_name, args = list(), returns = "sexp")
-      } else if (grepl("_get_as_bytes$|_get_raw$", sym_name)) {
-        # Array getters: 2 args (ext, len)
-        sym <- list(
-          name = sym_name,
-          args = list("sexp", "i32"),
-          returns = "sexp"
-        )
-      } else if (grepl("_set_as_bytes$|_set_raw$", sym_name)) {
-        # Array setters: 2 args (ext, raw)
-        sym <- list(
-          name = sym_name,
-          args = list("sexp", "raw"),
-          returns = "sexp"
-        )
-      } else {
-        # Getters, container_of, field_addr: SEXP ext only -> 1 arg
-        sym <- list(name = sym_name, args = list("sexp"), returns = "sexp")
+      sym <- helper_specs[[sym_name]]
+      if (is.null(sym)) {
+        warning("Unknown helper symbol '", sym_name, "'")
+        next
       }
+      sym$name <- sym_name
     }
 
     # Get the wrapper symbol pointer
@@ -509,7 +623,8 @@ tcc_compiled_object <- function(
   env$.helpers <- list(
     structs = structs,
     unions = unions,
-    enums = enums
+    enums = enums,
+    globals = globals
   )
 
   structure(env, class = "tcc_compiled")
@@ -855,6 +970,7 @@ tcc_link <- function(
     structs = ffi$structs,
     unions = ffi$unions,
     enums = ffi$enums,
+    globals = ffi$globals,
     container_of = ffi$container_of,
     field_addr = ffi$field_addr,
     struct_raw_access = ffi$struct_raw_access,
@@ -908,6 +1024,7 @@ tcc_link <- function(
     ffi$structs,
     ffi$unions,
     ffi$enums,
+    ffi$globals,
     ffi$container_of,
     ffi$field_addr,
     ffi$struct_raw_access,
@@ -1157,7 +1274,7 @@ tcc_enum <- function(ffi, name, constants = NULL, export_constants = FALSE) {
 #' \dontrun{
 #' ffi <- tcc_ffi() |>
 #'   tcc_struct("student", list(id = "i32", marks = "i32")) |>
-#'   tcc_container_of("student", "marks") # Creates student_from_marks()
+#'   tcc_container_of("student", "marks") # Creates struct_student_from_marks()
 #' }
 tcc_container_of <- function(ffi, struct_name, member_name) {
   if (!inherits(ffi, "tcc_ffi")) {

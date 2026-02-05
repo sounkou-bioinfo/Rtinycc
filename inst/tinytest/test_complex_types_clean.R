@@ -62,9 +62,9 @@ expect_true(
 
     compiled <- tcc_compile(ffi)
 
-    has_new <- exists("test_struct_new", envir = compiled)
-    has_get <- exists("test_struct_get_a", envir = compiled)
-    has_from <- exists("test_struct_from_a", envir = compiled)
+    has_new <- exists("struct_test_struct_new", envir = compiled)
+    has_get <- exists("struct_test_struct_get_a", envir = compiled)
+    has_from <- exists("struct_test_struct_from_a", envir = compiled)
     result <- compiled$test_fn()
 
     has_new && has_get && has_from && result == 42
