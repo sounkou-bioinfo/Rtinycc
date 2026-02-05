@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x619fbff8d000>
+#> <pointer: 0x63e1285ef000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -610,7 +610,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x619fc2f64248"
+#> [1] "0x63e12a148d28"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -677,8 +677,7 @@ tcc_call_symbol(state, "call_r_sqrt", return = "double")
 ### Header parsing with `treesitter.c` and generate bindings
 
 For header-driven bindings, use `treesitter.c` to parse function
-signatures and bind to an existing shared library (no manual
-`tcc_source()` bodies needed).
+signatures and bind to an existing shared library.
 
 ``` r
 header <- '
