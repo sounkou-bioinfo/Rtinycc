@@ -249,7 +249,46 @@ tcc_bind <- function(ffi, ...) {
     }
 
     # Validate return type
-    check_ffi_type(sym$returns, paste0("symbol '", sym_name, "' return"))
+    if (is.list(sym$returns)) {
+      if (is.null(sym$returns$type)) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' return must include 'type'",
+          call. = FALSE
+        )
+      }
+      ret_type <- sym$returns$type
+      ret_info <- check_ffi_type(
+        ret_type,
+        paste0("symbol '", sym_name, "' return")
+      )
+      if (!is.null(ret_info$kind) && ret_info$kind == "array") {
+        if (is.null(sym$returns$length_arg)) {
+          stop(
+            "Symbol '",
+            sym_name,
+            "' array return requires 'length_arg'",
+            call. = FALSE
+          )
+        }
+        if (!is.null(sym$args) && length(sym$args) > 0) {
+          if (
+            sym$returns$length_arg < 1 ||
+              sym$returns$length_arg > length(sym$args)
+          ) {
+            stop(
+              "Symbol '",
+              sym_name,
+              "' array return length_arg out of range",
+              call. = FALSE
+            )
+          }
+        }
+      }
+    } else {
+      check_ffi_type(sym$returns, paste0("symbol '", sym_name, "' return"))
+    }
 
     # Validate argument types
     if ("args" %in% names(sym)) {

@@ -68,7 +68,61 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
 }
 
 # Generate C code to convert C return value to R SEXP
-generate_c_return <- function(value_expr, ffi_type) {
+generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
+  if (is.list(ffi_type)) {
+    if (is.null(ffi_type$type)) {
+      stop("Return spec missing 'type'", call. = FALSE)
+    }
+    base_type <- ffi_type$type
+    type_info <- check_ffi_type(base_type, "return value")
+
+    if (!is.null(type_info$kind) && type_info$kind == "array") {
+      len_arg <- ffi_type$length_arg
+      if (is.null(len_arg) || !is.numeric(len_arg)) {
+        stop("Array return requires numeric 'length_arg'", call. = FALSE)
+      }
+      if (len_arg < 1 || len_arg > length(arg_names)) {
+        stop("length_arg out of range", call. = FALSE)
+      }
+      len_name <- arg_names[[as.integer(len_arg)]]
+
+      alloc_line <- switch(base_type,
+        raw = sprintf("SEXP out = PROTECT(allocVector(RAWSXP, %s));", len_name),
+        integer_array = sprintf("SEXP out = PROTECT(allocVector(INTSXP, %s));", len_name),
+        numeric_array = sprintf("SEXP out = PROTECT(allocVector(REALSXP, %s));", len_name),
+        logical_array = sprintf("SEXP out = PROTECT(allocVector(LGLSXP, %s));", len_name),
+        stop("Unsupported array return type: ", base_type, call. = FALSE)
+      )
+
+      copy_line <- switch(base_type,
+        raw = sprintf("  if (%s > 0) memcpy(RAW(out), %s, sizeof(uint8_t) * %s);", len_name, value_expr, len_name),
+        integer_array = sprintf("  if (%s > 0) memcpy(INTEGER(out), %s, sizeof(int32_t) * %s);", len_name, value_expr, len_name),
+        numeric_array = sprintf("  if (%s > 0) memcpy(REAL(out), %s, sizeof(double) * %s);", len_name, value_expr, len_name),
+        logical_array = sprintf("  if (%s > 0) memcpy(LOGICAL(out), %s, sizeof(int) * %s);", len_name, value_expr, len_name)
+      )
+
+      free_line <- if (isTRUE(ffi_type$free)) {
+        sprintf("  if (%s) free(%s);", value_expr, value_expr)
+      } else {
+        NULL
+      }
+
+      return(paste(
+        c(
+          sprintf("if (!%s) return R_NilValue;", value_expr),
+          alloc_line,
+          copy_line,
+          free_line,
+          "  UNPROTECT(1);",
+          "  return out;"
+        ),
+        collapse = "\n"
+      ))
+    }
+
+    ffi_type <- base_type
+  }
+
   type_info <- check_ffi_type(ffi_type, "return value")
 
   switch(ffi_type,
@@ -146,7 +200,10 @@ generate_c_wrapper <- function(
   is_external = FALSE
 ) {
   n_args <- length(arg_types)
-  return_info <- check_ffi_type(return_type, "return value")
+  return_info <- check_ffi_type(
+    if (is.list(return_type)) return_type$type else return_type,
+    "return value"
+  )
 
   # Always use R API mode: SEXP arguments and return
   # Build argument list
@@ -202,7 +259,7 @@ generate_c_wrapper <- function(
   }
 
   # Return conversion from C type to SEXP
-  return_conversion <- generate_c_return(call_expr, return_type)
+  return_conversion <- generate_c_return(call_expr, return_type, arg_names)
 
   # Build the wrapper with SEXP signature
   wrapper <- c(
@@ -231,7 +288,7 @@ generate_external_declarations <- function(symbols) {
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
     return_info <- check_ffi_type(
-      sym$returns,
+      if (is.list(sym$returns)) sym$returns$type else sym$returns,
       paste0("symbol '", sym_name, "' return")
     )
 

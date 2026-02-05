@@ -96,6 +96,7 @@ The FFI exposes a small, explicit set of type mappings between R and C. Conversi
 
 - **Scalars**: `i8`, `i16`, `i32`, `i64` (integers); `f32`, `f64` (floats); `bool` (logical); `cstring` (NUL-terminated C string).
 - **Arrays (zero-copy)**: `raw` → `uint8_t*`; `integer_array` → `int32_t*`; `numeric_array` → `double*`.
+- **Array returns**: use `returns = list(type = "numeric_array", length_arg = 2, free = TRUE)` to copy into a new R vector. `length_arg` is the 1-based index of the length argument; set `free = TRUE` when the C function allocates with `malloc`.
 - **Pointers**: `ptr` (opaque `externalptr`), `sexp` (pass `SEXP` directly), `callback:<signature>` (sync trampoline), `callback_async:<signature>` (async trampoline).
 - **Array fields in structs**: use `list(type = "u8", size = 16, array = TRUE)` and the generated helpers `struct_<name>_get_<field>()`, `struct_<name>_get_<field>_elt(i)`, `struct_<name>_set_<field>_elt(i, v)`.
 
@@ -128,7 +129,11 @@ Pass R vectors to C with zero-copy:
 ffi <- tcc_ffi() |>
   tcc_bind(
     sum_array = list(args = list("integer_array", "i32"), returns = "i64"),
-    bump_first = list(args = list("integer_array"), returns = "void")
+    bump_first = list(args = list("integer_array"), returns = "void"),
+    dup_array = list(
+      args = list("integer_array", "i32"),
+      returns = list(type = "integer_array", length_arg = 2, free = TRUE)
+    )
   ) |>
   tcc_source("
     int64_t sum_array(int32_t* arr, int32_t n) {
@@ -141,6 +146,12 @@ ffi <- tcc_ffi() |>
 
     void bump_first(int32_t* arr) {
       arr[0] += 10;
+    }
+
+    int32_t* dup_array(int32_t* arr, int32_t n) {
+      int32_t* out = (int32_t*)malloc(sizeof(int32_t) * n);
+      for (int i = 0; i < n; i++) out[i] = arr[i];
+      return out;
     }
   ") |>
   tcc_compile()
@@ -155,6 +166,10 @@ result
 # Zero-copy: C mutation reflects in R
 ffi$bump_first(x)
 x[1]
+
+# Array return: copied into a new R vector (C buffer freed)
+y <- ffi$dup_array(x, length(x))
+y[1]
 
 .Internal(inspect(x))
 

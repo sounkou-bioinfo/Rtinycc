@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x564209ccf000>
+#> <pointer: 0x629638bcc000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x564207f41a80"
+#> [1] "0x629639e69830"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -97,11 +97,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5642070be1d0>
+#> <pointer: 0x6296387ab570>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x564207749390>
+#> <pointer: 0x62963941e420>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5642070be1d0>
+#> <pointer: 0x6296387ab570>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -125,6 +125,11 @@ shared versus copied.
   (floats); `bool` (logical); `cstring` (NUL-terminated C string).
 - **Arrays (zero-copy)**: `raw` → `uint8_t*`; `integer_array` →
   `int32_t*`; `numeric_array` → `double*`.
+- **Array returns**: use
+  `returns = list(type = "numeric_array", length_arg = 2, free = TRUE)`
+  to copy into a new R vector. `length_arg` is the 1-based index of the
+  length argument; set `free = TRUE` when the C function allocates with
+  `malloc`.
 - **Pointers**: `ptr` (opaque `externalptr`), `sexp` (pass `SEXP`
   directly), `callback:<signature>` (sync trampoline),
   `callback_async:<signature>` (async trampoline).
@@ -163,7 +168,11 @@ Pass R vectors to C with zero-copy:
 ffi <- tcc_ffi() |>
   tcc_bind(
     sum_array = list(args = list("integer_array", "i32"), returns = "i64"),
-    bump_first = list(args = list("integer_array"), returns = "void")
+    bump_first = list(args = list("integer_array"), returns = "void"),
+    dup_array = list(
+      args = list("integer_array", "i32"),
+      returns = list(type = "integer_array", length_arg = 2, free = TRUE)
+    )
   ) |>
   tcc_source("
     int64_t sum_array(int32_t* arr, int32_t n) {
@@ -177,6 +186,12 @@ ffi <- tcc_ffi() |>
     void bump_first(int32_t* arr) {
       arr[0] += 10;
     }
+
+    int32_t* dup_array(int32_t* arr, int32_t n) {
+      int32_t* out = (int32_t*)malloc(sizeof(int32_t) * n);
+      for (int i = 0; i < n; i++) out[i] = arr[i];
+      return out;
+    }
   ") |>
   tcc_compile()
 
@@ -184,7 +199,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @564209879858 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @6296394f6b90 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -195,8 +210,13 @@ ffi$bump_first(x)
 x[1]
 #> [1] 11
 
+# Array return: copied into a new R vector (C buffer freed)
+y <- ffi$dup_array(x, length(x))
+y[1]
+#> [1] 11
+
 .Internal(inspect(x))
-#> @564209879858 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @6296394f6b90 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -649,7 +669,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x56420903d7b8"
+#> [1] "0x62963a1de298"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -798,7 +818,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5642091c5730>
+#> <pointer: 0x62963a1fd0a0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -827,11 +847,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x56420a9664c0>
+#> <pointer: 0x62963ab79d20>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x56420be33370>
+#> <pointer: 0x62963acfd600>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -858,7 +878,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x56420b6f59a0>
+#> <pointer: 0x629638bb3fa0>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -866,7 +886,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x564209c322e0>
+#> <pointer: 0x62963ab79d20>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -908,7 +928,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x56420b0fa5e0>
+#> <pointer: 0x629637c62c60>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)
