@@ -713,8 +713,11 @@ ffi <- tcc_ffi() |>
 
 o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
-tcc_ptr_set(ffi$struct_outer_in_addr(o), in_ptr)
-ffi$struct_inner_set_a(tcc_data_ptr(ffi$struct_outer_in_addr(o)), 42L)
+ffi$struct_outer_in_addr(o) |>
+  tcc_ptr_set(in_ptr)
+ffi$struct_outer_in_addr(o) |>
+  tcc_data_ptr() |>
+  (\(p) { ffi$struct_inner_set_a(p, 42L) })()
 ffi$struct_inner_free(in_ptr)
 ffi$struct_outer_free(o)
 ```
