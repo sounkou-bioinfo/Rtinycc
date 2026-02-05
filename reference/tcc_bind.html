@@ -59,7 +59,6 @@ This is the core of the declarative FFI API.</p>
 <li><p>code: Optional C code for the symbol (for embedded functions)</p></li>
 </ul><p>Callback arguments should use the form <code>callback:&lt;signature&gt;</code> (e.g.,
 <code>callback:double(double)</code>). The generated trampoline expects a
-<code>void*</code> user-data pointer as its first argument; pass
 <code>tcc_callback_ptr(cb)</code> to the corresponding user-data parameter in
 the C API. For thread-safe scheduling, use
 <code>callback_async:&lt;signature&gt;</code> which enqueues the call on the main

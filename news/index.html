@@ -39,6 +39,10 @@
 <li>Callback errors now warn and return type-appropriate defaults (avoid longjmp)</li>
 <li>Update README examples for callbacks, async callbacks, enums, and bitfields</li>
 <li>Fix potential exit-time segfaults by using a package-level finalizer (<code>RC_free_finalizer</code>) for generated struct/union helpers instead of JIT-local finalizers</li>
+<li>Add treesitter.c helpers (<code><a href="../reference/tcc_treesitter_functions.html">tcc_treesitter_functions()</a></code>, <code><a href="../reference/tcc_treesitter_structs.html">tcc_treesitter_structs()</a></code>, <code><a href="../reference/tcc_treesitter_bindings.html">tcc_treesitter_bindings()</a></code>) aligned with Rtinycc type mappings</li>
+<li>Require treesitter.c (&gt;= 0.0.3) for header parsing helpers</li>
+<li>Add global getter/setter helpers via <code><a href="../reference/tcc_global.html">tcc_global()</a></code> with generated <code>global_&lt;name&gt;_get()</code> and <code>global_&lt;name&gt;_set()</code> accessors</li>
+<li>BREAKING: struct/union helper names now use <code>struct_&lt;name&gt;_*</code> and <code>union_&lt;name&gt;_*</code> prefixes (including bitfields)</li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.1" id="rtinycc-001">Rtinycc 0.0.1<a class="anchor" aria-label="anchor" href="#rtinycc-001"></a></h2>

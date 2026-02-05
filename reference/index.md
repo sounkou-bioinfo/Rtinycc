@@ -68,6 +68,8 @@
   : Free allocated memory
 - [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md)
   : Get a symbol pointer from a libtcc state
+- [`tcc_global()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_global.md)
+  : Declare a global variable getter
 - [`tcc_header()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_header.md)
   : Add C headers
 - [`tcc_include()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_include.md)
@@ -85,6 +87,8 @@
   : Link an external shared library with Bun-style FFI bindings
 - [`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
   : Allocate memory buffer
+- [`tcc_map_c_type_to_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_map_c_type_to_ffi.md)
+  : Map a C type string to an Rtinycc FFI type
 - [`tcc_null_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_null_ptr.md)
   : Create a NULL pointer
 - [`tcc_output()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output.md)
@@ -128,6 +132,28 @@
   : Enable raw byte access for struct
 - [`tcc_symbol_is_valid()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_symbol_is_valid.md)
   : Check if a tcc_symbol external pointer is valid
+- [`tcc_treesitter_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_bindings.md)
+  : Generate tcc_bind() specs from a header
+- [`tcc_treesitter_defines()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_defines.md)
+  : Extract macro defines from a header file
+- [`tcc_treesitter_enum_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enum_bindings.md)
+  : Apply tcc_enum() bindings from a header
+- [`tcc_treesitter_enums()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enums.md)
+  : Parse enum declarations with treesitter.c
+- [`tcc_treesitter_functions()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_functions.md)
+  : Parse function declarations with treesitter.c
+- [`tcc_treesitter_globals()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_globals.md)
+  : Parse global declarations with treesitter.c
+- [`tcc_treesitter_struct_accessors()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_accessors.md)
+  : Generate tcc_struct() accessors from header structs
+- [`tcc_treesitter_struct_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_bindings.md)
+  : Apply tcc_struct() bindings from a header
+- [`tcc_treesitter_struct_members()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_struct_members.md)
+  : Parse struct members (including bitfields) with treesitter.c
+- [`tcc_treesitter_structs()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_structs.md)
+  : Parse struct declarations with treesitter.c
+- [`tcc_treesitter_unions()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_unions.md)
+  : Parse union declarations with treesitter.c
 - [`tcc_union()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_union.md)
   : Declare union for FFI helper generation
 - [`tcc_write_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_write_bytes.md)

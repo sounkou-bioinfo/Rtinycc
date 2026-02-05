@@ -16,7 +16,10 @@ tcc_library(ffi, library)
 
 - library:
 
-  Library name (e.g., "m", "sqlite3")
+  Library name (e.g., "m", "sqlite3") or a path to a shared library
+  (e.g., "libm.so.6"). When a path is provided, the library directory is
+  added automatically and the library name is inferred from the file
+  name.
 
 ## Value
 

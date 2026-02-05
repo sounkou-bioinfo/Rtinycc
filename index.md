@@ -56,7 +56,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x581513160000>
+#> <pointer: 0x636f4c4c9000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -76,6 +76,10 @@ tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
+tcc_ptr_addr(ptr, hex = TRUE)
+#> [1] "0x636f4e387f10"
+tcc_ptr_is_null(ptr)
+#> [1] FALSE
 tcc_free(ptr)
 #> NULL
 ```
@@ -329,24 +333,24 @@ ffi <- tcc_ffi() |>
   tcc_bind(point_distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
   tcc_compile()
 
-p1 <- ffi$point_new()
-p1 <- ffi$point_set_x(p1, 0.0)
-p1 <- ffi$point_set_y(p1, 0.0)
-p1 <- ffi$point_set_id(p1, 1L)
+p1 <- ffi$struct_point_new()
+p1 <- ffi$struct_point_set_x(p1, 0.0)
+p1 <- ffi$struct_point_set_y(p1, 0.0)
+p1 <- ffi$struct_point_set_id(p1, 1L)
 
-p2 <- ffi$point_new()
-p2 <- ffi$point_set_x(p2, 3.0)
-p2 <- ffi$point_set_y(p2, 4.0)
-p2 <- ffi$point_set_id(p2, 2L)
+p2 <- ffi$struct_point_new()
+p2 <- ffi$struct_point_set_x(p2, 3.0)
+p2 <- ffi$struct_point_set_y(p2, 4.0)
+p2 <- ffi$struct_point_set_id(p2, 2L)
 
-ffi$point_get_x(p1)
+ffi$struct_point_get_x(p1)
 #> [1] 0
 ffi$point_distance(p1, p2)
 #> [1] 25
 
-ffi$point_free(p1)
+ffi$struct_point_free(p1)
 #> NULL
-ffi$point_free(p2)
+ffi$struct_point_free(p2)
 #> NULL
 ```
 
@@ -390,14 +394,14 @@ ffi <- tcc_ffi() |>
   tcc_struct("status", accessors = c(flag = "u8", code = "u8")) |>
   tcc_compile()
 
-s <- ffi$status_new()
-s <- ffi$status_set_flag(s, 1)
-s <- ffi$status_set_code(s, 42)
-ffi$status_get_flag(s)
+s <- ffi$struct_status_new()
+s <- ffi$struct_status_set_flag(s, 1)
+s <- ffi$struct_status_set_code(s, 42)
+ffi$struct_status_get_flag(s)
 #> [1] 1
-ffi$status_get_code(s)
+ffi$struct_status_get_code(s)
 #> [1] 42
-ffi$status_free(s)
+ffi$struct_status_free(s)
 #> NULL
 ```
 
@@ -407,13 +411,13 @@ We can link against system libraries like libm
 
 ``` r
 # Link against math library
-math_lib <- tcc_link(
-  "libm.so.6",
-  symbols = list(
+math_lib <- tcc_ffi() |>
+  tcc_library("m") |>
+  tcc_bind(
     sqrt = list(args = list("f64"), returns = "f64"),
     sin = list(args = list("f64"), returns = "f64")
-  )
-)
+  ) |>
+  tcc_compile()
 
 math_lib$sqrt(16.0)
 #> [1] 4
@@ -545,7 +549,7 @@ sqlite_struct <- tcc_ffi() |>
   ) |>
   tcc_compile()
 
-h <- sqlite_struct$sqlite_handle_new()
+h <- sqlite_struct$struct_sqlite_handle_new()
 sqlite_struct$sqlite_handle_open(h, ":memory:")
 #> [1] 0
 sqlite_struct$sqlite_handle_exec(h, "CREATE TABLE items (id INTEGER, name TEXT);")
@@ -554,7 +558,7 @@ sqlite_struct$sqlite_handle_exec(h, "INSERT INTO items VALUES (1, \'test\');")
 #> [1] 0
 sqlite_struct$sqlite_handle_close(h)
 #> [1] 0
-sqlite_struct$sqlite_handle_free(h)
+sqlite_struct$struct_sqlite_handle_free(h)
 #> NULL
 ```
 
@@ -609,7 +613,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x58151482a948"
+#> [1] "0x636f4e7c0318"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -673,70 +677,64 @@ tcc_call_symbol(state, "call_r_sqrt", return = "double")
 #> [1] 4
 ```
 
+### Global getters and setters
+
+You can expose globals with explicit getters and setters:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    int global_counter = 7;
+    double global_pi = 3.14159;
+  ') |>
+  tcc_global("global_counter", "i32") |>
+  tcc_global("global_pi", "f64") |>
+  tcc_compile()
+
+ffi$global_global_counter_get()
+#> [1] 7
+ffi$global_global_pi_get()
+#> [1] 3.14159
+ffi$global_global_counter_set(9L)
+#> [1] 9
+ffi$global_global_counter_get()
+#> [1] 9
+```
+
 ### Header parsing with `treesitter.c` and generate bindings
 
 For header-driven bindings, use `treesitter.c` to parse function
-signatures and bind to an existing shared library (no manual
-[`tcc_source()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_source.md)
-bodies needed).
+signatures and bind to an existing shared library.
 
 ``` r
-library(treesitter.c)
-
 header <- '
 double sqrt(double x);
 double sin(double x);
+struct point { double x; double y; };
+enum status { OK = 0, ERROR = 1 };
+int global_counter;
 '
 
-root <- parse_header_text(header)
-funcs <- get_function_nodes(root, extract_params = TRUE, extract_return = TRUE)
+funcs <- tcc_treesitter_functions(header)
 funcs
 #>   capture_name text start_line start_col params return_type
 #> 1    decl_name sqrt          2         8 double      double
 #> 2    decl_name  sin          3         8 double      double
 
-clean_type <- function(x) {
-  x <- trimws(x)
-  x <- gsub("\\s+", " ", x)
-  x <- sub("\\s+[A-Za-z_][A-Za-z0-9_]*$", "", x)
-  trimws(x)
-}
+structs <- tcc_treesitter_structs(header)
+enums <- tcc_treesitter_enums(header)
+globals <- tcc_treesitter_globals(header)
+structs
+#>   capture_name  text start_line
+#> 1  struct_name point          4
+enums
+#>   capture_name   text start_line
+#> 1    enum_name status          5
+globals
+#>   capture_name           text start_line
+#> 1  global_name global_counter          6
 
-map_type <- function(x) {
-  x <- clean_type(x)
-  if (x %in% c("int", "int32_t")) return("i32")
-  if (x %in% c("unsigned int", "uint32_t")) return("u32")
-  if (x %in% c("double", "float")) return("f64")
-  if (grepl("char\\s*\\*", x)) return("cstring")
-  if (x %in% c("void")) return("void")
-  "ptr"
-}
-
-signature_to_bind <- function(row) {
-  params <- row$params
-  if (is.list(params)) params <- params[[1]]
-  params <- as.character(params)
-  if (length(params) == 1 && grepl(",", params)) {
-    params <- unlist(strsplit(params, ","))
-  }
-  args <- if (length(params) == 1 && !is.na(params) && nzchar(params)) {
-    vapply(params, map_type, character(1), USE.NAMES = FALSE)
-  } else if (length(params) > 1) {
-    vapply(params, map_type, character(1), USE.NAMES = FALSE)
-  } else {
-    character(0)
-  }
-  ret <- row$return_type
-  if (is.list(ret)) ret <- ret[[1]]
-  ret <- as.character(ret)
-  if (length(ret) > 1) ret <- ret[[1]]
-  list(args = as.list(args), returns = map_type(ret))
-}
-
-symbols <- setNames(
-  lapply(seq_len(nrow(funcs)), function(i) signature_to_bind(funcs[i, ])),
-  funcs$text
-)
+symbols <- tcc_treesitter_bindings(header)
 
 math_lib <- tcc_link(
   "libm.so.6",
