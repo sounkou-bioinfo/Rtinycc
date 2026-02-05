@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64306f39e000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x581513160000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -608,7 +608,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x643070c9d558"</span></span>
+<span><span class="co">#&gt; [1] "0x58151482a948"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
@@ -670,28 +670,22 @@
 <div class="section level3">
 <h3 id="header-parsing-with-treesitterc-and-generate-bindings">Header parsing with <code>treesitter.c</code> and generate bindings<a class="anchor" aria-label="anchor" href="#header-parsing-with-treesitterc-and-generate-bindings"></a>
 </h3>
-<p>For header-driven bindings, <code>treesitter.c</code> provides C header parsers you can use to extract symbols before declaring FFI bindings.</p>
+<p>For header-driven bindings, use <code>treesitter.c</code> to parse function signatures and bind to an existing shared library (no manual <code><a href="reference/tcc_source.html">tcc_source()</a></code> bodies needed).</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/treesitter.c/" class="external-link">treesitter.c</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">header</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">struct point { double x; double y; };</span></span>
-<span><span class="st">int add(int a, int b);</span></span>
-<span><span class="st">double scale(double x);</span></span>
+<span><span class="st">double sqrt(double x);</span></span>
+<span><span class="st">double sin(double x);</span></span>
 <span><span class="st">'</span></span>
 <span></span>
 <span><span class="va">root</span> <span class="op">&lt;-</span> <span class="fu">parse_header_text</span><span class="op">(</span><span class="va">header</span><span class="op">)</span></span>
 <span><span class="va">funcs</span> <span class="op">&lt;-</span> <span class="fu">get_function_nodes</span><span class="op">(</span><span class="va">root</span>, extract_params <span class="op">=</span> <span class="cn">TRUE</span>, extract_return <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">structs</span> <span class="op">&lt;-</span> <span class="fu">get_struct_nodes</span><span class="op">(</span><span class="va">root</span><span class="op">)</span></span>
 <span><span class="va">funcs</span></span>
-<span><span class="co">#&gt;   capture_name  text start_line start_col   params return_type</span></span>
-<span><span class="co">#&gt; 1    decl_name   add          3         5 int, int         int</span></span>
-<span><span class="co">#&gt; 2    decl_name scale          4         8   double      double</span></span>
-<span><span class="va">structs</span></span>
-<span><span class="co">#&gt;   capture_name  text start_line</span></span>
-<span><span class="co">#&gt; 1  struct_name point          2</span></span>
+<span><span class="co">#&gt;   capture_name text start_line start_col params return_type</span></span>
+<span><span class="co">#&gt; 1    decl_name sqrt          2         8 double      double</span></span>
+<span><span class="co">#&gt; 2    decl_name  sin          3         8 double      double</span></span>
 <span></span>
-<span><span class="co"># Example: generate bindings from parsed signatures</span></span>
 <span><span class="va">clean_type</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span>
 <span>  <span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">gsub</a></span><span class="op">(</span><span class="st">"\\s+"</span>, <span class="st">" "</span>, <span class="va">x</span><span class="op">)</span></span>
@@ -710,31 +704,23 @@
 <span><span class="op">}</span></span>
 <span></span>
 <span><span class="va">signature_to_bind</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">row</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">0</span><span class="op">)</span></span>
 <span>  <span class="va">params</span> <span class="op">&lt;-</span> <span class="va">row</span><span class="op">$</span><span class="va">params</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">is.list</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">params</span> <span class="op">&lt;-</span> <span class="va">params</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
-<span>  <span class="op">}</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">is.list</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span><span class="op">)</span> <span class="va">params</span> <span class="op">&lt;-</span> <span class="va">params</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span>  <span class="va">params</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">==</span> <span class="fl">1</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">","</span>, <span class="va">params</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">params</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/strsplit.html" class="external-link">strsplit</a></span><span class="op">(</span><span class="va">params</span>, <span class="st">","</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">params</span> <span class="op">&lt;-</span> <span class="va">params</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">==</span> <span class="fl">1</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">params</span>, <span class="va">map_type</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, USE.NAMES <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span>  <span class="va">args</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">==</span> <span class="fl">1</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">params</span>, <span class="va">map_type</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, USE.NAMES <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span>  <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">params</span>, <span class="va">map_type</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, USE.NAMES <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">params</span>, <span class="va">map_type</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, USE.NAMES <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">0</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
 <span>  <span class="va">ret</span> <span class="op">&lt;-</span> <span class="va">row</span><span class="op">$</span><span class="va">return_type</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">is.list</a></span><span class="op">(</span><span class="va">ret</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">ret</span> <span class="op">&lt;-</span> <span class="va">ret</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
-<span>  <span class="op">}</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">is.list</a></span><span class="op">(</span><span class="va">ret</span><span class="op">)</span><span class="op">)</span> <span class="va">ret</span> <span class="op">&lt;-</span> <span class="va">ret</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span>  <span class="va">ret</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">ret</span><span class="op">)</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">ret</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">ret</span> <span class="op">&lt;-</span> <span class="va">ret</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
-<span>  <span class="op">}</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">ret</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span> <span class="va">ret</span> <span class="op">&lt;-</span> <span class="va">ret</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">as.list</a></span><span class="op">(</span><span class="va">args</span><span class="op">)</span>, returns <span class="op">=</span> <span class="fu">map_type</span><span class="op">(</span><span class="va">ret</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
@@ -743,21 +729,16 @@
 <span>  <span class="va">funcs</span><span class="op">$</span><span class="va">text</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>
-<span>  <span class="va">ffi</span>,</span>
-<span>  <span class="st">"int add(int a, int b) { return a + b; }"</span></span>
+<span><span class="va">math_lib</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
+<span>  <span class="st">"libm.so.6"</span>,</span>
+<span>  symbols <span class="op">=</span> <span class="va">symbols</span>,</span>
+<span>  libs <span class="op">=</span> <span class="st">"m"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>
-<span>  <span class="va">ffi</span>,</span>
-<span>  <span class="st">"double scale(double x) { return x * 2.0; }"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">tcc_bind</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span>, <span class="va">symbols</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="va">ffi</span><span class="op">)</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">2L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 3</span></span>
-<span><span class="va">ffi</span><span class="op">$</span><span class="fu">scale</span><span class="op">(</span><span class="fl">2.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
+<span></span>
+<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sqrt</span><span class="op">(</span><span class="fl">16.0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4</span></span>
+<span><span class="va">math_lib</span><span class="op">$</span><span class="fu">sin</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0.841471</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
