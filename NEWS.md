@@ -9,6 +9,11 @@
 - Require treesitter.c (>= 0.0.3) for header parsing helpers
 - Add global getter/setter helpers via `tcc_global()` with generated `global_<name>_get()` and `global_<name>_set()` accessors
 - BREAKING: struct/union helper names now use `struct_<name>_*` and `union_<name>_*` prefixes (including bitfields)
+- Add `tcc_generate_bindings()` and expanded tree-sitter helpers for enum/union/global parsing and binding generation
+- Add pointer utilities: `tcc_null_ptr()`, `tcc_malloc()`, `tcc_free()`, `tcc_read_*()` helpers, pointer-to-pointer utilities (`tcc_data_ptr()`, `tcc_ptr_set()`, `tcc_ptr_free_set_null()`), and ownership checks via `tcc_ptr_is_owned()`
+- Tag external pointers as owned/borrowed and guard frees based on ownership
+- Add array field element helpers for structs (`struct_<name>_get_<field>_elt()` / `struct_<name>_set_<field>_elt()`)
+- Add array return specifications in `tcc_bind()` via `returns = list(type = "*_array", length_arg = ..., free = TRUE)`
 
 # Rtinycc 0.0.1
 
