@@ -43,6 +43,13 @@
 <li>Require treesitter.c (&gt;= 0.0.3) for header parsing helpers</li>
 <li>Add global getter/setter helpers via <code><a href="../reference/tcc_global.html">tcc_global()</a></code> with generated <code>global_&lt;name&gt;_get()</code> and <code>global_&lt;name&gt;_set()</code> accessors</li>
 <li>BREAKING: struct/union helper names now use <code>struct_&lt;name&gt;_*</code> and <code>union_&lt;name&gt;_*</code> prefixes (including bitfields)</li>
+<li>Add <code><a href="../reference/tcc_generate_bindings.html">tcc_generate_bindings()</a></code> and expanded tree-sitter helpers for enum/union/global parsing and binding generation</li>
+<li>Add pointer utilities: <code><a href="../reference/tcc_null_ptr.html">tcc_null_ptr()</a></code>, <code><a href="../reference/tcc_malloc.html">tcc_malloc()</a></code>, <code><a href="../reference/tcc_free.html">tcc_free()</a></code>, <code>tcc_read_*()</code> helpers, pointer-to-pointer utilities (<code><a href="../reference/tcc_data_ptr.html">tcc_data_ptr()</a></code>, <code><a href="../reference/tcc_ptr_set.html">tcc_ptr_set()</a></code>, <code><a href="../reference/tcc_ptr_free_set_null.html">tcc_ptr_free_set_null()</a></code>), and ownership checks via <code><a href="../reference/tcc_ptr_is_owned.html">tcc_ptr_is_owned()</a></code>
+</li>
+<li>Tag external pointers as owned/borrowed and guard frees based on ownership</li>
+<li>Add array field element helpers for structs (<code>struct_&lt;name&gt;_get_&lt;field&gt;_elt()</code> / <code>struct_&lt;name&gt;_set_&lt;field&gt;_elt()</code>)</li>
+<li>Add array return specifications in <code><a href="../reference/tcc_bind.html">tcc_bind()</a></code> via <code>returns = list(type = "*_array", length_arg = ..., free = TRUE)</code>
+</li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.1" id="rtinycc-001">Rtinycc 0.0.1<a class="anchor" aria-label="anchor" href="#rtinycc-001"></a></h2>

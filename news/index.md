@@ -25,6 +25,28 @@
   accessors
 - BREAKING: struct/union helper names now use `struct_<name>_*` and
   `union_<name>_*` prefixes (including bitfields)
+- Add
+  [`tcc_generate_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_generate_bindings.md)
+  and expanded tree-sitter helpers for enum/union/global parsing and
+  binding generation
+- Add pointer utilities:
+  [`tcc_null_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_null_ptr.md),
+  [`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md),
+  [`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md),
+  `tcc_read_*()` helpers, pointer-to-pointer utilities
+  ([`tcc_data_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_data_ptr.md),
+  [`tcc_ptr_set()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_set.md),
+  [`tcc_ptr_free_set_null()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_free_set_null.md)),
+  and ownership checks via
+  [`tcc_ptr_is_owned()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_owned.md)
+- Tag external pointers as owned/borrowed and guard frees based on
+  ownership
+- Add array field element helpers for structs
+  (`struct_<name>_get_<field>_elt()` /
+  `struct_<name>_set_<field>_elt()`)
+- Add array return specifications in
+  [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
+  via `returns = list(type = "*_array", length_arg = ..., free = TRUE)`
 
 ## Rtinycc 0.0.1
 
