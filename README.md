@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x56d5bb561000>
+#> <pointer: 0x5db31eb51000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -332,24 +332,24 @@ ffi <- tcc_ffi() |>
   tcc_bind(point_distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
   tcc_compile()
 
-p1 <- ffi$point_new()
-p1 <- ffi$point_set_x(p1, 0.0)
-p1 <- ffi$point_set_y(p1, 0.0)
-p1 <- ffi$point_set_id(p1, 1L)
+p1 <- ffi$struct_point_new()
+p1 <- ffi$struct_point_set_x(p1, 0.0)
+p1 <- ffi$struct_point_set_y(p1, 0.0)
+p1 <- ffi$struct_point_set_id(p1, 1L)
 
-p2 <- ffi$point_new()
-p2 <- ffi$point_set_x(p2, 3.0)
-p2 <- ffi$point_set_y(p2, 4.0)
-p2 <- ffi$point_set_id(p2, 2L)
+p2 <- ffi$struct_point_new()
+p2 <- ffi$struct_point_set_x(p2, 3.0)
+p2 <- ffi$struct_point_set_y(p2, 4.0)
+p2 <- ffi$struct_point_set_id(p2, 2L)
 
-ffi$point_get_x(p1)
+ffi$struct_point_get_x(p1)
 #> [1] 0
 ffi$point_distance(p1, p2)
 #> [1] 25
 
-ffi$point_free(p1)
+ffi$struct_point_free(p1)
 #> NULL
-ffi$point_free(p2)
+ffi$struct_point_free(p2)
 #> NULL
 ```
 
@@ -391,14 +391,14 @@ ffi <- tcc_ffi() |>
   tcc_struct("status", accessors = c(flag = "u8", code = "u8")) |>
   tcc_compile()
 
-s <- ffi$status_new()
-s <- ffi$status_set_flag(s, 1)
-s <- ffi$status_set_code(s, 42)
-ffi$status_get_flag(s)
+s <- ffi$struct_status_new()
+s <- ffi$struct_status_set_flag(s, 1)
+s <- ffi$struct_status_set_code(s, 42)
+ffi$struct_status_get_flag(s)
 #> [1] 1
-ffi$status_get_code(s)
+ffi$struct_status_get_code(s)
 #> [1] 42
-ffi$status_free(s)
+ffi$struct_status_free(s)
 #> NULL
 ```
 
@@ -546,7 +546,7 @@ sqlite_struct <- tcc_ffi() |>
   ) |>
   tcc_compile()
 
-h <- sqlite_struct$sqlite_handle_new()
+h <- sqlite_struct$struct_sqlite_handle_new()
 sqlite_struct$sqlite_handle_open(h, ":memory:")
 #> [1] 0
 sqlite_struct$sqlite_handle_exec(h, "CREATE TABLE items (id INTEGER, name TEXT);")
@@ -555,7 +555,7 @@ sqlite_struct$sqlite_handle_exec(h, "INSERT INTO items VALUES (1, \'test\');")
 #> [1] 0
 sqlite_struct$sqlite_handle_close(h)
 #> [1] 0
-sqlite_struct$sqlite_handle_free(h)
+sqlite_struct$struct_sqlite_handle_free(h)
 #> NULL
 ```
 
@@ -610,7 +610,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x56d5be945028"
+#> [1] "0x5db3200fea68"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
