@@ -59,8 +59,8 @@
 <div class="section level2">
 <h2 id="how-all-of-this-works-">How all of this works ?<a class="anchor" aria-label="anchor" href="#how-all-of-this-works-"></a>
 </h2>
-<p>Rtinycc generates C wrappers on the fly and calls them through <code>.Call</code> without building a shared library that registers <code>R_init_*</code> symbols. The wrapper pointer used by <code>.RtinyccCall</code> is created in <code>RC_libtcc_get_symbol()</code> by converting the raw <code>void*</code> from TinyCC into a <code>DL_FUNC</code> and wrapping it with <code>R_MakeExternalPtrFn</code>. The resulting external pointer is returned by <code><a href="reference/tcc_get_symbol.html">tcc_get_symbol()</a></code>, then passed through <a href="R/ffi.R"><code>make_callable()</code></a> into <code>.RtinyccCall</code> (which is just <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">base::.Call</a></code>). This is powerful, but it is also an ABI boundary: even though <code>TinyCC</code> is built with the same toolchain as R’s <code>CC</code> config, there can still be subtle calling-convention or ABI mismatches on some platforms or with unusual compiler flags. If you hit unexplained crashes around <code>.Call</code>, treat this as a likely culprit.</p>
-<p>We do not rely on <code>TinyCC</code>’s ABI mode alone. The strategy is hybrid: we generate wrapper code (API-style) to avoid brittle, hand-rolled layout logic (think Python ctypes-style calculations), while still linking to external libraries and calling into their ABI (ABI-style). The net effect is that <code>TinyCC</code> performs the layout computations (<code>sizeof</code>, <code>offsetof</code>, calling conventions) inside the generated C, and the resulting wrappers bridge to external symbols. This is similar in spirit to <a href="https://cffi.readthedocs.io/" class="external-link"><code>CFFI</code></a> and tools like <a href="https://cslug.readthedocs.io/en/latest/" class="external-link"><code>cslug</code></a>, but here the codegen uses <code>TinyCC</code> directly rather than libffi’s call interface. For background and contrasts with a libffi approach, see the <a href="https://github.com/sounkou-bioinfo/RSimpleFFI#readme" class="external-link"><code>RSimpleFFI</code> README</a>.</p>
+<p>Rtinycc generates C wrappers on the fly and calls them through <code>.Call</code> without building a shared library that registers <code>R_init_*</code> symbols. The wrapper pointer used by <code>.RtinyccCall</code> is created in <code>RC_libtcc_get_symbol()</code> by converting the raw <code>void*</code> from TinyCC into a <code>DL_FUNC</code> and wrapping it with <code>R_MakeExternalPtrFn</code>. The resulting external pointer is returned by <code><a href="reference/tcc_get_symbol.html">tcc_get_symbol()</a></code>, then passed through <a href="R/ffi.R"><code>make_callable()</code></a> into <code>.RtinyccCall</code> (which is just <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">base::.Call</a></code>). This is powerful, but it is also an ABI boundary: even though <code>TinyCC</code> is built with the same toolchain as R’s <code>CC</code> config, there can still be subtle calling-convention or ABI mismatches on some platforms or with unusual compiler flags.</p>
+<p>We do not rely on <code>TinyCC</code>’s ABI mode alone. The strategy is hybrid: we generate wrapper code (API-style) to avoid brittle, hand-rolled layout logic (think Python ctypes-style calculations), while still linking to external libraries and calling into their ABI (ABI-style). The net effect is that <code>TinyCC</code> performs the layout computations (<code>sizeof</code>, <code>offsetof</code>, calling conventions) inside the generated C, and the resulting wrappers bridge to external symbols. This is similar in spirit to <a href="https://cffi.readthedocs.io/" class="external-link"><code>CFFI</code> API mode</a> and tools like <a href="https://cslug.readthedocs.io/en/latest/" class="external-link"><code>cslug</code></a>, but here the codegen uses <code>TinyCC</code> directly rather than libffi’s call interface. For background and contrasts with a libffi approach, see the <a href="https://github.com/sounkou-bioinfo/RSimpleFFI#readme" class="external-link"><code>RSimpleFFI</code> README</a>.</p>
 <p>Ownership semantics are explicit but limited. Pointers from <code><a href="reference/tcc_malloc.html">tcc_malloc()</a></code> (and other helpers that allocate) are tagged as owned and will be freed by <code><a href="reference/tcc_free.html">tcc_free()</a></code> or by their finalizer. Borrowed pointers (e.g. from <code><a href="reference/tcc_data_ptr.html">tcc_data_ptr()</a></code>) are tagged as borrowed and must not be freed by Rtinycc. Array returns are copied into an R vector; use <code>free = TRUE</code> only when the C function returns a <code>malloc</code>-owned buffer.</p>
 <p>TinyCC itself has limitations that surface here. In particular, complex types often require the <code>_Complex</code> macro workaround in example code to keep <code>TinyCC</code> parsing happy. If you see odd behavior around complex numbers or complex signatures, try the <code>_Complex</code> workaround first and treat it as a <code>TinyCC</code> compatibility constraint rather than an Rtinycc bug.</p>
 </div>
@@ -106,7 +106,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64572dc3b000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3bfb2000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -124,7 +124,7 @@
 <span><span class="fu"><a href="reference/tcc_read_u8.html">tcc_read_u8</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 104 101 108 108 111</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x64572d8ebce0"</span></span>
+<span><span class="co">#&gt; [1] "0x5c7d3c9b70e0"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -134,11 +134,11 @@
 <span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64572d8ebef0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3c66a430&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64572f6358c0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3e7250e0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64572d8ebef0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3c66a430&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -226,7 +226,7 @@
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># force the altrep</span></span>
 <span><span class="co"># Inspect SEXP pointer </span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @645730399650 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @5c7d3e70da88 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">result</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
@@ -243,7 +243,7 @@
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @645730399650 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @5c7d3e70da88 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 <div class="section level4">
 <h4 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
@@ -670,7 +670,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x64573201a2d8"</span></span>
+<span><span class="co">#&gt; [1] "0x5c7d3d14e508"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
@@ -810,7 +810,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x6457327791b0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d40a3a0b0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -838,11 +838,11 @@
 <span><span class="va">in_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">in_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x6457327458f0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3f7439c0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="op">(</span>\<span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="op">{</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_set_a</span><span class="op">(</span><span class="va">p</span>, <span class="fl">42L</span><span class="op">)</span> <span class="op">}</span><span class="op">)</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64572fb97d90&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3f6e5f00&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_free</span><span class="op">(</span><span class="va">in_ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_free</span><span class="op">(</span><span class="va">o</span><span class="op">)</span></span>
@@ -867,7 +867,7 @@
 <span><span class="va">anon_ptr</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_anon_addr</span><span class="op">(</span><span class="va">w</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">anon_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x645732779170&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d3ca71120&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_anon_addr</span><span class="op">(</span><span class="va">w</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="op">(</span></span>
@@ -875,7 +875,7 @@
 <span>      <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_set_a</span><span class="op">(</span><span class="va">p</span>, <span class="fl">7L</span><span class="op">)</span></span>
 <span>    <span class="op">}</span></span>
 <span>  <span class="op">)</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x64572d780330&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d405c9e20&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_anon_t_free</span><span class="op">(</span><span class="va">anon_ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_wrapper_free</span><span class="op">(</span><span class="va">w</span><span class="op">)</span></span>
@@ -919,7 +919,7 @@
 <span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">255L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x645732186e80&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c7d40cc4090&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 255</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_free</span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
