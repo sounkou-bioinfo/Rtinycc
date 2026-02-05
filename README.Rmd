@@ -97,6 +97,7 @@ The FFI exposes a small, explicit set of type mappings between R and C. Conversi
 - **Scalars**: `i8`, `i16`, `i32`, `i64` (integers); `f32`, `f64` (floats); `bool` (logical); `cstring` (NUL-terminated C string).
 - **Arrays (zero-copy)**: `raw` → `uint8_t*`; `integer_array` → `int32_t*`; `numeric_array` → `double*`.
 - **Pointers**: `ptr` (opaque `externalptr`), `sexp` (pass `SEXP` directly), `callback:<signature>` (sync trampoline), `callback_async:<signature>` (async trampoline).
+- **Array fields in structs**: use `list(type = "u8", size = 16, array = TRUE)` and the generated helpers `struct_<name>_get_<field>()`, `struct_<name>_get_<field>_elt(i)`, `struct_<name>_set_<field>_elt(i, v)`.
 
 #### Simple function
 
@@ -735,8 +736,15 @@ ffi <- tcc_ffi() |>
 
 w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
-tcc_ptr_set(ffi$struct_wrapper_anon_addr(w), anon_ptr)
-ffi$struct_anon_t_set_a(tcc_data_ptr(ffi$struct_wrapper_anon_addr(w)), 7L)
+ffi$struct_wrapper_anon_addr(w) |>
+  tcc_ptr_set(anon_ptr)
+ffi$struct_wrapper_anon_addr(w) |>
+  tcc_data_ptr() |>
+  (
+    function(p) {
+      ffi$struct_anon_t_set_a(p, 7L)
+    }
+  )()
 ffi$struct_anon_t_free(anon_ptr)
 ffi$struct_wrapper_free(w)
 ```
