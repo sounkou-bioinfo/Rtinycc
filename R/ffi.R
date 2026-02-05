@@ -80,14 +80,53 @@ tcc_library_path <- function(ffi, path) {
 #' Add library to link against
 #'
 #' @param ffi A tcc_ffi object
-#' @param library Library name (e.g., "m", "sqlite3")
+#' @param library Library name (e.g., "m", "sqlite3") or a path to a
+#'   shared library (e.g., "libm.so.6"). When a path is provided, the
+#'   library directory is added automatically and the library name is
+#'   inferred from the file name.
 #' @return Updated tcc_ffi object (for chaining)
 #' @export
 tcc_library <- function(ffi, library) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
   }
-  ffi$libraries <- c(ffi$libraries, library)
+
+  libs <- as.character(library)
+  for (lib in libs) {
+    if (!nzchar(lib)) {
+      next
+    }
+
+    lib_name <- lib
+
+    # If a path or a file name with extension is provided, resolve and
+    # extract the library name while also adding the lib path.
+    if (file.exists(lib) || grepl("[/\\\\]", lib)) {
+      if (!file.exists(lib)) {
+        found_path <- tcc_find_library(lib)
+        if (is.null(found_path)) {
+          stop("Library not found: ", lib, call. = FALSE)
+        }
+        lib <- found_path
+      }
+      ffi$lib_paths <- c(ffi$lib_paths, dirname(lib))
+      lib_name <- sub("^lib", "", basename(lib))
+      lib_name <- sub("\\.(so|dylib|dll).*$", "", lib_name)
+    } else if (grepl("\\.(so|dylib|dll)(\\..*)?$", lib, ignore.case = TRUE)) {
+      found_path <- tcc_find_library(lib)
+      if (is.null(found_path)) {
+        stop("Library not found: ", lib, call. = FALSE)
+      }
+      ffi$lib_paths <- c(ffi$lib_paths, dirname(found_path))
+      lib_name <- sub("^lib", "", basename(found_path))
+      lib_name <- sub("\\.(so|dylib|dll).*$", "", lib_name)
+    }
+
+    if (nzchar(lib_name)) {
+      ffi$libraries <- c(ffi$libraries, lib_name)
+    }
+  }
+
   ffi
 }
 
@@ -754,8 +793,7 @@ print.tcc_compiled <- function(x, ...) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(
-    sysname,
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -808,8 +846,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(
-      sysname,
+    lib_name <- switch(sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
