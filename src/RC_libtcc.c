@@ -12,6 +12,7 @@
 #endif
 #include <stdint.h>
 #include <inttypes.h>
+#include <string.h>
 
 static void RC_tcc_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
@@ -165,7 +166,9 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     if (native_symbol_tag == NULL) {
         native_symbol_tag = Rf_install("native symbol");
     }
-    SEXP ptr = PROTECT(R_MakeExternalPtrFn((DL_FUNC)fn, native_symbol_tag, R_NilValue));
+    DL_FUNC fn_ptr;
+    memcpy(&fn_ptr, &fn, sizeof(fn_ptr));
+    SEXP ptr = PROTECT(R_MakeExternalPtrFn(fn_ptr, native_symbol_tag, R_NilValue));
     Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_symbol"));
     UNPROTECT(1);
     return ptr;
