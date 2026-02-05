@@ -35,6 +35,7 @@
 <div id="rtinycc-agent-guidelines-short" class="section level1">
 
 <p>This file is the minimum guidance for agentic work on Rtinycc. Read relevant code before changes, keep edits small and focused, and update tests/docs when you change behavior.</p>
+<p>Agents must read actual implementations before guessing. If you need third-party code or headers, check the <code>.sync</code> directory for local copies of libraries we depend on so you can read them directly instead of assuming behavior. We also generate <code>&lt;package&gt;.llm.txt</code> files for R package docs; for example, treesitter.c docs can be found in <code>treesitter.llm.txt</code>.</p>
 <div class="section level2">
 <h2 id="what-this-package-does">What this package does<a class="anchor" aria-label="anchor" href="#what-this-package-does"></a></h2>
 <p>Rtinycc embeds TinyCC and exposes both CLI and libtcc APIs to R. It provides a Bun-style FFI that generates SEXP wrappers at runtime, compiles them with TinyCC, and calls them via <code>.Call</code>.</p>
@@ -58,7 +59,7 @@
 <li>
 <code>make test</code> runs tinytest.</li>
 <li>For a single file: <code>R -e "tinytest::run_test_file('inst/tinytest/&lt;file&gt;.R')"</code>.</li>
-<li>Development plumbing: run <code>air format .</code> after edits, use <code>make install</code> for local installs, <code>make check</code> for CRAN-style checks, and <code>make rdm</code> to regenerate README. Always add or update tinytests for behavior changes.</li>
+<li>Development plumbing: run <code>air format</code> after edits, use <code>make install</code> for local installs, <code>make check</code> for CRAN-style checks, and <code>make rdm</code> to regenerate README. Always add or update tinytests for behavior changes.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="editing-rules">Editing rules<a class="anchor" aria-label="anchor" href="#editing-rules"></a></h2>
