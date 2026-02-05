@@ -35,8 +35,7 @@ raw `void*` from TinyCC into a `DL_FUNC` and wrapping it with
 `.RtinyccCall` (which is just `base::.Call`). This is powerful, but it is also
 an ABI boundary: even though `TinyCC` is built with the same toolchain as R’s
 `CC` config, there can still be subtle calling-convention or ABI mismatches on
-some platforms or with unusual compiler flags. If you hit unexplained crashes
-around `.Call`, treat this as a likely culprit.
+some platforms or with unusual compiler flags. 
 
 We do not rely on `TinyCC`’s ABI mode alone. The strategy is hybrid: we generate
 wrapper code (API-style) to avoid brittle, hand-rolled layout logic (think
@@ -44,7 +43,7 @@ Python ctypes-style calculations), while still linking to external libraries
 and calling into their ABI (ABI-style). The net effect is that `TinyCC` performs
 the layout computations (`sizeof`, `offsetof`, calling conventions) inside the
 generated C, and the resulting wrappers bridge to external symbols. This is
-similar in spirit to [`CFFI`](https://cffi.readthedocs.io/) and tools like
+similar in spirit to [`CFFI` API mode](https://cffi.readthedocs.io/) and tools like
 [`cslug`](https://cslug.readthedocs.io/en/latest/), but here the codegen uses
 `TinyCC` directly rather than libffi’s call interface. For background and
 contrasts with a libffi approach, see the
