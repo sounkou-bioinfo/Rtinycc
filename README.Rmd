@@ -613,7 +613,7 @@ tcc_call_symbol(state, "call_r_sqrt", return = "double")
 ### Header parsing with `treesitter.c` and generate bindings
 
 For header-driven bindings, use `treesitter.c` to parse function signatures and
-bind to an existing shared library (no manual `tcc_source()` bodies needed).
+bind to an existing shared library.
 
 ```{r ffi-treesitter}
 header <- '
