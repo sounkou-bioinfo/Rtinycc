@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x6125af39f000>
+#> <pointer: 0x636f4c4c9000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6125b125df10"
+#> [1] "0x636f4e387f10"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -614,7 +614,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x6125b04d2428"
+#> [1] "0x636f4e7c0318"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -732,8 +732,8 @@ enums
 #>   capture_name   text start_line
 #> 1    enum_name status          5
 globals
-#> [1] capture_name text         start_line  
-#> <0 rows> (or 0-length row.names)
+#>   capture_name           text start_line
+#> 1  global_name global_counter          6
 
 symbols <- tcc_treesitter_bindings(header)
 
