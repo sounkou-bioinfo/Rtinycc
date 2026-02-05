@@ -135,7 +135,7 @@
 - [`tcc_symbol_is_valid()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_symbol_is_valid.md)
   : Check if a tcc_symbol external pointer is valid
 - [`tcc_treesitter_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_bindings.md)
-  : Generate tcc_bind() specs from a header
+  : Generate bindings from a header
 - [`tcc_treesitter_defines()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_defines.md)
   : Extract macro defines from a header file
 - [`tcc_treesitter_enum_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_enum_bindings.md)
