@@ -724,6 +724,38 @@ ffi$global_global_counter_get()
 
 ### Limitations and Issues of Note
 
+#### How all of this works (and why it is unusual)
+
+Rtinycc generates C wrappers on the fly and calls them through `.Call` without
+building a shared library that registers `R_init_*` symbols. This is done by
+casting the generated wrapper to the `.Call` ABI at runtime (via
+`.RtinyccCall`, which is just `base::.Call`). This is powerful, but it is also
+an ABI boundary: even though TinyCC is built with the same toolchain as R’s
+`CC` config, there can still be subtle calling-convention or ABI mismatches
+on some platforms or with unusual compiler flags. If you hit unexplained
+crashes around `.Call`, treat this as a likely culprit.
+
+We use TinyCC in ABI mode (like CFFI) so the compiler performs the layout
+computations (e.g. `sizeof`, `offsetof`, calling conventions) for the crossing,
+which avoids a class of brittle, hand-rolled layout logic (think Python
+ctypes-style calculations). This is similar in spirit to the libffi-based
+approach in RSimpleFFI, but here the codegen uses TinyCC to do the crossing
+directly instead of libffi’s call interface. For background and contrasts, see
+the RSimpleFFI README: https://github.com/sounkou-bioinfo/RSimpleFFI#readme
+
+Ownership semantics are explicit but limited. Pointers from `tcc_malloc()` (and
+other helpers that allocate) are tagged as owned and will be freed by
+`tcc_free()` or by their finalizer. Borrowed pointers (e.g. from
+`tcc_data_ptr()`) are tagged as borrowed and must not be freed by Rtinycc.
+Array returns are copied into an R vector; use `free = TRUE` only when the C
+function returns a `malloc`-owned buffer.
+
+TinyCC itself has limitations that surface here. In particular, complex types
+often require the `_Complex` macro workaround in example code to keep TinyCC
+parsing happy. If you see odd behavior around complex numbers or complex
+signatures, try the `_Complex` workaround first and treat it as a TinyCC
+compatibility constraint rather than an Rtinycc bug.
+
 #### Nested structs/unions by value
 
 Use pointer utilities for pointer fields, and small wrappers for by-value fields:

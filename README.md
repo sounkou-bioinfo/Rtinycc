@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x629638bcc000>
+#> <pointer: 0x5f8878d76000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x629639e69830"
+#> [1] "0x5f887b9cf460"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -97,11 +97,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6296387ab570>
+#> <pointer: 0x5f8879a235c0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x62963941e420>
+#> <pointer: 0x5f8879c133c0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6296387ab570>
+#> <pointer: 0x5f8879a235c0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -199,7 +199,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @6296394f6b90 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5f887b9f42b8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -216,7 +216,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6296394f6b90 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @5f887b9f42b8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -669,7 +669,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x62963a1de298"
+#> [1] "0x5f887b093fe8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -818,7 +818,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x62963a1fd0a0>
+#> <pointer: 0x5f887cb7f100>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -826,6 +826,41 @@ ffi$global_global_counter_get()
 ```
 
 ### Limitations and Issues of Note
+
+#### How all of this works (and why it is unusual)
+
+Rtinycc generates C wrappers on the fly and calls them through `.Call`
+without building a shared library that registers `R_init_*` symbols.
+This is done by casting the generated wrapper to the `.Call` ABI at
+runtime (via `.RtinyccCall`, which is just `base::.Call`). This is
+powerful, but it is also an ABI boundary: even though TinyCC is built
+with the same toolchain as R’s `CC` config, there can still be subtle
+calling-convention or ABI mismatches on some platforms or with unusual
+compiler flags. If you hit unexplained crashes around `.Call`, treat
+this as a likely culprit.
+
+We use TinyCC in ABI mode (like CFFI) so the compiler performs the
+layout computations (e.g. `sizeof`, `offsetof`, calling conventions) for
+the crossing, which avoids a class of brittle, hand-rolled layout logic
+(think Python ctypes-style calculations). This is similar in spirit to
+the libffi-based approach in RSimpleFFI, but here the codegen uses
+TinyCC to do the crossing directly instead of libffi’s call interface.
+For background and contrasts, see the RSimpleFFI README:
+<https://github.com/sounkou-bioinfo/RSimpleFFI#readme>
+
+Ownership semantics are explicit but limited. Pointers from
+`tcc_malloc()` (and other helpers that allocate) are tagged as owned and
+will be freed by `tcc_free()` or by their finalizer. Borrowed pointers
+(e.g. from `tcc_data_ptr()`) are tagged as borrowed and must not be
+freed by Rtinycc. Array returns are copied into an R vector; use
+`free = TRUE` only when the C function returns a `malloc`-owned buffer.
+
+TinyCC itself has limitations that surface here. In particular, complex
+types often require the `_Complex` macro workaround in example code to
+keep TinyCC parsing happy. If you see odd behavior around complex
+numbers or complex signatures, try the `_Complex` workaround first and
+treat it as a TinyCC compatibility constraint rather than an Rtinycc
+bug.
 
 #### Nested structs/unions by value
 
@@ -847,11 +882,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x62963ab79d20>
+#> <pointer: 0x5f887b5bc980>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x62963acfd600>
+#> <pointer: 0x5f887a0519c0>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -878,7 +913,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x629638bb3fa0>
+#> <pointer: 0x5f887a0519c0>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -886,7 +921,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x62963ab79d20>
+#> <pointer: 0x5f887d1a8530>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -928,7 +963,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x629637c62c60>
+#> <pointer: 0x5f887caa6c80>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)
