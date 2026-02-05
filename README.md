@@ -3,6 +3,8 @@
 
 # Rtinycc
 
+Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
+
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)[![Rtinycc
@@ -107,7 +109,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5c7d3bfb2000>
+#> <pointer: 0x60d76cc02000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -128,7 +130,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5c7d3c9b70e0"
+#> [1] "0x60d76ca7c7b0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -138,11 +140,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5c7d3c66a430>
+#> <pointer: 0x60d76f8569f0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5c7d3e7250e0>
+#> <pointer: 0x60d76cc8fb80>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5c7d3c66a430>
+#> <pointer: 0x60d76f8569f0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -240,7 +242,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @5c7d3e70da88 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @60d76f88a378 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -257,7 +259,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5c7d3e70da88 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @60d76f88a378 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -710,7 +712,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5c7d3d14e508"
+#> [1] "0x60d77058f2c8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -859,7 +861,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5c7d40a3a0b0>
+#> <pointer: 0x60d76ef53d30>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -888,11 +890,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x5c7d3f7439c0>
+#> <pointer: 0x60d770f3a0c0>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x5c7d3f6e5f00>
+#> <pointer: 0x60d7706704e0>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -919,7 +921,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x5c7d3ca71120>
+#> <pointer: 0x60d771162ac0>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -927,7 +929,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x5c7d405c9e20>
+#> <pointer: 0x60d76f11b730>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -974,7 +976,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x5c7d40cc4090>
+#> <pointer: 0x60d76d3d44f0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)
