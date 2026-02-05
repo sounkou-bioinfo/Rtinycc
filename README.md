@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x636f4c4c9000>
+#> <pointer: 0x5af394b7e000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x636f4e387f10"
+#> [1] "0x5af393537de0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -614,7 +614,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x636f4e7c0318"
+#> [1] "0x5af3975d6358"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -705,7 +705,9 @@ ffi$global_global_counter_get()
 ### Header parsing with `treesitter.c` and generate bindings
 
 For header-driven bindings, use `treesitter.c` to parse function
-signatures and bind to an existing shared library.
+signatures and bind to an existing shared library. For
+struct/enum/global helpers, use `tcc_generate_bindings()` and include
+the declarations in your `tcc_source()`.
 
 ``` r
 header <- '
@@ -747,6 +749,139 @@ math_lib$sqrt(16.0)
 #> [1] 4
 math_lib$sin(1.0)
 #> [1] 0.841471
+
+# Generate struct/enum/global helpers from header declarations
+ffi <- tcc_ffi() |>
+  tcc_source(header) |>
+  tcc_generate_bindings(
+    header,
+    functions = FALSE,
+    structs = TRUE,
+    enums = TRUE,
+    globals = TRUE
+  ) |>
+  tcc_compile()
+
+ffi$struct_point_new()
+#> <pointer: 0x5af39664eb30>
+ffi$enum_status_OK()
+#> [1] 0
+ffi$global_global_counter_get()
+#> [1] 0
+```
+
+### Limitations and Issues of Note
+
+#### Nested structs/unions by value
+
+Use field addresses and wrap the nested type explicitly:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    struct inner { int a; };
+    struct outer { struct inner in; };
+
+    struct outer* outer_new(void) { return (struct outer*)calloc(1, sizeof(struct outer)); }
+    void outer_free(struct outer* o) { free(o); }
+    void* outer_in_addr(struct outer* o) { return (void*) &o->in; }
+  ') |>
+  tcc_struct("inner", accessors = c(a = "i32")) |>
+  tcc_bind(
+    outer_new = list(args = list(), returns = "ptr"),
+    outer_free = list(args = list("ptr"), returns = "void"),
+    outer_in_addr = list(args = list("ptr"), returns = "ptr")
+  ) |>
+  tcc_compile()
+
+o <- ffi$outer_new()
+in_ptr <- ffi$outer_in_addr(o)
+ffi$struct_inner_set_a(in_ptr, 42L)
+#> <pointer: 0x5af397ddc030>
+ffi$outer_free(o)
+#> NULL
+```
+
+#### Anonymous nested structs/unions
+
+Name the type in `tcc_source()` and bind it:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    typedef struct anon_t { int a; } anon_t;
+    struct wrapper { anon_t anon; };
+
+    struct wrapper* wrapper_new(void) { return (struct wrapper*)calloc(1, sizeof(struct wrapper)); }
+    void wrapper_free(struct wrapper* w) { free(w); }
+    void* wrapper_anon_addr(struct wrapper* w) { return (void*) &w->anon; }
+  ') |>
+  tcc_struct("anon_t", accessors = c(a = "i32")) |>
+  tcc_bind(
+    wrapper_new = list(args = list(), returns = "ptr"),
+    wrapper_free = list(args = list("ptr"), returns = "void"),
+    wrapper_anon_addr = list(args = list("ptr"), returns = "ptr")
+  ) |>
+  tcc_compile()
+
+w <- ffi$wrapper_new()
+anon_ptr <- ffi$wrapper_anon_addr(w)
+ffi$struct_anon_t_set_a(anon_ptr, 7L)
+#> <pointer: 0x5af39331e100>
+ffi$wrapper_free(w)
+#> NULL
+```
+
+#### Enum and bitfield validation
+
+Validate in R or add a small C wrapper:
+
+``` r
+validate_code <- function(code) {
+  stopifnot(code >= 0 && code <= 63)
+  code
+}
+
+code <- validate_code(12L)
+```
+
+#### 64-bit integer precision
+
+Keep values within $2^{53}$, or pass pointers:
+
+``` r
+safe_u64 <- 2^53 - 1
+safe_u64
+#> [1] 9.007199e+15
+```
+
+#### Complex composite layouts (arrays in structs)
+
+Use `tcc_field_addr()` and raw byte helpers:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    struct buf { unsigned char data[16]; };
+    struct buf* buf_new(void) { return (struct buf*)calloc(1, sizeof(struct buf)); }
+    void buf_free(struct buf* b) { free(b); }
+    void* buf_data_addr(struct buf* b) { return (void*) b->data; }
+  ') |>
+  tcc_bind(
+    buf_new = list(args = list(), returns = "ptr"),
+    buf_free = list(args = list("ptr"), returns = "void"),
+    buf_data_addr = list(args = list("ptr"), returns = "ptr")
+  ) |>
+  tcc_compile()
+
+b <- ffi$buf_new()
+data_ptr <- ffi$buf_data_addr(b)
+tcc_write_bytes(data_ptr, as.raw(1:16))
+#> NULL
+tcc_read_bytes(data_ptr, 16)
+#>  [1] 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10
+ffi$buf_free(b)
+#> NULL
 ```
 
 ## License

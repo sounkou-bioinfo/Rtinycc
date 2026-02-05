@@ -273,11 +273,21 @@ tcc_map_c_type_to_ffi <- function(c_type) {
     "ptr"
 }
 
-#' Generate tcc_bind() specs from a header
+#' Generate bindings from a header
 #'
 #' @param header Character scalar containing C declarations.
 #' @param mapper Function to map C types to FFI types.
-#' @return Named list suitable for `tcc_bind()`.
+#' @param ffi Optional `tcc_ffi` object. When provided, returns an updated
+#'   FFI object with generated bindings.
+#' @param functions Logical; generate `tcc_bind()` specs for functions.
+#' @param structs Logical; generate `tcc_struct()` helpers.
+#' @param unions Logical; generate `tcc_union()` helpers.
+#' @param enums Logical; generate `tcc_enum()` helpers.
+#' @param globals Logical; generate `tcc_global()` getters/setters.
+#' @param bitfield_type FFI type to use for bitfields.
+#' @param include_bitfields Whether to include bitfields.
+#' @return Named list suitable for `tcc_bind()` when `ffi` is NULL, otherwise
+#'   an updated `tcc_ffi` object.
 #' @export
 #'
 #' @examples
@@ -285,8 +295,42 @@ tcc_map_c_type_to_ffi <- function(c_type) {
 #' symbols <- tcc_treesitter_bindings(header)
 tcc_treesitter_bindings <- function(
   header,
-  mapper = tcc_map_c_type_to_ffi
+  mapper = tcc_map_c_type_to_ffi,
+  ffi = NULL,
+  functions = TRUE,
+  structs = FALSE,
+  unions = FALSE,
+  enums = FALSE,
+  globals = FALSE,
+  bitfield_type = "u8",
+  include_bitfields = TRUE
 ) {
+    if (!is.null(ffi)) {
+        return(tcc_generate_bindings(
+            ffi,
+            header,
+            mapper = mapper,
+            functions = functions,
+            structs = structs,
+            unions = unions,
+            enums = enums,
+            globals = globals,
+            bitfield_type = bitfield_type,
+            include_bitfields = include_bitfields
+        ))
+    }
+
+    if (structs || unions || enums || globals) {
+        stop(
+            "Provide `ffi` to generate struct/union/enum/global bindings",
+            call. = FALSE
+        )
+    }
+
+    if (!functions) {
+        return(list())
+    }
+
     funcs <- tcc_treesitter_functions(header)
     if (nrow(funcs) == 0) {
         return(list())
