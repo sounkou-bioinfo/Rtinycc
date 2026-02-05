@@ -90,3 +90,28 @@ ffi <- tcc_ffi() |>
 output <- capture.output(print(ffi))
 expect_true(any(grepl("tcc_ffi", output)))
 expect_true(any(grepl("foo", output)))
+
+# Test 7: Array return type
+ffi <- tcc_ffi() |>
+  tcc_bind(
+    dup_array = list(
+      args = list("integer_array", "i32"),
+      returns = list(type = "integer_array", length_arg = 2, free = TRUE)
+    )
+  ) |>
+  tcc_source(
+    "
+    #include <stdlib.h>
+    int* dup_array(int* arr, int n) {
+      if (n <= 0) return NULL;
+      int* out = (int*)malloc(sizeof(int) * n);
+      for (int i = 0; i < n; i++) out[i] = arr[i] * 2;
+      return out;
+    }
+  "
+  ) |>
+  tcc_compile()
+
+expect_true(inherits(ffi, "tcc_compiled"))
+result <- ffi$dup_array(as.integer(c(1, 2, 3)), 3L)
+expect_equal(result, c(2L, 4L, 6L))
