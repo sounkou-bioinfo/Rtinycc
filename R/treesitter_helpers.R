@@ -77,6 +77,21 @@ tcc_treesitter_unions <- function(header, ...) {
     treesitter.c::get_union_nodes(root, ...)
 }
 
+#' Parse union members with treesitter.c
+#'
+#' @param header Character scalar containing C declarations.
+#' @param ... Additional arguments passed to `treesitter.c::get_union_members_from_root()`.
+#' @return A data frame of union members.
+#' @export
+#'
+#' @examples
+#' header <- "union data { int i; double d; };"
+#' tcc_treesitter_union_members(header)
+tcc_treesitter_union_members <- function(header, ...) {
+    root <- .tcc_treesitter_root(header)
+    treesitter.c::get_union_members_from_root(root, ...)
+}
+
 #' Parse enum declarations with treesitter.c
 #'
 #' @param header Character scalar containing C declarations.
@@ -90,6 +105,21 @@ tcc_treesitter_unions <- function(header, ...) {
 tcc_treesitter_enums <- function(header, ...) {
     root <- .tcc_treesitter_root(header)
     treesitter.c::get_enum_nodes(root, ...)
+}
+
+#' Parse enum members with treesitter.c
+#'
+#' @param header Character scalar containing C declarations.
+#' @param ... Additional arguments passed to `treesitter.c::get_enum_members_from_root()`.
+#' @return A data frame of enum members.
+#' @export
+#'
+#' @examples
+#' header <- "enum status { OK = 0, ERR = 1 };"
+#' tcc_treesitter_enum_members(header)
+tcc_treesitter_enum_members <- function(header, ...) {
+    root <- .tcc_treesitter_root(header)
+    treesitter.c::get_enum_members_from_root(root, ...)
 }
 
 #' Parse struct members (including bitfields) with treesitter.c
@@ -120,6 +150,21 @@ tcc_treesitter_struct_members <- function(header, ...) {
 tcc_treesitter_globals <- function(header, ...) {
     root <- .tcc_treesitter_root(header)
     treesitter.c::get_globals_from_root(root, ...)
+}
+
+#' Parse global declarations with types using treesitter.c
+#'
+#' @param header Character scalar containing C declarations.
+#' @param ... Additional arguments passed to `treesitter.c::get_globals_with_types_from_root()`.
+#' @return A data frame of global names and C types.
+#' @export
+#'
+#' @examples
+#' header <- "int global_counter;"
+#' tcc_treesitter_global_types(header)
+tcc_treesitter_global_types <- function(header, ...) {
+    root <- .tcc_treesitter_root(header)
+    treesitter.c::get_globals_with_types_from_root(root, ...)
 }
 
 #' Extract macro defines from a header file
@@ -353,6 +398,69 @@ tcc_treesitter_struct_accessors <- function(
     out[!vapply(out, function(x) length(x) == 0, logical(1))]
 }
 
+#' Generate tcc_union() accessors from header unions
+#'
+#' @param header Character scalar containing C declarations.
+#' @param mapper Function to map C types to FFI types.
+#' @param bitfield_type FFI type to use for bitfields.
+#' @param include_bitfields Whether to include bitfields.
+#' @return Named list of accessors by union name.
+#' @export
+#'
+#' @examples
+#' header <- "union data { int i; double d; };"
+#' tcc_treesitter_union_accessors(header)
+tcc_treesitter_union_accessors <- function(
+  header,
+  mapper = tcc_map_c_type_to_ffi,
+  bitfield_type = "u8",
+  include_bitfields = TRUE
+) {
+    members <- tcc_treesitter_union_members(header)
+    if (nrow(members) == 0) {
+        return(list())
+    }
+
+    split_members <- split(members, members$union_name)
+    out <- lapply(split_members, function(df) {
+        acc <- list()
+        for (i in seq_len(nrow(df))) {
+            row <- df[i, ]
+            name <- row$member_name
+            if (is.na(name) || !nzchar(name)) {
+                next
+            }
+            is_bitfield <- !is.na(row$bitfield) && nzchar(row$bitfield)
+            if (is_bitfield && !include_bitfields) {
+                next
+            }
+
+            mtype <- row$member_type
+            if (is_bitfield) {
+                ffi_type <- bitfield_type
+            } else if (is.na(mtype) || !nzchar(mtype)) {
+                stop(
+                    "Missing union member type for '",
+                    name,
+                    "' in union '",
+                    row$union_name,
+                    "'",
+                    call. = FALSE
+                )
+            } else if (mtype %in% c("struct", "struct (anonymous)")) {
+                ffi_type <- "ptr"
+            } else {
+                ffi_type <- mapper(mtype)
+            }
+
+            acc[[name]] <- ffi_type
+        }
+        acc
+    })
+
+    out[!vapply(out, function(x) length(x) == 0, logical(1))]
+}
+
 #' Apply tcc_struct() bindings from a header
 #'
 #' @param ffi A tcc_ffi object.
@@ -372,6 +480,29 @@ tcc_treesitter_struct_bindings <- function(ffi, header, ...) {
     }
     for (nm in names(accessors)) {
         ffi <- tcc_struct(ffi, nm, accessors[[nm]])
+    }
+    ffi
+}
+
+#' Apply tcc_union() bindings from a header
+#'
+#' @param ffi A tcc_ffi object.
+#' @param header Character scalar containing C declarations.
+#' @param ... Passed to `tcc_treesitter_union_accessors()`.
+#' @return Updated tcc_ffi object.
+#' @export
+#'
+#' @examples
+#' header <- "union data { int i; double d; };"
+#' ffi <- tcc_ffi()
+#' ffi <- tcc_treesitter_union_bindings(ffi, header)
+tcc_treesitter_union_bindings <- function(ffi, header, ...) {
+    accessors <- tcc_treesitter_union_accessors(header, ...)
+    if (length(accessors) == 0) {
+        return(ffi)
+    }
+    for (nm in names(accessors)) {
+        ffi <- tcc_union(ffi, nm, accessors[[nm]])
     }
     ffi
 }
@@ -399,5 +530,100 @@ tcc_treesitter_enum_bindings <- function(ffi, header, constants = NULL) {
             ffi <- tcc_enum(ffi, nm, constants = constants[[nm]])
         }
     }
+    ffi
+}
+
+#' Generate bindings from header declarations
+#'
+#' @param ffi A tcc_ffi object. If NULL, a new one is created.
+#' @param header Character scalar containing C declarations.
+#' @param mapper Function to map C types to FFI types.
+#' @param functions Logical; generate `tcc_bind()` specs for functions.
+#' @param structs Logical; generate `tcc_struct()` helpers.
+#' @param unions Logical; generate `tcc_union()` helpers.
+#' @param enums Logical; generate `tcc_enum()` helpers.
+#' @param globals Logical; generate `tcc_global()` getters/setters.
+#' @param bitfield_type FFI type to use for bitfields.
+#' @param include_bitfields Whether to include bitfields.
+#' @return Updated tcc_ffi object.
+#' @export
+#'
+#' @examples
+#' header <- "double sqrt(double x); struct point { double x; double y; };"
+#' ffi <- tcc_generate_bindings(tcc_ffi(), header)
+tcc_generate_bindings <- function(
+  ffi = NULL,
+  header,
+  mapper = tcc_map_c_type_to_ffi,
+  functions = TRUE,
+  structs = TRUE,
+  unions = TRUE,
+  enums = TRUE,
+  globals = TRUE,
+  bitfield_type = "u8",
+  include_bitfields = TRUE
+) {
+    if (is.null(ffi)) {
+        ffi <- tcc_ffi()
+    }
+    if (!inherits(ffi, "tcc_ffi")) {
+        stop("Expected tcc_ffi object", call. = FALSE)
+    }
+
+    if (functions) {
+        bindings <- tcc_treesitter_bindings(header, mapper = mapper)
+        if (length(bindings) > 0) {
+            ffi <- do.call(tcc_bind, c(list(ffi), bindings))
+        }
+    }
+
+    if (structs) {
+        ffi <- tcc_treesitter_struct_bindings(
+            ffi,
+            header,
+            mapper = mapper,
+            bitfield_type = bitfield_type,
+            include_bitfields = include_bitfields
+        )
+    }
+
+    if (unions) {
+        ffi <- tcc_treesitter_union_bindings(
+            ffi,
+            header,
+            mapper = mapper,
+            bitfield_type = bitfield_type,
+            include_bitfields = include_bitfields
+        )
+    }
+
+    if (enums) {
+        enum_members <- tcc_treesitter_enum_members(header)
+        if (nrow(enum_members) > 0) {
+            split_members <- split(enum_members, enum_members$enum_name)
+            for (nm in names(split_members)) {
+                consts <- split_members[[nm]]$member_name
+                consts <- consts[!is.na(consts) & nzchar(consts)]
+                if (length(consts) > 0) {
+                    ffi <- tcc_enum(ffi, nm, constants = consts)
+                }
+            }
+        }
+    }
+
+    if (globals) {
+        g <- tcc_treesitter_global_types(header)
+        if (nrow(g) > 0) {
+            for (i in seq_len(nrow(g))) {
+                nm <- g$text[i]
+                c_type <- g$c_type[i]
+                if (is.na(nm) || !nzchar(nm) || is.na(c_type) || !nzchar(c_type)) {
+                    next
+                }
+                ffi <- tcc_global(ffi, nm, mapper(c_type))
+            }
+        }
+    }
+
     ffi
 }

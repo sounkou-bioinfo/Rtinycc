@@ -14,7 +14,7 @@ License: GPL (>= 3)
 Depends: R (>= 4.4.0)
 Suggests:
     tinytest,
-    treesitter.c (>= 0.0.2.9000)
+    treesitter.c (>= 0.0.4)
 SystemRequirements: GNU make
 OS_type: unix
 Encoding: UTF-8
