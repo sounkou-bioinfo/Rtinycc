@@ -72,6 +72,8 @@ ptr <- tcc_cstring("hello")
 tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
+tcc_ptr_addr(ptr, hex = TRUE)
+tcc_ptr_is_null(ptr)
 tcc_free(ptr)
 ```
 
