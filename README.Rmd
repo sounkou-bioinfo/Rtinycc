@@ -369,13 +369,13 @@ We can link against system libraries like libm
 
 ```{r ffi-link, eval=TRUE}
 # Link against math library
-math_lib <- tcc_link(
-  "libm.so.6",
-  symbols = list(
+math_lib <- tcc_ffi() |>
+  tcc_library("m") |>
+  tcc_bind(
     sqrt = list(args = list("f64"), returns = "f64"),
     sin = list(args = list("f64"), returns = "f64")
-  )
-)
+  ) |>
+  tcc_compile()
 
 math_lib$sqrt(16.0)
 ```
@@ -641,10 +641,20 @@ bind to an existing shared library.
 header <- '
 double sqrt(double x);
 double sin(double x);
+struct point { double x; double y; };
+enum status { OK = 0, ERROR = 1 };
+int global_counter;
 '
 
 funcs <- tcc_treesitter_functions(header)
 funcs
+
+structs <- tcc_treesitter_structs(header)
+enums <- tcc_treesitter_enums(header)
+globals <- tcc_treesitter_globals(header)
+structs
+enums
+globals
 
 symbols <- tcc_treesitter_bindings(header)
 

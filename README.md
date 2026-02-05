@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5fe6c76d4000>
+#> <pointer: 0x5ef679c13000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5fe6c8e348d0"
+#> [1] "0x5ef67bad1f10"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -412,13 +412,13 @@ We can link against system libraries like libm
 
 ``` r
 # Link against math library
-math_lib <- tcc_link(
-  "libm.so.6",
-  symbols = list(
+math_lib <- tcc_ffi() |>
+  tcc_library("m") |>
+  tcc_bind(
     sqrt = list(args = list("f64"), returns = "f64"),
     sin = list(args = list("f64"), returns = "f64")
-  )
-)
+  ) |>
+  tcc_compile()
 
 math_lib$sqrt(16.0)
 #> [1] 4
@@ -614,7 +614,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5fe6c7e08118"
+#> [1] "0x5ef67d08ce18"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -711,6 +711,9 @@ signatures and bind to an existing shared library.
 header <- '
 double sqrt(double x);
 double sin(double x);
+struct point { double x; double y; };
+enum status { OK = 0, ERROR = 1 };
+int global_counter;
 '
 
 funcs <- tcc_treesitter_functions(header)
@@ -718,6 +721,19 @@ funcs
 #>   capture_name text start_line start_col params return_type
 #> 1    decl_name sqrt          2         8 double      double
 #> 2    decl_name  sin          3         8 double      double
+
+structs <- tcc_treesitter_structs(header)
+enums <- tcc_treesitter_enums(header)
+globals <- tcc_treesitter_globals(header)
+structs
+#>   capture_name  text start_line
+#> 1  struct_name point          4
+enums
+#>   capture_name   text start_line
+#> 1    enum_name status          5
+globals
+#> [1] capture_name text         start_line  
+#> <0 rows> (or 0-length row.names)
 
 symbols <- tcc_treesitter_bindings(header)
 
