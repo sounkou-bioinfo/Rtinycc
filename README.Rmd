@@ -127,7 +127,8 @@ Pass R vectors to C with zero-copy:
 ```{r ffi-arrays}
 ffi <- tcc_ffi() |>
   tcc_bind(
-    sum_array = list(args = list("integer_array", "i32"), returns = "i64")
+    sum_array = list(args = list("integer_array", "i32"), returns = "i64"),
+    bump_first = list(args = list("integer_array"), returns = "void")
   ) |>
   tcc_source("
     int64_t sum_array(int32_t* arr, int32_t n) {
@@ -137,13 +138,25 @@ ffi <- tcc_ffi() |>
       }
       return sum;
     }
+
+    void bump_first(int32_t* arr) {
+      arr[0] += 10;
+    }
   ") |>
   tcc_compile()
 
 # Pass R integer vector directly
-x <- 1:100
+x <- as.integer(1:100) # force the altrep
+# Inspect SEXP pointer 
+.Internal(inspect(x))
 result <- ffi$sum_array(x, length(x))
 result
+
+# Zero-copy: C mutation reflects in R
+ffi$bump_first(x)
+x[1]
+
+.Internal(inspect(x))
 
 ```
 

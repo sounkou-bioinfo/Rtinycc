@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5a4b1462e000>
+#> <pointer: 0x564209ccf000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -87,7 +87,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5a4b13994f90"
+#> [1] "0x564207f41a80"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -97,11 +97,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5a4b139951a0>
+#> <pointer: 0x5642070be1d0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5a4b12a319b0>
+#> <pointer: 0x564207749390>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5a4b139951a0>
+#> <pointer: 0x5642070be1d0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -162,7 +162,8 @@ Pass R vectors to C with zero-copy:
 ``` r
 ffi <- tcc_ffi() |>
   tcc_bind(
-    sum_array = list(args = list("integer_array", "i32"), returns = "i64")
+    sum_array = list(args = list("integer_array", "i32"), returns = "i64"),
+    bump_first = list(args = list("integer_array"), returns = "void")
   ) |>
   tcc_source("
     int64_t sum_array(int32_t* arr, int32_t n) {
@@ -172,14 +173,30 @@ ffi <- tcc_ffi() |>
       }
       return sum;
     }
+
+    void bump_first(int32_t* arr) {
+      arr[0] += 10;
+    }
   ") |>
   tcc_compile()
 
 # Pass R integer vector directly
-x <- 1:100
+x <- as.integer(1:100) # force the altrep
+# Inspect SEXP pointer 
+.Internal(inspect(x))
+#> @564209879858 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
+
+# Zero-copy: C mutation reflects in R
+ffi$bump_first(x)
+#> NULL
+x[1]
+#> [1] 11
+
+.Internal(inspect(x))
+#> @564209879858 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -632,7 +649,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5a4b1594f7f8"
+#> [1] "0x56420903d7b8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -781,7 +798,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5a4b18371a80>
+#> <pointer: 0x5642091c5730>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -810,11 +827,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x5a4b1584d2e0>
+#> <pointer: 0x56420a9664c0>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x5a4b139305f0>
+#> <pointer: 0x56420be33370>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -841,7 +858,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x5a4b1584d2e0>
+#> <pointer: 0x56420b6f59a0>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -849,7 +866,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x5a4b154efaa0>
+#> <pointer: 0x564209c322e0>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -891,7 +908,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x5a4b14f092f0>
+#> <pointer: 0x56420b0fa5e0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)
