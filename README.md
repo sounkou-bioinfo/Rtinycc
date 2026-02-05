@@ -66,7 +66,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x64306f39e000>
+#> <pointer: 0x581513160000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -610,7 +610,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x643070c9d558"
+#> [1] "0x58151482a948"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -676,30 +676,25 @@ tcc_call_symbol(state, "call_r_sqrt", return = "double")
 
 ### Header parsing with `treesitter.c` and generate bindings
 
-For header-driven bindings, `treesitter.c` provides C header parsers you
-can use to extract symbols before declaring FFI bindings.
+For header-driven bindings, use `treesitter.c` to parse function
+signatures and bind to an existing shared library (no manual
+`tcc_source()` bodies needed).
 
 ``` r
 library(treesitter.c)
 
 header <- '
-struct point { double x; double y; };
-int add(int a, int b);
-double scale(double x);
+double sqrt(double x);
+double sin(double x);
 '
 
 root <- parse_header_text(header)
 funcs <- get_function_nodes(root, extract_params = TRUE, extract_return = TRUE)
-structs <- get_struct_nodes(root)
 funcs
-#>   capture_name  text start_line start_col   params return_type
-#> 1    decl_name   add          3         5 int, int         int
-#> 2    decl_name scale          4         8   double      double
-structs
-#>   capture_name  text start_line
-#> 1  struct_name point          2
+#>   capture_name text start_line start_col params return_type
+#> 1    decl_name sqrt          2         8 double      double
+#> 2    decl_name  sin          3         8 double      double
 
-# Example: generate bindings from parsed signatures
 clean_type <- function(x) {
   x <- trimws(x)
   x <- gsub("\\s+", " ", x)
@@ -718,31 +713,23 @@ map_type <- function(x) {
 }
 
 signature_to_bind <- function(row) {
-  args <- character(0)
   params <- row$params
-  if (is.list(params)) {
-    params <- params[[1]]
-  }
+  if (is.list(params)) params <- params[[1]]
   params <- as.character(params)
   if (length(params) == 1 && grepl(",", params)) {
     params <- unlist(strsplit(params, ","))
   }
-  if (length(params) > 1) {
-    params <- params
-  }
-  if (length(params) == 1 && !is.na(params) && nzchar(params)) {
-    args <- vapply(params, map_type, character(1), USE.NAMES = FALSE)
+  args <- if (length(params) == 1 && !is.na(params) && nzchar(params)) {
+    vapply(params, map_type, character(1), USE.NAMES = FALSE)
   } else if (length(params) > 1) {
-    args <- vapply(params, map_type, character(1), USE.NAMES = FALSE)
+    vapply(params, map_type, character(1), USE.NAMES = FALSE)
+  } else {
+    character(0)
   }
   ret <- row$return_type
-  if (is.list(ret)) {
-    ret <- ret[[1]]
-  }
+  if (is.list(ret)) ret <- ret[[1]]
   ret <- as.character(ret)
-  if (length(ret) > 1) {
-    ret <- ret[[1]]
-  }
+  if (length(ret) > 1) ret <- ret[[1]]
   list(args = as.list(args), returns = map_type(ret))
 }
 
@@ -751,21 +738,16 @@ symbols <- setNames(
   funcs$text
 )
 
-ffi <- tcc_ffi()
-ffi <- tcc_source(
-  ffi,
-  "int add(int a, int b) { return a + b; }"
+math_lib <- tcc_link(
+  "libm.so.6",
+  symbols = symbols,
+  libs = "m"
 )
-ffi <- tcc_source(
-  ffi,
-  "double scale(double x) { return x * 2.0; }"
-)
-ffi <- do.call(tcc_bind, c(list(ffi), symbols))
-ffi <- tcc_compile(ffi)
-ffi$add(1L, 2L)
-#> [1] 3
-ffi$scale(2.0)
+
+math_lib$sqrt(16.0)
 #> [1] 4
+math_lib$sin(1.0)
+#> [1] 0.841471
 ```
 
 ## License
