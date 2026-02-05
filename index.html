@@ -98,7 +98,7 @@
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="fu"><a href="reference/tcc_get_symbol.html">tcc_get_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b0ea434c000&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x64306f39e000&gt;</span></span>
 <span><span class="co">#&gt; attr(,"class")</span></span>
 <span><span class="co">#&gt; [1] "tcc_symbol"</span></span></code></pre></div>
 <p>This is the simplest path for quick, in-process JIT compilation.</p>
@@ -448,45 +448,22 @@
 <div class="section level4">
 <h4 id="sqlite-with-an-r-callback">SQLite with an R callback<a class="anchor" aria-label="anchor" href="#sqlite-with-an-r-callback"></a>
 </h4>
-<p>Use an R callback from <code>sqlite3_exec()</code> via a small C bridge that calls <code>RC_invoke_callback()</code>.</p>
+<p>Use a <code>callback:&lt;signature&gt;</code> binding so the trampoline is generated automatically.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"hello from R callback:"</span>, <span class="va">x</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
+<span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">argc</span>, <span class="va">argv</span>, <span class="va">col</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">hits</span> <span class="op">&lt;&lt;-</span> <span class="va">hits</span> <span class="op">+</span> <span class="fl">1L</span></span>
 <span>    <span class="fl">0L</span></span>
 <span>  <span class="op">}</span>,</span>
-<span>  signature <span class="op">=</span> <span class="st">"int (*)(cstring)"</span></span>
+<span>  signature <span class="op">=</span> <span class="st">"int (*)(int, char **, char **)"</span></span>
 <span><span class="op">)</span></span>
-<span></span>
 <span><span class="va">cb_ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">sqlite_cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">'#include &lt;sqlite3.h&gt;'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"sqlite3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'  </span></span>
-<span><span class="st">  #define _Complex</span></span>
-<span><span class="st">  #include &lt;R.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">  #include &lt;stdio.h&gt;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  typedef struct { int id; } callback_token_t;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  SEXP RC_invoke_callback(SEXP, SEXP);</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  static int r_callback(void* ctx, int argc, char** argv, char** col) {</span></span>
-<span><span class="st">    callback_token_t* tok = (callback_token_t*)ctx;</span></span>
-<span><span class="st">    int id = tok-&gt;id;</span></span>
-<span><span class="st">    char buf[32];</span></span>
-<span><span class="st">    snprintf(buf, sizeof(buf), "%d", id);</span></span>
-<span><span class="st">    SEXP idstr = mkString(buf);</span></span>
-<span><span class="st">    SEXP args = PROTECT(allocVector(VECSXP, 1));</span></span>
-<span><span class="st">    const char* val = (argc &gt; 0 &amp;&amp; argv &amp;&amp; argv[0]) ? argv[0] : "";</span></span>
-<span><span class="st">    SET_VECTOR_ELT(args, 0, mkString(val));</span></span>
-<span><span class="st">    SEXP res = RC_invoke_callback(idstr, args);</span></span>
-<span><span class="st">    UNPROTECT(1);</span></span>
-<span><span class="st">    return asInteger(res);</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">  void* open_inmemory_db() {</span></span>
 <span><span class="st">    sqlite3* db = NULL;</span></span>
 <span><span class="st">    sqlite3_open(":memory:", &amp;db);</span></span>
@@ -497,35 +474,34 @@
 <span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
 <span><span class="st">    return sqlite3_close(db);</span></span>
 <span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  int exec_with_r_callback(void* db_ptr, const char* sql, void* cb_ptr) {</span></span>
-<span><span class="st">    sqlite3* db = (sqlite3*)db_ptr;</span></span>
-<span><span class="st">    char* err_msg = NULL;</span></span>
-<span><span class="st">    int rc = sqlite3_exec(db, sql, r_callback, cb_ptr, &amp;err_msg);</span></span>
-<span><span class="st">    if (err_msg) {</span></span>
-<span><span class="st">      sqlite3_free(err_msg);</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    return rc;</span></span>
-<span><span class="st">  }</span></span>
 <span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
 <span>    open_inmemory_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"ptr"</span><span class="op">)</span>,</span>
 <span>    close_db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>    exec_with_r_callback <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ptr"</span>, <span class="st">"cstring"</span>, <span class="st">"ptr"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>    sqlite3_exec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        <span class="st">"ptr"</span>,</span>
+<span>        <span class="st">"cstring"</span>,</span>
+<span>        <span class="st">"callback:int(int, char **, char **)"</span>,</span>
+<span>        <span class="st">"ptr"</span>,</span>
+<span>        <span class="st">"ptr"</span></span>
+<span>      <span class="op">)</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"i32"</span></span>
+<span>    <span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">db_ptr</span> <span class="op">&lt;-</span> <span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">open_inmemory_db</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"CREATE TABLE items (id INTEGER, name TEXT);"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">sqlite3_exec</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"CREATE TABLE items (id INTEGER, name TEXT);"</span>, <span class="va">cb</span>, <span class="va">cb_ptr</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"INSERT INTO items VALUES (1, \'test\');"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">sqlite3_exec</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"INSERT INTO items VALUES (1, \'test\');"</span>, <span class="va">cb</span>, <span class="va">cb_ptr</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">exec_with_r_callback</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"SELECT name FROM items;"</span>, <span class="va">cb_ptr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; hello from R callback: test</span></span>
+<span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">sqlite3_exec</span><span class="op">(</span><span class="va">db_ptr</span>, <span class="st">"SELECT name FROM items;"</span>, <span class="va">cb</span>, <span class="va">cb_ptr</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">hits</span></span>
+<span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">sqlite_cb</span><span class="op">$</span><span class="fu">close_db</span><span class="op">(</span><span class="va">db_ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
-<span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level4">
@@ -632,7 +608,7 @@
 <span><span class="co"># Use pointer utilities with SQLite</span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_setup_test_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">db</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5b0ea2cd1b58"</span></span>
+<span><span class="co">#&gt; [1] "0x643070c9d558"</span></span>
 <span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">tcc_exec_with_utils</span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT COUNT(*) FROM items;"</span><span class="op">)</span></span>
 <span><span class="va">sqlite_with_utils</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
