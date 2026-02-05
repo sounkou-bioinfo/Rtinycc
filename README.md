@@ -18,7 +18,7 @@ includes a small, explicit FFI inspired by [bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
 predictable conversions and pointer utilities. The package targets
 Unix-alikes systems (no Windows support for now) and focuses on
-embedding TinyCC and enabling JIT-compiled bindings directly from R.
+embedding `TinyCC` and enabling JIT-compiled bindings directly from R.
 Combined with
 [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
 provides C header parsers, it can be used to rapidly generate
@@ -27,26 +27,29 @@ declarative bindings.
 ## How all of this works ?
 
 Rtinycc generates C wrappers on the fly and calls them through `.Call`
-without building a shared library that registers `R_init_*` symbols.
-This is done by casting the generated wrapper to the `.Call` ABI at
-runtime (via `.RtinyccCall`, which is just `base::.Call`). This is
-powerful, but it is also an ABI boundary: even though TinyCC is built
-with the same toolchain as R’s `CC` config, there can still be subtle
-calling-convention or ABI mismatches on some platforms or with unusual
-compiler flags. If you hit unexplained crashes around `.Call`, treat
-this as a likely culprit.
+without building a shared library that registers `R_init_*` symbols. The
+wrapper pointer used by `.RtinyccCall` is created in
+`RC_libtcc_get_symbol()` by converting the raw `void*` from TinyCC into
+a `DL_FUNC` and wrapping it with `R_MakeExternalPtrFn`. The resulting
+external pointer is returned by `tcc_get_symbol()`, then passed through
+[`make_callable()`](R/ffi.R) into `.RtinyccCall` (which is just
+`base::.Call`). This is powerful, but it is also an ABI boundary: even
+though `TinyCC` is built with the same toolchain as R’s `CC` config,
+there can still be subtle calling-convention or ABI mismatches on some
+platforms or with unusual compiler flags. If you hit unexplained crashes
+around `.Call`, treat this as a likely culprit.
 
-We do not rely on TinyCC’s ABI mode alone. The strategy is hybrid: we
+We do not rely on `TinyCC`’s ABI mode alone. The strategy is hybrid: we
 generate wrapper code (API-style) to avoid brittle, hand-rolled layout
 logic (think Python ctypes-style calculations), while still linking to
 external libraries and calling into their ABI (ABI-style). The net
-effect is that TinyCC performs the layout computations (`sizeof`,
+effect is that `TinyCC` performs the layout computations (`sizeof`,
 `offsetof`, calling conventions) inside the generated C, and the
 resulting wrappers bridge to external symbols. This is similar in spirit
-to [CFFI](https://cffi.readthedocs.io/) and tools like
-[cslug](https://cslug.readthedocs.io/en/latest/), but here the codegen
-uses TinyCC directly rather than libffi’s call interface. For background
-and contrasts with a libffi approach, see the [RSimpleFFI
+to [`CFFI`](https://cffi.readthedocs.io/) and tools like
+[`cslug`](https://cslug.readthedocs.io/en/latest/), but here the codegen
+uses `TinyCC` directly rather than libffi’s call interface. For
+background and contrasts with a libffi approach, see the [`RSimpleFFI`
 README](https://github.com/sounkou-bioinfo/RSimpleFFI#readme).
 
 Ownership semantics are explicit but limited. Pointers from
@@ -58,9 +61,9 @@ freed by Rtinycc. Array returns are copied into an R vector; use
 
 TinyCC itself has limitations that surface here. In particular, complex
 types often require the `_Complex` macro workaround in example code to
-keep TinyCC parsing happy. If you see odd behavior around complex
+keep `TinyCC` parsing happy. If you see odd behavior around complex
 numbers or complex signatures, try the `_Complex` workaround first and
-treat it as a TinyCC compatibility constraint rather than an Rtinycc
+treat it as a `TinyCC` compatibility constraint rather than an Rtinycc
 bug.
 
 ## Installation
@@ -105,7 +108,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x63517ba18000>
+#> <pointer: 0x64572dc3b000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -126,7 +129,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x63517cdef040"
+#> [1] "0x64572d8ebce0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -136,11 +139,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x63517ab6e640>
+#> <pointer: 0x64572d8ebef0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x63517cdef040>
+#> <pointer: 0x64572f6358c0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x63517ab6e640>
+#> <pointer: 0x64572d8ebef0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -238,7 +241,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @63517cc1d918 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @645730399650 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -255,7 +258,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @63517cc1d918 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @645730399650 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -708,7 +711,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x63517ea42e08"
+#> [1] "0x64573201a2d8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -738,7 +741,7 @@ tcc_add_include_path(state, r_include)
 tcc_add_library_path(state, r_lib)
 #> [1] 0
 
-# Using #define _Complex as workaround of TinyCC’s lack of support for complex
+# Using #define _Complex as workaround of `TinyCC`’s lack of support for complex
 # types, we can link against R’s install headers and libR to call the R C API.
 code <- '
 #define _Complex
@@ -857,7 +860,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x63517e9a91b0>
+#> <pointer: 0x6457327791b0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -886,11 +889,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x63517e3ffb40>
+#> <pointer: 0x6457327458f0>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x63517fcd0310>
+#> <pointer: 0x64572fb97d90>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -917,7 +920,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x63517ead4440>
+#> <pointer: 0x645732779170>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -925,7 +928,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x63517f720820>
+#> <pointer: 0x64572d780330>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -951,8 +954,13 @@ Keep values within $2^{53}$, or pass pointers:
 
 ``` r
 safe_u64 <- 2^53 - 1
-safe_u64
-#> [1] 9.007199e+15
+unsafe_u64 <- 2^53
+sprintf("safe:   %.0f", safe_u64)
+#> [1] "safe:   9007199254740991"
+sprintf("unsafe: %.0f", unsafe_u64)
+#> [1] "unsafe: 9007199254740992"
+identical(safe_u64, unsafe_u64)
+#> [1] FALSE
 ```
 
 #### Complex composite layouts (arrays in structs)
@@ -967,7 +975,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x63517d557c90>
+#> <pointer: 0x645732186e80>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)
@@ -982,3 +990,6 @@ GPL-3
 
 - [tinycc](https://github.com/TinyCC/tinycc)
 - [bun’s FFI](https://bun.com/docs/runtime/ffi)
+- [CFFI](https://cffi.readthedocs.io/)
+- [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
+- [CSlug](https://cslug.readthedocs.io/en/latest/)

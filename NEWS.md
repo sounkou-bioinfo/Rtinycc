@@ -1,3 +1,8 @@
+# Rtinycc 0.0.2
+
+- Update package title and description
+- Mark this as the first release with API versioning going forward
+
 # Rtinycc 0.0.1.9000 (development version)
 
 - Generate callback trampolines from `callback:<signature>` bindings so C APIs can accept function pointers directly

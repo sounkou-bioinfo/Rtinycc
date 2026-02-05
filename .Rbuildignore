@@ -13,3 +13,4 @@ src/*.o
 ^Makefile$
 ^AGENTS.md$
 ^\.sync/.*$
+^treesiter\.c/.*$

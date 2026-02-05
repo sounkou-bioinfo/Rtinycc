@@ -21,31 +21,34 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-Rtinycc is an R interface to [tinycc](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes a small, explicit FFI inspired by [bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable conversions and pointer utilities. The package targets Unix-alikes systems (no Windows support for now) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [tinycc](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes a small, explicit FFI inspired by [bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable conversions and pointer utilities. The package targets Unix-alikes systems (no Windows support for now) and focuses on embedding `TinyCC` and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
 
 
 ## How all of this works ?
 
 Rtinycc generates C wrappers on the fly and calls them through `.Call` without
-building a shared library that registers `R_init_*` symbols. This is done by
-casting the generated wrapper to the `.Call` ABI at runtime (via
-`.RtinyccCall`, which is just `base::.Call`). This is powerful, but it is also
-an ABI boundary: even though TinyCC is built with the same toolchain as R’s
-`CC` config, there can still be subtle calling-convention or ABI mismatches
-on some platforms or with unusual compiler flags. If you hit unexplained
-crashes around `.Call`, treat this as a likely culprit.
+building a shared library that registers `R_init_*` symbols. The wrapper pointer
+used by `.RtinyccCall` is created in `RC_libtcc_get_symbol()` by converting the
+raw `void*` from TinyCC into a `DL_FUNC` and wrapping it with
+`R_MakeExternalPtrFn`. The resulting external pointer is returned by
+`tcc_get_symbol()`, then passed through [`make_callable()`](R/ffi.R) into
+`.RtinyccCall` (which is just `base::.Call`). This is powerful, but it is also
+an ABI boundary: even though `TinyCC` is built with the same toolchain as R’s
+`CC` config, there can still be subtle calling-convention or ABI mismatches on
+some platforms or with unusual compiler flags. If you hit unexplained crashes
+around `.Call`, treat this as a likely culprit.
 
-We do not rely on TinyCC’s ABI mode alone. The strategy is hybrid: we generate
+We do not rely on `TinyCC`’s ABI mode alone. The strategy is hybrid: we generate
 wrapper code (API-style) to avoid brittle, hand-rolled layout logic (think
 Python ctypes-style calculations), while still linking to external libraries
-and calling into their ABI (ABI-style). The net effect is that TinyCC performs
+and calling into their ABI (ABI-style). The net effect is that `TinyCC` performs
 the layout computations (`sizeof`, `offsetof`, calling conventions) inside the
 generated C, and the resulting wrappers bridge to external symbols. This is
-similar in spirit to [CFFI](https://cffi.readthedocs.io/) and tools like
-[cslug](https://cslug.readthedocs.io/en/latest/), but here the codegen uses
-TinyCC directly rather than libffi’s call interface. For background and
+similar in spirit to [`CFFI`](https://cffi.readthedocs.io/) and tools like
+[`cslug`](https://cslug.readthedocs.io/en/latest/), but here the codegen uses
+`TinyCC` directly rather than libffi’s call interface. For background and
 contrasts with a libffi approach, see the
-[RSimpleFFI README](https://github.com/sounkou-bioinfo/RSimpleFFI#readme).
+[`RSimpleFFI` README](https://github.com/sounkou-bioinfo/RSimpleFFI#readme).
 
 Ownership semantics are explicit but limited. Pointers from `tcc_malloc()` (and
 other helpers that allocate) are tagged as owned and will be freed by
@@ -55,9 +58,9 @@ Array returns are copied into an R vector; use `free = TRUE` only when the C
 function returns a `malloc`-owned buffer.
 
 TinyCC itself has limitations that surface here. In particular, complex types
-often require the `_Complex` macro workaround in example code to keep TinyCC
+often require the `_Complex` macro workaround in example code to keep `TinyCC`
 parsing happy. If you see odd behavior around complex numbers or complex
-signatures, try the `_Complex` workaround first and treat it as a TinyCC
+signatures, try the `_Complex` workaround first and treat it as a `TinyCC`
 compatibility constraint rather than an Rtinycc bug.
 
 ## Installation
@@ -656,7 +659,7 @@ r_lib <- file.path(R.home("lib"))
 tcc_add_include_path(state, r_include)
 tcc_add_library_path(state, r_lib)
 
-# Using #define _Complex as workaround of TinyCC’s lack of support for complex
+# Using #define _Complex as workaround of `TinyCC`’s lack of support for complex
 # types, we can link against R’s install headers and libR to call the R C API.
 code <- '
 #define _Complex
@@ -867,3 +870,6 @@ GPL-3
 
 - [tinycc](https://github.com/TinyCC/tinycc)
 - [bun's FFI](https://bun.com/docs/runtime/ffi)
+- [CFFI](https://cffi.readthedocs.io/)
+- [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
+- [CSlug](https://cslug.readthedocs.io/en/latest/)
