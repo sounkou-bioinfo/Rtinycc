@@ -1,5 +1,5 @@
 Package: Rtinycc
-Title: Builds 'TinyCC' 'Cli' and Library For 'C' Scripting in 'R'
+Title: Builds 'TinyCC' 'Cli' and Library for 'C' Scripting in 'R'
 Version: 0.0.2.9000
 Authors@R:c(
     person(given = "Sounkou Mahamane", family = "Toure", 
@@ -23,5 +23,3 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 URL: https://github.com/sounkou-bioinfo/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc
 BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues
-Remotes:
-    sounkou-bioinfo/treesitter.c
