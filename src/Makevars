@@ -2,8 +2,6 @@ TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
 PKG_CFLAGS = $(PKG_CPPFLAGS)
 
-# Prefer static archive to avoid runtime symbol interposition with R
-LIBTCC_A     := $(wildcard $(TINYCC_DIR)/lib/libtcc.a)
 LIBTCC_SO    := $(wildcard $(TINYCC_DIR)/lib/libtcc.so)
 LIBTCC_DYLIB := $(wildcard $(TINYCC_DIR)/lib/libtcc.dylib)
 
@@ -15,7 +13,6 @@ else
 RPATH = -Wl,-rpath,'$$ORIGIN/../tinycc/lib'
 endif
 
-# Prefer static archive; for dynamic cases append platform rpath
 ifneq ($(LIBTCC_SO),)
 		PKG_LIBS = $(LIBTCC_SO) $(RPATH)
 else ifneq ($(LIBTCC_DYLIB),)

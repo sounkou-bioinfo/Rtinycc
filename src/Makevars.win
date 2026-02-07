@@ -4,9 +4,9 @@ TINYCC_DIR = ../inst/tinycc
 # (stdlib.h, stdio.h, math.h …) which conflict with Rtools/MinGW.
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/libtcc
 
-# Link against libtcc.dll directly (like Unix links against .so/.dylib).
-# At runtime, install.libs.R copies libtcc.dll next to Rtinycc.dll so
-# the Windows loader finds it via same-directory search (rpath equivalent).
+# Prefer dynamic linking against libtcc.dll (same strategy as Unix).
+# This keeps _exit/abort/etc. out of Rtinycc.dll — they stay in the
+# companion libtcc.dll which install.libs.R copies next to Rtinycc.dll.
 LIBTCC_DLL := $(wildcard $(TINYCC_DIR)/lib/libtcc.dll)
 
 ifneq ($(LIBTCC_DLL),)
