@@ -252,7 +252,7 @@ ffi <- tcc_ffi() |>
   ) |>
   tcc_compile()
 
-x <- as.integer(1:100)
+x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
 ffi$sum_array(x, length(x))
 
@@ -264,7 +264,6 @@ x[1]
 y <- ffi$dup_array(x, length(x))
 y[1]
 
-# x is no longer ALTREP -- the C mutation materialised it
 .Internal(inspect(x))
 ```
 
