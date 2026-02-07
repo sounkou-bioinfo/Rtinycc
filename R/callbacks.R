@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Callback Registration and Invocation
 # Allow R functions to be passed as callbacks to compiled C code
 

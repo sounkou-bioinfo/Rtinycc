@@ -10,7 +10,9 @@ tcc_cstring(str)
 \item{str}{Character string}
 }
 \value{
-External pointer to C string
+An external pointer tagged \code{"rtinycc_owned"} pointing to a
+malloc'd copy of the string. Freed on garbage collection or via
+\code{\link[=tcc_free]{tcc_free()}}.
 }
 \description{
 Convert R character strings to C-style null-terminated string pointers.

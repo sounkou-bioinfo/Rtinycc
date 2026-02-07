@@ -15,10 +15,13 @@ tcc_read_cstring(
 
 \item{max_bytes}{Optional maximum number of bytes to read (fixed-length read).}
 
-\item{null_action}{Behavior when ptr is NULL: one of "na", "empty", "error".}
+\item{null_action}{Behavior when ptr is NULL: one of "na", "empty", "error".
+Only effective when \code{max_bytes} is provided; without it a NULL pointer
+returns \code{""}.}
 }
 \value{
-Character string
+Character string, or \code{NA}/\code{""} for NULL pointers depending on
+\code{null_action}.
 }
 \description{
 Convert a C-style null-terminated string pointer back to R character string.

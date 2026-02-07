@@ -1,3 +1,8 @@
+/* Rtinycc - TinyCC for R
+ * Copyright (C) 2025-2026 Sounkou Mahamane Toure
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
@@ -46,8 +51,7 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const void *args);
 
-// Dummy function
-SEXP RC_dummy();
+
 
 // .Call entries
 static const R_CallMethodDef CallEntries[] = {
@@ -93,8 +97,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_callback_async_schedule", (DL_FUNC) &RC_callback_async_schedule, 2},
     {"RC_callback_async_drain", (DL_FUNC) &RC_callback_async_drain, 0},
     
-    // Dummy function
-    {"RC_dummy", (DL_FUNC) &RC_dummy, 0},
     {NULL, NULL, 0}
 };
 

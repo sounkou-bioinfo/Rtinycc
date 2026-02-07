@@ -2,7 +2,7 @@
 % Please edit documentation in R/tcc_ptr_utils.R
 \name{tcc_ptr_is_owned}
 \alias{tcc_ptr_is_owned}
-\title{Check whether an external pointer is owned by Rtinycc}
+\title{Check for the \code{"rtinycc_owned"} tag}
 \usage{
 tcc_ptr_is_owned(ptr)
 }
@@ -13,5 +13,7 @@ tcc_ptr_is_owned(ptr)
 Logical scalar
 }
 \description{
-Check whether an external pointer is owned by Rtinycc
+Returns \code{TRUE} only for pointers created by \code{\link[=tcc_malloc]{tcc_malloc()}} or
+\code{\link[=tcc_cstring]{tcc_cstring()}}. Struct pointers (tagged \code{"struct_<name>"}) and
+borrowed pointers return \code{FALSE}.
 }

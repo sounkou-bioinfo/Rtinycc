@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 #' Treesitter helpers for header-driven bindings
 #'
 #' Convenience wrappers around `treesitter.c` that map C types to the

@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 #' Get the address of an external pointer
 #'
 #' Extract the memory address from an external pointer as a numeric value.
@@ -83,8 +87,7 @@ tcc_sysinclude_paths <- tcc_include_paths
 
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
-  switch(
-    output,
+  switch(output,
     memory = 1L, # TCC_OUTPUT_MEMORY
     obj = 3L, # TCC_OUTPUT_OBJ
     dll = 4L, # TCC_OUTPUT_DLL
@@ -105,7 +108,6 @@ check_cli_exists <- function() {
 #'
 #' Initialize a libtcc compilation state, optionally pointing at the bundled include/lib paths.
 #' @param output Output type: one of "memory", "obj", "dll", "exe", "preprocess".
-#' @param include_path Path to headers; defaults to the bundled include dir.
 #' @param include_path Path(s) to headers; defaults to the bundled include dirs.
 #' @param lib_path Path(s) to libraries; defaults to the bundled lib dirs (lib and lib/tcc).
 #' @return An external pointer of class `tcc_state`.

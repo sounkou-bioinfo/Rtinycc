@@ -2,7 +2,7 @@
 % Please edit documentation in R/tcc_ptr_utils.R
 \name{tcc_free}
 \alias{tcc_free}
-\title{Free allocated memory}
+\title{Free owned memory}
 \usage{
 tcc_free(ptr)
 }
@@ -10,8 +10,11 @@ tcc_free(ptr)
 \item{ptr}{External pointer to free}
 }
 \value{
-NULL (invisibly)
+\code{NULL}.
 }
 \description{
-Free memory allocated with tcc_malloc, equivalent to C free.
+Free memory whose external pointer is tagged \code{"rtinycc_owned"} (e.g.
+from \code{\link[=tcc_malloc]{tcc_malloc()}} or \code{\link[=tcc_cstring]{tcc_cstring()}}). Errors on struct pointers
+(use the generated \verb{struct_<name>_free()}) or borrowed pointers from
+\code{\link[=tcc_data_ptr]{tcc_data_ptr()}}.
 }

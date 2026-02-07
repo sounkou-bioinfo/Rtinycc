@@ -57,12 +57,14 @@ with `RC_libtcc_add_host_symbols()`, which registers package-internal C
 functions via `tcc_add_symbol()` before relocation. Any new C function
 referenced by generated TCC code must be added there.
 
-Ownership semantics are explicit. Pointers from `tcc_malloc()` and generated
-struct constructors are tagged as owned and will be freed by `tcc_free()` or
-by their R finalizer (`RC_free_finalizer`). Borrowed pointers (e.g. from
-`tcc_data_ptr()`) are never freed by Rtinycc. Array returns are copied into a
-fresh R vector; set `free = TRUE` only when the C function returns a
-`malloc`-owned buffer.
+Ownership semantics are explicit. Pointers from `tcc_malloc()` are tagged
+`rtinycc_owned` and can be released with `tcc_free()` (or by their R
+finalizer). Generated struct constructors use a struct-specific tag
+(`struct_<name>`) with an `RC_free_finalizer`; free them with
+`struct_<name>_free()`, not `tcc_free()`. Pointers from `tcc_data_ptr()` are
+tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array returns are
+copied into a fresh R vector; set `free = TRUE` only when the C function
+returns a `malloc`-owned buffer.
 
 ## Installation
 
@@ -837,14 +839,15 @@ code <- validate_code(12L)
 
 #### 64-bit integer precision
 
-Keep values within $2^{53}$, or pass pointers:
+R represents `i64`/`u64` as `double`, so integers beyond $2^{53}$ lose
+precision. Adjacent values become indistinguishable:
 
 ```{r limits-int64}
-safe_u64 <- 2^53 - 1
-unsafe_u64 <- 2^53
-sprintf("safe:   %.0f", safe_u64)
-sprintf("unsafe: %.0f", unsafe_u64)
-identical(safe_u64, unsafe_u64)
+a <- 2^53
+b <- 2^53 + 1
+sprintf("a: %.0f", a)
+sprintf("b: %.0f", b)
+identical(a, b)  # TRUE -- precision lost
 ```
 
 #### Complex composite layouts (arrays in structs)

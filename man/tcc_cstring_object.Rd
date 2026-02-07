@@ -11,7 +11,7 @@ tcc_cstring_object(ptr, clone = TRUE, owned = FALSE)
 
 \item{clone}{Whether to clone the string immediately (safe for R use)}
 
-\item{owned}{Whether R should free the C memory when done}
+\item{owned}{Currently unused. Reserved for future finalizer support.}
 }
 \value{
 A tcc_cstring object

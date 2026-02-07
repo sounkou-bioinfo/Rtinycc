@@ -10,7 +10,9 @@ tcc_data_ptr(ptr_ref)
 \item{ptr_ref}{External pointer to a pointer value (e.g., address of a field).}
 }
 \value{
-External pointer to the referenced address.
+An external pointer tagged \code{"rtinycc_borrowed"}. Not owned by
+Rtinycc and never freed on garbage collection. Do not pass to
+\code{\link[=tcc_free]{tcc_free()}}.
 }
 \description{
 Treats \code{ptr_ref} as a pointer to a pointer and returns the pointed address

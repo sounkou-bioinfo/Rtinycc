@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # FFI Class and High-Level API
 # Bun-style FFI with API mode compilation
 
@@ -1162,7 +1166,7 @@ tcc_link <- function(
 #'
 #' @param ptr External pointer to C string
 #' @param clone Whether to clone the string immediately (safe for R use)
-#' @param owned Whether R should free the C memory when done
+#' @param owned Currently unused. Reserved for future finalizer support.
 #' @return A tcc_cstring object
 #' @export
 tcc_cstring_object <- function(ptr, clone = TRUE, owned = FALSE) {

@@ -12,7 +12,7 @@ tcc_write_bytes(ptr, raw)
 \item{raw}{Raw vector to write}
 }
 \value{
-NULL (invisibly)
+\code{NULL}.
 }
 \description{
 Write a raw vector into memory pointed to by an external pointer.

@@ -10,7 +10,8 @@ tcc_malloc(size)
 \item{size}{Number of bytes to allocate}
 }
 \value{
-External pointer to allocated memory
+An external pointer tagged \code{"rtinycc_owned"} with an R finalizer.
+Freed on garbage collection or explicitly via \code{\link[=tcc_free]{tcc_free()}}.
 }
 \description{
 Allocate a memory buffer of specified size, equivalent to C malloc.

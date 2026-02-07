@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # C Wrapper Code Generator for API Mode
 # Generates C code that converts R SEXP to C types and back
 

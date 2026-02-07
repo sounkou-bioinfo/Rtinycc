@@ -59,10 +59,12 @@ this with `RC_libtcc_add_host_symbols()`, which registers
 package-internal C functions via `tcc_add_symbol()` before relocation.
 Any new C function referenced by generated TCC code must be added there.
 
-Ownership semantics are explicit. Pointers from `tcc_malloc()` and
-generated struct constructors are tagged as owned and will be freed by
-`tcc_free()` or by their R finalizer (`RC_free_finalizer`). Borrowed
-pointers (e.g. from `tcc_data_ptr()`) are never freed by Rtinycc. Array
+Ownership semantics are explicit. Pointers from `tcc_malloc()` are
+tagged `rtinycc_owned` and can be released with `tcc_free()` (or by
+their R finalizer). Generated struct constructors use a struct-specific
+tag (`struct_<name>`) with an `RC_free_finalizer`; free them with
+`struct_<name>_free()`, not `tcc_free()`. Pointers from `tcc_data_ptr()`
+are tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array
 returns are copied into a fresh R vector; set `free = TRUE` only when
 the C function returns a `malloc`-owned buffer.
 
@@ -108,7 +110,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5be2486b7000>
+#> <pointer: 0x5d1e5e2a3000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -129,7 +131,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5be249d5fda0"
+#> [1] "0x5d1e5f28c540"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -139,11 +141,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5be2490b7bc0>
+#> <pointer: 0x5d1e5df4f0e0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5be24928b0c0>
+#> <pointer: 0x5d1e5dc714c0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5be2490b7bc0>
+#> <pointer: 0x5d1e5df4f0e0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -241,7 +243,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @5be24b341de8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5d1e5ffef9f0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -258,7 +260,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5be24b341de8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @5d1e5ffef9f0 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -711,7 +713,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5be24ae28828"
+#> [1] "0x5d1e5d440b38"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -860,7 +862,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5be24b3974c0>
+#> <pointer: 0x5d1e62b18dd0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -889,11 +891,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x5be24caa6610>
+#> <pointer: 0x5d1e62b17c00>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x5be24b0bdb60>
+#> <pointer: 0x5d1e624bf870>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -920,7 +922,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x5be24caa68a0>
+#> <pointer: 0x5d1e60bdf740>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -928,7 +930,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x5be24c104910>
+#> <pointer: 0x5d1e60d67e00>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -950,17 +952,18 @@ code <- validate_code(12L)
 
 #### 64-bit integer precision
 
-Keep values within $2^{53}$, or pass pointers:
+R represents `i64`/`u64` as `double`, so integers beyond $2^{53}$ lose
+precision. Adjacent values become indistinguishable:
 
 ``` r
-safe_u64 <- 2^53 - 1
-unsafe_u64 <- 2^53
-sprintf("safe:   %.0f", safe_u64)
-#> [1] "safe:   9007199254740991"
-sprintf("unsafe: %.0f", unsafe_u64)
-#> [1] "unsafe: 9007199254740992"
-identical(safe_u64, unsafe_u64)
-#> [1] FALSE
+a <- 2^53
+b <- 2^53 + 1
+sprintf("a: %.0f", a)
+#> [1] "a: 9007199254740992"
+sprintf("b: %.0f", b)
+#> [1] "b: 9007199254740992"
+identical(a, b)  # TRUE -- precision lost
+#> [1] TRUE
 ```
 
 #### Complex composite layouts (arrays in structs)
@@ -975,7 +978,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x5be249105a60>
+#> <pointer: 0x5d1e5f685bd0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)

@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # FFI Type System - R/C focused type mapping
 # Designed for C FFI (not Zig), optimized for R data types
 #

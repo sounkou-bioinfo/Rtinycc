@@ -1,3 +1,7 @@
+# Rtinycc - TinyCC for R
+# Copyright (C) 2025-2026 Sounkou Mahamane Toure
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 #' Pointer and Buffer Utilities for FFI
 #'
 #' Generic helper functions for common FFI operations inspired by Bun's FFI.
@@ -24,7 +28,9 @@ tcc_null_ptr <- function() {
 #' This handles UTF-8 encoding and null termination automatically.
 #'
 #' @param str Character string
-#' @return External pointer to C string
+#' @return An external pointer tagged `"rtinycc_owned"` pointing to a
+#'   malloc'd copy of the string. Freed on garbage collection or via
+#'   [tcc_free()].
 #' @export
 tcc_cstring <- function(str) {
   .Call(RC_create_cstring, as.character(str))
@@ -38,7 +44,10 @@ tcc_cstring <- function(str) {
 #' @param ptr External pointer to C string
 #' @param max_bytes Optional maximum number of bytes to read (fixed-length read).
 #' @param null_action Behavior when ptr is NULL: one of "na", "empty", "error".
-#' @return Character string
+#'   Only effective when `max_bytes` is provided; without it a NULL pointer
+#'   returns `""`.
+#' @return Character string, or `NA`/`""` for NULL pointers depending on
+#'   `null_action`.
 #' @export
 tcc_read_cstring <- function(
   ptr,
@@ -80,7 +89,7 @@ tcc_read_bytes <- function(ptr, nbytes) {
 #'
 #' @param ptr External pointer
 #' @param raw Raw vector to write
-#' @return NULL (invisibly)
+#' @return `NULL`.
 #' @export
 tcc_write_bytes <- function(ptr, raw) {
   .Call(RC_write_bytes, ptr, raw)
@@ -92,7 +101,9 @@ tcc_write_bytes <- function(ptr, raw) {
 #' as an external pointer. This is useful for fields like `void**` or `T**`.
 #'
 #' @param ptr_ref External pointer to a pointer value (e.g., address of a field).
-#' @return External pointer to the referenced address.
+#' @return An external pointer tagged `"rtinycc_borrowed"`. Not owned by
+#'   Rtinycc and never freed on garbage collection. Do not pass to
+#'   [tcc_free()].
 #' @export
 tcc_data_ptr <- function(ptr_ref) {
   .Call(RC_data_ptr, ptr_ref)
@@ -162,18 +173,22 @@ tcc_read_f64 <- function(ptr, n) {
 #' Returns an external pointer that can be passed to FFI functions.
 #'
 #' @param size Number of bytes to allocate
-#' @return External pointer to allocated memory
+#' @return An external pointer tagged `"rtinycc_owned"` with an R finalizer.
+#'   Freed on garbage collection or explicitly via [tcc_free()].
 #' @export
 tcc_malloc <- function(size) {
   .Call(RC_malloc, as.integer(size))
 }
 
-#' Free allocated memory
+#' Free owned memory
 #'
-#' Free memory allocated with tcc_malloc, equivalent to C free.
+#' Free memory whose external pointer is tagged `"rtinycc_owned"` (e.g.
+#' from [tcc_malloc()] or [tcc_cstring()]). Errors on struct pointers
+#' (use the generated `struct_<name>_free()`) or borrowed pointers from
+#' [tcc_data_ptr()].
 #'
 #' @param ptr External pointer to free
-#' @return NULL (invisibly)
+#' @return `NULL`.
 #' @export
 tcc_free <- function(ptr) {
   .Call(RC_free, ptr)
@@ -209,7 +224,11 @@ tcc_ptr_is_null <- function(ptr) {
   !.Call(RC_libtcc_ptr_valid, ptr)
 }
 
-#' Check whether an external pointer is owned by Rtinycc
+#' Check for the `"rtinycc_owned"` tag
+#'
+#' Returns `TRUE` only for pointers created by [tcc_malloc()] or
+#' [tcc_cstring()]. Struct pointers (tagged `"struct_<name>"`) and
+#' borrowed pointers return `FALSE`.
 #'
 #' @param ptr External pointer
 #' @return Logical scalar
