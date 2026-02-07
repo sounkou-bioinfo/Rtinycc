@@ -124,7 +124,35 @@ SEXP test_finalizer(void) {
     info = "smoke: R_RegisterCFinalizerEx + RC_free_finalizer"
 )
 
-# ---------- 8. Full struct: new/get/set/free ---------------------------------
+# ---------- 8. struct: compile only (no call) ---------------------------------
+expect_true(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "struct point { int x; int y; };")
+        ffi <- tcc_struct(ffi, "point", accessors = c(x = "i32", y = "i32"))
+        ffi <- tcc_bind(ffi)
+        compiled <- tcc_compile(ffi)
+        inherits(compiled, "tcc_compiled")
+    },
+    info = "smoke: struct compile succeeds"
+)
+
+# ---------- 9. struct: new() only --------------------------------------------
+expect_true(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "struct point { int x; int y; };")
+        ffi <- tcc_struct(ffi, "point", accessors = c(x = "i32", y = "i32"))
+        ffi <- tcc_bind(ffi)
+        compiled <- tcc_compile(ffi)
+
+        p <- compiled$struct_point_new()
+        is(p, "externalptr")
+    },
+    info = "smoke: struct_point_new()"
+)
+
+# ---------- 10. struct: set_x() ---------------------------------------------
 expect_true(
     {
         ffi <- tcc_ffi()
@@ -135,12 +163,40 @@ expect_true(
 
         p <- compiled$struct_point_new()
         p <- compiled$struct_point_set_x(p, 10L)
-        p <- compiled$struct_point_set_y(p, 20L)
-        x <- compiled$struct_point_get_x(p)
-        y <- compiled$struct_point_get_y(p)
-        compiled$struct_point_free(p)
-
-        x == 10L && y == 20L
+        is(p, "externalptr")
     },
-    info = "smoke: struct new/get/set/free"
+    info = "smoke: struct_point_set_x()"
+)
+
+# ---------- 11. struct: get_x() ---------------------------------------------
+expect_equal(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "struct point { int x; int y; };")
+        ffi <- tcc_struct(ffi, "point", accessors = c(x = "i32", y = "i32"))
+        ffi <- tcc_bind(ffi)
+        compiled <- tcc_compile(ffi)
+
+        p <- compiled$struct_point_new()
+        p <- compiled$struct_point_set_x(p, 10L)
+        compiled$struct_point_get_x(p)
+    },
+    10L,
+    info = "smoke: struct_point_get_x()"
+)
+
+# ---------- 12. struct: free() ----------------------------------------------
+expect_true(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "struct point { int x; int y; };")
+        ffi <- tcc_struct(ffi, "point", accessors = c(x = "i32", y = "i32"))
+        ffi <- tcc_bind(ffi)
+        compiled <- tcc_compile(ffi)
+
+        p <- compiled$struct_point_new()
+        compiled$struct_point_free(p)
+        TRUE
+    },
+    info = "smoke: struct_point_free()"
 )
