@@ -23,3 +23,5 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 URL: https://github.com/sounkou-bioinfo/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc
 BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues
+Remotes:
+    sounkou-bioinfo/treesitter.c
