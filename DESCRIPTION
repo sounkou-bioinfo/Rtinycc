@@ -1,6 +1,6 @@
 Package: Rtinycc
 Title: Builds 'TinyCC' 'Cli' and Library for 'C' Scripting in 'R'
-Version: 0.0.2.9000
+Version: 0.0.3
 Authors@R:c(
     person(given = "Sounkou Mahamane", family = "Toure", 
     email = "sounkoutoure@gmail.com", role = c("aut", "cre")),

@@ -1,8 +1,16 @@
-# Rtinycc 0.0.2.9000 (development version)
+# Rtinycc 0.0.3
 
-- Fix macOS "undefined symbol" errors at relocation time. The configure script strips `-flat_namespace` from TCC's Makefile to avoid SIGEV issues, but without it TCC cannot resolve host symbols (`RC_free_finalizer`, `RC_invoke_callback`, `RC_callback_async_schedule_c`) through the dynamic linker. The new `RC_libtcc_add_host_symbols()` explicitly registers these symbols via `tcc_add_symbol()` before `tcc_relocate()`, which is harmless on Linux and fixes macOS.
+- Add typed memory read/write helpers inspired by Bun's FFI and the ctypesio package: `tcc_read_i8()`, `tcc_read_u8()`, `tcc_read_i16()`, `tcc_read_u16()`, `tcc_read_i32()`, `tcc_read_u32()`, `tcc_read_i64()`, `tcc_read_u64()`, `tcc_read_f32()`, `tcc_read_f64()`, `tcc_read_ptr()` and corresponding `tcc_write_*()` functions. All operate at a byte offset and use `memcpy` internally for alignment safety.
 
-- `tcc_compiled` objects now survive `serialize()`/`unserialize()` and `saveRDS()`/`readRDS()`. The FFI recipe is stored inside the compiled object; on first access after deserialization, `$.tcc_compiled` detects the dead TCC state pointer and recompiles transparently. Works for both `tcc_compile()` and `tcc_link()` objects. Use `tcc_recompile()` for explicit recompilation.
+- Legacy vectorised interface preserved: `tcc_read_u8(ptr, n = 4)`, `tcc_read_i32(ptr, n = 2)`, and `tcc_read_f64(ptr, n = 2)` continue to work alongside the new scalar offset API.
+
+- Fix macOS "undefined symbol" errors at relocation time. `RC_libtcc_add_host_symbols()` explicitly registers host symbols (`RC_free_finalizer`, `RC_invoke_callback`, `RC_callback_async_schedule_c`) via `tcc_add_symbol()` before `tcc_relocate()`.
+
+- Fix macOS library linking: short library names like `"m"` that cannot be resolved to a file path are now passed through as `-l<name>` to the linker instead of erroring.
+
+- Fix `stdbool.h` not found on macOS: `tcc_set_lib_path()` now receives the correct `lib/tcc` directory so TCC resolves its own headers via `{B}/include`.
+
+- `tcc_compiled` objects now survive `serialize()`/`unserialize()` and `saveRDS()`/`readRDS()`. The FFI recipe is stored inside the compiled object; on first access after deserialization, `$.tcc_compiled` detects the dead TCC state pointer and recompiles transparently.
 
 - Compiled FFI objects are fork-safe: `parallel::mclapply()` and other `fork()`-based parallelism work out of the box since TCC's compiled code lives in memory mappings that survive `fork()` via copy-on-write.
 
