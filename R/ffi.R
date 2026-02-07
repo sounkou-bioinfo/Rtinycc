@@ -1088,12 +1088,18 @@ tcc_link <- function(
   verbose = FALSE
 ) {
   # Find library if not absolute path
+  is_short_name <- !file.exists(path) && !grepl("[/\\\\]", path) &&
+    !grepl("\\.(so|dylib|dll)", path)
+
   if (!file.exists(path) && !grepl("^/", path)) {
     found_path <- tcc_find_library(path)
-    if (is.null(found_path)) {
+    if (is.null(found_path) && !is_short_name) {
       stop("Library not found: ", path, call. = FALSE)
     }
-    path <- found_path
+    if (!is.null(found_path)) {
+      path <- found_path
+      is_short_name <- FALSE
+    }
   }
 
   if (verbose) {
@@ -1107,7 +1113,11 @@ tcc_link <- function(
 
   # Add library
   ffi$libraries <- libs
-  ffi$lib_paths <- c(dirname(path), lib_paths)
+  if (!is_short_name) {
+    ffi$lib_paths <- c(dirname(path), lib_paths)
+  } else {
+    ffi$lib_paths <- lib_paths
+  }
   ffi$include_paths <- include_paths
 
   # Process headers
@@ -1120,14 +1130,19 @@ tcc_link <- function(
     ffi$c_code <- user_code
   }
 
-  # Add the library path for the specific library
-  ffi <- tcc_library_path(ffi, dirname(path))
+  # Add the library path and link the library
+  if (!is_short_name) {
+    ffi <- tcc_library_path(ffi, dirname(path))
 
-  # Extract library name from path for linking
-  lib_name <- sub("^lib", "", basename(path))
-  lib_name <- sub("\\.(so|dylib|dll).*", "", lib_name)
-  if (nzchar(lib_name) > 0) {
-    ffi <- tcc_library(ffi, lib_name)
+    # Extract library name from path for linking
+    lib_name <- sub("^lib", "", basename(path))
+    lib_name <- sub("\\.(so|dylib|dll).*", "", lib_name)
+    if (nzchar(lib_name) > 0) {
+      ffi <- tcc_library(ffi, lib_name)
+    }
+  } else {
+    # Short name like "m" — just pass to linker as -l<name>
+    ffi <- tcc_library(ffi, path)
   }
 
   # Store symbols
