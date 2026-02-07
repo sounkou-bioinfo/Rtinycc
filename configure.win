@@ -1,5 +1,5 @@
 #!/bin/sh
-# configure.win — build TinyCC on Windows via Rtools
+# configure.win — build TinyCC on Windows via Rtools (MSYS2/mingw)
 set -ex
 
 # R's build configuration
@@ -23,34 +23,27 @@ if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
     echo "Configuring and building tinycc ..."
 
-    # Configure TinyCC for Windows (static library only)
+    # TCC's configure detects WIN32 from the compiler target and
+    # defaults to building libtcc.dll (CONFIG_static=no).
     ./configure --prefix="$TINYCC_DEST" \
         --cc="$CC" \
-        --ar="$AR" \
-        --extra-cflags="-DONE_SOURCE"
+        --ar="$AR"
 
     mkdir -p "$TINYCC_DEST/lib"
     mkdir -p "$TINYCC_DEST/include"
 
-    echo "Building c2str helper ..."
-    "$MAKE" c2str.exe || { echo "Failed to build c2str.exe" >&2; exit 1; }
-
-    echo "Generating tccdefs_.h ..."
-    "$MAKE" tccdefs_.h || { echo "Failed to generate tccdefs_.h" >&2; exit 1; }
-
-    echo "Building libtcc.a (static) and tcc executable ..."
-    "$MAKE" libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
-    "$MAKE" tcc.exe || "$MAKE" tcc || { echo "Failed to build tcc executable" >&2; exit 1; }
+    echo "Building libtcc.dll, libtcc.a and tcc.exe ..."
+    # Build the shared library (libtcc.dll) + static archive + CLI
+    "$MAKE" libtcc.dll libtcc.a tcc.exe libtcc1.a \
+        || { echo "Failed to build TinyCC" >&2; exit 1; }
 
     # --- install tcc.exe ---
     # TCC searches for include/lib relative to the executable, so keep it
     # at the root of inst/tinycc/ (not in bin/).
     if [ -f "tcc.exe" ]; then
         cp -f "tcc.exe" "$TINYCC_DEST/"
-    elif [ -f "tcc" ]; then
-        cp -f "tcc" "$TINYCC_DEST/"
     else
-        echo "tcc executable not found after build" >&2
+        echo "tcc.exe not found after build" >&2
         exit 1
     fi
 
@@ -62,7 +55,10 @@ if [ -d "$TINYCC_SRC" ]; then
     mkdir -p "$TINYCC_DEST/include/winapi"
     cp -rf win32/include/* "$TINYCC_DEST/include/" 2>/dev/null || true
 
-    # --- install libraries (static only) ---
+    # --- install libraries ---
+    # Both DLL and static archive; Makevars.win links against the DLL
+    # and install.libs.R copies it next to Rtinycc.dll (rpath equivalent).
+    cp -f libtcc.dll "$TINYCC_DEST/lib/" 2>/dev/null || true
     cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
 
     # libtcc1.a is the runtime support library (needed by the CLI)
@@ -77,7 +73,7 @@ if [ -d "$TINYCC_SRC" ]; then
     # Windows .def files for system libraries
     cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
 
-    echo "TinyCC installed to $TINYCC_DEST (static only)"
+    echo "TinyCC installed to $TINYCC_DEST"
 
     # Always remove TCC source after build
     rm -rf "$TINYCC_SRC" || true
