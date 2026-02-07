@@ -1,3 +1,7 @@
+# Rtinycc 0.0.2.9000 (development version)
+
+- Fix macOS "undefined symbol" errors at relocation time. The configure script strips `-flat_namespace` from TCC's Makefile to avoid SIGEV issues, but without it TCC cannot resolve host symbols (`RC_free_finalizer`, `RC_invoke_callback`, `RC_callback_async_schedule_c`) through the dynamic linker. The new `RC_libtcc_add_host_symbols()` explicitly registers these symbols via `tcc_add_symbol()` before `tcc_relocate()`, which is harmless on Linux and fixes macOS.
+
 # Rtinycc 0.0.2
 
 - Update package title and description

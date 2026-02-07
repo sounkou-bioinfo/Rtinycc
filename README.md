@@ -16,7 +16,7 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://s
 
 Rtinycc is an R interface to [tinycc](https://github.com/TinyCC/tinycc),
 providing both CLI access and a libtcc-backed in-memory compiler. It
-includes a small, explicit FFI inspired by [bun’s
+includes a experimental, small, explicit FFI inspired by [bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
 predictable conversions and pointer utilities. The package targets
 Unix-alikes systems (no Windows support for now) and focuses on
@@ -26,46 +26,45 @@ Combined with
 provides C header parsers, it can be used to rapidly generate
 declarative bindings.
 
-## How all of this works ?
+## How it works
 
-Rtinycc generates C wrappers on the fly and calls them through `.Call`
-without building a shared library that registers `R_init_*` symbols. The
-wrapper pointer used by `.RtinyccCall` is created in
-`RC_libtcc_get_symbol()` by converting the raw `void*` from TinyCC into
-a `DL_FUNC` and wrapping it with `R_MakeExternalPtrFn`. The resulting
-external pointer is returned by `tcc_get_symbol()`, then passed through
-[`make_callable()`](R/ffi.R) into `.RtinyccCall` (which is just
-`base::.Call`). This is powerful, but it is also an ABI boundary: even
-though `TinyCC` is built with the same toolchain as R’s `CC` config,
-there can still be subtle calling-convention or ABI mismatches on some
-platforms or with unusual compiler flags.
+When you call `tcc_compile()`, Rtinycc generates C wrapper functions
+whose signature follows the `.Call` convention (`SEXP` in, `SEXP` out).
+These wrappers convert R types to C, call the target function, and
+convert the result back. TCC compiles them in-memory – no shared library
+is written to disk and no `R_init_*` registration is needed.
 
-We do not rely on `TinyCC`’s ABI mode alone. The strategy is hybrid: we
-generate wrapper code (API-style) to avoid brittle, hand-rolled layout
-logic (think Python ctypes-style calculations), while still linking to
-external libraries and calling into their ABI (ABI-style). The net
-effect is that `TinyCC` performs the layout computations (`sizeof`,
-`offsetof`, calling conventions) inside the generated C, and the
-resulting wrappers bridge to external symbols. This is similar in spirit
-to [`CFFI` API mode](https://cffi.readthedocs.io/) and tools like
-[`cslug`](https://cslug.readthedocs.io/en/latest/), but here the codegen
-uses `TinyCC` directly rather than libffi’s call interface. For
-background and contrasts with a libffi approach, see the [`RSimpleFFI`
+After `tcc_relocate()`, wrapper pointers are retrieved via
+`tcc_get_symbol()`, which internally calls `RC_libtcc_get_symbol()`.
+That function converts TCC’s raw `void*` into a `DL_FUNC` wrapped with
+`R_MakeExternalPtrFn` (tagged `"native symbol"`). On the R side,
+[`make_callable()`](R/ffi.R) creates a closure that passes this external
+pointer to `.Call` (aliased as `.RtinyccCall` to keep `R CMD check`
+happy).
+
+The design follows [CFFI’s](https://cffi.readthedocs.io/) API-mode
+pattern: instead of computing struct layouts and calling conventions in
+R (ABI-mode, like Python’s ctypes), the generated C code lets TCC handle
+`sizeof`, `offsetof`, and argument passing. Rtinycc never replicates
+platform-specific layout rules. The wrappers can also link against
+external shared libraries whose symbols TCC resolves at relocation time.
+For background on how this compares to a libffi approach, see the
+[`RSimpleFFI`
 README](https://github.com/sounkou-bioinfo/RSimpleFFI#readme).
 
-Ownership semantics are explicit but limited. Pointers from
-`tcc_malloc()` (and other helpers that allocate) are tagged as owned and
-will be freed by `tcc_free()` or by their finalizer. Borrowed pointers
-(e.g. from `tcc_data_ptr()`) are tagged as borrowed and must not be
-freed by Rtinycc. Array returns are copied into an R vector; use
-`free = TRUE` only when the C function returns a `malloc`-owned buffer.
+On macOS the configure script strips `-flat_namespace` from TCC’s build
+to avoid SIGEV issues. Without it, TCC cannot resolve host symbols (e.g.
+`RC_free_finalizer`) through the dynamic linker. Rtinycc works around
+this with `RC_libtcc_add_host_symbols()`, which registers
+package-internal C functions via `tcc_add_symbol()` before relocation.
+Any new C function referenced by generated TCC code must be added there.
 
-TinyCC itself has limitations that surface here. In particular, complex
-types often require the `_Complex` macro workaround in example code to
-keep `TinyCC` parsing happy. If you see odd behavior around complex
-numbers or complex signatures, try the `_Complex` workaround first and
-treat it as a `TinyCC` compatibility constraint rather than an Rtinycc
-bug.
+Ownership semantics are explicit. Pointers from `tcc_malloc()` and
+generated struct constructors are tagged as owned and will be freed by
+`tcc_free()` or by their R finalizer (`RC_free_finalizer`). Borrowed
+pointers (e.g. from `tcc_data_ptr()`) are never freed by Rtinycc. Array
+returns are copied into a fresh R vector; set `free = TRUE` only when
+the C function returns a `malloc`-owned buffer.
 
 ## Installation
 
@@ -109,7 +108,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x6212ce9a0000>
+#> <pointer: 0x5be2486b7000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -130,7 +129,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6212cf3faec0"
+#> [1] "0x5be249d5fda0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -140,11 +139,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6212d0d4a110>
+#> <pointer: 0x5be2490b7bc0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6212cf462aa0>
+#> <pointer: 0x5be24928b0c0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6212d0d4a110>
+#> <pointer: 0x5be2490b7bc0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -155,8 +154,8 @@ tcc_free(ptr_ref)
 
 A declarative interface inspired by
 [Bun:FFI](https://bun.com/docs/runtime/ffi) is provided. Define types
-explicitly and let `Rtinycc` generate the binding code automatically by
-using `TinyCC` to compile a dll.
+explicitly and let `Rtinycc` generate the binding code automaticallly
+using `TinyCC` in memory compilation mode.
 
 #### Type System
 
@@ -242,7 +241,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @6212d162aec0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5be24b341de8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -259,7 +258,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6212d162aec0 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @5be24b341de8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -712,7 +711,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x6212d0911488"
+#> [1] "0x5be24ae28828"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -861,7 +860,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6212d2303c90>
+#> <pointer: 0x5be24b3974c0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -890,11 +889,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x6212d1863f20>
+#> <pointer: 0x5be24caa6610>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x6212d26ab8f0>
+#> <pointer: 0x5be24b0bdb60>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -921,7 +920,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x6212cf3a08e0>
+#> <pointer: 0x5be24caa68a0>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -929,7 +928,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x6212d2eae620>
+#> <pointer: 0x5be24c104910>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -976,7 +975,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x6212d0d74370>
+#> <pointer: 0x5be249105a60>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)
