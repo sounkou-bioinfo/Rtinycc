@@ -38,6 +38,12 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership is tracke
 - Prefer early returns and explicit error messages with `stop(..., call. = FALSE)`.
 - Update README examples when you change user-facing behavior.
 
+## macOS host symbol visibility
+
+On macOS the configure script strips `-flat_namespace` from TCC's Makefile to avoid SIGEV-related issues. Without flat namespace, TCC cannot resolve symbols exported by the R package (`RC_free_finalizer`, `RC_invoke_callback`, `RC_callback_async_schedule_c`) through the dynamic linker at relocation time, causing "undefined symbol" errors.
+
+The fix is `RC_libtcc_add_host_symbols()` in `src/RC_libtcc.c`, which explicitly registers these host symbols via `tcc_add_symbol()` before `tcc_relocate()`. This is called from `R/ffi.R` at both compilation call sites. Any new C function that generated TCC code references must be added to `RC_libtcc_add_host_symbols()` or it will break on macOS.
+
 ## Key files
 
 - R API: `R/ffi.R`, `R/ffi_types.R`, `R/ffi_codegen.R`, `R/tinycc.R`
