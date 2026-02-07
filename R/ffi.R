@@ -409,6 +409,9 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     ffi$introspect
   )
 
+  # Store the recipe so the object can be recompiled after deserialization
+  compiled$.ffi <- ffi
+
   compiled
 }
 
@@ -746,6 +749,7 @@ tcc_compiled_object <- function(
     enums = enums,
     globals = globals
   )
+  env$.valid <- TRUE
 
   structure(env, class = "tcc_compiled")
 }
@@ -865,6 +869,70 @@ print.tcc_compiled <- function(x, ...) {
     }
   }
   invisible(x)
+}
+
+#' Access a compiled FFI symbol
+#'
+#' Overrides \code{$} to detect dead pointers after deserialization
+#' and recompile transparently from the stored recipe.
+#'
+#' @param x A tcc_compiled object
+#' @param name Symbol name to access
+#' @return The callable function or metadata field
+#' @export
+`$.tcc_compiled` <- function(x, name) {
+  # Fast path: internal fields are always accessible
+  if (startsWith(name, ".")) {
+    return(.subset2(x, name))
+  }
+
+  # Detect dead pointers (nil after deserialization) and recompile.
+  # tcc_symbol_is_valid() is a single C call; negligible overhead.
+  state <- .subset2(x, ".state")
+  if (is.null(state) || !tcc_symbol_is_valid(state)) {
+    message("[Rtinycc] Recompiling FFI bindings after deserialization")
+    recompile_into(x)
+  }
+
+  .subset2(x, name)
+}
+
+#' Recompile a tcc_compiled object
+#'
+#' Explicitly recompile from the stored FFI recipe.
+#' Useful after deserialization (\code{readRDS}, \code{unserialize})
+#' or to force a fresh compilation.
+#'
+#' @param compiled A tcc_compiled object
+#' @return The recompiled tcc_compiled object (invisibly, same environment)
+#' @export
+tcc_recompile <- function(compiled) {
+  if (!inherits(compiled, "tcc_compiled")) {
+    stop("Expected tcc_compiled object", call. = FALSE)
+  }
+  recompile_into(compiled)
+  invisible(compiled)
+}
+
+# Shared recompilation logic for both tcc_compile and tcc_link objects.
+# Rebuilds the compiled code from the stored recipe and copies all
+# bindings into the target environment.
+recompile_into <- function(target) {
+  link_args <- .subset2(target, ".link_args")
+  if (!is.null(link_args)) {
+    fresh <- do.call(tcc_link, link_args)
+  } else {
+    ffi <- .subset2(target, ".ffi")
+    if (is.null(ffi)) {
+      stop("Cannot recompile: no FFI recipe stored in this object", call. = FALSE)
+    }
+    fresh <- tcc_compile(ffi)
+  }
+  for (nm in ls(fresh, all.names = TRUE)) {
+    assign(nm, get(nm, envir = fresh, inherits = FALSE), envir = target)
+  }
+  assign(".valid", TRUE, envir = target)
+  invisible(target)
 }
 
 # Helper for %||%
@@ -1150,6 +1218,18 @@ tcc_link <- function(
     ffi$field_addr,
     ffi$struct_raw_access,
     ffi$introspect
+  )
+
+  # Store enough to re-link after deserialization
+  compiled$.ffi <- ffi
+  compiled$.link_args <- list(
+    path = path,
+    symbols = symbols,
+    headers = headers,
+    libs = libs,
+    lib_paths = lib_paths,
+    include_paths = include_paths,
+    user_code = user_code
   )
 
   if (verbose) {

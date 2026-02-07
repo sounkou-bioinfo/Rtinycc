@@ -101,9 +101,10 @@ if (.Platform$OS.type != "windows" && requireNamespace("parallel", quietly = TRU
 }
 
 
-# ── Serialization safety ─────────────────────────────────────────────────────
+# ── Serialization: auto-recompile ─────────────────────────────────────────────
 # tcc_compiled objects contain external pointers (TCC state, function pointers).
-# These become nil after serialize/unserialize.  We should detect this.
+# These become nil after serialize/unserialize. The $.tcc_compiled method
+# detects this and recompiles transparently from the stored FFI recipe.
 
 ffi_ser <- tcc_ffi() |>
     tcc_source("int square(int x) { return x * x; }") |>
@@ -112,34 +113,30 @@ ffi_ser <- tcc_ffi() |>
 
 expect_equal(ffi_ser$square(7L), 49L, info = "Pre-serialization: square works")
 
-# --- Test 5: serialize + unserialize round-trip -------------------------
+# --- Test 5: serialize + unserialize auto-recompiles --------------------
 raw_bytes <- serialize(ffi_ser, NULL)
 ffi_restored <- unserialize(raw_bytes)
 
-# The restored object should exist but its function pointers are dead
 expect_true(
     inherits(ffi_restored, "tcc_compiled"),
     info = "Serialized object retains class"
 )
 
-# Calling a function on the deserialized object should error
-# because the external pointer is now nil
-res5 <- tryCatch(ffi_restored$square(7L), error = function(e) e)
-expect_true(
-    inherits(res5, "error"),
-    info = "Deserialized FFI function call errors (nil pointer)"
+# First access triggers recompilation; result should be correct
+expect_equal(
+    ffi_restored$square(7L), 49L,
+    info = "Deserialized FFI auto-recompiles and works"
 )
 
-# --- Test 6: saveRDS + readRDS round-trip -------------------------------
+# --- Test 6: saveRDS + readRDS auto-recompiles --------------------------
 tmp <- tempfile(fileext = ".rds")
 saveRDS(ffi_ser, tmp)
 ffi_rds <- readRDS(tmp)
 unlink(tmp)
 
-res6 <- tryCatch(ffi_rds$square(7L), error = function(e) e)
-expect_true(
-    inherits(res6, "error"),
-    info = "readRDS FFI function call errors (nil pointer)"
+expect_equal(
+    ffi_rds$square(9L), 81L,
+    info = "readRDS FFI auto-recompiles and works"
 )
 
 # --- Test 7: original still works after serialization -------------------
@@ -148,30 +145,48 @@ expect_equal(
     info = "Original FFI still works after serialization"
 )
 
-# --- Test 8: pointer utilities survive? ---------------------------------
+# --- Test 8: explicit tcc_recompile ------------------------------------
+ffi_recomp <- unserialize(serialize(ffi_ser, NULL))
+tcc_recompile(ffi_recomp)
+expect_equal(
+    ffi_recomp$square(11L), 121L,
+    info = "Explicit tcc_recompile works"
+)
+
+# --- Test 9: tcc_link round-trip ----------------------------------------
+math <- tcc_link("libm.so.6", symbols = list(
+    sqrt = list(args = list("f64"), returns = "f64")
+))
+expect_equal(math$sqrt(25.0), 5.0, info = "tcc_link: original works")
+
+math2 <- unserialize(serialize(math, NULL))
+expect_equal(
+    math2$sqrt(144.0), 12.0,
+    info = "tcc_link: auto-recompiles after deserialization"
+)
+
+# --- Test 10: raw pointers are still dead after deserialization ----------
 ptr <- tcc_malloc(8)
 raw_ptr <- serialize(ptr, NULL)
 ptr_restored <- unserialize(raw_ptr)
 
-res8 <- tryCatch(tcc_ptr_is_null(ptr_restored), error = function(e) e)
-# External pointer is nil after deserialize, so this may error or return TRUE
-if (inherits(res8, "error")) {
+res10 <- tryCatch(tcc_ptr_is_null(ptr_restored), error = function(e) e)
+if (inherits(res10, "error")) {
     expect_true(TRUE, info = "Deserialized pointer errors on use")
 } else {
-    expect_true(res8, info = "Deserialized pointer reads as NULL")
+    expect_true(res10, info = "Deserialized pointer reads as NULL")
 }
 tcc_free(ptr)
 
-# --- Test 9: tcc_state external pointer after serialization -------------
+# --- Test 11: tcc_state external pointer still dead ---------------------
 state <- tcc_state(output = "memory")
 tcc_compile_string(state, "int one(void) { return 1; }")
 tcc_relocate(state)
 raw_state <- serialize(state, NULL)
 state2 <- unserialize(raw_state)
 
-# state2 should be a nil external pointer
-res9 <- tryCatch(tcc_call_symbol(state2, "one", return = "int"), error = function(e) e)
+res11 <- tryCatch(tcc_call_symbol(state2, "one", return = "int"), error = function(e) e)
 expect_true(
-    inherits(res9, "error"),
-    info = "Deserialized TCC state errors on use"
+    inherits(res11, "error"),
+    info = "Deserialized TCC state errors on use (no auto-recompile for raw state)"
 )

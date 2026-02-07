@@ -2,6 +2,10 @@
 
 - Fix macOS "undefined symbol" errors at relocation time. The configure script strips `-flat_namespace` from TCC's Makefile to avoid SIGEV issues, but without it TCC cannot resolve host symbols (`RC_free_finalizer`, `RC_invoke_callback`, `RC_callback_async_schedule_c`) through the dynamic linker. The new `RC_libtcc_add_host_symbols()` explicitly registers these symbols via `tcc_add_symbol()` before `tcc_relocate()`, which is harmless on Linux and fixes macOS.
 
+- `tcc_compiled` objects now survive `serialize()`/`unserialize()` and `saveRDS()`/`readRDS()`. The FFI recipe is stored inside the compiled object; on first access after deserialization, `$.tcc_compiled` detects the dead TCC state pointer and recompiles transparently. Works for both `tcc_compile()` and `tcc_link()` objects. Use `tcc_recompile()` for explicit recompilation.
+
+- Compiled FFI objects are fork-safe: `parallel::mclapply()` and other `fork()`-based parallelism work out of the box since TCC's compiled code lives in memory mappings that survive `fork()` via copy-on-write.
+
 # Rtinycc 0.0.2
 
 - Update package title and description

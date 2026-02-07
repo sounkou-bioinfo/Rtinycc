@@ -620,6 +620,31 @@ ffi$struct_buf_get_data_elt(b, 1L)
 ffi$struct_buf_free(b)
 ```
 
+## Serialization and fork safety
+
+Compiled FFI objects are fork-safe: `parallel::mclapply()` and other `fork()`-based parallelism work out of the box because TCC's compiled code lives in memory mappings that survive `fork()` via copy-on-write.
+
+Serialization is also supported. Each `tcc_compiled` object stores its FFI recipe internally, so after `saveRDS()` / `readRDS()` (or `serialize()` / `unserialize()`), the first `$` access detects the dead TCC state pointer and recompiles transparently.
+
+```{r serialize-example}
+ffi <- tcc_ffi() |>
+  tcc_source("int square(int x) { return x * x; }") |>
+  tcc_bind(square = list(args = list("i32"), returns = "i32")) |>
+  tcc_compile()
+
+ffi$square(7L)
+
+tmp <- tempfile(fileext = ".rds")
+saveRDS(ffi, tmp)
+ffi2 <- readRDS(tmp)
+unlink(tmp)
+
+# Auto-recompiles on first access
+ffi2$square(7L)
+```
+
+For explicit control, use `tcc_recompile()`. Note that raw `tcc_state` objects and bare pointers from `tcc_malloc()` do not carry a recipe and remain dead after deserialization.
+
 ## License
 
 GPL-3
