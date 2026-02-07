@@ -109,7 +109,7 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
 tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x60d76cc02000>
+#> <pointer: 0x57c48be3f000>
 #> attr(,"class")
 #> [1] "tcc_symbol"
 ```
@@ -130,7 +130,7 @@ tcc_read_bytes(ptr, 5)
 tcc_read_u8(ptr, 5)
 #> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x60d76ca7c7b0"
+#> [1] "0x57c48cfe6de0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -140,11 +140,11 @@ tcc_free(ptr)
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x60d76f8569f0>
+#> <pointer: 0x57c48e08ac90>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x60d76cc8fb80>
+#> <pointer: 0x57c48d17f1c0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x60d76f8569f0>
+#> <pointer: 0x57c48e08ac90>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -242,7 +242,7 @@ ffi <- tcc_ffi() |>
 x <- as.integer(1:100) # force the altrep
 # Inspect SEXP pointer 
 .Internal(inspect(x))
-#> @60d76f88a378 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @57c48eac7378 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 result <- ffi$sum_array(x, length(x))
 result
 #> [1] 5050
@@ -259,7 +259,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @60d76f88a378 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @57c48eac7378 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 #### Callbacks
@@ -712,7 +712,7 @@ sqlite_with_utils <- tcc_ffi() |>
 # Use pointer utilities with SQLite
 db <- sqlite_with_utils$tcc_setup_test_db()
 tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x60d77058f2c8"
+#> [1] "0x57c48eade4b8"
 
 result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
 sqlite_with_utils$sqlite3_libversion()
@@ -861,7 +861,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x60d76ef53d30>
+#> <pointer: 0x57c48f76f930>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -890,11 +890,11 @@ o <- ffi$struct_outer_new()
 in_ptr <- ffi$struct_inner_new()
 ffi$struct_outer_in_addr(o) |>
   tcc_ptr_set(in_ptr)
-#> <pointer: 0x60d770f3a0c0>
+#> <pointer: 0x57c49038bc10>
 ffi$struct_outer_in_addr(o) |>
   tcc_data_ptr() |>
   (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x60d7706704e0>
+#> <pointer: 0x57c4911001e0>
 ffi$struct_inner_free(in_ptr)
 #> NULL
 ffi$struct_outer_free(o)
@@ -921,7 +921,7 @@ w <- ffi$struct_wrapper_new()
 anon_ptr <- ffi$struct_anon_t_new()
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_ptr_set(anon_ptr)
-#> <pointer: 0x60d771162ac0>
+#> <pointer: 0x57c49034b8e0>
 ffi$struct_wrapper_anon_addr(w) |>
   tcc_data_ptr() |>
   (
@@ -929,7 +929,7 @@ ffi$struct_wrapper_anon_addr(w) |>
       ffi$struct_anon_t_set_a(p, 7L)
     }
   )()
-#> <pointer: 0x60d76f11b730>
+#> <pointer: 0x57c49038c290>
 ffi$struct_anon_t_free(anon_ptr)
 #> NULL
 ffi$struct_wrapper_free(w)
@@ -976,7 +976,7 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x60d76d3d44f0>
+#> <pointer: 0x57c48bd288f0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 255
 ffi$struct_buf_free(b)

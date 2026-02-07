@@ -1135,3 +1135,15 @@ SEXP RC_cleanup_callbacks() {
 SEXP RC_dummy() {
     return R_NilValue;
 }
+
+/* Register host symbols that TCC-compiled code may reference.
+   On macOS (without -flat_namespace) these are not visible to TCC
+   through the dynamic linker, so we must add them explicitly. */
+SEXP RC_libtcc_add_host_symbols(SEXP ext) {
+    TCCState *s = RC_tcc_state(ext);
+    tcc_add_symbol(s, "RC_free_finalizer", RC_free_finalizer);
+    tcc_add_symbol(s, "RC_invoke_callback", RC_invoke_callback);
+    tcc_add_symbol(s, "RC_callback_async_schedule_c",
+                   RC_callback_async_schedule_c);
+    return R_NilValue;
+}

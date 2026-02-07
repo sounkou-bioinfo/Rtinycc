@@ -2,7 +2,7 @@
 
 This file is the minimum guidance for agentic work on Rtinycc. Read relevant code before changes, keep edits small and focused, and update tests/docs when you change behavior.
 
-Agents must read actual implementations before guessing. If you need third-party code or headers, check the `.sync` directory for local copies of libraries we depend on so you can read them directly instead of assuming behavior. We also generate `<package>.llm.txt` files for R package docs; for example, treesitter.c docs can be found in `treesitter.llm.txt`.
+Agents must read actual implementations before guessing. If you need third-party code or headers, check the `.sync` directory for local copies of libraries we depend on so you can read them directly instead of assuming behavior. We also generate `<package>.llm.txt` files for R package docs; for example, treesitter.c docs can be found in `treesitter.c.llm.txt`.
 
 ## What this package does
 
@@ -44,3 +44,8 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership is tracke
 - C API: `src/RC_libtcc.c`, `src/init.c`
 - Tests: `inst/tinytest/`
 - Docs: `README.Rmd`, `NEWS.md`
+
+## README and DOCS Style
+
+- We use a sober style, make paragraphs and avoid ridiculous list/bullet points when uncessary. 
+- We are using Rmarkdown so the user can see the output, so no need for ridiculous cats and other things like that.

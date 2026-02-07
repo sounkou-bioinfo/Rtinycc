@@ -381,6 +381,9 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     stop("Failed to compile FFI bindings", call. = FALSE)
   }
 
+  # Register host symbols for macOS compatibility
+  .Call(RC_libtcc_add_host_symbols, state)
+
   # Relocate
   result <- tcc_relocate(state)
   if (result != 0) {
@@ -1120,6 +1123,9 @@ tcc_link <- function(
   if (result != 0) {
     stop("Failed to compile FFI bindings for ", basename(path), call. = FALSE)
   }
+
+  # Register host symbols for macOS compatibility
+  .Call(RC_libtcc_add_host_symbols, state)
 
   # Relocate
   result <- tcc_relocate(state)
