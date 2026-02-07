@@ -1,12 +1,9 @@
-
 TINYCC_DIR = ../inst/tinycc
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
-LIBTCC_DLL = $(TINYCC_DIR)/bin/libtcc.dll
 
-ifeq ($(shell if exist "$(LIBTCC_DLL)" echo yes),yes)
-	PKG_LIBS = $(LIBTCC_DLL)
-else
-	PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
-endif
+# Static linking only — avoids libtcc printf symbols leaking into the
+# shared library and triggering R CMD check warnings about non-API entry
+# points (e.g. printf, fprintf, vsnprintf).
+PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
 
 all: $(SHLIB)

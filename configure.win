@@ -1,63 +1,50 @@
 #!/bin/sh
-# we are on rtools so we have pkg-config etc
+# configure.win — build TinyCC on Windows via Rtools
 set -ex
-# Get R's build configuration
+
+# R's build configuration
 MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
 CC=`"${R_HOME}/bin/R" CMD config CC`
 CC=$(echo "${CC}" | awk '{print $1}')
 AR=`"${R_HOME}/bin/R" CMD config AR`
 
-# Build TinyCC
 THISDir=$(dirname "$0")
 THISDir=$(cd "$THISDir" && pwd)
-LOCAL_TINYCC="${THISDir}/tinycc"
 TINYCC_SRC="${THISDir}/src/tinycc"
 
 echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
 "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+
 TINYCC_DEST="${THISDir}/inst/tinycc"
 echo "Package source directory: $THISDir"
 echo "TinyCC will be installed to: $TINYCC_DEST"
-MSYSTEM=MINGW64
-MSYS2_PATH_TYPE=inherit
-CHERE_INVOKING=yes
 
 if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
     echo "Configuring and building tinycc ..."
-    
-    # Configure TinyCC for Windows
-    # TinyCC can be built with mingw/gcc on Windows via Rtools
+
+    # Configure TinyCC for Windows (static library only)
     ./configure --prefix="$TINYCC_DEST" \
         --cc="$CC" \
         --ar="$AR" \
         --extra-cflags="-DONE_SOURCE"
-    
+
     mkdir -p "$TINYCC_DEST/lib"
     mkdir -p "$TINYCC_DEST/include"
-    
+
     echo "Building c2str helper ..."
     "$MAKE" c2str.exe || { echo "Failed to build c2str.exe" >&2; exit 1; }
 
     echo "Generating tccdefs_.h ..."
     "$MAKE" tccdefs_.h || { echo "Failed to generate tccdefs_.h" >&2; exit 1; }
 
-    echo "Building libtcc (static and dll) and tcc executable ..."
-    "$MAKE" CONFIG_static=no libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
-    "$MAKE" CONFIG_static=no libtcc.dll || true
-    "$MAKE" tcc || "$MAKE" tcc.exe || { echo "Failed to build tcc executable" >&2; exit 1; }
+    echo "Building libtcc.a (static) and tcc executable ..."
+    "$MAKE" libtcc.a || { echo "Failed to build libtcc.a" >&2; exit 1; }
+    "$MAKE" tcc.exe || "$MAKE" tcc || { echo "Failed to build tcc executable" >&2; exit 1; }
 
-    # Install built files if present
-    if [ -f libtcc.dll ]; then
-        mkdir -p "$TINYCC_DEST/bin"
-        cp -f libtcc.dll "$TINYCC_DEST/bin/"
-    fi
-    if [ -f tcc.exe ]; then
-        cp -f tcc.exe "$TINYCC_DEST/"
-    fi
-    # On Windows, TCC searches for include/lib directories relative to the executable location
-    # We need tcc.exe to be in the root of tinycc/, not in bin/, so it finds include/ and lib/
-    mkdir -p "$TINYCC_DEST"
+    # --- install tcc.exe ---
+    # TCC searches for include/lib relative to the executable, so keep it
+    # at the root of inst/tinycc/ (not in bin/).
     if [ -f "tcc.exe" ]; then
         cp -f "tcc.exe" "$TINYCC_DEST/"
     elif [ -f "tcc" ]; then
@@ -67,31 +54,30 @@ if [ -d "$TINYCC_SRC" ]; then
         exit 1
     fi
 
-    # Copy TCC's include files (required for preprocessing on Windows)
-    echo "Installing TCC include files..."
+    # --- install headers ---
+    # libtcc.h lives in the TCC source root, not in include/
+    cp -f libtcc.h "$TINYCC_DEST/include/" 2>/dev/null || true
     cp -f include/*.h "$TINYCC_DEST/include/" 2>/dev/null || true
     cp -f tcclib.h "$TINYCC_DEST/include/" 2>/dev/null || true
     mkdir -p "$TINYCC_DEST/include/winapi"
     cp -rf win32/include/* "$TINYCC_DEST/include/" 2>/dev/null || true
-    
-    # Copy TCC's library files (required for linking on Windows)
-    echo "Installing TCC library files..."
+
+    # --- install libraries (static only) ---
     cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
-    cp -f libtcc.dll "$TINYCC_DEST/bin/" 2>/dev/null || true
-    LIBTCC1_SRC=$(find "$TINYCC_SRC" -name "libtcc1.a" | head -n 1)
+
+    # libtcc1.a is the runtime support library (needed by the CLI)
+    LIBTCC1_SRC=$(find . -name "libtcc1.a" 2>/dev/null | head -n 1)
     if [ -n "$LIBTCC1_SRC" ]; then
         mkdir -p "$TINYCC_DEST/lib/tcc"
         cp -f "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" 2>/dev/null || true
     else
         echo "WARNING: libtcc1.a not found during build; CLI may fail"
     fi
+
+    # Windows .def files for system libraries
     cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
-    
-    echo "TinyCC tcc executable and support files installed to $TINYCC_DEST"
-    #ls -la "$TINYCC_DEST/" "$TINYCC_DEST/include/" "$TINYCC_DEST/lib/" 2>/dev/null || true
-    echo "Verifying tcc.exe exists:"
-    #ls -la "$TINYCC_DEST/tcc.exe" || echo "ERROR: tcc.exe not found at expected location!"
-    
+
+    echo "TinyCC installed to $TINYCC_DEST (static only)"
 
     # Always remove TCC source after build
     rm -rf "$TINYCC_SRC" || true

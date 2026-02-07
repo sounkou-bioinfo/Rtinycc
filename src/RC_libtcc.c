@@ -681,16 +681,26 @@ typedef struct {
 #ifdef _WIN32
 SEXP RC_callback_async_init() {
     Rf_error("Async callbacks are not supported on Windows");
+    return R_NilValue;
 }
 
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     (void) callback_ext;
     (void) args;
     Rf_error("Async callbacks are not supported on Windows");
+    return R_NilValue;
 }
 
 SEXP RC_callback_async_drain() {
     Rf_error("Async callbacks are not supported on Windows");
+    return R_NilValue;
+}
+
+/* Stub: async scheduling is not available on Windows. */
+typedef struct { int kind; union { int i; double d; void *p; char *s; } v; } cb_arg_t;
+int RC_callback_async_schedule_c(int id, int n_args, const void *args) {
+    (void) id; (void) n_args; (void) args;
+    return -1;
 }
 #else
 // Async callback dispatch (main-thread queue)
