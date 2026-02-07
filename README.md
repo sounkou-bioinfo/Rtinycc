@@ -14,14 +14,13 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://s
 
 ## Abstract
 
-Rtinycc is an R interface to [tinycc](https://github.com/TinyCC/tinycc),
+Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc),
 providing both CLI access and a libtcc-backed in-memory compiler. It
-includes a experimental, small, explicit FFI inspired by [bun’s
+includes an experimental FFI inspired by [Bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
-predictable conversions and pointer utilities. The package targets
-Unix-alikes systems (no Windows support for now) and focuses on
-embedding `TinyCC` and enabling JIT-compiled bindings directly from R.
-Combined with
+predictable type conversions and pointer utilities. The package targets
+Unix-alike systems and focuses on embedding TinyCC and enabling
+JIT-compiled bindings directly from R. Combined with
 [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
 provides C header parsers, it can be used to rapidly generate
 declarative bindings.
@@ -78,49 +77,82 @@ install.packages('Rtinycc', repos = c('https://sounkou-bioinfo.r-universe.dev', 
 
 ### CLI
 
+The CLI interface compiles C source files to standalone executables
+using the bundled TinyCC toolchain.
+
 ``` r
 library(Rtinycc)
-tcc_dir <- tcc_prefix()
-# CLI compile to executable
+
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
-exe <- tempfile(fileext = if (.Platform$OS.type == "windows") ".exe" else "")
-inc_args <- paste0("-I", tcc_include_paths())
-lib_args <- paste0("-L", tcc_lib_paths())
-status <- tcc_run_cli(c("-B", tcc_dir, inc_args, lib_args, src, "-o", exe))
-status
+exe <- tempfile()
+tcc_run_cli(c(
+  "-B", tcc_prefix(),
+  paste0("-I", tcc_include_paths()),
+  paste0("-L", tcc_lib_paths()),
+  src, "-o", exe
+))
 #> [1] 0
 Sys.chmod(exe, mode = "0755")
 system2(exe, stdout = TRUE)
 #> [1] "42"
 ```
 
-Use the CLI when you need an external executable; for in-memory
-workflows, prefer libtcc.
+For in-memory workflows, prefer libtcc instead.
 
-### In-memory using libtcc
+### In-memory compilation with libtcc
+
+We can compile and call C functions entirely in memory. This is the
+simplest path for quick JIT compilation.
 
 ``` r
-# libtcc in-memory compile
 state <- tcc_state(output = "memory")
-code <- "int forty_two(){ return 42; }"
-tcc_compile_string(state, code)
+tcc_compile_string(state, "int forty_two(){ return 42; }")
 #> [1] 0
 tcc_relocate(state)
 #> [1] 0
 tcc_call_symbol(state, "forty_two", return = "int")
 #> [1] 42
-tcc_get_symbol(state, "forty_two")
-#> <pointer: 0x5d1e5e2a3000>
-#> attr(,"class")
-#> [1] "tcc_symbol"
 ```
 
-This is the simplest path for quick, in-process JIT compilation.
+The lower-level API gives full control over include paths, libraries,
+and the R C API. Using `#define _Complex` as a workaround for TCC’s lack
+of [complex type
+support](https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
+we can link against R’s headers and call into `libR`.
 
-### Utilities
+``` r
+state <- tcc_state(output = "memory")
+tcc_add_include_path(state, R.home("include"))
+#> [1] 0
+tcc_add_library_path(state, R.home("lib"))
+#> [1] 0
 
-Use the pointer utilities to manage external pointers and C strings
-without manual casts.
+code <- '
+#define _Complex
+#include <R.h>
+#include <Rinternals.h>
+
+double call_r_sqrt(void) {
+  SEXP fn   = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
+  SEXP val  = PROTECT(Rf_ScalarReal(16.0));
+  SEXP call = PROTECT(Rf_lang2(fn, val));
+  SEXP out  = PROTECT(Rf_eval(call, R_GlobalEnv));
+  double res = REAL(out)[0];
+  UNPROTECT(4);
+  return res;
+}
+'
+tcc_compile_string(state, code)
+#> [1] 0
+tcc_relocate(state)
+#> [1] 0
+tcc_call_symbol(state, "call_r_sqrt", return = "double")
+#> [1] 4
+```
+
+### Pointer utilities
+
+Rtinycc provides helpers for managing external pointers and C strings.
 
 ``` r
 ptr <- tcc_cstring("hello")
@@ -128,124 +160,133 @@ tcc_read_cstring(ptr)
 #> [1] "hello"
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
-tcc_read_u8(ptr, 5)
-#> [1] 104 101 108 108 111
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5d1e5f28c540"
+#> [1] "0x58f072e34ac0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
 #> NULL
+```
 
-# Pointer-to-pointer helpers
+Pointer-to-pointer workflows are supported for C APIs that return values
+through output parameters.
+
+``` r
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5d1e5df4f0e0>
+#> <pointer: 0x58f07096b0c0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5d1e5dc714c0>
+#> <pointer: 0x58f0725e2e90>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5d1e5df4f0e0>
+#> <pointer: 0x58f07096b0c0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
 #> NULL
 ```
 
-### A declarative FFI API
+## Declarative FFI
 
-A declarative interface inspired by
-[Bun:FFI](https://bun.com/docs/runtime/ffi) is provided. Define types
-explicitly and let `Rtinycc` generate the binding code automaticallly
-using `TinyCC` in memory compilation mode.
+A declarative interface inspired by [Bun’s
+FFI](https://bun.com/docs/runtime/ffi) sits on top of the lower-level
+API. We define types explicitly and Rtinycc generates the binding code,
+compiling it in memory with TCC.
 
-#### Type System
+### Type system
 
-The FFI exposes a small, explicit set of type mappings between R and C.
+The FFI exposes a small set of type mappings between R and C.
 Conversions are explicit and predictable so callers know when data is
 shared versus copied.
 
-- **Scalars**: `i8`, `i16`, `i32`, `i64` (integers); `f32`, `f64`
-  (floats); `bool` (logical); `cstring` (NUL-terminated C string).
-- **Arrays (zero-copy)**: `raw` → `uint8_t*`; `integer_array` →
-  `int32_t*`; `numeric_array` → `double*`.
-- **Array returns**: use
-  `returns = list(type = "numeric_array", length_arg = 2, free = TRUE)`
-  to copy into a new R vector. `length_arg` is the 1-based index of the
-  length argument; set `free = TRUE` when the C function allocates with
-  `malloc`.
-- **Pointers**: `ptr` (opaque `externalptr`), `sexp` (pass `SEXP`
-  directly), `callback:<signature>` (sync trampoline),
-  `callback_async:<signature>` (async trampoline).
-- **Array fields in structs**: use
-  `list(type = "u8", size = 16, array = TRUE)` and the generated helpers
-  `struct_<name>_get_<field>()`, `struct_<name>_get_<field>_elt(i)`,
-  `struct_<name>_set_<field>_elt(i, v)`.
+Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`,
+`u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical);
+`cstring` (NUL-terminated string). Array arguments pass R vectors to C
+with zero copy: `raw` maps to `uint8_t*`, `integer_array` to `int32_t*`,
+`numeric_array` to `double*`. Pointer types include `ptr` (opaque
+external pointer), `sexp` (pass a `SEXP` directly), and callback
+signatures like `callback:double(double)`.
 
-#### Simple function
+Array returns use
+`returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to
+copy the result into a new R vector. The `length_arg` is the 1-based
+index of the C argument that carries the array length. Set `free = TRUE`
+when the C function returns a `malloc`-owned buffer.
+
+### Simple functions
 
 ``` r
-
-# Define and compile in one chain
 ffi <- tcc_ffi() |>
-  tcc_bind(
-    add = list(args = list("i32", "i32"), returns = "i32")
-  ) |>
   tcc_source("
-    int add(int a, int b) {
-      return a + b;
-    }
+    int add(int a, int b) { return a + b; }
   ") |>
+  tcc_bind(add = list(args = list("i32", "i32"), returns = "i32")) |>
   tcc_compile()
 
-# Call directly with type conversion
-result <- ffi$add(5L, 3L)
-result
+ffi$add(5L, 3L)
 #> [1] 8
 ```
 
-#### Working with R arrays
+### Linking external libraries
 
-Pass R vectors to C with zero-copy:
+We can bind directly to symbols in shared libraries. Here we link
+against `libm`.
+
+``` r
+math <- tcc_ffi() |>
+  tcc_library("m") |>
+  tcc_bind(
+    sqrt  = list(args = list("f64"), returns = "f64"),
+    sin   = list(args = list("f64"), returns = "f64"),
+    floor = list(args = list("f64"), returns = "f64")
+  ) |>
+  tcc_compile()
+
+math$sqrt(16.0)
+#> [1] 4
+math$sin(pi / 2)
+#> [1] 1
+math$floor(3.7)
+#> [1] 3
+```
+
+### Working with arrays
+
+R vectors are passed to C with zero copy. Mutations in C are visible in
+R.
 
 ``` r
 ffi <- tcc_ffi() |>
+  tcc_source("
+    #include <stdlib.h>
+    #include <string.h>
+
+    int64_t sum_array(int32_t* arr, int32_t n) {
+      int64_t s = 0;
+      for (int i = 0; i < n; i++) s += arr[i];
+      return s;
+    }
+
+    void bump_first(int32_t* arr) { arr[0] += 10; }
+
+    int32_t* dup_array(int32_t* arr, int32_t n) {
+      int32_t* out = malloc(sizeof(int32_t) * n);
+      memcpy(out, arr, sizeof(int32_t) * n);
+      return out;
+    }
+  ") |>
   tcc_bind(
-    sum_array = list(args = list("integer_array", "i32"), returns = "i64"),
+    sum_array  = list(args = list("integer_array", "i32"), returns = "i64"),
     bump_first = list(args = list("integer_array"), returns = "void"),
-    dup_array = list(
+    dup_array  = list(
       args = list("integer_array", "i32"),
       returns = list(type = "integer_array", length_arg = 2, free = TRUE)
     )
   ) |>
-  tcc_source("
-    int64_t sum_array(int32_t* arr, int32_t n) {
-      int64_t sum = 0;
-      for(int i = 0; i < n; i++) {
-        sum += arr[i];
-      }
-      return sum;
-    }
-
-    void bump_first(int32_t* arr) {
-      arr[0] += 10;
-    }
-
-    int32_t* dup_array(int32_t* arr, int32_t n) {
-      int32_t* out = (int32_t*)malloc(sizeof(int32_t) * n);
-      for (int i = 0; i < n; i++) out[i] = arr[i];
-      return out;
-    }
-  ") |>
   tcc_compile()
 
-# Pass R integer vector directly
-x <- as.integer(1:100) # force the altrep
-# Inspect SEXP pointer 
-.Internal(inspect(x))
-#> @5d1e5ffef9f0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
-result <- ffi$sum_array(x, length(x))
-result
+x <- as.integer(1:100)
+ffi$sum_array(x, length(x))
 #> [1] 5050
 
 # Zero-copy: C mutation reflects in R
@@ -254,201 +295,46 @@ ffi$bump_first(x)
 x[1]
 #> [1] 11
 
-# Array return: copied into a new R vector (C buffer freed)
+# Array return: copied into a new R vector, C buffer freed
 y <- ffi$dup_array(x, length(x))
 y[1]
 #> [1] 11
-
-.Internal(inspect(x))
-#> @5d1e5ffef9f0 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
-#### Callbacks
+### Structs and unions
 
-R functions can be registered as C function pointers via
-`tcc_callback()` and passed to compiled code. Provide a C signature that
-matches the R callback arguments and always call `tcc_callback_close()`
-when finished. When using `tcc_bind()`, specify a `callback:<signature>`
-argument so the trampoline can be generated, and pass
-`tcc_callback_ptr(cb)` as the user data pointer to the C API.
+Complex C types are supported declaratively. Use `tcc_struct()` to
+generate allocation and accessor helpers. Free instances when done.
 
 ``` r
-cb <- tcc_callback(function(x) x * 2, signature = "double (*)(double)")
-cb_ptr <- tcc_callback_ptr(cb)
-
-code <- '
-#define _Complex
-
-double call_cb(double (*cb)(void* ctx, double), void* ctx, double x) {
-  return cb(ctx, x);
-}
-'
-
 ffi <- tcc_ffi() |>
-  tcc_source(code) |>
-  tcc_bind(
-    call_cb = list(
-      args = list("callback:double(double)", "ptr", "f64"),
-      returns = "f64"
-    )
-  ) |>
-  tcc_compile()
-
-ffi$call_cb(cb, cb_ptr, 21.0)
-#> [1] 42
-tcc_callback_close(cb)
-```
-
-#### Callback errors
-
-If the callback throws, a warning is emitted and a type-appropriate
-default value is returned:
-
-``` r
-cb_err <- tcc_callback(
-  function(x) stop("boom"),
-  signature = "double (*)(double)"
-)
-cb_ptr_err <- tcc_callback_ptr(cb_err)
-
-code_err <- '
-#define _Complex
-
-double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {
-  return cb(ctx, x);
-}
-'
-
-ffi_err <- tcc_ffi() |>
-  tcc_source(code_err) |>
-  tcc_bind(
-    call_cb_err = list(
-      args = list("callback:double(double)", "ptr", "f64"),
-      returns = "f64"
-    )
-  ) |>
-  tcc_compile()
-
-warned <- FALSE
-res <- withCallingHandlers(
-  ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
-  warning = function(w) {
-    warned <<- TRUE
-    invokeRestart("muffleWarning")
-  }
-)
-list(warned = warned, result = res)
-#> $warned
-#> [1] TRUE
-#> 
-#> $result
-#> [1] NA
-
-tcc_callback_close(cb_err)
-```
-
-#### Async callbacks (main-thread queue)
-
-For cross-thread scheduling, initialize the async dispatcher and enqueue
-a callback from C on a worker thread using `callback_async:<signature>`.
-On Unix-like systems, callbacks are executed on the main thread.
-
-``` r
-  tcc_callback_async_enable()
-
-  hits <- 0L
-  cb_async <- tcc_callback(function(x) { hits <<- hits + x; NULL }, signature = "void (*)(int)")
-  cb_ptr <- tcc_callback_ptr(cb_async)  # user-data token for async scheduling
-
-  code_async <- '
-#define _Complex
-#include <pthread.h>
-
-struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
-
-static void* worker(void* data) {
-  struct task* t = (struct task*) data;
-  t->cb(t->ctx, t->value);
-  return NULL;
-}
-
-int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
-  if (!cb || !ctx) return -1;
-  const int n = 100;
-  struct task tasks[100];
-  pthread_t th[100];
-  for (int i = 0; i < n; i++) {
-    tasks[i].cb = cb;
-    tasks[i].ctx = ctx;
-    tasks[i].value = value;
-    if (pthread_create(&th[i], NULL, worker, &tasks[i]) != 0) {
-      for (int j = 0; j < i; j++) {
-        pthread_join(th[j], NULL);
-      }
-      return -2;
+  tcc_source('
+    #include <math.h>
+    struct point { double x; double y; };
+    double distance(struct point* a, struct point* b) {
+      double dx = a->x - b->x, dy = a->y - b->y;
+      return sqrt(dx * dx + dy * dy);
     }
-  }
-  for (int i = 0; i < n; i++) {
-    pthread_join(th[i], NULL);
-  }
-  return 0;
-}
-'
-ffi_async <- tcc_ffi() |>
-    tcc_source(code_async) |>
-    tcc_library("pthread") |>
-    tcc_bind(
-      spawn_async = list(
-        args = list("callback_async:void(int)", "ptr", "i32"),
-        returns = "i32"
-      )
-    ) |>
-    tcc_compile()
-
-rc <- ffi_async$spawn_async(cb_async, cb_ptr, 2L)
-tcc_callback_async_drain()
-print(hits)
-#> [1] 200
-tcc_callback_close(cb_async)
-```
-
-#### Structs, unions, and bitfields
-
-Complex C types are supported declaratively. Use `tcc_struct()` and
-`tcc_union()` to generate allocation and accessor helpers and
-`tcc_introspect()` for size/alignment information. Free struct instances
-when you are done.
-
-``` r
-code <- '
-struct point { double x; double y; int id; };
-double point_distance(struct point* a, struct point* b) {
-  double dx = a->x - b->x;
-  double dy = a->y - b->y;
-  return dx * dx + dy * dy;
-}
-'
-
-ffi <- tcc_ffi() |>
-  tcc_source(code) |>
-  tcc_struct('point', accessors = c(x = 'f64', y = 'f64', id = 'i32')) |>
-  tcc_bind(point_distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
+  ') |>
+  tcc_library("m") |>
+  tcc_struct("point", accessors = c(x = "f64", y = "f64")) |>
+  tcc_bind(distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
   tcc_compile()
 
 p1 <- ffi$struct_point_new()
-p1 <- ffi$struct_point_set_x(p1, 0.0)
-p1 <- ffi$struct_point_set_y(p1, 0.0)
-p1 <- ffi$struct_point_set_id(p1, 1L)
+ffi$struct_point_set_x(p1, 0.0)
+#> <pointer: 0x58f073631ce0>
+ffi$struct_point_set_y(p1, 0.0)
+#> <pointer: 0x58f073631ce0>
 
 p2 <- ffi$struct_point_new()
-p2 <- ffi$struct_point_set_x(p2, 3.0)
-p2 <- ffi$struct_point_set_y(p2, 4.0)
-p2 <- ffi$struct_point_set_id(p2, 2L)
+ffi$struct_point_set_x(p2, 3.0)
+#> <pointer: 0x58f072e265f0>
+ffi$struct_point_set_y(p2, 4.0)
+#> <pointer: 0x58f072e265f0>
 
-ffi$struct_point_get_x(p1)
-#> [1] 0
-ffi$point_distance(p1, p2)
-#> [1] 25
+ffi$distance(p1, p2)
+#> [1] 5
 
 ffi$struct_point_free(p1)
 #> NULL
@@ -456,357 +342,170 @@ ffi$struct_point_free(p2)
 #> NULL
 ```
 
-#### Enums
+### Enums
 
-Enums are supported via `tcc_enum()` and exported as helper functions:
+Enums are exposed as helper functions that return integer constants.
 
 ``` r
-code <- '
-enum status { OK = 0, ERROR = 1, PENDING = 2 };
-'
-
 ffi <- tcc_ffi() |>
-  tcc_source(code) |>
-  tcc_enum("status", constants = c("OK", "ERROR", "PENDING")) |>
+  tcc_source("enum color { RED = 0, GREEN = 1, BLUE = 2 };") |>
+  tcc_enum("color", constants = c("RED", "GREEN", "BLUE")) |>
   tcc_compile()
 
-ffi$enum_status_OK()
+ffi$enum_color_RED()
 #> [1] 0
-ffi$enum_status_ERROR()
-#> [1] 1
+ffi$enum_color_BLUE()
+#> [1] 2
 ```
 
-#### Bitfields
+### Bitfields
 
-Bitfields are handled by the C compiler; accessors read/write them like
-normal fields:
+Bitfields are handled by TCC. Accessors read and write them like normal
+fields.
 
 ``` r
-code <- '
-struct status {
-  unsigned int flag : 1;
-  unsigned int code : 6;
-};
-'
-
 ffi <- tcc_ffi() |>
-  tcc_source(code) |>
-  tcc_struct("status", accessors = c(flag = "u8", code = "u8")) |>
+  tcc_source("
+    struct flags {
+      unsigned int active : 1;
+      unsigned int level  : 4;
+    };
+  ") |>
+  tcc_struct("flags", accessors = c(active = "u8", level = "u8")) |>
   tcc_compile()
 
-s <- ffi$struct_status_new()
-s <- ffi$struct_status_set_flag(s, 1)
-s <- ffi$struct_status_set_code(s, 42)
-ffi$struct_status_get_flag(s)
+s <- ffi$struct_flags_new()
+ffi$struct_flags_set_active(s, 1L)
+#> <pointer: 0x58f070822d70>
+ffi$struct_flags_set_level(s, 9L)
+#> <pointer: 0x58f070822d70>
+ffi$struct_flags_get_active(s)
 #> [1] 1
-ffi$struct_status_get_code(s)
-#> [1] 42
-ffi$struct_status_free(s)
+ffi$struct_flags_get_level(s)
+#> [1] 9
+ffi$struct_flags_free(s)
 #> NULL
 ```
 
-### Linking external libraries
+### Global getters and setters
 
-We can link against system libraries like libm
+C globals can be exposed with explicit getter/setter helpers.
 
 ``` r
-# Link against math library
-math_lib <- tcc_ffi() |>
-  tcc_library("m") |>
+ffi <- tcc_ffi() |>
+  tcc_source("
+    int counter = 7;
+    double pi_approx = 3.14159;
+  ") |>
+  tcc_global("counter", "i32") |>
+  tcc_global("pi_approx", "f64") |>
+  tcc_compile()
+
+ffi$global_counter_get()
+#> [1] 7
+ffi$global_pi_approx_get()
+#> [1] 3.14159
+ffi$global_counter_set(42L)
+#> [1] 42
+ffi$global_counter_get()
+#> [1] 42
+```
+
+### Callbacks
+
+R functions can be registered as C function pointers via
+`tcc_callback()` and passed to compiled code. Specify a
+`callback:<signature>` argument in `tcc_bind()` so the trampoline is
+generated automatically. Always close callbacks when done.
+
+``` r
+cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
+
+code <- '
+#define _Complex
+double apply_fn(double (*fn)(void* ctx, double), void* ctx, double x) {
+  return fn(ctx, x);
+}
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
   tcc_bind(
-    sqrt = list(args = list("f64"), returns = "f64"),
-    sin = list(args = list("f64"), returns = "f64")
+    apply_fn = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
   ) |>
   tcc_compile()
 
-math_lib$sqrt(16.0)
-#> [1] 4
+ffi$apply_fn(cb, tcc_callback_ptr(cb), 7.0)
+#> [1] 49
+tcc_callback_close(cb)
 ```
 
-#### SQLite entry point
+If a callback throws an error, a warning is emitted and a
+type-appropriate default is returned (0 for numeric, `FALSE` for
+logical, `NULL` for pointer).
 
-Use SQLite to validate the external library workflow and inspect the
-version string.
+For thread-safe scheduling from worker threads, use
+`callback_async:<signature>` and drain the queue on the main thread with
+`tcc_callback_async_drain()`.
 
-``` r
-# Link the system SQLite3 library and expose a few symbols
-sqlite <- tcc_link(
-  "libsqlite3.so",
-  symbols = list(
-    sqlite3_libversion = list(args = list(), returns = "cstring"),
-    sqlite3_open = list(args = list("cstring", "ptr"), returns = "i32"),
-    sqlite3_close = list(args = list("ptr"), returns = "i32"),
-    sqlite3_exec = list(args = list("ptr", "cstring", "ptr", "ptr", "ptr"), returns = "i32")
-  ),
-  libs = "sqlite3"
-)
+### SQLite: a complete example
 
-# Query the SQLite library version
-sqlite$sqlite3_libversion()
-#> [1] "3.45.1"
-```
-
-#### SQLite with an R callback
-
-Use a `callback:<signature>` binding so the trampoline is generated
-automatically.
+This example ties together external library linking, callbacks, and
+custom C helpers. We open an in-memory SQLite database, execute queries,
+and collect rows through an R callback.
 
 ``` r
-hits <- 0L
 cb <- tcc_callback(
-  function(argc, argv, col) {
-    hits <<- hits + 1L
-    0L
-  },
+  function(argc, argv, cols) { 0L },
   signature = "int (*)(int, char **, char **)"
 )
-cb_ptr <- tcc_callback_ptr(cb)
 
-sqlite_cb <- tcc_ffi() |>
-  tcc_header('#include <sqlite3.h>') |>
+sqlite <- tcc_ffi() |>
+  tcc_header("#include <sqlite3.h>") |>
   tcc_library("sqlite3") |>
   tcc_source('
-  void* open_inmemory_db() {
-    sqlite3* db = NULL;
-    sqlite3_open(":memory:", &db);
-    return db;
-  }
-
-  int close_db(void* db_ptr) {
-    sqlite3* db = (sqlite3*)db_ptr;
-    return sqlite3_close(db);
-  }
+    void* open_db() {
+      sqlite3* db = NULL;
+      sqlite3_open(":memory:", &db);
+      return db;
+    }
+    int close_db(void* db) {
+      return sqlite3_close((sqlite3*)db);
+    }
   ') |>
   tcc_bind(
-    open_inmemory_db = list(args = list(), returns = "ptr"),
+    open_db  = list(args = list(), returns = "ptr"),
     close_db = list(args = list("ptr"), returns = "i32"),
+    sqlite3_libversion = list(args = list(), returns = "cstring"),
     sqlite3_exec = list(
-      args = list(
-        "ptr",
-        "cstring",
-        "callback:int(int, char **, char **)",
-        "ptr",
-        "ptr"
-      ),
+      args = list("ptr", "cstring", "callback:int(int, char **, char **)", "ptr", "ptr"),
       returns = "i32"
     )
   ) |>
   tcc_compile()
 
-db_ptr <- sqlite_cb$open_inmemory_db()
-sqlite_cb$sqlite3_exec(db_ptr, "CREATE TABLE items (id INTEGER, name TEXT);", cb, cb_ptr, tcc_null_ptr())
+sqlite$sqlite3_libversion()
+#> [1] "3.45.1"
+
+db <- sqlite$open_db()
+sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callback_ptr(cb), tcc_null_ptr())
 #> [1] 0
-sqlite_cb$sqlite3_exec(db_ptr, "INSERT INTO items VALUES (1, \'test\');", cb, cb_ptr, tcc_null_ptr())
+sqlite$sqlite3_exec(db, "INSERT INTO t VALUES (1, 'hello');", cb, tcc_callback_ptr(cb), tcc_null_ptr())
 #> [1] 0
-sqlite_cb$sqlite3_exec(db_ptr, "SELECT name FROM items;", cb, cb_ptr, tcc_null_ptr())
-#> [1] 0
-hits
-#> [1] 1
-sqlite_cb$close_db(db_ptr)
+sqlite$close_db(db)
 #> [1] 0
 tcc_callback_close(cb)
 ```
 
-#### SQLite with an opaque struct wrapper
+## Header parsing with treesitter.c
 
-Wrap the opaque `sqlite3*` in a small struct so the FFI exercises struct
-allocation and accessors.
-
-``` r
-sqlite_struct <- tcc_ffi() |>
-  tcc_header('#include <sqlite3.h>') |>
-  tcc_library("sqlite3") |>
-  tcc_source('
-  struct sqlite_handle { sqlite3* db; };
-
-  int sqlite_handle_open(struct sqlite_handle* h, const char* path) {
-    return sqlite3_open(path, &h->db);
-  }
-
-  int sqlite_handle_close(struct sqlite_handle* h) {
-    if (h->db) {
-      int rc = sqlite3_close(h->db);
-      h->db = NULL;
-      return rc;
-    }
-    return 0;
-  }
-
-  int sqlite_handle_exec(struct sqlite_handle* h, const char* sql) {
-    char* err_msg = NULL;
-    int rc = sqlite3_exec(h->db, sql, NULL, NULL, &err_msg);
-    if (err_msg) {
-      sqlite3_free(err_msg);
-    }
-    return rc;
-  }
-  ') |>
-  tcc_struct('sqlite_handle', accessors = c(db = 'ptr')) |>
-  tcc_bind(
-    sqlite_handle_open = list(args = list("ptr", "cstring"), returns = "i32"),
-    sqlite_handle_close = list(args = list("ptr"), returns = "i32"),
-    sqlite_handle_exec = list(args = list("ptr", "cstring"), returns = "i32")
-  ) |>
-  tcc_compile()
-
-h <- sqlite_struct$struct_sqlite_handle_new()
-sqlite_struct$sqlite_handle_open(h, ":memory:")
-#> [1] 0
-sqlite_struct$sqlite_handle_exec(h, "CREATE TABLE items (id INTEGER, name TEXT);")
-#> [1] 0
-sqlite_struct$sqlite_handle_exec(h, "INSERT INTO items VALUES (1, \'test\');")
-#> [1] 0
-sqlite_struct$sqlite_handle_close(h)
-#> [1] 0
-sqlite_struct$struct_sqlite_handle_free(h)
-#> NULL
-```
-
-#### Custom wrapper functions: SQLite with pointer utilities
-
-You can also create custom wrapper functions
-
-``` r
-# Create SQLite with pointer utilities integration
-sqlite_with_utils <- tcc_ffi() |>
-  tcc_header('#include <sqlite3.h>') |>
-  tcc_library("sqlite3") |>
-  tcc_source('  
-  // Helper to create in-memory database
-  void* tcc_create_inmemory_db_with_utils() {
-    sqlite3* db = NULL;
-    sqlite3_open(":memory:", &db);
-    return db;
-  }
-  
-  // Helper that executes SQL
-  int tcc_exec_with_utils(void* db_ptr, const char* sql) {
-    sqlite3* db = (sqlite3*)db_ptr;
-    char* err_msg = NULL;
-    int rc = sqlite3_exec(db, sql, NULL, NULL, &err_msg);
-    if (err_msg) {
-      sqlite3_free(err_msg);
-    }
-    return rc;
-  }
-  
-  // Helper to create and populate database
-  void* tcc_setup_test_db() {
-    sqlite3* db = NULL;
-    sqlite3_open(":memory:", &db);
-    if (db) {
-      sqlite3_exec(db, "CREATE TABLE items (id INTEGER, name TEXT);", NULL, NULL, NULL);
-      sqlite3_exec(db, "INSERT INTO items VALUES (1, \'test\');", NULL, NULL, NULL);
-    }
-    return db;
-  }
-') |>
-  tcc_bind(
-    sqlite3_libversion = list(args = list(), returns = "cstring"),
-    sqlite3_close = list(args = list("ptr"), returns = "i32"),
-    tcc_create_inmemory_db_with_utils = list(args = list(), returns = "ptr"),
-    tcc_exec_with_utils = list(args = list("ptr", "cstring"), returns = "i32"),
-    tcc_setup_test_db = list(args = list(), returns = "ptr")
-  ) |>
-  tcc_compile()
-
-# Use pointer utilities with SQLite
-db <- sqlite_with_utils$tcc_setup_test_db()
-tcc_ptr_addr(db, hex = TRUE)
-#> [1] "0x5d1e5d440b38"
-
-result <- sqlite_with_utils$tcc_exec_with_utils(db, "SELECT COUNT(*) FROM items;")
-sqlite_with_utils$sqlite3_libversion()
-#> [1] "3.45.1"
-sqlite_with_utils$sqlite3_close(db)
-#> [1] 0
-```
-
-### Lower level API
-
-Using `#Define _Complex` as workaround of `TinyCC`’s lack of support for
-[complex
-types](https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
-we link against R’s install headers and `libR` to call R’s C API
-function. This workaround is used in the binding generation too.
-
-``` r
-# Create new state for R linking example
-state <- tcc_state(output = "memory")
-
-# Add R include and library paths using Rtinycc functions
-r_include <- R.home("include")
-r_lib <- file.path(R.home("lib"))
-
-tcc_add_include_path(state, r_include)
-#> [1] 0
-tcc_add_library_path(state, r_lib)
-#> [1] 0
-
-# Using #define _Complex as workaround of `TinyCC`’s lack of support for complex
-# types, we can link against R’s install headers and libR to call the R C API.
-code <- '
-#define _Complex
-#include <R.h>
-#include <Rinternals.h>
-
-void hello_world() {
-  Rprintf("Hello World from compiled C code!\\n");
-}
-
-double call_r_sqrt(void) {
-  SEXP sqrt_fun = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
-  SEXP val = PROTECT(Rf_ScalarReal(16.0));
-  SEXP call = PROTECT(Rf_lang2(sqrt_fun, val));
-  SEXP out = PROTECT(Rf_eval(call, R_GlobalEnv));
-  double res = REAL(out)[0];
-  UNPROTECT(4);
-  return res;
-}
-'
-
-tcc_compile_string(state, code)
-#> [1] 0
-tcc_relocate(state)
-#> [1] 0
-
-tcc_call_symbol(state, "hello_world", return = "void")
-#> Hello World from compiled C code!
-#> NULL
-tcc_call_symbol(state, "call_r_sqrt", return = "double")
-#> [1] 4
-```
-
-### Global getters and setters
-
-You can expose globals with explicit getters and setters:
-
-``` r
-ffi <- tcc_ffi() |>
-  tcc_source('
-    int global_counter = 7;
-    double global_pi = 3.14159;
-  ') |>
-  tcc_global("global_counter", "i32") |>
-  tcc_global("global_pi", "f64") |>
-  tcc_compile()
-
-ffi$global_global_counter_get()
-#> [1] 7
-ffi$global_global_pi_get()
-#> [1] 3.14159
-ffi$global_global_counter_set(9L)
-#> [1] 9
-ffi$global_global_counter_get()
-#> [1] 9
-```
-
-### Header parsing with `treesitter.c` and generate bindings
-
-For header-driven bindings, use `treesitter.c` to parse function
-signatures and bind to an existing shared library. For
-struct/enum/global helpers, use `tcc_generate_bindings()` and include
-the declarations in your `tcc_source()`.
+For header-driven bindings, we use `treesitter.c` to parse function
+signatures and generate binding specifications automatically. For
+struct, enum, and global helpers, `tcc_generate_bindings()` handles the
+code generation.
 
 ``` r
 header <- '
@@ -817,182 +516,72 @@ enum status { OK = 0, ERROR = 1 };
 int global_counter;
 '
 
-funcs <- tcc_treesitter_functions(header)
-funcs
+tcc_treesitter_functions(header)
 #>   capture_name text start_line start_col params return_type
 #> 1    decl_name sqrt          2         8 double      double
 #> 2    decl_name  sin          3         8 double      double
-
-structs <- tcc_treesitter_structs(header)
-enums <- tcc_treesitter_enums(header)
-globals <- tcc_treesitter_globals(header)
-structs
+tcc_treesitter_structs(header)
 #>   capture_name  text start_line
 #> 1  struct_name point          4
-enums
+tcc_treesitter_enums(header)
 #>   capture_name   text start_line
 #> 1    enum_name status          5
-globals
+tcc_treesitter_globals(header)
 #>   capture_name           text start_line
 #> 1  global_name global_counter          6
 
+# Bind parsed functions to libm
 symbols <- tcc_treesitter_bindings(header)
-
-math_lib <- tcc_link(
-  "libm.so.6",
-  symbols = symbols,
-  libs = "m"
-)
-
-math_lib$sqrt(16.0)
+math <- tcc_link("libm.so.6", symbols = symbols, libs = "m")
+math$sqrt(16.0)
 #> [1] 4
-math_lib$sin(1.0)
-#> [1] 0.841471
 
-# Generate struct/enum/global helpers from header declarations
+# Generate struct/enum/global helpers
 ffi <- tcc_ffi() |>
   tcc_source(header) |>
   tcc_generate_bindings(
     header,
-    functions = FALSE,
-    structs = TRUE,
-    enums = TRUE,
-    globals = TRUE
+    functions = FALSE, structs = TRUE,
+    enums = TRUE, globals = TRUE
   ) |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5d1e62b18dd0>
+#> <pointer: 0x58f0736f4920>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
 #> [1] 0
 ```
 
-### Limitations and Issues of Note
+## Known limitations
 
-#### Nested structs/unions by value
+TCC does not support C99 `_Complex` types. Generated code works around
+this with `#define _Complex`, which suppresses the keyword. If you see
+parse errors involving complex types, apply the same workaround in your
+`tcc_source()` code.
 
-Use pointer utilities for pointer fields, and small wrappers for
-by-value fields:
+R represents `i64` and `u64` values as `double`, which loses precision
+beyond $2^{53}$. For exact 64-bit arithmetic, pass pointers to
+C-allocated storage instead.
 
-``` r
-ffi <- tcc_ffi() |>
-  tcc_source('
-    struct inner { int a; };
-    struct outer { struct inner* in; };
-  ') |>
-  tcc_struct("inner", accessors = c(a = "i32")) |>
-  tcc_struct("outer", accessors = c(`in` = "ptr")) |>
-  tcc_field_addr("outer", "in") |>
-  tcc_compile()
+Nested structs by value are not directly supported by the accessor
+generator. Use pointer fields and `tcc_field_addr()` to reach inner
+structs through pointer indirection.
 
-o <- ffi$struct_outer_new()
-in_ptr <- ffi$struct_inner_new()
-ffi$struct_outer_in_addr(o) |>
-  tcc_ptr_set(in_ptr)
-#> <pointer: 0x5d1e62b17c00>
-ffi$struct_outer_in_addr(o) |>
-  tcc_data_ptr() |>
-  (\(p) { ffi$struct_inner_set_a(p, 42L) })()
-#> <pointer: 0x5d1e624bf870>
-ffi$struct_inner_free(in_ptr)
-#> NULL
-ffi$struct_outer_free(o)
-#> NULL
-```
-
-#### Anonymous nested structs/unions
-
-Name the type in `tcc_source()` and bind it (still uses helpers to reach
-fields):
-
-``` r
-ffi <- tcc_ffi() |>
-  tcc_source('
-    typedef struct anon_t { int a; } anon_t;
-    struct wrapper { anon_t* anon; };
-  ') |>
-  tcc_struct("anon_t", accessors = c(a = "i32")) |>
-  tcc_struct("wrapper", accessors = c(anon = "ptr")) |>
-  tcc_field_addr("wrapper", "anon") |>
-  tcc_compile()
-
-w <- ffi$struct_wrapper_new()
-anon_ptr <- ffi$struct_anon_t_new()
-ffi$struct_wrapper_anon_addr(w) |>
-  tcc_ptr_set(anon_ptr)
-#> <pointer: 0x5d1e60bdf740>
-ffi$struct_wrapper_anon_addr(w) |>
-  tcc_data_ptr() |>
-  (
-    function(p) {
-      ffi$struct_anon_t_set_a(p, 7L)
-    }
-  )()
-#> <pointer: 0x5d1e60d67e00>
-ffi$struct_anon_t_free(anon_ptr)
-#> NULL
-ffi$struct_wrapper_free(w)
-#> NULL
-```
-
-#### Enum and bitfield validation
-
-Validate in R or add a small C wrapper:
-
-``` r
-validate_code <- function(code) {
-  stopifnot(code >= 0 && code <= 63)
-  code
-}
-
-code <- validate_code(12L)
-```
-
-#### 64-bit integer precision
-
-R represents `i64`/`u64` as `double`, so integers beyond $2^{53}$ lose
-precision. Adjacent values become indistinguishable:
-
-``` r
-a <- 2^53
-b <- 2^53 + 1
-sprintf("a: %.0f", a)
-#> [1] "a: 9007199254740992"
-sprintf("b: %.0f", b)
-#> [1] "b: 9007199254740992"
-identical(a, b)  # TRUE -- precision lost
-#> [1] TRUE
-```
-
-#### Complex composite layouts (arrays in structs)
-
-Use pointer utilities and raw byte helpers:
-
-``` r
-ffi <- tcc_ffi() |>
-  tcc_source('struct buf { unsigned char data[16]; };') |>
-  tcc_struct("buf", accessors = list(data = list(type = "u8", size = 16, array = TRUE))) |>
-  tcc_compile()
-
-b <- ffi$struct_buf_new()
-ffi$struct_buf_set_data_elt(b, 0L, 255L)
-#> <pointer: 0x5d1e5f685bd0>
-ffi$struct_buf_get_data_elt(b, 0L)
-#> [1] 255
-ffi$struct_buf_free(b)
-#> NULL
-```
+Array fields in structs require the
+`list(type = ..., size = N, array = TRUE)` syntax in `tcc_struct()`,
+which generates element-wise accessors (`_get_<field>_elt()` /
+`_set_<field>_elt()`).
 
 ## License
 
 GPL-3
 
-# References
+## References
 
-- [tinycc](https://github.com/TinyCC/tinycc)
-- [bun’s FFI](https://bun.com/docs/runtime/ffi)
+- [TinyCC](https://github.com/TinyCC/tinycc)
+- [Bun’s FFI](https://bun.com/docs/runtime/ffi)
 - [CFFI](https://cffi.readthedocs.io/)
 - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
 - [CSlug](https://cslug.readthedocs.io/en/latest/)
