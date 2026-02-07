@@ -31,7 +31,11 @@ tcc_lib_path <- function() file.path(tcc_prefix(), "lib")
 #' @export
 tcc_lib_paths <- function() {
   prefix <- tcc_prefix()
-  paths <- c(file.path(prefix, "lib"), file.path(prefix, "lib", "tcc"))
+  # lib/tcc must come first: the C layer passes the first entry to
+
+  # tcc_set_lib_path(), and TCC resolves its own headers as
+  # {lib_path}/include (e.g. stdbool.h, stddef.h).
+  paths <- c(file.path(prefix, "lib", "tcc"), file.path(prefix, "lib"))
   normalizePath(paths[file.exists(paths)], winslash = "/", mustWork = FALSE)
 }
 
