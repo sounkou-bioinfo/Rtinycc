@@ -47,9 +47,14 @@ if [ -d "$TINYCC_SRC" ]; then
         exit 1
     fi
 
-    # --- install headers ---
-    # libtcc.h lives in the TCC source root, not in include/
-    cp -f libtcc.h "$TINYCC_DEST/include/" 2>/dev/null || true
+    # --- install libtcc API header ---
+    # libtcc.h goes into its own directory so that Makevars.win can
+    # include it without pulling in TCC's system headers (which
+    # conflict with Rtools/MinGW headers at build time).
+    mkdir -p "$TINYCC_DEST/libtcc"
+    cp -f libtcc.h "$TINYCC_DEST/libtcc/" 2>/dev/null || true
+
+    # --- install TCC system headers (for TCC runtime use only) ---
     cp -f include/*.h "$TINYCC_DEST/include/" 2>/dev/null || true
     cp -f tcclib.h "$TINYCC_DEST/include/" 2>/dev/null || true
     mkdir -p "$TINYCC_DEST/include/winapi"
@@ -60,6 +65,8 @@ if [ -d "$TINYCC_SRC" ]; then
     # and install.libs.R copies it next to Rtinycc.dll (rpath equivalent).
     cp -f libtcc.dll "$TINYCC_DEST/lib/" 2>/dev/null || true
     cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
+    # tcc.exe is linked against libtcc.dll; it needs a copy next to it.
+    cp -f libtcc.dll "$TINYCC_DEST/" 2>/dev/null || true
 
     # libtcc1.a is the runtime support library (needed by the CLI)
     LIBTCC1_SRC=$(find . -name "libtcc1.a" 2>/dev/null | head -n 1)

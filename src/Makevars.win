@@ -1,5 +1,8 @@
 TINYCC_DIR = ../inst/tinycc
-PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
+# Only include the libtcc/ dir (for libtcc.h).  Do NOT add
+# $(TINYCC_DIR)/include — that contains TCC's own system headers
+# (stdlib.h, stdio.h, math.h …) which conflict with Rtools/MinGW.
+PKG_CPPFLAGS = -I$(TINYCC_DIR)/libtcc
 
 # Link against libtcc.dll directly (like Unix links against .so/.dylib).
 # At runtime, install.libs.R copies libtcc.dll next to Rtinycc.dll so
