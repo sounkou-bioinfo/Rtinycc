@@ -1024,8 +1024,8 @@ tcc_find_library <- function(name) {
 #' type conversion between R and C automatically.
 #'
 #' @param path Library short name (e.g., "m", "sqlite3") or full path to
-#'   the shared library. Short names are resolved via
-#'   [tcc_find_library()] using platform-appropriate suffixes.
+#'   the shared library. Short names are resolved using
+#'   platform-appropriate suffixes (`.so`, `.dylib`, `.dll`).
 #' @param symbols Named list of symbol definitions with:
 #'   \itemize{
 #'     \item args: List of FFI types for arguments

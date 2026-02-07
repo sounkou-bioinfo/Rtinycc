@@ -17,8 +17,8 @@ tcc_link(
 }
 \arguments{
 \item{path}{Library short name (e.g., "m", "sqlite3") or full path to
-the shared library. Short names are resolved via
-\code{\link[=tcc_find_library]{tcc_find_library()}} using platform-appropriate suffixes.}
+the shared library. Short names are resolved using
+platform-appropriate suffixes (\code{.so}, \code{.dylib}, \code{.dll}).}
 
 \item{symbols}{Named list of symbol definitions with:
 \itemize{
