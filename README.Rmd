@@ -166,7 +166,12 @@ A declarative interface inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi
 
 The FFI exposes a small set of type mappings between R and C. Conversions are explicit and predictable so callers know when data is shared versus copied.
 
-Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`, `u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical); `cstring` (NUL-terminated string). Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `integer_array` to `int32_t*`, `numeric_array` to `double*`. Pointer types include `ptr` (opaque external pointer), `sexp` (pass a `SEXP` directly), and callback signatures like `callback:double(double)`.
+Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`, `u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical); `cstring` (NUL-terminated string). 
+
+Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `integer_array` to `int32_t*`, `numeric_array` to `double*`. 
+
+Pointer types include `ptr` (opaque external pointer), `sexp` (pass a `SEXP` directly), and callback signatures like `callback:double(double)`.
+
 
 Array returns use `returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to copy the result into a new R vector. The `length_arg` is the 1-based index of the C argument that carries the array length. Set `free = TRUE` when the C function returns a `malloc`-owned buffer.
 
@@ -237,6 +242,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 x <- as.integer(1:100)
+.Internal(inspect(x))
 ffi$sum_array(x, length(x))
 
 # Zero-copy: C mutation reflects in R
@@ -246,6 +252,9 @@ x[1]
 # Array return: copied into a new R vector, C buffer freed
 y <- ffi$dup_array(x, length(x))
 y[1]
+
+# x is no longer ALTREP -- the C mutation materialised it
+.Internal(inspect(x))
 ```
 
 ### Structs and unions
@@ -366,9 +375,103 @@ ffi$apply_fn(cb, tcc_callback_ptr(cb), 7.0)
 tcc_callback_close(cb)
 ```
 
-If a callback throws an error, a warning is emitted and a type-appropriate default is returned (0 for numeric, `FALSE` for logical, `NULL` for pointer).
+### Callback errors
 
-For thread-safe scheduling from worker threads, use `callback_async:<signature>` and drain the queue on the main thread with `tcc_callback_async_drain()`.
+If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate default (0 for numeric, `FALSE` for logical, `NULL` for pointer). This prevents C code from seeing an unwound stack.
+
+```{r callback-error}
+cb_err <- tcc_callback(
+  function(x) stop("boom"),
+  signature = "double (*)(double)"
+)
+
+ffi_err <- tcc_ffi() |>
+  tcc_source('
+    #define _Complex
+    double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {
+      return cb(ctx, x);
+    }
+  ') |>
+  tcc_bind(
+    call_cb_err = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+warned <- FALSE
+res <- withCallingHandlers(
+  ffi_err$call_cb_err(cb_err, tcc_callback_ptr(cb_err), 1.0),
+  warning = function(w) {
+    warned <<- TRUE
+    invokeRestart("muffleWarning")
+  }
+)
+list(warned = warned, result = res)
+tcc_callback_close(cb_err)
+```
+
+### Async callbacks
+
+For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread when you call `tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once before use.
+
+```{r callback-async}
+tcc_callback_async_enable()
+
+hits <- 0L
+cb_async <- tcc_callback(
+  function(x) { hits <<- hits + x; NULL },
+  signature = "void (*)(int)"
+)
+
+code_async <- '
+#define _Complex
+#include <pthread.h>
+
+struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
+
+static void* worker(void* data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  return NULL;
+}
+
+int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
+  if (!cb || !ctx) return -1;
+  const int n = 100;
+  struct task tasks[100];
+  pthread_t th[100];
+  for (int i = 0; i < n; i++) {
+    tasks[i].cb = cb;
+    tasks[i].ctx = ctx;
+    tasks[i].value = value;
+    if (pthread_create(&th[i], NULL, worker, &tasks[i]) != 0) {
+      for (int j = 0; j < i; j++) pthread_join(th[j], NULL);
+      return -2;
+    }
+  }
+  for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
+  return 0;
+}
+'
+
+ffi_async <- tcc_ffi() |>
+  tcc_source(code_async) |>
+  tcc_library("pthread") |>
+  tcc_bind(
+    spawn_async = list(
+      args = list("callback_async:void(int)", "ptr", "i32"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+rc <- ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
+tcc_callback_async_drain()
+hits
+tcc_callback_close(cb_async)
+```
 
 ### SQLite: a complete example
 

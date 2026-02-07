@@ -161,7 +161,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x58f072e34ac0"
+#> [1] "0x6411e2fbbe50"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -175,11 +175,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x58f07096b0c0>
+#> <pointer: 0x6411e293e7e0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x58f0725e2e90>
+#> <pointer: 0x6411e349e480>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x58f07096b0c0>
+#> <pointer: 0x6411e293e7e0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -201,11 +201,14 @@ shared versus copied.
 
 Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`,
 `u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical);
-`cstring` (NUL-terminated string). Array arguments pass R vectors to C
-with zero copy: `raw` maps to `uint8_t*`, `integer_array` to `int32_t*`,
-`numeric_array` to `double*`. Pointer types include `ptr` (opaque
-external pointer), `sexp` (pass a `SEXP` directly), and callback
-signatures like `callback:double(double)`.
+`cstring` (NUL-terminated string).
+
+Array arguments pass R vectors to C with zero copy: `raw` maps to
+`uint8_t*`, `integer_array` to `int32_t*`, `numeric_array` to `double*`.
+
+Pointer types include `ptr` (opaque external pointer), `sexp` (pass a
+`SEXP` directly), and callback signatures like
+`callback:double(double)`.
 
 Array returns use
 `returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to
@@ -286,6 +289,8 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 x <- as.integer(1:100)
+.Internal(inspect(x))
+#> @6411e254bec0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -299,6 +304,10 @@ x[1]
 y <- ffi$dup_array(x, length(x))
 y[1]
 #> [1] 11
+
+# x is no longer ALTREP -- the C mutation materialised it
+.Internal(inspect(x))
+#> @6411e254bec0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Structs and unions
@@ -323,15 +332,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x58f073631ce0>
+#> <pointer: 0x6411e0f392f0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x58f073631ce0>
+#> <pointer: 0x6411e0f392f0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x58f072e265f0>
+#> <pointer: 0x6411e104f320>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x58f072e265f0>
+#> <pointer: 0x6411e104f320>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -376,9 +385,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x58f070822d70>
+#> <pointer: 0x6411e0e43ce0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x58f070822d70>
+#> <pointer: 0x6411e0e43ce0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -443,13 +452,116 @@ ffi$apply_fn(cb, tcc_callback_ptr(cb), 7.0)
 tcc_callback_close(cb)
 ```
 
-If a callback throws an error, a warning is emitted and a
-type-appropriate default is returned (0 for numeric, `FALSE` for
-logical, `NULL` for pointer).
+### Callback errors
+
+If a callback throws an R error, the trampoline catches it, emits a
+warning, and returns a type-appropriate default (0 for numeric, `FALSE`
+for logical, `NULL` for pointer). This prevents C code from seeing an
+unwound stack.
+
+``` r
+cb_err <- tcc_callback(
+  function(x) stop("boom"),
+  signature = "double (*)(double)"
+)
+
+ffi_err <- tcc_ffi() |>
+  tcc_source('
+    #define _Complex
+    double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {
+      return cb(ctx, x);
+    }
+  ') |>
+  tcc_bind(
+    call_cb_err = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+warned <- FALSE
+res <- withCallingHandlers(
+  ffi_err$call_cb_err(cb_err, tcc_callback_ptr(cb_err), 1.0),
+  warning = function(w) {
+    warned <<- TRUE
+    invokeRestart("muffleWarning")
+  }
+)
+list(warned = warned, result = res)
+#> $warned
+#> [1] TRUE
+#> 
+#> $result
+#> [1] NA
+tcc_callback_close(cb_err)
+```
+
+### Async callbacks
 
 For thread-safe scheduling from worker threads, use
-`callback_async:<signature>` and drain the queue on the main thread with
-`tcc_callback_async_drain()`.
+`callback_async:<signature>` in `tcc_bind()`. The callback is enqueued
+from any thread and executed on the main R thread when you call
+`tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once
+before use.
+
+``` r
+tcc_callback_async_enable()
+
+hits <- 0L
+cb_async <- tcc_callback(
+  function(x) { hits <<- hits + x; NULL },
+  signature = "void (*)(int)"
+)
+
+code_async <- '
+#define _Complex
+#include <pthread.h>
+
+struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
+
+static void* worker(void* data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  return NULL;
+}
+
+int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
+  if (!cb || !ctx) return -1;
+  const int n = 100;
+  struct task tasks[100];
+  pthread_t th[100];
+  for (int i = 0; i < n; i++) {
+    tasks[i].cb = cb;
+    tasks[i].ctx = ctx;
+    tasks[i].value = value;
+    if (pthread_create(&th[i], NULL, worker, &tasks[i]) != 0) {
+      for (int j = 0; j < i; j++) pthread_join(th[j], NULL);
+      return -2;
+    }
+  }
+  for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
+  return 0;
+}
+'
+
+ffi_async <- tcc_ffi() |>
+  tcc_source(code_async) |>
+  tcc_library("pthread") |>
+  tcc_bind(
+    spawn_async = list(
+      args = list("callback_async:void(int)", "ptr", "i32"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+rc <- ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
+tcc_callback_async_drain()
+hits
+#> [1] 200
+tcc_callback_close(cb_async)
+```
 
 ### SQLite: a complete example
 
@@ -547,7 +659,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x58f0736f4920>
+#> <pointer: 0x6411e49fc5e0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
