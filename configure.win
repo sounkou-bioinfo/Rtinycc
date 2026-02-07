@@ -80,6 +80,18 @@ if [ -d "$TINYCC_SRC" ]; then
     # Windows .def files for system libraries
     cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
 
+    # Generate R.def so TCC JIT code can resolve R API symbols
+    # (Rf_ScalarInteger, Rf_error, R_NilValue, etc.).
+    # R.dll lives in $R_HOME/bin/<arch>/.
+    R_DLL=$(find "${R_HOME}/bin" -name "R.dll" 2>/dev/null | head -n 1)
+    if [ -n "$R_DLL" ]; then
+        echo "Generating R.def from $R_DLL ..."
+        ./tcc.exe -impdef "$R_DLL" -o "$TINYCC_DEST/lib/R.def" \
+            || echo "WARNING: tcc -impdef failed; TCC JIT may not resolve R symbols"
+    else
+        echo "WARNING: R.dll not found; TCC JIT may not resolve R symbols"
+    fi
+
     echo "TinyCC installed to $TINYCC_DEST"
 
     # Always remove TCC source after build
