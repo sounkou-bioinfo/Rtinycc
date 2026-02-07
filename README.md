@@ -161,7 +161,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6411e2fbbe50"
+#> [1] "0x57fc1857e790"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -175,11 +175,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6411e293e7e0>
+#> <pointer: 0x57fc1711e230>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6411e349e480>
+#> <pointer: 0x57fc18f49a60>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6411e293e7e0>
+#> <pointer: 0x57fc1711e230>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -290,7 +290,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100)
 .Internal(inspect(x))
-#> @6411e254bec0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @57fc1865aa80 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -307,7 +307,7 @@ y[1]
 
 # x is no longer ALTREP -- the C mutation materialised it
 .Internal(inspect(x))
-#> @6411e254bec0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @57fc1865aa80 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Structs and unions
@@ -332,15 +332,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x6411e0f392f0>
+#> <pointer: 0x57fc18908a40>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x6411e0f392f0>
+#> <pointer: 0x57fc18908a40>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x6411e104f320>
+#> <pointer: 0x57fc1947bda0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x6411e104f320>
+#> <pointer: 0x57fc1947bda0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -385,9 +385,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x6411e0e43ce0>
+#> <pointer: 0x57fc16c81750>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x6411e0e43ce0>
+#> <pointer: 0x57fc16c81750>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -659,7 +659,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6411e49fc5e0>
+#> <pointer: 0x57fc1ac6b810>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -668,23 +668,93 @@ ffi$global_global_counter_get()
 
 ## Known limitations
 
+### `_Complex` types
+
 TCC does not support C99 `_Complex` types. Generated code works around
-this with `#define _Complex`, which suppresses the keyword. If you see
-parse errors involving complex types, apply the same workaround in your
-`tcc_source()` code.
+this with `#define _Complex`, which suppresses the keyword. Apply the
+same workaround in your own `tcc_source()` code when headers pull in
+complex types.
+
+### 64-bit integer precision
 
 R represents `i64` and `u64` values as `double`, which loses precision
-beyond $2^{53}$. For exact 64-bit arithmetic, pass pointers to
-C-allocated storage instead.
+beyond $2^{53}$. Values that differ only past that threshold become
+indistinguishable.
 
-Nested structs by value are not directly supported by the accessor
-generator. Use pointer fields and `tcc_field_addr()` to reach inner
-structs through pointer indirection.
+``` r
+sprintf("2^53:     %.0f", 2^53)
+#> [1] "2^53:     9007199254740992"
+sprintf("2^53 + 1: %.0f", 2^53 + 1)
+#> [1] "2^53 + 1: 9007199254740992"
+identical(2^53, 2^53 + 1)
+#> [1] TRUE
+```
 
-Array fields in structs require the
-`list(type = ..., size = N, array = TRUE)` syntax in `tcc_struct()`,
-which generates element-wise accessors (`_get_<field>_elt()` /
-`_set_<field>_elt()`).
+For exact 64-bit arithmetic, keep values in C-allocated storage and
+manipulate them through pointers.
+
+### Nested structs
+
+The accessor generator does not handle nested structs by value. Use
+pointer fields instead and reach inner structs with `tcc_field_addr()`.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    struct inner { int a; };
+    struct outer { struct inner* in; };
+  ') |>
+  tcc_struct("inner", accessors = c(a = "i32")) |>
+  tcc_struct("outer", accessors = c(`in` = "ptr")) |>
+  tcc_field_addr("outer", "in") |>
+  tcc_compile()
+
+o <- ffi$struct_outer_new()
+i <- ffi$struct_inner_new()
+ffi$struct_inner_set_a(i, 42L)
+#> <pointer: 0x57fc1aacd2e0>
+
+# Write the inner pointer into the outer struct
+ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
+#> <pointer: 0x57fc1b5a3930>
+
+# Read it back through indirection
+ffi$struct_outer_in_addr(o) |>
+  tcc_data_ptr() |>
+  ffi$struct_inner_get_a()
+#> [1] 42
+
+ffi$struct_inner_free(i)
+#> NULL
+ffi$struct_outer_free(o)
+#> NULL
+```
+
+### Array fields in structs
+
+Array fields require the `list(type = ..., size = N, array = TRUE)`
+syntax in `tcc_struct()`, which generates element-wise accessors.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('struct buf { unsigned char data[16]; };') |>
+  tcc_struct("buf", accessors = list(
+    data = list(type = "u8", size = 16, array = TRUE)
+  )) |>
+  tcc_compile()
+
+b <- ffi$struct_buf_new()
+ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
+#> <pointer: 0x57fc1b590a50>
+ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
+#> <pointer: 0x57fc1b590a50>
+ffi$struct_buf_get_data_elt(b, 0L)
+#> [1] 202
+ffi$struct_buf_get_data_elt(b, 1L)
+#> [1] 254
+ffi$struct_buf_free(b)
+#> NULL
+```
 
 ## License
 
