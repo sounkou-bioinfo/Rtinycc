@@ -39,6 +39,30 @@ SEXP RC_ptr_set(SEXP ptr_ref, SEXP ptr_value);
 SEXP RC_ptr_free_set_null(SEXP ptr_ref);
 SEXP RC_ptr_is_owned(SEXP ptr);
 
+// Typed read/write helpers (Bun-style)
+SEXP RC_read_i8(SEXP ptr, SEXP offset);
+SEXP RC_read_u8_typed(SEXP ptr, SEXP offset);
+SEXP RC_read_i16(SEXP ptr, SEXP offset);
+SEXP RC_read_u16(SEXP ptr, SEXP offset);
+SEXP RC_read_i32_typed(SEXP ptr, SEXP offset);
+SEXP RC_read_u32(SEXP ptr, SEXP offset);
+SEXP RC_read_i64(SEXP ptr, SEXP offset);
+SEXP RC_read_u64(SEXP ptr, SEXP offset);
+SEXP RC_read_f32(SEXP ptr, SEXP offset);
+SEXP RC_read_f64_typed(SEXP ptr, SEXP offset);
+SEXP RC_read_ptr(SEXP ptr, SEXP offset);
+SEXP RC_write_i8(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u8(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_i16(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u16(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_i32(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_f32(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_f64(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value);
+
 // Callback functions
 SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
 SEXP RC_unregister_callback(SEXP callback_ext);
@@ -85,7 +109,31 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_ptr_set",      (DL_FUNC) &RC_ptr_set,      2},
     {"RC_ptr_free_set_null", (DL_FUNC) &RC_ptr_free_set_null, 1},
     {"RC_ptr_is_owned", (DL_FUNC) &RC_ptr_is_owned, 1},
-    
+
+    // Typed read/write helpers
+    {"RC_read_i8",       (DL_FUNC) &RC_read_i8,       2},
+    {"RC_read_u8_typed", (DL_FUNC) &RC_read_u8_typed,  2},
+    {"RC_read_i16",      (DL_FUNC) &RC_read_i16,      2},
+    {"RC_read_u16",      (DL_FUNC) &RC_read_u16,      2},
+    {"RC_read_i32_typed",(DL_FUNC) &RC_read_i32_typed, 2},
+    {"RC_read_u32",      (DL_FUNC) &RC_read_u32,      2},
+    {"RC_read_i64",      (DL_FUNC) &RC_read_i64,      2},
+    {"RC_read_u64",      (DL_FUNC) &RC_read_u64,      2},
+    {"RC_read_f32",      (DL_FUNC) &RC_read_f32,      2},
+    {"RC_read_f64_typed",(DL_FUNC) &RC_read_f64_typed, 2},
+    {"RC_read_ptr",      (DL_FUNC) &RC_read_ptr,      2},
+    {"RC_write_i8",      (DL_FUNC) &RC_write_i8,      3},
+    {"RC_write_u8",      (DL_FUNC) &RC_write_u8,      3},
+    {"RC_write_i16",     (DL_FUNC) &RC_write_i16,     3},
+    {"RC_write_u16",     (DL_FUNC) &RC_write_u16,     3},
+    {"RC_write_i32",     (DL_FUNC) &RC_write_i32,     3},
+    {"RC_write_u32",     (DL_FUNC) &RC_write_u32,     3},
+    {"RC_write_i64",     (DL_FUNC) &RC_write_i64,     3},
+    {"RC_write_u64",     (DL_FUNC) &RC_write_u64,     3},
+    {"RC_write_f32",     (DL_FUNC) &RC_write_f32,     3},
+    {"RC_write_f64",     (DL_FUNC) &RC_write_f64,     3},
+    {"RC_write_ptr",     (DL_FUNC) &RC_write_ptr,     3},
+
     // Callback functions
     {"RC_register_callback",   (DL_FUNC) &RC_register_callback,   4},
     {"RC_unregister_callback", (DL_FUNC) &RC_unregister_callback, 1},

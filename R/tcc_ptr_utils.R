@@ -137,34 +137,212 @@ tcc_ptr_free_set_null <- function(ptr_ref) {
 #' Read unsigned 8-bit values from a pointer
 #'
 #' @param ptr External pointer
-#' @param n Number of values to read
-#' @return Integer vector
+#' @param n Number of values to read (legacy vectorised interface).
+#'   If provided, reads `n` consecutive u8 values starting at byte 0.
+#' @param offset Byte offset from `ptr` (scalar interface). Ignored when
+#'   `n` is supplied.
+#' @return Integer scalar (offset form) or integer vector (n form).
 #' @export
-tcc_read_u8 <- function(ptr, n) {
-  raw <- tcc_read_bytes(ptr, n)
-  readBin(raw, integer(), n = length(raw), size = 1, signed = FALSE)
+tcc_read_u8 <- function(ptr, n = NULL, offset = 0L) {
+  if (!is.null(n)) {
+    raw <- tcc_read_bytes(ptr, n)
+    return(readBin(raw, integer(), n = length(raw), size = 1, signed = FALSE))
+  }
+  .Call(RC_read_u8_typed, ptr, as.integer(offset))
+}
+
+#' Read signed 8-bit integer
+#'
+#' @inheritParams tcc_read_u8
+#' @return Integer scalar
+#' @export
+tcc_read_i8 <- function(ptr, offset = 0L) {
+  .Call(RC_read_i8, ptr, as.integer(offset))
+}
+
+#' Read signed 16-bit integer
+#'
+#' @inheritParams tcc_read_u8
+#' @return Integer scalar
+#' @export
+tcc_read_i16 <- function(ptr, offset = 0L) {
+  .Call(RC_read_i16, ptr, as.integer(offset))
+}
+
+#' Read unsigned 16-bit integer
+#'
+#' @inheritParams tcc_read_u8
+#' @return Integer scalar
+#' @export
+tcc_read_u16 <- function(ptr, offset = 0L) {
+  .Call(RC_read_u16, ptr, as.integer(offset))
 }
 
 #' Read signed 32-bit integers from a pointer
 #'
 #' @param ptr External pointer
-#' @param n Number of values to read
-#' @return Integer vector
+#' @param n Number of values to read (legacy vectorised interface).
+#'   If provided, reads `n` consecutive i32 values starting at byte 0.
+#' @param offset Byte offset from `ptr` (scalar interface). Ignored when
+#'   `n` is supplied.
+#' @return Integer scalar (offset form) or integer vector (n form).
 #' @export
-tcc_read_i32 <- function(ptr, n) {
-  raw <- tcc_read_bytes(ptr, n * 4L)
-  readBin(raw, integer(), n = n, size = 4, signed = TRUE)
+tcc_read_i32 <- function(ptr, n = NULL, offset = 0L) {
+  if (!is.null(n)) {
+    raw <- tcc_read_bytes(ptr, n * 4L)
+    return(readBin(raw, integer(), n = n, size = 4, signed = TRUE))
+  }
+  .Call(RC_read_i32_typed, ptr, as.integer(offset))
+}
+
+#' Read unsigned 32-bit integer
+#'
+#' @inheritParams tcc_read_u8
+#' @return Numeric scalar (double, exact up to 2^32-1).
+#' @export
+tcc_read_u32 <- function(ptr, offset = 0L) {
+  .Call(RC_read_u32, ptr, as.integer(offset))
+}
+
+#' Read signed 64-bit integer
+#'
+#' @inheritParams tcc_read_u8
+#' @return Numeric scalar (double, exact up to 2^53).
+#' @export
+tcc_read_i64 <- function(ptr, offset = 0L) {
+  .Call(RC_read_i64, ptr, as.integer(offset))
+}
+
+#' Read unsigned 64-bit integer
+#'
+#' @inheritParams tcc_read_u8
+#' @return Numeric scalar (double, exact up to 2^53).
+#' @export
+tcc_read_u64 <- function(ptr, offset = 0L) {
+  .Call(RC_read_u64, ptr, as.integer(offset))
+}
+
+#' Read 32-bit float
+#'
+#' @inheritParams tcc_read_u8
+#' @return Numeric scalar (promoted to double).
+#' @export
+tcc_read_f32 <- function(ptr, offset = 0L) {
+  .Call(RC_read_f32, ptr, as.integer(offset))
 }
 
 #' Read 64-bit doubles from a pointer
 #'
 #' @param ptr External pointer
-#' @param n Number of values to read
-#' @return Numeric vector
+#' @param n Number of values to read (legacy vectorised interface).
+#'   If provided, reads `n` consecutive f64 values starting at byte 0.
+#' @param offset Byte offset from `ptr` (scalar interface). Ignored when
+#'   `n` is supplied.
+#' @return Numeric scalar (offset form) or numeric vector (n form).
 #' @export
-tcc_read_f64 <- function(ptr, n) {
-  raw <- tcc_read_bytes(ptr, n * 8L)
-  readBin(raw, numeric(), n = n, size = 8, endian = .Platform$endian)
+tcc_read_f64 <- function(ptr, n = NULL, offset = 0L) {
+  if (!is.null(n)) {
+    raw <- tcc_read_bytes(ptr, n * 8L)
+    return(readBin(raw, numeric(), n = n, size = 8, endian = .Platform$endian))
+  }
+  .Call(RC_read_f64_typed, ptr, as.integer(offset))
+}
+
+#' Read a pointer at byte offset
+#'
+#' Dereferences a `void*` at the given byte offset from `ptr`.
+#' Equivalent to `*(void**)(ptr + offset)`. The returned pointer
+#' is tagged `"rtinycc_borrowed"` and will not be freed by the
+#' garbage collector.
+#'
+#' @inheritParams tcc_read_u8
+#' @return External pointer
+#' @export
+tcc_read_ptr <- function(ptr, offset = 0L) {
+  .Call(RC_read_ptr, ptr, as.integer(offset))
+}
+
+#' Write a signed 8-bit integer
+#' @param ptr External pointer
+#' @param offset Byte offset
+#' @param value Integer value to write
+#' @return `NULL` (invisibly).
+#' @export
+tcc_write_i8 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_i8, ptr, as.integer(offset), value))
+}
+
+#' Write an unsigned 8-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_u8 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_u8, ptr, as.integer(offset), value))
+}
+
+#' Write a signed 16-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_i16 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_i16, ptr, as.integer(offset), value))
+}
+
+#' Write an unsigned 16-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_u16 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_u16, ptr, as.integer(offset), value))
+}
+
+#' Write a signed 32-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_i32 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_i32, ptr, as.integer(offset), value))
+}
+
+#' Write an unsigned 32-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_u32 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_u32, ptr, as.integer(offset), value))
+}
+
+#' Write a signed 64-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_i64 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_i64, ptr, as.integer(offset), value))
+}
+
+#' Write an unsigned 64-bit integer
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_u64 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_u64, ptr, as.integer(offset), value))
+}
+
+#' Write a 32-bit float
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_f32 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_f32, ptr, as.integer(offset), value))
+}
+
+#' Write a 64-bit double
+#' @inheritParams tcc_write_i8
+#' @export
+tcc_write_f64 <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_f64, ptr, as.integer(offset), value))
+}
+
+#' Write a pointer at byte offset
+#' @param ptr External pointer (destination buffer)
+#' @param offset Byte offset
+#' @param value External pointer to write
+#' @return `NULL` (invisibly).
+#' @export
+tcc_write_ptr <- function(ptr, offset, value) {
+  invisible(.Call(RC_write_ptr, ptr, as.integer(offset), value))
 }
 
 #' Allocate memory buffer

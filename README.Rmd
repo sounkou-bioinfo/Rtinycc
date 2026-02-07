@@ -476,8 +476,13 @@ This example ties together external library linking, callbacks, and custom C hel
 
 ```{r ffi-sqlite, eval=TRUE}
 cb <- tcc_callback(
-  function(argc, argv, cols) { print("hello !") ; 0L },
-  signature = "int (*)(int, char **, char **)"
+  function(userdata, argc, argv, cols) {
+    values <- tcc_cstring(argv, argc)
+    names  <- tcc_cstring(cols, argc)
+    print(setNames(values, names))
+    0L
+  },
+  signature = "int (*)(void*, int, char **, char **)"
 )
 
 sqlite <- tcc_ffi() |>
@@ -498,7 +503,7 @@ sqlite <- tcc_ffi() |>
     close_db = list(args = list("ptr"), returns = "i32"),
     sqlite3_libversion = list(args = list(), returns = "cstring"),
     sqlite3_exec = list(
-      args = list("ptr", "cstring", "callback:int(int, char **, char **)", "ptr", "ptr"),
+      args = list("ptr", "cstring", "callback:int(void*, int, char **, char **)", "ptr", "ptr"),
       returns = "i32"
     )
   ) |>
@@ -508,7 +513,8 @@ sqlite$sqlite3_libversion()
 
 db <- sqlite$open_db()
 sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callback_ptr(cb), tcc_null_ptr())
-sqlite$sqlite3_exec(db, "INSERT INTO t VALUES (1, 'hello');", cb, tcc_callback_ptr(cb), tcc_null_ptr())
+sqlite$sqlite3_exec(db, "INSERT INTO t VALUES (1, 'hello'), (2, 'world');", cb, tcc_callback_ptr(cb), tcc_null_ptr())
+sqlite$sqlite3_exec(db, "SELECT * FROM t;", cb, tcc_callback_ptr(cb), tcc_null_ptr())
 sqlite$close_db(db)
 tcc_callback_close(cb)
 ```

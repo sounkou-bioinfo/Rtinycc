@@ -501,6 +501,158 @@ SEXP RC_write_bytes(SEXP ptr, SEXP raw) {
 }
 
 // ============================================================================
+// Typed read/write helpers (Bun-style)
+// ============================================================================
+
+/* Helper: validate external pointer and compute base + byte_offset. */
+static inline unsigned char *ptr_at(SEXP ptr, SEXP offset) {
+    if (TYPEOF(ptr) != EXTPTRSXP) Rf_error("Expected external pointer");
+    unsigned char *base = (unsigned char *)R_ExternalPtrAddr(ptr);
+    if (!base) Rf_error("Pointer is NULL");
+    return base + (size_t)Rf_asInteger(offset);
+}
+
+/* --- scalar reads -------------------------------------------------------- */
+
+SEXP RC_read_i8(SEXP ptr, SEXP offset) {
+    int8_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarInteger((int)v);
+}
+
+SEXP RC_read_u8_typed(SEXP ptr, SEXP offset) {
+    uint8_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarInteger((int)v);
+}
+
+SEXP RC_read_i16(SEXP ptr, SEXP offset) {
+    int16_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarInteger((int)v);
+}
+
+SEXP RC_read_u16(SEXP ptr, SEXP offset) {
+    uint16_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarInteger((int)v);
+}
+
+SEXP RC_read_i32_typed(SEXP ptr, SEXP offset) {
+    int32_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarInteger(v);
+}
+
+SEXP RC_read_u32(SEXP ptr, SEXP offset) {
+    uint32_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarReal((double)v);
+}
+
+SEXP RC_read_i64(SEXP ptr, SEXP offset) {
+    int64_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarReal((double)v);
+}
+
+SEXP RC_read_u64(SEXP ptr, SEXP offset) {
+    uint64_t v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarReal((double)v);
+}
+
+SEXP RC_read_f32(SEXP ptr, SEXP offset) {
+    float v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarReal((double)v);
+}
+
+SEXP RC_read_f64_typed(SEXP ptr, SEXP offset) {
+    double v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return Rf_ScalarReal(v);
+}
+
+/* Read a pointer value at byte offset (dereference void**). */
+SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
+    void *v;
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
+    return R_MakeExternalPtr(v, Rf_install("rtinycc_borrowed"), R_NilValue);
+}
+
+/* --- scalar writes ------------------------------------------------------- */
+
+SEXP RC_write_i8(SEXP ptr, SEXP offset, SEXP value) {
+    int8_t v = (int8_t)Rf_asInteger(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_u8(SEXP ptr, SEXP offset, SEXP value) {
+    uint8_t v = (uint8_t)Rf_asInteger(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_i16(SEXP ptr, SEXP offset, SEXP value) {
+    int16_t v = (int16_t)Rf_asInteger(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_u16(SEXP ptr, SEXP offset, SEXP value) {
+    uint16_t v = (uint16_t)Rf_asInteger(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_i32(SEXP ptr, SEXP offset, SEXP value) {
+    int32_t v = (int32_t)Rf_asInteger(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value) {
+    uint32_t v = (uint32_t)Rf_asReal(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value) {
+    int64_t v = (int64_t)Rf_asReal(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value) {
+    uint64_t v = (uint64_t)Rf_asReal(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_f32(SEXP ptr, SEXP offset, SEXP value) {
+    float v = (float)Rf_asReal(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_f64(SEXP ptr, SEXP offset, SEXP value) {
+    double v = Rf_asReal(value);
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value) {
+    void *v = NULL;
+    if (TYPEOF(value) == EXTPTRSXP) {
+        v = R_ExternalPtrAddr(value);
+    }
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
+    return R_NilValue;
+}
+
+// ============================================================================
 // Callback Registration and Invocation
 // ============================================================================
 

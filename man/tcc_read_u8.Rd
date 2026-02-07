@@ -4,15 +4,19 @@
 \alias{tcc_read_u8}
 \title{Read unsigned 8-bit values from a pointer}
 \usage{
-tcc_read_u8(ptr, n)
+tcc_read_u8(ptr, n = NULL, offset = 0L)
 }
 \arguments{
 \item{ptr}{External pointer}
 
-\item{n}{Number of values to read}
+\item{n}{Number of values to read (legacy vectorised interface).
+If provided, reads \code{n} consecutive u8 values starting at byte 0.}
+
+\item{offset}{Byte offset from \code{ptr} (scalar interface). Ignored when
+\code{n} is supplied.}
 }
 \value{
-Integer vector
+Integer scalar (offset form) or integer vector (n form).
 }
 \description{
 Read unsigned 8-bit values from a pointer

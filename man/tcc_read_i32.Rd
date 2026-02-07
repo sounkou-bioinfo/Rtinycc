@@ -4,15 +4,19 @@
 \alias{tcc_read_i32}
 \title{Read signed 32-bit integers from a pointer}
 \usage{
-tcc_read_i32(ptr, n)
+tcc_read_i32(ptr, n = NULL, offset = 0L)
 }
 \arguments{
 \item{ptr}{External pointer}
 
-\item{n}{Number of values to read}
+\item{n}{Number of values to read (legacy vectorised interface).
+If provided, reads \code{n} consecutive i32 values starting at byte 0.}
+
+\item{offset}{Byte offset from \code{ptr} (scalar interface). Ignored when
+\code{n} is supplied.}
 }
 \value{
-Integer vector
+Integer scalar (offset form) or integer vector (n form).
 }
 \description{
 Read signed 32-bit integers from a pointer

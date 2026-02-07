@@ -4,15 +4,19 @@
 \alias{tcc_read_f64}
 \title{Read 64-bit doubles from a pointer}
 \usage{
-tcc_read_f64(ptr, n)
+tcc_read_f64(ptr, n = NULL, offset = 0L)
 }
 \arguments{
 \item{ptr}{External pointer}
 
-\item{n}{Number of values to read}
+\item{n}{Number of values to read (legacy vectorised interface).
+If provided, reads \code{n} consecutive f64 values starting at byte 0.}
+
+\item{offset}{Byte offset from \code{ptr} (scalar interface). Ignored when
+\code{n} is supplied.}
 }
 \value{
-Numeric vector
+Numeric scalar (offset form) or numeric vector (n form).
 }
 \description{
 Read 64-bit doubles from a pointer
