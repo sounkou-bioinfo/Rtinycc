@@ -1,3 +1,5 @@
+# Rtinycc 0.0.3.9000 (development version)
+
 # Rtinycc 0.0.3
 
 - Add typed memory read/write helpers inspired by Bun's FFI and the ctypesio package: `tcc_read_i8()`, `tcc_read_u8()`, `tcc_read_i16()`, `tcc_read_u16()`, `tcc_read_i32()`, `tcc_read_u32()`, `tcc_read_i64()`, `tcc_read_u64()`, `tcc_read_f32()`, `tcc_read_f64()`, `tcc_read_ptr()` and corresponding `tcc_write_*()` functions. All operate at a byte offset and use `memcpy` internally for alignment safety.
