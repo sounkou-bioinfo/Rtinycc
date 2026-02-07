@@ -476,7 +476,7 @@ This example ties together external library linking, callbacks, and custom C hel
 
 ```{r ffi-sqlite, eval=TRUE}
 cb <- tcc_callback(
-  function(argc, argv, cols) { message("hello !") ; 0L },
+  function(argc, argv, cols) { print("hello !") ; 0L },
   signature = "int (*)(int, char **, char **)"
 )
 
