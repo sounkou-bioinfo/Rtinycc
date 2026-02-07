@@ -135,7 +135,7 @@ tcc_call_symbol(state, "call_r_sqrt", return = "double")
 
 ### Pointer utilities
 
-Rtinycc provides helpers for managing external pointers and C strings.
+Rtinycc ships a set of typed memory access functions similar to what the [ctypesio](https://cran.r-project.org/package=ctypesio) package offers, but designed around our FFI pointer model. Every scalar C type has a corresponding `tcc_read_*` / `tcc_write_*` pair that operates at a byte offset into any external pointer, so you can walk structs, arrays, and output parameters without writing C helpers.
 
 ```{r ffi-utils}
 ptr <- tcc_cstring("hello")
@@ -144,6 +144,17 @@ tcc_read_bytes(ptr, 5)
 tcc_ptr_addr(ptr, hex = TRUE)
 tcc_ptr_is_null(ptr)
 tcc_free(ptr)
+```
+
+Typed reads and writes cover the full scalar range (`i8`/`u8`, `i16`/`u16`, `i32`/`u32`, `i64`/`u64`, `f32`/`f64`) plus pointer dereferencing via `tcc_read_ptr` / `tcc_write_ptr`. All operations use a byte offset and `memcpy` internally for alignment safety.
+
+```{r ffi-typed-rw}
+buf <- tcc_malloc(32)
+tcc_write_i32(buf, 0L, 42L)
+tcc_write_f64(buf, 8L, pi)
+tcc_read_i32(buf, offset = 0L)
+tcc_read_f64(buf, offset = 8L)
+tcc_free(buf)
 ```
 
 Pointer-to-pointer workflows are supported for C APIs that return values through output parameters.
@@ -472,17 +483,25 @@ tcc_callback_close(cb_async)
 
 ### SQLite: a complete example
 
-This example ties together external library linking, callbacks, and custom C helpers. We open an in-memory SQLite database, execute queries, and collect rows through an R callback.
+This example ties together external library linking, callbacks, and pointer dereferencing. We open an in-memory SQLite database, execute queries, and collect rows through an R callback that reads `char**` arrays using `tcc_read_ptr` and `tcc_read_cstring`.
 
 ```{r ffi-sqlite, eval=TRUE}
+ptr_size <- .Machine$sizeof.pointer
+
+read_string_array <- function(ptr, n) {
+  vapply(seq_len(n), function(i) {
+    tcc_read_cstring(tcc_read_ptr(ptr, (i - 1L) * ptr_size))
+  }, "")
+}
+
 cb <- tcc_callback(
-  function(userdata, argc, argv, cols) {
-    values <- tcc_cstring(argv, argc)
-    names  <- tcc_cstring(cols, argc)
-    print(setNames(values, names))
+  function(argc, argv, cols) {
+    values <- read_string_array(argv, argc)
+    names  <- read_string_array(cols, argc)
+    cat(paste(names, values, sep = " = ", collapse = ", "), "\n")
     0L
   },
-  signature = "int (*)(void*, int, char **, char **)"
+  signature = "int (*)(int, char **, char **)"
 )
 
 sqlite <- tcc_ffi() |>
@@ -503,7 +522,7 @@ sqlite <- tcc_ffi() |>
     close_db = list(args = list("ptr"), returns = "i32"),
     sqlite3_libversion = list(args = list(), returns = "cstring"),
     sqlite3_exec = list(
-      args = list("ptr", "cstring", "callback:int(void*, int, char **, char **)", "ptr", "ptr"),
+      args = list("ptr", "cstring", "callback:int(int, char **, char **)", "ptr", "ptr"),
       returns = "i32"
     )
   ) |>

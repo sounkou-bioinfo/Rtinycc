@@ -152,7 +152,12 @@ tcc_call_symbol(state, "call_r_sqrt", return = "double")
 
 ### Pointer utilities
 
-Rtinycc provides helpers for managing external pointers and C strings.
+Rtinycc ships a set of typed memory access functions similar to what the
+[ctypesio](https://cran.r-project.org/package=ctypesio) package offers,
+but designed around our FFI pointer model. Every scalar C type has a
+corresponding `tcc_read_*` / `tcc_write_*` pair that operates at a byte
+offset into any external pointer, so you can walk structs, arrays, and
+output parameters without writing C helpers.
 
 ``` r
 ptr <- tcc_cstring("hello")
@@ -161,10 +166,27 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5fad45d6ecf0"
+#> [1] "0x5af4430691e0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
+#> NULL
+```
+
+Typed reads and writes cover the full scalar range (`i8`/`u8`,
+`i16`/`u16`, `i32`/`u32`, `i64`/`u64`, `f32`/`f64`) plus pointer
+dereferencing via `tcc_read_ptr` / `tcc_write_ptr`. All operations use a
+byte offset and `memcpy` internally for alignment safety.
+
+``` r
+buf <- tcc_malloc(32)
+tcc_write_i32(buf, 0L, 42L)
+tcc_write_f64(buf, 8L, pi)
+tcc_read_i32(buf, offset = 0L)
+#> [1] 42
+tcc_read_f64(buf, offset = 8L)
+#> [1] 3.141593
+tcc_free(buf)
 #> NULL
 ```
 
@@ -175,11 +197,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5fad43dfaba0>
+#> <pointer: 0x5af4431436b0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5fad45c48c60>
+#> <pointer: 0x5af445456af0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5fad43dfaba0>
+#> <pointer: 0x5af4431436b0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -290,7 +312,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100)
 .Internal(inspect(x))
-#> @5fad450534d0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5af44504d130 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -307,7 +329,7 @@ y[1]
 
 # x is no longer ALTREP -- the C mutation materialised it
 .Internal(inspect(x))
-#> @5fad450534d0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5af44504d130 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Structs and unions
@@ -332,15 +354,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5fad442ccd40>
+#> <pointer: 0x5af4426f9000>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5fad442ccd40>
+#> <pointer: 0x5af4426f9000>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5fad465328b0>
+#> <pointer: 0x5af442855340>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5fad465328b0>
+#> <pointer: 0x5af442855340>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -385,9 +407,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5fad454985b0>
+#> <pointer: 0x5af4428c6ad0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5fad454985b0>
+#> <pointer: 0x5af4428c6ad0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -563,18 +585,27 @@ tcc_callback_close(cb_async)
 ### SQLite: a complete example
 
 This example ties together external library linking, callbacks, and
-custom C helpers. We open an in-memory SQLite database, execute queries,
-and collect rows through an R callback.
+pointer dereferencing. We open an in-memory SQLite database, execute
+queries, and collect rows through an R callback that reads `char**`
+arrays using `tcc_read_ptr` and `tcc_read_cstring`.
 
 ``` r
+ptr_size <- .Machine$sizeof.pointer
+
+read_string_array <- function(ptr, n) {
+  vapply(seq_len(n), function(i) {
+    tcc_read_cstring(tcc_read_ptr(ptr, (i - 1L) * ptr_size))
+  }, "")
+}
+
 cb <- tcc_callback(
-  function(userdata, argc, argv, cols) {
-    values <- tcc_cstring(argv, argc)
-    names  <- tcc_cstring(cols, argc)
-    print(setNames(values, names))
+  function(argc, argv, cols) {
+    values <- read_string_array(argv, argc)
+    names  <- read_string_array(cols, argc)
+    cat(paste(names, values, sep = " = ", collapse = ", "), "\n")
     0L
   },
-  signature = "int (*)(void*, int, char **, char **)"
+  signature = "int (*)(int, char **, char **)"
 )
 
 sqlite <- tcc_ffi() |>
@@ -595,7 +626,7 @@ sqlite <- tcc_ffi() |>
     close_db = list(args = list("ptr"), returns = "i32"),
     sqlite3_libversion = list(args = list(), returns = "cstring"),
     sqlite3_exec = list(
-      args = list("ptr", "cstring", "callback:int(void*, int, char **, char **)", "ptr", "ptr"),
+      args = list("ptr", "cstring", "callback:int(int, char **, char **)", "ptr", "ptr"),
       returns = "i32"
     )
   ) |>
@@ -610,9 +641,9 @@ sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callb
 sqlite$sqlite3_exec(db, "INSERT INTO t VALUES (1, 'hello'), (2, 'world');", cb, tcc_callback_ptr(cb), tcc_null_ptr())
 #> [1] 0
 sqlite$sqlite3_exec(db, "SELECT * FROM t;", cb, tcc_callback_ptr(cb), tcc_null_ptr())
-#> Warning in sqlite$sqlite3_exec(db, "SELECT * FROM t;", cb,
-#> tcc_callback_ptr(cb), : Callback raised an error
-#> [1] 4
+#> id = 1, name = hello 
+#> id = 2, name = world
+#> [1] 0
 sqlite$close_db(db)
 #> [1] 0
 tcc_callback_close(cb)
@@ -665,7 +696,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5fad4366c450>
+#> <pointer: 0x5af446fe5930>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -718,11 +749,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5fad430473f0>
+#> <pointer: 0x5af4477a4900>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5fad47694710>
+#> <pointer: 0x5af44689c230>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -751,9 +782,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5fad44485890>
+#> <pointer: 0x5af447d9dfb0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5fad44485890>
+#> <pointer: 0x5af447d9dfb0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
