@@ -16,7 +16,9 @@ tcc_link(
 )
 }
 \arguments{
-\item{path}{Path to the shared library (e.g., "libsqlite3.so")}
+\item{path}{Library short name (e.g., "m", "sqlite3") or full path to
+the shared library. Short names are resolved via
+\code{\link[=tcc_find_library]{tcc_find_library()}} using platform-appropriate suffixes.}
 
 \item{symbols}{Named list of symbol definitions with:
 \itemize{
@@ -40,7 +42,7 @@ tcc_link(
 A tcc_compiled object with callable functions
 }
 \description{
-Link a system library (like libsqlite3.so) and generate type-safe
+Link a system library (like libsqlite3) and generate type-safe
 wrappers automatically using TinyCC JIT compilation (API mode).
 Unlike dlopen(), this uses TinyCC to compile bindings that handle
 type conversion between R and C automatically.
@@ -62,7 +64,7 @@ sqlite$sqlite3_libversion()
 
 # Example with custom user code for helper functions
 math_with_helpers <- tcc_link(
-  "libm.so.6",
+  "m",
   symbols = list(
     sqrt = list(args = list("f64"), returns = "f64"),
     safe_sqrt = list(args = list("f64"), returns = "f64")

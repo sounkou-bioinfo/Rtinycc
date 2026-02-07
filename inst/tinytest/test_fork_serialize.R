@@ -154,7 +154,7 @@ expect_equal(
 )
 
 # --- Test 9: tcc_link round-trip ----------------------------------------
-math <- tcc_link("libm.so.6", symbols = list(
+math <- tcc_link("m", symbols = list(
     sqrt = list(args = list("f64"), returns = "f64")
 ))
 expect_equal(math$sqrt(25.0), 5.0, info = "tcc_link: original works")

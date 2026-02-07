@@ -533,7 +533,7 @@ tcc_treesitter_globals(header)
 
 # Bind parsed functions to libm
 symbols <- tcc_treesitter_bindings(header)
-math <- tcc_link("libm.so.6", symbols = symbols)
+math <- tcc_link("m", symbols = symbols)
 math$sqrt(16.0)
 
 # Generate struct/enum/global helpers

@@ -1018,12 +1018,14 @@ tcc_find_library <- function(name) {
 
 #' Link an external shared library with Bun-style FFI bindings
 #'
-#' Link a system library (like libsqlite3.so) and generate type-safe
+#' Link a system library (like libsqlite3) and generate type-safe
 #' wrappers automatically using TinyCC JIT compilation (API mode).
 #' Unlike dlopen(), this uses TinyCC to compile bindings that handle
 #' type conversion between R and C automatically.
 #'
-#' @param path Path to the shared library (e.g., "libsqlite3.so")
+#' @param path Library short name (e.g., "m", "sqlite3") or full path to
+#'   the shared library. Short names are resolved via
+#'   [tcc_find_library()] using platform-appropriate suffixes.
 #' @param symbols Named list of symbol definitions with:
 #'   \itemize{
 #'     \item args: List of FFI types for arguments
@@ -1054,7 +1056,7 @@ tcc_find_library <- function(name) {
 #'
 #' # Example with custom user code for helper functions
 #' math_with_helpers <- tcc_link(
-#'   "libm.so.6",
+#'   "m",
 #'   symbols = list(
 #'     sqrt = list(args = list("f64"), returns = "f64"),
 #'     safe_sqrt = list(args = list("f64"), returns = "f64")
