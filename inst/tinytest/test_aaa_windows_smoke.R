@@ -56,7 +56,75 @@ expect_equal(
     info = "smoke: global variable"
 )
 
-# ---------- 5. Struct (calloc + R_MakeExternalPtr + RC_free_finalizer) --------
+# ---------- 5. calloc + free via JIT (no R API, just CRT) --------------------
+expect_equal(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "
+#include <stdlib.h>
+int test_calloc(void) {
+    int *p = (int*)calloc(1, sizeof(int));
+    if (!p) return -1;
+    *p = 123;
+    int v = *p;
+    free(p);
+    return v;
+}
+")
+        ffi <- tcc_bind(ffi, test_calloc = list(args = list(), returns = "i32"))
+        compiled <- tcc_compile(ffi)
+        compiled$test_calloc()
+    },
+    123L,
+    info = "smoke: calloc/free from CRT"
+)
+
+# ---------- 6. R_MakeExternalPtr + R_NilValue (R API data imports) -----------
+expect_true(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "
+#include <stdlib.h>
+SEXP test_extptr(void) {
+    int *p = (int*)calloc(1, sizeof(int));
+    if (!p) Rf_error(\"OOM\");
+    *p = 42;
+    SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
+    return ext;
+}
+")
+        ffi <- tcc_bind(ffi, test_extptr = list(args = list(), returns = "sexp"))
+        compiled <- tcc_compile(ffi)
+        res <- compiled$test_extptr()
+        is(res, "externalptr")
+    },
+    info = "smoke: R_MakeExternalPtr + R_NilValue"
+)
+
+# ---------- 7. R_RegisterCFinalizerEx with RC_free_finalizer -----------------
+expect_true(
+    {
+        ffi <- tcc_ffi()
+        ffi <- tcc_source(ffi, "
+#include <stdlib.h>
+SEXP test_finalizer(void) {
+    int *p = (int*)calloc(1, sizeof(int));
+    if (!p) Rf_error(\"OOM\");
+    *p = 99;
+    SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
+    R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);
+    return ext;
+}
+")
+        ffi <- tcc_bind(ffi, test_finalizer = list(args = list(), returns = "sexp"))
+        compiled <- tcc_compile(ffi)
+        res <- compiled$test_finalizer()
+        is(res, "externalptr")
+    },
+    info = "smoke: R_RegisterCFinalizerEx + RC_free_finalizer"
+)
+
+# ---------- 8. Full struct: new/get/set/free ---------------------------------
 expect_true(
     {
         ffi <- tcc_ffi()
