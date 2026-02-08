@@ -1,0 +1,117 @@
+#!/bin/sh
+# configure.win — build TinyCC on Windows via Rtools (MSYS2/mingw)
+set -ex
+
+# R's build configuration
+MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
+CC=`"${R_HOME}/bin/R" CMD config CC`
+CC=$(echo "${CC}" | awk '{print $1}')
+AR=`"${R_HOME}/bin/R" CMD config AR`
+
+THISDir=$(dirname "$0")
+THISDir=$(cd "$THISDir" && pwd)
+TINYCC_SRC="${THISDir}/src/tinycc"
+
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
+"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+
+TINYCC_DEST="${THISDir}/inst/tinycc"
+echo "Package source directory: $THISDir"
+echo "TinyCC will be installed to: $TINYCC_DEST"
+
+if [ -d "$TINYCC_SRC" ]; then
+    cd "$TINYCC_SRC"
+    echo "Configuring and building tinycc ..."
+
+    # TCC's configure detects WIN32 from the compiler target and
+    # defaults to building libtcc.dll (CONFIG_static=no).
+    ./configure --prefix="$TINYCC_DEST" \
+        --cc="$CC" \
+        --ar="$AR"
+
+    mkdir -p "$TINYCC_DEST/lib"
+    mkdir -p "$TINYCC_DEST/include"
+
+    echo "Building libtcc.dll, libtcc.a and tcc.exe ..."
+    # Build the shared library (libtcc.dll) + static archive + CLI
+    "$MAKE" libtcc.dll libtcc.a tcc.exe libtcc1.a \
+        || { echo "Failed to build TinyCC" >&2; exit 1; }
+
+    # --- install tcc.exe ---
+    # TCC searches for include/lib relative to the executable, so keep it
+    # at the root of inst/tinycc/ (not in bin/).
+    if [ -f "tcc.exe" ]; then
+        cp -f "tcc.exe" "$TINYCC_DEST/"
+    else
+        echo "tcc.exe not found after build" >&2
+        exit 1
+    fi
+
+    # --- install libtcc API header ---
+    # libtcc.h goes into its own directory so that Makevars.win can
+    # include it without pulling in TCC's system headers (which
+    # conflict with Rtools/MinGW headers at build time).
+    mkdir -p "$TINYCC_DEST/libtcc"
+    cp -f libtcc.h "$TINYCC_DEST/libtcc/" 2>/dev/null || true
+
+    # --- install TCC system headers (for TCC runtime use only) ---
+    cp -f include/*.h "$TINYCC_DEST/include/" 2>/dev/null || true
+    cp -f tcclib.h "$TINYCC_DEST/include/" 2>/dev/null || true
+    mkdir -p "$TINYCC_DEST/include/winapi"
+    cp -rf win32/include/* "$TINYCC_DEST/include/" 2>/dev/null || true
+
+    # --- install libraries ---
+    # Both DLL and static archive; Makevars.win links against the DLL
+    # and install.libs.R copies it next to Rtinycc.dll (rpath equivalent).
+    cp -f libtcc.dll "$TINYCC_DEST/lib/" 2>/dev/null || true
+    cp -f libtcc.a "$TINYCC_DEST/lib/" 2>/dev/null || true
+    # tcc.exe is linked against libtcc.dll; it needs a copy next to it.
+    cp -f libtcc.dll "$TINYCC_DEST/" 2>/dev/null || true
+
+    # libtcc1.a is the runtime support library (needed by the CLI)
+    LIBTCC1_SRC=$(find . -name "libtcc1.a" 2>/dev/null | head -n 1)
+    if [ -n "$LIBTCC1_SRC" ]; then
+        mkdir -p "$TINYCC_DEST/lib/tcc"
+        cp -f "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" 2>/dev/null || true
+    else
+        echo "WARNING: libtcc1.a not found during build; CLI may fail"
+    fi
+
+    # Windows .def files for system libraries
+    cp -f win32/lib/*.def "$TINYCC_DEST/lib/" 2>/dev/null || true
+
+    # Generate R.def so TCC JIT code can resolve R API symbols
+    # (Rf_ScalarInteger, Rf_error, R_NilValue, etc.).
+    # R.dll lives in $R_HOME/bin/<arch>/.
+    R_DLL=$(find "${R_HOME}/bin" -name "R.dll" 2>/dev/null | head -n 1)
+    if [ -n "$R_DLL" ]; then
+        echo "Generating R.def from $R_DLL ..."
+        ./tcc.exe -impdef "$R_DLL" -o "$TINYCC_DEST/lib/R.def" \
+            || echo "WARNING: tcc -impdef failed; TCC JIT may not resolve R symbols"
+    else
+        echo "WARNING: R.dll not found; TCC JIT may not resolve R symbols"
+    fi
+
+    # Generate ucrt.def to replace msvcrt.def.
+    # R 4.2+ uses UCRT; TCC defaults to msvcrt.  If JIT code calls
+    # calloc() from msvcrt and the host frees with UCRT's free(),
+    # the heap mismatch causes a crash.  Replacing msvcrt.def with
+    # ucrt.def (named msvcrt.def so TCC picks it up automatically)
+    # ensures JIT code uses the same CRT as R.
+    UCRT_DLL=$(find /c/Windows/System32 -maxdepth 1 -iname "ucrtbase.dll" 2>/dev/null | head -n 1)
+    if [ -n "$UCRT_DLL" ]; then
+        echo "Generating ucrt.def from $UCRT_DLL ..."
+        ./tcc.exe -impdef "$UCRT_DLL" -o "$TINYCC_DEST/lib/msvcrt.def" \
+            || echo "WARNING: tcc -impdef ucrtbase.dll failed; keeping original msvcrt.def"
+    else
+        echo "WARNING: ucrtbase.dll not found; keeping original msvcrt.def"
+    fi
+
+    echo "TinyCC installed to $TINYCC_DEST"
+
+    # Always remove TCC source after build
+    rm -rf "$TINYCC_SRC" || true
+else
+    echo "Error: tinycc source directory $TINYCC_SRC does not exist."
+    exit 1
+fi
