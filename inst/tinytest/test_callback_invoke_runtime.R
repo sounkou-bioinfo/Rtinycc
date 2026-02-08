@@ -51,8 +51,6 @@ expect_true(
     on.exit(
       {
         close_if_valid(cb_err)
-        # rm(cb_ptr_err)
-        # gc()
       },
       add = TRUE
     )
@@ -70,16 +68,20 @@ expect_true(
       tcc_compile()
 
     warned <- FALSE
-    res <- withCallingHandlers(
-      ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
-      warning = function(w) {
-        warned <<- TRUE
-        invokeRestart("muffleWarning")
-      }
+    res <- NULL
+    capture.output(
+      {
+        res <- withCallingHandlers(
+          ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
+          warning = function(w) {
+            warned <<- TRUE
+            invokeRestart("muffleWarning")
+          }
+        )
+      },
+      type = "message"
     )
     ok <- isTRUE(warned && is.na(res))
-    # rm(ffi_err)
-    # gc()
     ok
   },
   info = "Callback errors yield warning and NA"
@@ -182,8 +184,7 @@ if (.Platform$OS.type != "windows") {
       on.exit(
         {
           close_if_valid(cb_async)
-          # rm(cb_ptr_async)
-          # gc()
+          f
         },
         add = TRUE
       )

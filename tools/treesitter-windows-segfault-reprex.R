@@ -1,21 +1,21 @@
-# Minimal reprex: treesitter segfault on Windows at R exit
+# Minimal reprex: treesitter + Rtinycc segfault on Windows at R exit
 #
 # On Windows, R crashes (segfault) after this script finishes.
-# The crash occurs during R's exit-time finalizer sweep because
-# treesitter registers all external pointers (parser, tree, query)
-# with R_RegisterCFinalizerEx(..., onexit = TRUE).
+# treesitter alone does NOT crash. The crash requires both treesitter
+# and Rtinycc (which loads libtcc.dll) to be loaded in the same session.
 #
-# At process exit, the finalizers call ts_parser_delete() / ts_tree_delete()
-# / ts_query_delete() which call free(). On Windows, if the CRT heap is
-# partially torn down or the DLL unload order is unfavorable, free() segfaults.
+# Hypothesis: libtcc.dll's presence or unload order during exit interferes
+# with treesitter's onexit=TRUE finalizers (ts_parser_delete, ts_tree_delete,
+# ts_query_delete which call free()).
 #
 # Run with: Rscript treesitter-windows-segfault-reprex.R
-# Or inside R CMD check examples.
 #
-# The fix: change finalize_on_exit from TRUE to FALSE in
-# src/external-pointer.c in the treesitter package.
-# At process exit the OS reclaims all memory; running free() is pointless.
+# Try each variant to narrow down the trigger:
+#   1. treesitter only            → no crash
+#   2. treesitter + library(Rtinycc) → crash?
+#   3. treesitter + Rtinycc JIT   → crash?
 
+# --- Variant 1: treesitter only (known: no crash) ---
 library(treesitter)
 library(treesitter.c)
 
@@ -23,11 +23,18 @@ lang <- treesitter.c::language()
 parser <- treesitter::parser(lang)
 tree <- treesitter::parser_parse(parser, "int add(int a, int b);")
 root <- treesitter::tree_root_node(tree)
-
-# Also create a query object (another onexit=TRUE finalizer)
 query <- treesitter::query(lang, "(function_declarator) @fn")
 caps <- treesitter::query_captures(query, root)
 
-message(
-  "Done. If on Windows, the segfault happens after this line during R exit."
-)
+# --- Variant 2: uncomment to also load Rtinycc (loads libtcc.dll) ---
+# library(Rtinycc)
+
+# --- Variant 3: uncomment to also do JIT compilation ---
+# library(Rtinycc)
+# ffi <- tcc_ffi() |>
+#   tcc_source("int add(int a, int b) { return a + b; }") |>
+#   tcc_bind(add = list(args = list("i32", "i32"), returns = "i32")) |>
+#   tcc_compile()
+# stopifnot(ffi$add(2L, 3L) == 5L)
+
+message("Done. If crash happens, it occurs after this line during R exit.")
