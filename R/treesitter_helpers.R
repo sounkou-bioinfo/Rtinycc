@@ -14,10 +14,11 @@
 #' @keywords internal
 #'
 #' @examples
-#'
+#' \dontrun{
 #' header <- "double sqrt(double x);\nint add(int a, int b);"
 #' tcc_treesitter_functions(header)
 #' tcc_treesitter_bindings(header)
+#' }
 #'
 #' @section treesitter.c:
 #' These helpers require the optional treesitter.c package.
@@ -39,8 +40,10 @@ NULL
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "double sqrt(double x);"
 #' tcc_treesitter_functions(header)
+#' }
 tcc_treesitter_functions <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_function_nodes(
@@ -59,8 +62,10 @@ tcc_treesitter_functions <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "struct point { double x; double y; };"
 #' tcc_treesitter_structs(header)
+#' }
 tcc_treesitter_structs <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_struct_nodes(root, ...)
@@ -74,8 +79,10 @@ tcc_treesitter_structs <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "union data { int i; double d; };"
 #' tcc_treesitter_unions(header)
+#' }
 tcc_treesitter_unions <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_union_nodes(root, ...)
@@ -89,8 +96,10 @@ tcc_treesitter_unions <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "union data { int i; double d; };"
 #' tcc_treesitter_union_members(header)
+#' }
 tcc_treesitter_union_members <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_union_members_from_root(root, ...)
@@ -104,8 +113,10 @@ tcc_treesitter_union_members <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "enum status { OK = 0, ERR = 1 };"
 #' tcc_treesitter_enums(header)
+#' }
 tcc_treesitter_enums <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_enum_nodes(root, ...)
@@ -119,8 +130,10 @@ tcc_treesitter_enums <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "enum status { OK = 0, ERR = 1 };"
 #' tcc_treesitter_enum_members(header)
+#' }
 tcc_treesitter_enum_members <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_enum_members_from_root(root, ...)
@@ -134,8 +147,10 @@ tcc_treesitter_enum_members <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "struct point { double x; double y; };"
 #' tcc_treesitter_struct_members(header)
+#' }
 tcc_treesitter_struct_members <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_struct_members(root, ...)
@@ -149,8 +164,10 @@ tcc_treesitter_struct_members <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "int global_counter;"
 #' tcc_treesitter_globals(header)
+#' }
 tcc_treesitter_globals <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_globals_from_root(root, ...)
@@ -164,8 +181,10 @@ tcc_treesitter_globals <- function(header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "int global_counter;"
 #' tcc_treesitter_global_types(header)
+#' }
 tcc_treesitter_global_types <- function(header, ...) {
   root <- .tcc_treesitter_root(header)
   treesitter.c::get_globals_with_types_from_root(root, ...)
@@ -181,7 +200,9 @@ tcc_treesitter_global_types <- function(header, ...) {
 #' @export
 #'
 #' @examples
-#' # tcc_treesitter_defines("/usr/include/math.h")
+#' \dontrun{
+#' tcc_treesitter_defines("/usr/include/math.h")
+#' }
 tcc_treesitter_defines <- function(
   file,
   use_cpp = TRUE,
@@ -206,8 +227,10 @@ tcc_treesitter_defines <- function(
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' tcc_map_c_type_to_ffi("int")
 #' tcc_map_c_type_to_ffi("const char *")
+#' }
 tcc_map_c_type_to_ffi <- function(c_type) {
   x <- trimws(as.character(c_type))
   x <- gsub("\\s+", " ", x)
@@ -295,8 +318,10 @@ tcc_map_c_type_to_ffi <- function(c_type) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "double sqrt(double x);"
 #' symbols <- tcc_treesitter_bindings(header)
+#' }
 tcc_treesitter_bindings <- function(
   header,
   mapper = tcc_map_c_type_to_ffi,
@@ -393,8 +418,10 @@ tcc_treesitter_bindings <- function(
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "struct point { double x; double y; };"
 #' tcc_treesitter_struct_accessors(header)
+#' }
 tcc_treesitter_struct_accessors <- function(
   header,
   mapper = tcc_map_c_type_to_ffi,
@@ -456,8 +483,10 @@ tcc_treesitter_struct_accessors <- function(
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "union data { int i; double d; };"
 #' tcc_treesitter_union_accessors(header)
+#' }
 tcc_treesitter_union_accessors <- function(
   header,
   mapper = tcc_map_c_type_to_ffi,
@@ -518,9 +547,11 @@ tcc_treesitter_union_accessors <- function(
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "struct point { double x; double y; };"
 #' ffi <- tcc_ffi()
 #' ffi <- tcc_treesitter_struct_bindings(ffi, header)
+#' }
 tcc_treesitter_struct_bindings <- function(ffi, header, ...) {
   accessors <- tcc_treesitter_struct_accessors(header, ...)
   if (length(accessors) == 0) {
@@ -541,9 +572,11 @@ tcc_treesitter_struct_bindings <- function(ffi, header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "union data { int i; double d; };"
 #' ffi <- tcc_ffi()
 #' ffi <- tcc_treesitter_union_bindings(ffi, header)
+#' }
 tcc_treesitter_union_bindings <- function(ffi, header, ...) {
   accessors <- tcc_treesitter_union_accessors(header, ...)
   if (length(accessors) == 0) {
@@ -564,9 +597,11 @@ tcc_treesitter_union_bindings <- function(ffi, header, ...) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "enum status { OK = 0, ERR = 1 };"
 #' ffi <- tcc_ffi()
 #' ffi <- tcc_treesitter_enum_bindings(ffi, header, constants = list(status = c("OK", "ERR")))
+#' }
 tcc_treesitter_enum_bindings <- function(ffi, header, constants = NULL) {
   enums <- tcc_treesitter_enums(header)
   if (nrow(enums) == 0 || is.null(constants)) {
@@ -597,8 +632,10 @@ tcc_treesitter_enum_bindings <- function(ffi, header, constants = NULL) {
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' header <- "double sqrt(double x); struct point { double x; double y; };"
 #' ffi <- tcc_generate_bindings(tcc_ffi(), header)
+#' }
 tcc_generate_bindings <- function(
   ffi = NULL,
   header,
