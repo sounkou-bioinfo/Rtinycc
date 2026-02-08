@@ -103,7 +103,14 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     }
     SEXP ext = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
-    R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, TRUE);
+    /* onexit = FALSE: do not call tcc_delete() during R shutdown.
+       tcc_delete() calls FreeLibrary() on DLLs loaded during JIT
+       (R.dll, ucrtbase, kernel32) and RtlDeleteFunctionTable() for
+       unwind info.  At exit the Windows loader is already tearing
+       down — those calls crash.  During normal GC the cleanup is
+       safe because the loader is healthy.  At exit the OS reclaims
+       all process memory and DLL refcounts automatically. */
+    R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, FALSE);
     UNPROTECT(1);
     return ext;
 }
