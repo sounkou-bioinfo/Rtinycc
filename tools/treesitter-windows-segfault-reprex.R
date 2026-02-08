@@ -28,4 +28,6 @@ root <- treesitter::tree_root_node(tree)
 query <- treesitter::query(lang, "(function_declarator) @fn")
 caps <- treesitter::query_captures(query, root)
 
-message("Done. If on Windows, the segfault happens after this line during R exit.")
+message(
+  "Done. If on Windows, the segfault happens after this line during R exit."
+)
