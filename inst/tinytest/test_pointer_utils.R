@@ -41,7 +41,11 @@ result <- tcc_free(mem_ptr)
 expect_true(is.null(result))
 
 # Test pointer-to-pointer helpers
-ptr_size <- if (!is.null(.Machine$sizeof.pointer)) .Machine$sizeof.pointer else 8L
+ptr_size <- if (!is.null(.Machine$sizeof.pointer)) {
+  .Machine$sizeof.pointer
+} else {
+  8L
+}
 ptr_ref <- tcc_malloc(ptr_size)
 target <- tcc_malloc(16)
 

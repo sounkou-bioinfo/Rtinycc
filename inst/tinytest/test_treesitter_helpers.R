@@ -3,6 +3,11 @@
 library(tinytest)
 library(Rtinycc)
 
+if (.Platform$OS.type == "windows") {
+    message("Skipping treesitter tests on Windows (treesitter.c crashes on struct parsing)")
+    exit_file(msg = "treesitter.c not stable on Windows")
+}
+
 if (!requireNamespace("treesitter.c", quietly = TRUE)) {
     message("Skipping treesitter helper tests: treesitter.c not installed")
     exit_file(msg = "treesitter.c not available")

@@ -359,6 +359,18 @@ tcc_compile <- function(ffi, verbose = FALSE) {
   }
 
   # Create TinyCC state
+  r_lib_paths <- file.path(R.home("lib"))
+  if (.Platform$OS.type == "windows") {
+    # On Windows, R.dll lives in bin/<arch>; TCC needs it for R API symbols
+    r_lib_paths <- c(
+      r_lib_paths,
+      normalizePath(
+        file.path(R.home(), "bin", .Platform$r_arch),
+        winslash = "/",
+        mustWork = FALSE
+      )
+    )
+  }
   state <- tcc_state(
     output = ffi$output,
     include_path = c(
@@ -366,7 +378,7 @@ tcc_compile <- function(ffi, verbose = FALSE) {
       ffi$include_paths,
       file.path(R.home("include"))
     ),
-    lib_path = c(tcc_lib_paths(), ffi$lib_paths, file.path(R.home("lib")))
+    lib_path = c(tcc_lib_paths(), ffi$lib_paths, r_lib_paths)
   )
 
   # Add library paths
@@ -377,6 +389,11 @@ tcc_compile <- function(ffi, verbose = FALSE) {
   # Add libraries
   for (lib in ffi$libraries) {
     tcc_add_library(state, lib)
+  }
+
+  # On Windows, link against R.dll so TCC can resolve R API symbols
+  if (.Platform$OS.type == "windows") {
+    tcc_add_library(state, "R")
   }
 
   # Compile the generated code
@@ -924,7 +941,10 @@ recompile_into <- function(target) {
   } else {
     ffi <- .subset2(target, ".ffi")
     if (is.null(ffi)) {
-      stop("Cannot recompile: no FFI recipe stored in this object", call. = FALSE)
+      stop(
+        "Cannot recompile: no FFI recipe stored in this object",
+        call. = FALSE
+      )
     }
     fresh <- tcc_compile(ffi)
   }
@@ -942,7 +962,8 @@ recompile_into <- function(target) {
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
 
-  switch(sysname,
+  switch(
+    sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -995,7 +1016,8 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(sysname,
+    lib_name <- switch(
+      sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
@@ -1088,7 +1110,8 @@ tcc_link <- function(
   verbose = FALSE
 ) {
   # Find library if not absolute path
-  is_short_name <- !file.exists(path) && !grepl("[/\\\\]", path) &&
+  is_short_name <- !file.exists(path) &&
+    !grepl("[/\\\\]", path) &&
     !grepl("\\.(so|dylib|dll)", path)
 
   if (!file.exists(path) && !grepl("^/", path)) {
@@ -1185,6 +1208,17 @@ tcc_link <- function(
   }
 
   # Create TinyCC state
+  r_lib_paths <- file.path(R.home("lib"))
+  if (.Platform$OS.type == "windows") {
+    r_lib_paths <- c(
+      r_lib_paths,
+      normalizePath(
+        file.path(R.home(), "bin", .Platform$r_arch),
+        winslash = "/",
+        mustWork = FALSE
+      )
+    )
+  }
   state <- tcc_state(
     output = "memory",
     include_path = c(
@@ -1192,7 +1226,7 @@ tcc_link <- function(
       ffi$include_paths,
       file.path(R.home("include"))
     ),
-    lib_path = c(tcc_lib_paths(), ffi$lib_paths, file.path(R.home("lib")))
+    lib_path = c(tcc_lib_paths(), ffi$lib_paths, r_lib_paths)
   )
 
   # Add library paths
@@ -1205,6 +1239,11 @@ tcc_link <- function(
   # Add libraries
   for (lib in ffi$libraries) {
     tcc_add_library(state, lib)
+  }
+
+  # On Windows, link against R.dll so TCC can resolve R API symbols
+  if (.Platform$OS.type == "windows") {
+    tcc_add_library(state, "R")
   }
 
   # Compile the generated code

@@ -1,9 +1,15 @@
-
 TINYCC_DIR = ../inst/tinycc
-PKG_CPPFLAGS = -I$(TINYCC_DIR)/include -I$(TINYCC_DIR)/lib/tcc/include
-LIBTCC_DLL = $(TINYCC_DIR)/bin/libtcc.dll
+# Only include the libtcc/ dir (for libtcc.h).  Do NOT add
+# $(TINYCC_DIR)/include — that contains TCC's own system headers
+# (stdlib.h, stdio.h, math.h …) which conflict with Rtools/MinGW.
+PKG_CPPFLAGS = -I$(TINYCC_DIR)/libtcc
 
-ifeq ($(shell if exist "$(LIBTCC_DLL)" echo yes),yes)
+# Prefer dynamic linking against libtcc.dll (same strategy as Unix).
+# This keeps _exit/abort/etc. out of Rtinycc.dll — they stay in the
+# companion libtcc.dll which install.libs.R copies next to Rtinycc.dll.
+LIBTCC_DLL := $(wildcard $(TINYCC_DIR)/lib/libtcc.dll)
+
+ifneq ($(LIBTCC_DLL),)
 	PKG_LIBS = $(LIBTCC_DLL)
 else
 	PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc

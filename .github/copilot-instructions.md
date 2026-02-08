@@ -40,9 +40,64 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership is tracke
 
 ## macOS host symbol visibility
 
-On macOS the configure script strips `-flat_namespace` from TCC's Makefile to avoid SIGEV-related issues. Without flat namespace, TCC cannot resolve symbols exported by the R package (`RC_free_finalizer`, `RC_invoke_callback`, `RC_callback_async_schedule_c`) through the dynamic linker at relocation time, causing "undefined symbol" errors.
+On macOS the configure script strips `-flat_namespace` from TCC's Makefile to avoid SIGEV-related issues. Without flat namespace, TCC cannot resolve symbols exported by the R package (`RC_free_finalizer`, `RC_invoke_callback`, `RC_invoke_callback_id`, `RC_callback_async_schedule_c`) through the dynamic linker at relocation time, causing "undefined symbol" errors.
 
-The fix is `RC_libtcc_add_host_symbols()` in `src/RC_libtcc.c`, which explicitly registers these host symbols via `tcc_add_symbol()` before `tcc_relocate()`. This is called from `R/ffi.R` at both compilation call sites. Any new C function that generated TCC code references must be added to `RC_libtcc_add_host_symbols()` or it will break on macOS.
+The fix is `RC_libtcc_add_host_symbols()` in `src/RC_libtcc.c`, which explicitly registers these host symbols via `tcc_add_symbol()` before `tcc_relocate()`. This is called from `R/ffi.R` at both compilation call sites. Any new C function that generated TCC code references must be added to `RC_libtcc_add_host_symbols()` or it will break on macOS and Windows.
+
+## Windows support
+
+Windows support required solving several interacting problems. This section documents every workaround so that future agents don't undo or duplicate them.
+
+### Build system (`configure.win`, `Makevars.win`, `install.libs.R`)
+
+`configure.win` unpacks the vendored TCC tarball, builds `libtcc.dll`, `libtcc.a`, `tcc.exe`, and `libtcc1.a` using the Rtools MinGW toolchain, then installs them to `inst/tinycc/`. After the build it generates `.def` files for R and the UCRT (see below) and cleans up the source tree.
+
+`Makevars.win` dynamically links `Rtinycc.dll` against `libtcc.dll` (not the static `.a`). This keeps symbols like `_exit` and `abort` out of `Rtinycc.dll` — they stay in `libtcc.dll`, avoiding R CMD check NOTEs about entry points that could terminate R.
+
+`install.libs.R` copies `libtcc.dll` next to `Rtinycc.dll` inside the installed package. Windows has no rpath; the PE loader searches the directory containing the loading DLL first, so this is the Windows equivalent.
+
+### Header separation
+
+TCC ships its own `stdlib.h`, `stdio.h`, `math.h`, etc. in `include/`. These conflict with the Rtools/MinGW headers used to compile `Rtinycc.dll` itself. To avoid the conflict, `libtcc.h` is installed to a separate `inst/tinycc/libtcc/` directory, and `Makevars.win` uses `-I$(TINYCC_DIR)/libtcc` (not `-I$(TINYCC_DIR)/include`). TCC's system headers still go to `inst/tinycc/include/` for JIT runtime use only.
+
+### CRT heap mismatch — ucrt.def replaces msvcrt.def
+
+R 4.2+ links against the UCRT (`ucrtbase.dll`). TCC, by default, links JIT code against `msvcrt.dll` (it auto-links "msvcrt" in `tccpe.c`). When JIT code calls `calloc()` from msvcrt and the host calls `free()` from UCRT (as `RC_free_finalizer` does), the heap mismatch causes a crash.
+
+The fix in `configure.win`: generate a `.def` file from `ucrtbase.dll` using `tcc -impdef`, but name the output `msvcrt.def`. This overwrites TCC's original `msvcrt.def`. Since TCC's PE linker loads "msvcrt" automatically, all CRT symbols (`calloc`, `free`, `printf`, etc.) now resolve from ucrtbase.dll — the same CRT that R and `Rtinycc.dll` use.
+
+### R API symbol resolution — R.def
+
+TCC JIT code calls R API functions (`Rf_ScalarInteger`, `Rf_error`, `R_NilValue`, etc.). On Windows these live in `R.dll`. `configure.win` generates `R.def` from `R.dll` via `tcc -impdef` and places it in `inst/tinycc/lib/`. At compile time, `R/ffi.R` calls `tcc_add_library(state, "R")` on Windows, which makes TCC load `R.def` and resolve R API symbols through `R.dll`.
+
+### Host symbol injection (same as macOS)
+
+On Windows (and macOS), TCC cannot find package-internal C functions (`RC_free_finalizer`, `RC_invoke_callback_id`, `RC_callback_async_schedule_c`) through the dynamic linker. `RC_libtcc_add_host_symbols()` registers them via `tcc_add_symbol()` with direct function pointers before `tcc_relocate()`. These functions are NOT in `init.c` / not exported via `.Call` — they are only called by TCC-generated JIT code.
+
+### snprintf is not exported from ucrtbase.dll
+
+In UCRT, `snprintf` is an inline function in the headers that calls `__stdio_common_vsprintf`. It is not a direct DLL export, so TCC's JIT linker can't find it. The original callback trampoline codegen used `snprintf` to convert the callback token id (an int) to a string, then called `RC_invoke_callback(SEXP string, SEXP args)` which did `atoi` to get the int back — a pointless round-trip.
+
+The fix: `RC_invoke_callback_id(int id, SEXP args)` in `RC_libtcc.c` takes the int directly. The trampoline codegen in `R/callbacks.R` now calls `RC_invoke_callback_id(tok->id, args)` instead, eliminating the `snprintf`, `mkString`, and `atoi` round-trip entirely. The forward declaration in `R/ffi_codegen.R` was updated to match.
+
+### Async callbacks: Windows stubs
+
+Async callbacks rely on `pipe()`, `pthread_create`, and R's `addInputHandler()` — none of which exist on Windows. `RC_libtcc.c` has `#ifdef _WIN32` stubs that call `Rf_error("Async callbacks are not supported on Windows")` for the R-facing functions, and return `-1` for the C-facing `RC_callback_async_schedule_c`. The async callback tests in `test_callback_invoke_runtime.R` are guarded with `if (.Platform$OS.type != "windows")`.
+
+### No libm on Windows
+
+On Unix, math functions live in `libm.so` and require `-lm`. On Windows, they are part of the CRT (ucrtbase.dll). Any tests using `tcc_link("m")` or `tcc_library("m")` must be guarded with `if (.Platform$OS.type != "windows")`.
+
+### No fork on Windows
+
+R's `parallel::mclapply` uses `fork()` which does not exist on Windows. Fork-related tests in `test_fork_serialize.R` are guarded with `if (.Platform$OS.type != "windows")`.
+
+### Windows-specific files
+
+- `configure.win`: Build TCC from source, generate R.def and ucrt.def
+- `src/Makevars.win`: Dynamic linking against libtcc.dll
+- `src/install.libs.R`: Copy libtcc.dll next to Rtinycc.dll
+- `.github/workflows/windows.yml`: Windows CI
 
 ## Key files
 

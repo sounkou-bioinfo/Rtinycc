@@ -670,7 +670,16 @@ typedef struct {
 // Static array of callbacks (simple fixed-size for now)
 #define MAX_CALLBACKS 256
 static callback_entry_t callback_registry[MAX_CALLBACKS];
-static int next_callback_id = 0;
+
+// Find a free callback registry slot (returns -1 if none available)
+static int RC_callback_find_free_slot() {
+    for (int i = 0; i < MAX_CALLBACKS; i++) {
+        if (!callback_registry[i].valid && callback_registry[i].fun == NULL) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 // Callback token structure - passed back to R as external ptr
 typedef struct {
@@ -681,16 +690,26 @@ typedef struct {
 #ifdef _WIN32
 SEXP RC_callback_async_init() {
     Rf_error("Async callbacks are not supported on Windows");
+    return R_NilValue;
 }
 
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     (void) callback_ext;
     (void) args;
     Rf_error("Async callbacks are not supported on Windows");
+    return R_NilValue;
 }
 
 SEXP RC_callback_async_drain() {
     Rf_error("Async callbacks are not supported on Windows");
+    return R_NilValue;
+}
+
+/* Stub: async scheduling is not available on Windows. */
+typedef struct { int kind; union { int i; double d; void *p; char *s; } v; } cb_arg_t;
+int RC_callback_async_schedule_c(int id, int n_args, const void *args) {
+    (void) id; (void) n_args; (void) args;
+    return -1;
 }
 #else
 // Async callback dispatch (main-thread queue)
@@ -790,11 +809,10 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     }
     
     // Find an available slot
-    if (next_callback_id >= MAX_CALLBACKS) {
+    int id = RC_callback_find_free_slot();
+    if (id < 0) {
         Rf_error("Callback registry full (max %d)", MAX_CALLBACKS);
     }
-    
-    int id = next_callback_id++;
     callback_entry_t *entry = &callback_registry[id];
     
     // Preserve the R function
@@ -1083,6 +1101,13 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     return RC_invoke_callback_internal(id, args);
 }
 
+// Invoke callback by integer id directly (no snprintf needed)
+// This avoids CRT stdio dependency in JIT code (snprintf is not a
+// direct export from ucrtbase.dll on Windows)
+SEXP RC_invoke_callback_id(int id, SEXP args) {
+    return RC_invoke_callback_internal(id, args);
+}
+
 #ifndef _WIN32
 static void cbq_push(cb_task_t *task) {
     pthread_mutex_lock(&cbq_mutex);
@@ -1304,7 +1329,7 @@ SEXP RC_callback_async_drain() {
 // Cleanup all callbacks during package unload
 SEXP RC_cleanup_callbacks() {
     // Clean up all valid callbacks in the registry
-    for (int i = 0; i < next_callback_id; i++) {
+    for (int i = 0; i < MAX_CALLBACKS; i++) {
         callback_entry_t *entry = &callback_registry[i];
         if (entry->valid && entry->fun != NULL) {
             R_ReleaseObject(entry->fun);
@@ -1324,7 +1349,6 @@ SEXP RC_cleanup_callbacks() {
             }
         }
     }
-    next_callback_id = 0;
     return R_NilValue;
 }
 
@@ -1336,6 +1360,7 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     tcc_add_symbol(s, "RC_free_finalizer", RC_free_finalizer);
     tcc_add_symbol(s, "RC_invoke_callback", RC_invoke_callback);
+    tcc_add_symbol(s, "RC_invoke_callback_id", RC_invoke_callback_id);
     tcc_add_symbol(s, "RC_callback_async_schedule_c",
                    RC_callback_async_schedule_c);
     return R_NilValue;
