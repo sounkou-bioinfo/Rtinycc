@@ -154,16 +154,19 @@ expect_equal(
 )
 
 # --- Test 9: tcc_link round-trip ----------------------------------------
-math <- tcc_link("m", symbols = list(
-    sqrt = list(args = list("f64"), returns = "f64")
-))
-expect_equal(math$sqrt(25.0), 5.0, info = "tcc_link: original works")
+# libm doesn't exist on Windows (math is in the CRT), so skip this test
+if (.Platform$OS.type != "windows") {
+    math <- tcc_link("m", symbols = list(
+        sqrt = list(args = list("f64"), returns = "f64")
+    ))
+    expect_equal(math$sqrt(25.0), 5.0, info = "tcc_link: original works")
 
-math2 <- unserialize(serialize(math, NULL))
-expect_equal(
-    math2$sqrt(144.0), 12.0,
-    info = "tcc_link: auto-recompiles after deserialization"
-)
+    math2 <- unserialize(serialize(math, NULL))
+    expect_equal(
+        math2$sqrt(144.0), 12.0,
+        info = "tcc_link: auto-recompiles after deserialization"
+    )
+}
 
 # --- Test 10: raw pointers are still dead after deserialization ----------
 ptr <- tcc_malloc(8)
