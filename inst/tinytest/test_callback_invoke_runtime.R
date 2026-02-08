@@ -69,17 +69,25 @@ expect_true(
 
     warned <- FALSE
     res <- NULL
-    capture.output(
+    tmp <- tempfile()
+    con <- file(tmp, open = "wt")
+    sink(con)
+    sink(con, type = "message")
+    on.exit(
       {
-        res <- withCallingHandlers(
-          ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
-          warning = function(w) {
-            warned <<- TRUE
-            invokeRestart("muffleWarning")
-          }
-        )
+        sink(type = "message")
+        sink()
+        close(con)
+        unlink(tmp)
       },
-      type = "message"
+      add = TRUE
+    )
+    res <- withCallingHandlers(
+      ffi_err$call_cb_err(cb_err, cb_ptr_err, 1.0),
+      warning = function(w) {
+        warned <<- TRUE
+        invokeRestart("muffleWarning")
+      }
     )
     ok <- isTRUE(warned && is.na(res))
     ok
