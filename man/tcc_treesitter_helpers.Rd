@@ -21,10 +21,11 @@ These helpers require the optional treesitter.c package.
 }
 
 \examples{
-
+\dontrun{
 header <- "double sqrt(double x);\nint add(int a, int b);"
 tcc_treesitter_functions(header)
 tcc_treesitter_bindings(header)
+}
 
 }
 \keyword{internal}

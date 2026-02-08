@@ -27,6 +27,8 @@ Named list of accessors by struct name.
 Generate tcc_struct() accessors from header structs
 }
 \examples{
+\dontrun{
 header <- "struct point { double x; double y; };"
 tcc_treesitter_struct_accessors(header)
+}
 }

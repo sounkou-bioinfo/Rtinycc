@@ -27,6 +27,8 @@ Named list of accessors by union name.
 Generate tcc_union() accessors from header unions
 }
 \examples{
+\dontrun{
 header <- "union data { int i; double d; };"
 tcc_treesitter_union_accessors(header)
+}
 }

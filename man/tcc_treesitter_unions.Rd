@@ -18,6 +18,8 @@ A data frame of union nodes.
 Parse union declarations with treesitter.c
 }
 \examples{
+\dontrun{
 header <- "union data { int i; double d; };"
 tcc_treesitter_unions(header)
+}
 }

@@ -18,6 +18,8 @@ A data frame of struct nodes.
 Parse struct declarations with treesitter.c
 }
 \examples{
+\dontrun{
 header <- "struct point { double x; double y; };"
 tcc_treesitter_structs(header)
+}
 }

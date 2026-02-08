@@ -18,6 +18,8 @@ A data frame of function nodes.
 Parse function declarations with treesitter.c
 }
 \examples{
+\dontrun{
 header <- "double sqrt(double x);"
 tcc_treesitter_functions(header)
+}
 }

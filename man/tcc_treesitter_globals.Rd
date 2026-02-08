@@ -18,6 +18,8 @@ A data frame of global names.
 Parse global declarations with treesitter.c
 }
 \examples{
+\dontrun{
 header <- "int global_counter;"
 tcc_treesitter_globals(header)
+}
 }

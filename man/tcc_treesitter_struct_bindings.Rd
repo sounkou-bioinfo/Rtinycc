@@ -20,7 +20,9 @@ Updated tcc_ffi object.
 Apply tcc_struct() bindings from a header
 }
 \examples{
+\dontrun{
 header <- "struct point { double x; double y; };"
 ffi <- tcc_ffi()
 ffi <- tcc_treesitter_struct_bindings(ffi, header)
+}
 }

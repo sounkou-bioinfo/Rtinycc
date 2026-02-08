@@ -18,6 +18,8 @@ A data frame of enum nodes.
 Parse enum declarations with treesitter.c
 }
 \examples{
+\dontrun{
 header <- "enum status { OK = 0, ERR = 1 };"
 tcc_treesitter_enums(header)
+}
 }

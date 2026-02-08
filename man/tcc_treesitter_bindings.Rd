@@ -47,6 +47,8 @@ an updated \code{tcc_ffi} object.
 Generate bindings from a header
 }
 \examples{
+\dontrun{
 header <- "double sqrt(double x);"
 symbols <- tcc_treesitter_bindings(header)
+}
 }

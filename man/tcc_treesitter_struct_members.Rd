@@ -18,6 +18,8 @@ A data frame of struct members.
 Parse struct members (including bitfields) with treesitter.c
 }
 \examples{
+\dontrun{
 header <- "struct point { double x; double y; };"
 tcc_treesitter_struct_members(header)
+}
 }

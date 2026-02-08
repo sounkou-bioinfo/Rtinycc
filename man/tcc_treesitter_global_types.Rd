@@ -18,6 +18,8 @@ A data frame of global names and C types.
 Parse global declarations with types using treesitter.c
 }
 \examples{
+\dontrun{
 header <- "int global_counter;"
 tcc_treesitter_global_types(header)
+}
 }

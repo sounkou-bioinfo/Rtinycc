@@ -20,7 +20,9 @@ Updated tcc_ffi object.
 Apply tcc_union() bindings from a header
 }
 \examples{
+\dontrun{
 header <- "union data { int i; double d; };"
 ffi <- tcc_ffi()
 ffi <- tcc_treesitter_union_bindings(ffi, header)
+}
 }

@@ -16,6 +16,8 @@ A single FFI type string.
 Map a C type string to an Rtinycc FFI type
 }
 \examples{
+\dontrun{
 tcc_map_c_type_to_ffi("int")
 tcc_map_c_type_to_ffi("const char *")
+}
 }

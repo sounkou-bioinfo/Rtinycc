@@ -27,5 +27,7 @@ Character vector of macro names defined in \code{file}.
 Extract macro defines from a header file
 }
 \examples{
-# tcc_treesitter_defines("/usr/include/math.h")
+\dontrun{
+tcc_treesitter_defines("/usr/include/math.h")
+}
 }

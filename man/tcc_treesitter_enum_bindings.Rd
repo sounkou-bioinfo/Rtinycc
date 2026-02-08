@@ -20,7 +20,9 @@ Updated tcc_ffi object.
 Apply tcc_enum() bindings from a header
 }
 \examples{
+\dontrun{
 header <- "enum status { OK = 0, ERR = 1 };"
 ffi <- tcc_ffi()
 ffi <- tcc_treesitter_enum_bindings(ffi, header, constants = list(status = c("OK", "ERR")))
+}
 }

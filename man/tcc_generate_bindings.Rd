@@ -45,6 +45,8 @@ Updated tcc_ffi object.
 Generate bindings from header declarations
 }
 \examples{
+\dontrun{
 header <- "double sqrt(double x); struct point { double x; double y; };"
 ffi <- tcc_generate_bindings(tcc_ffi(), header)
+}
 }
