@@ -670,7 +670,16 @@ typedef struct {
 // Static array of callbacks (simple fixed-size for now)
 #define MAX_CALLBACKS 256
 static callback_entry_t callback_registry[MAX_CALLBACKS];
-static int next_callback_id = 0;
+
+// Find a free callback registry slot (returns -1 if none available)
+static int RC_callback_find_free_slot() {
+    for (int i = 0; i < MAX_CALLBACKS; i++) {
+        if (!callback_registry[i].valid && callback_registry[i].fun == NULL) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 // Callback token structure - passed back to R as external ptr
 typedef struct {
@@ -800,11 +809,10 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     }
     
     // Find an available slot
-    if (next_callback_id >= MAX_CALLBACKS) {
+    int id = RC_callback_find_free_slot();
+    if (id < 0) {
         Rf_error("Callback registry full (max %d)", MAX_CALLBACKS);
     }
-    
-    int id = next_callback_id++;
     callback_entry_t *entry = &callback_registry[id];
     
     // Preserve the R function
@@ -1321,7 +1329,7 @@ SEXP RC_callback_async_drain() {
 // Cleanup all callbacks during package unload
 SEXP RC_cleanup_callbacks() {
     // Clean up all valid callbacks in the registry
-    for (int i = 0; i < next_callback_id; i++) {
+    for (int i = 0; i < MAX_CALLBACKS; i++) {
         callback_entry_t *entry = &callback_registry[i];
         if (entry->valid && entry->fun != NULL) {
             R_ReleaseObject(entry->fun);
@@ -1341,7 +1349,6 @@ SEXP RC_cleanup_callbacks() {
             }
         }
     }
-    next_callback_id = 0;
     return R_NilValue;
 }
 
