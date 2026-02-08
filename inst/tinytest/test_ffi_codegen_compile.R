@@ -21,11 +21,25 @@ test_generate_compile_simple <- function() {
   expect_true(grepl("int forty_two", code))
   expect_true(grepl("R_wrap_forty_two", code))
 
-  # Try to compile it (with R headers)
+  # Try to compile it (with R + TCC system headers)
+  r_lib_paths <- file.path(R.home("lib"))
+  if (.Platform$OS.type == "windows") {
+    r_lib_paths <- c(
+      r_lib_paths,
+      normalizePath(
+        file.path(R.home(), "bin", .Platform$r_arch),
+        winslash = "/", mustWork = FALSE
+      )
+    )
+  }
   state <- tcc_state(
     output = "memory",
-    include_path = file.path(R.home("include"))
+    include_path = c(tcc_include_paths(), file.path(R.home("include"))),
+    lib_path = c(tcc_lib_paths(), r_lib_paths)
   )
+  if (.Platform$OS.type == "windows") {
+    tcc_add_library(state, "R")
+  }
   result <- tcc_compile_string(state, code)
 
   if (result != 0) {
@@ -71,11 +85,25 @@ test_generate_compile_arrays <- function() {
   expect_true(grepl("sum_ints", code))
   expect_true(grepl("R_wrap_sum_ints", code))
 
-  # Try to compile (with R headers)
+  # Try to compile (with R + TCC system headers)
+  r_lib_paths <- file.path(R.home("lib"))
+  if (.Platform$OS.type == "windows") {
+    r_lib_paths <- c(
+      r_lib_paths,
+      normalizePath(
+        file.path(R.home(), "bin", .Platform$r_arch),
+        winslash = "/", mustWork = FALSE
+      )
+    )
+  }
   state <- tcc_state(
     output = "memory",
-    include_path = file.path(R.home("include"))
+    include_path = c(tcc_include_paths(), file.path(R.home("include"))),
+    lib_path = c(tcc_lib_paths(), r_lib_paths)
   )
+  if (.Platform$OS.type == "windows") {
+    tcc_add_library(state, "R")
+  }
   result <- tcc_compile_string(state, code)
 
   if (result == 0) {
