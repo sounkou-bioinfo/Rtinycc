@@ -1,5 +1,9 @@
 # Rtinycc 0.0.3.9000 (development version)
 
+- Experimental Windows support. The package now builds and passes R CMD check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC from source via `configure.win`, dynamically links `libtcc.dll`, and generates `.def` files for R API symbol resolution. CRT heap consistency is ensured by redirecting TCC's default msvcrt linkage to `ucrtbase.dll`. Async callbacks and `fork()`-based parallelism remain Unix-only. See `AGENTS.md` for implementation details.
+
+- `RC_invoke_callback_id()` replaces the `snprintf`-based callback dispatch. The trampoline now passes the callback token as an integer directly, eliminating a round-trip through string conversion that relied on `snprintf` (unavailable as a direct symbol on Windows/UCRT).
+
 # Rtinycc 0.0.3
 
 - Add typed memory read/write helpers inspired by Bun's FFI and the ctypesio package: `tcc_read_i8()`, `tcc_read_u8()`, `tcc_read_i16()`, `tcc_read_u16()`, `tcc_read_i32()`, `tcc_read_u32()`, `tcc_read_i64()`, `tcc_read_u64()`, `tcc_read_f32()`, `tcc_read_f64()`, `tcc_read_ptr()` and corresponding `tcc_write_*()` functions. All operate at a byte offset and use `memcpy` internally for alignment safety.
