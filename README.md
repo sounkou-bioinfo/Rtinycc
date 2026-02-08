@@ -180,7 +180,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5a34e9e954e0"
+#> [1] "0x5aecc3e8d4e0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -211,11 +211,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5a34ea19da50>
+#> <pointer: 0x5aecc4195a50>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5a34ecdf95b0>
+#> <pointer: 0x5aecc6df15b0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5a34ea19da50>
+#> <pointer: 0x5aecc4195a50>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -326,7 +326,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5a34ec3e17e8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5aecc63d97e8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -342,7 +342,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5a34ec3e17e8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @5aecc63d97e8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Structs and unions
@@ -367,15 +367,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5a34e9c02b50>
+#> <pointer: 0x5aecc3bfab50>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5a34e9c02b50>
+#> <pointer: 0x5aecc3bfab50>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5a34ea1a0d40>
+#> <pointer: 0x5aecc4198d40>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5a34ea1a0d40>
+#> <pointer: 0x5aecc4198d40>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -420,9 +420,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5a34ec5d4220>
+#> <pointer: 0x5aecc65cc220>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5a34ec5d4220>
+#> <pointer: 0x5aecc65cc220>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -709,7 +709,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5a34edf82600>
+#> <pointer: 0x5aecc7f7a600>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -762,11 +762,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5a34ecdb67f0>
+#> <pointer: 0x5aecc6dae7f0>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5a34ecead770>
+#> <pointer: 0x5aecc6ea5770>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -795,9 +795,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5a34ecdb67f0>
+#> <pointer: 0x5aecc6dae7f0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5a34ecdb67f0>
+#> <pointer: 0x5aecc6dae7f0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
