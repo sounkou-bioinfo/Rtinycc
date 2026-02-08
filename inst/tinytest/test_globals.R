@@ -17,6 +17,19 @@ expect_true(
       tcc_global("global_pi", "f64") |>
       tcc_global("global_name", "cstring")
 
+    tmp <- tempfile()
+    con <- file(tmp, open = "wt")
+    sink(con)
+    sink(con, type = "message")
+    on.exit(
+      {
+        sink(type = "message")
+        sink()
+        close(con)
+        unlink(tmp)
+      },
+      add = TRUE
+    )
     compiled <- tcc_compile(ffi)
 
     counter <- compiled$global_global_counter_get()
