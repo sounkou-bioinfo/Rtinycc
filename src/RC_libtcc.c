@@ -103,13 +103,13 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     }
     SEXP ext = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
-    /* onexit = FALSE: do not call tcc_delete() during R shutdown.
-       tcc_delete() calls FreeLibrary() on DLLs loaded during JIT
-       (R.dll, ucrtbase, kernel32) and RtlDeleteFunctionTable() for
-       unwind info.  At exit the Windows loader is already tearing
-       down — those calls crash.  During normal GC the cleanup is
-       safe because the loader is healthy.  At exit the OS reclaims
-       all process memory and DLL refcounts automatically. */
+    /* onexit = FALSE: skip tcc_delete() during R shutdown.
+       tcc_delete() → tcc_run_free() releases DLLs loaded during JIT
+       (FreeLibrary on Windows, dlclose on Unix) and frees JIT memory.
+       At process exit the OS reclaims everything automatically;
+       running these teardown calls while the runtime is shutting down
+       causes segfaults (Windows) or is simply pointless (Unix/macOS).
+       Normal GC still runs this finalizer while R is alive. */
     R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, FALSE);
     UNPROTECT(1);
     return ext;
@@ -283,7 +283,7 @@ SEXP RC_get_external_ptr_hex(SEXP ext) {
 /* Create a NULL external pointer tagged "rtinycc_null". */
 SEXP RC_null_pointer() {
     SEXP ptr = R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
-    R_RegisterCFinalizerEx(ptr, RC_null_finalizer, TRUE);
+    R_RegisterCFinalizerEx(ptr, RC_null_finalizer, FALSE);
     return ptr;
 }
 
@@ -301,7 +301,7 @@ SEXP RC_malloc(SEXP size) {
     }
     
     SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
-    R_RegisterCFinalizerEx(ptr, RC_free_finalizer, TRUE);
+    R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
     return ptr;
 }
 
@@ -336,13 +336,13 @@ SEXP RC_data_ptr(SEXP ptr_ref) {
     void *ref = R_ExternalPtrAddr(ptr_ref);
     if (!ref) {
         SEXP out = R_MakeExternalPtr(NULL, Rf_install("rtinycc_borrowed"), R_NilValue);
-        R_RegisterCFinalizerEx(out, RC_null_finalizer, TRUE);
+        R_RegisterCFinalizerEx(out, RC_null_finalizer, FALSE);
         return out;
     }
 
     void *data = *((void**)ref);
     SEXP out = R_MakeExternalPtr(data, Rf_install("rtinycc_borrowed"), R_NilValue);
-    R_RegisterCFinalizerEx(out, RC_null_finalizer, TRUE);
+    R_RegisterCFinalizerEx(out, RC_null_finalizer, FALSE);
     return out;
 }
 
@@ -410,7 +410,7 @@ SEXP RC_create_cstring(SEXP str) {
     strcpy(data, c_str);
     
     SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
-    R_RegisterCFinalizerEx(ptr, RC_free_finalizer, TRUE);
+    R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
     return ptr;
 }
 
@@ -859,7 +859,7 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     
     SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_callback"));
-    R_RegisterCFinalizerEx(ext, RC_callback_finalizer, TRUE);
+    R_RegisterCFinalizerEx(ext, RC_callback_finalizer, FALSE);
     UNPROTECT(1);
     
     return ext;
@@ -899,7 +899,7 @@ SEXP RC_get_callback_ptr(SEXP callback_ext) {
     token->refs += 1;
     SEXP ptr = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_callback_ptr"));
-    R_RegisterCFinalizerEx(ptr, RC_callback_ptr_finalizer, TRUE);
+    R_RegisterCFinalizerEx(ptr, RC_callback_ptr_finalizer, FALSE);
     UNPROTECT(1);
     return ptr;
 }

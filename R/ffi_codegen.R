@@ -9,8 +9,7 @@
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
     i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
     i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
@@ -91,8 +90,7 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
       }
       len_name <- arg_names[[as.integer(len_arg)]]
 
-      alloc_line <- switch(
-        base_type,
+      alloc_line <- switch(base_type,
         raw = sprintf("SEXP out = PROTECT(allocVector(RAWSXP, %s));", len_name),
         integer_array = sprintf(
           "SEXP out = PROTECT(allocVector(INTSXP, %s));",
@@ -109,8 +107,7 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
         stop("Unsupported array return type: ", base_type, call. = FALSE)
       )
 
-      copy_line <- switch(
-        base_type,
+      copy_line <- switch(base_type,
         raw = sprintf(
           "  if (%s > 0) memcpy(RAW(out), %s, sizeof(uint8_t) * %s);",
           len_name,
@@ -161,8 +158,7 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
 
   type_info <- check_ffi_type(ffi_type, "return value")
 
-  switch(
-    ffi_type,
+  switch(ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
@@ -475,7 +471,7 @@ generate_struct_new <- function(struct_name) {
       "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), R_NilValue);",
       struct_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);",
+    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);",
     "  return ext;",
     "}",
     ""
@@ -518,8 +514,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec
   }
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
     i32 = sprintf("return ScalarInteger(p->%s);", field_name),
@@ -568,8 +563,7 @@ generate_struct_array_getter <- function(struct_name, field_name, field_spec) {
     stop("Array field '", field_name, "' missing size", call. = FALSE)
   }
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i8 = sprintf("return ScalarInteger((int)p->%s[idx]);", field_name),
     i16 = sprintf("return ScalarInteger((int)p->%s[idx]);", field_name),
     i32 = sprintf("return ScalarInteger(p->%s[idx]);", field_name),
@@ -610,8 +604,7 @@ generate_struct_array_setter <- function(struct_name, field_name, field_spec) {
     stop("Array field '", field_name, "' missing size", call. = FALSE)
   }
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i8 = sprintf("p->%s[idx] = (int8_t)asInteger(val);", field_name),
     i16 = sprintf("p->%s[idx] = (int16_t)asInteger(val);", field_name),
     i32 = sprintf("p->%s[idx] = asInteger(val);", field_name),
@@ -656,8 +649,7 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
     size <- NULL
   }
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i8 = sprintf("p->%s = (int8_t)asInteger(val);", field_name),
     i16 = sprintf("p->%s = (int16_t)asInteger(val);", field_name),
     i32 = sprintf("p->%s = asInteger(val);", field_name),
@@ -844,7 +836,7 @@ generate_union_new <- function(union_name) {
       "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"union_%s\"), R_NilValue);",
       union_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);",
+    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);",
     "  return ext;",
     "}",
     ""
@@ -878,8 +870,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  return_code <- switch(
-    type_name,
+  return_code <- switch(type_name,
     i32 = sprintf("return ScalarInteger(p->%s);", mem_name),
     f32 = sprintf("return ScalarReal((double)p->%s);", mem_name),
     sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name)
@@ -904,8 +895,7 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  setter_code <- switch(
-    type_name,
+  setter_code <- switch(type_name,
     i32 = sprintf("p->%s = asInteger(val);", mem_name),
     f32 = sprintf("p->%s = (float)asReal(val);", mem_name),
     sprintf("// Cannot set union member of type %s", type_name)
