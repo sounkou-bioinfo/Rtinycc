@@ -51,7 +51,7 @@ compares to a libffi approach, see the
 [`RSimpleFFI` README](https://github.com/sounkou-bioinfo/RSimpleFFI#readme).
 
 On macOS the configure script strips `-flat_namespace` from TCC's build to
-avoid SIGEV issues. Without it, TCC cannot resolve host symbols (e.g.
+avoid [BUS ERROR issues](https://genomic.social/@bioinfhotep/115765645745231377). Without it, TCC cannot resolve host symbols (e.g.
 `RC_free_finalizer`) through the dynamic linker. Rtinycc works around this
 with `RC_libtcc_add_host_symbols()`, which registers package-internal C
 functions via `tcc_add_symbol()` before relocation. Any new C function
@@ -70,8 +70,7 @@ formatted output should use R API functions instead (e.g.
 `Rf_warning()`, `Rprintf()`). Async callbacks and `fork()`-based
 parallelism are not available on Windows.
 -->
-Ownership semantics are explicit. Pointers from `tcc_malloc()` are tagged
-`rtinycc_owned` and can be released with `tcc_free()` (or by their R
+Ownership semantics are explicit. Pointers from `tcc_malloc()` are tagged `rtinycc_owned` and can be released with `tcc_free()` (or by their R
 finalizer). Generated struct constructors use a struct-specific tag
 (`struct_<name>`) with an `RC_free_finalizer`; free them with
 `struct_<name>_free()`, not `tcc_free()`. Pointers from `tcc_data_ptr()` are
