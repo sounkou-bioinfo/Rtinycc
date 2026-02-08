@@ -1,5 +1,9 @@
 # Rtinycc 0.0.3.9000 (development version)
 
+- Fix exit-time segfaults on Windows (and potential issues on other platforms) by setting `onexit = FALSE` on all `R_RegisterCFinalizerEx()` calls. External pointer finalizers for TCC states, owned pointers, callbacks, and JIT-generated struct/union constructors now only run during normal garbage collection, not during R shutdown. At process exit the OS reclaims all memory; running teardown code while the runtime is shutting down caused crashes on Windows due to DLL unload ordering and CRT heap teardown races.
+
+- Treesitter helper examples are now wrapped in `\dontrun{}` and the treesitter helper tests are skipped on Windows to avoid process-exit crashes related to `treesitter.c` cleanup.
+
 - Experimental Windows support. The package now builds and passes R CMD check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC from source via `configure.win`, dynamically links `libtcc.dll`, and generates `.def` files for R API symbol resolution. CRT heap consistency is ensured by redirecting TCC's default msvcrt linkage to `ucrtbase.dll`. Async callbacks and `fork()`-based parallelism remain Unix-only. See `AGENTS.md` for implementation details.
 
 - `RC_invoke_callback_id()` replaces the `snprintf`-based callback dispatch. The trampoline now passes the callback token as an integer directly, eliminating a round-trip through string conversion that relied on `snprintf` (unavailable as a direct symbol on Windows/UCRT).

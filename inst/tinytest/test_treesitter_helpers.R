@@ -16,6 +16,10 @@ if (!requireNamespace("treesitter.c", quietly = TRUE)) {
     }
 }
 
+if (.Platform$OS.type == "windows") {
+    exit_file(msg = "treesitter helpers skipped on Windows")
+}
+
 # Test 1: function parsing and bindings
 expect_true(
     {
