@@ -7,6 +7,7 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Error.h>
+#include <R_ext/Print.h>
 #include <R_ext/Parse.h>
 #ifndef _WIN32
 #include <R_ext/eventloop.h>
@@ -65,8 +66,8 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         Rf_error("tcc_new failed");
     }
 
-    /* Route libtcc diagnostics through R */
-    // tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) REprintf);
+    /* Route libtcc diagnostics through R (stdout, sink-able) */
+    tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) Rprintf);
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
