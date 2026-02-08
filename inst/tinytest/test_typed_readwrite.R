@@ -35,8 +35,8 @@ expect_equal(tcc_read_u64(buf, 24L), 2^52, info = "u64 round-trip")
 # --- f32 / f64 -------------------------------------------------------------
 tcc_write_f32(buf, 32L, 3.14)
 expect_true(
-    abs(tcc_read_f32(buf, 32L) - 3.14) < 1e-5,
-    info = "f32 round-trip (single precision)"
+  abs(tcc_read_f32(buf, 32L) - 3.14) < 1e-5,
+  info = "f32 round-trip (single precision)"
 )
 
 tcc_write_f64(buf, 40L, pi)
@@ -47,27 +47,34 @@ inner <- tcc_malloc(8)
 tcc_write_ptr(buf, 48L, inner)
 read_back <- tcc_read_ptr(buf, 48L)
 expect_equal(
-    tcc_ptr_addr(read_back), tcc_ptr_addr(inner),
-    info = "ptr round-trip"
+  tcc_ptr_addr(read_back),
+  tcc_ptr_addr(inner),
+  info = "ptr round-trip"
 )
 tcc_free(inner)
 
 # --- legacy vectorised interface (backward compat) --------------------------
 tcc_write_bytes(buf, as.raw(c(10, 20, 30, 40)))
-expect_equal(tcc_read_u8(buf, n = 4), c(10L, 20L, 30L, 40L),
-    info = "u8 legacy n interface"
+expect_equal(
+  tcc_read_u8(buf, n = 4),
+  c(10L, 20L, 30L, 40L),
+  info = "u8 legacy n interface"
 )
 
 tcc_write_i32(buf, 0L, 42L)
 tcc_write_i32(buf, 4L, 99L)
-expect_equal(tcc_read_i32(buf, n = 2), c(42L, 99L),
-    info = "i32 legacy n interface"
+expect_equal(
+  tcc_read_i32(buf, n = 2),
+  c(42L, 99L),
+  info = "i32 legacy n interface"
 )
 
 tcc_write_f64(buf, 0L, 1.5)
 tcc_write_f64(buf, 8L, 2.5)
-expect_equal(tcc_read_f64(buf, n = 2), c(1.5, 2.5),
-    info = "f64 legacy n interface"
+expect_equal(
+  tcc_read_f64(buf, n = 2),
+  c(1.5, 2.5),
+  info = "f64 legacy n interface"
 )
 
 # --- default offset = 0 ----------------------------------------------------

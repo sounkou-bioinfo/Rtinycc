@@ -28,7 +28,8 @@ test_generate_compile_simple <- function() {
       r_lib_paths,
       normalizePath(
         file.path(R.home(), "bin", .Platform$r_arch),
-        winslash = "/", mustWork = FALSE
+        winslash = "/",
+        mustWork = FALSE
       )
     )
   }
@@ -92,7 +93,8 @@ test_generate_compile_arrays <- function() {
       r_lib_paths,
       normalizePath(
         file.path(R.home(), "bin", .Platform$r_arch),
-        winslash = "/", mustWork = FALSE
+        winslash = "/",
+        mustWork = FALSE
       )
     )
   }

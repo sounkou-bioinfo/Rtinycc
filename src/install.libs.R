@@ -17,9 +17,9 @@ file.copy(files, dest, overwrite = TRUE)
 
 # On Windows, also copy libtcc.dll next to Rtinycc.dll
 if (.Platform$OS.type == "windows") {
-    libtcc_dll <- file.path("..", "inst", "tinycc", "lib", "libtcc.dll")
-    if (file.exists(libtcc_dll)) {
-        file.copy(libtcc_dll, dest, overwrite = TRUE)
-        message("Copied libtcc.dll to ", dest)
-    }
+  libtcc_dll <- file.path("..", "inst", "tinycc", "lib", "libtcc.dll")
+  if (file.exists(libtcc_dll)) {
+    file.copy(libtcc_dll, dest, overwrite = TRUE)
+    message("Copied libtcc.dll to ", dest)
+  }
 }
