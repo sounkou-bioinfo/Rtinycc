@@ -19,8 +19,9 @@ providing both CLI access and a libtcc-backed in-memory compiler. It
 includes an experimental FFI inspired by [Bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
 predictable type conversions and pointer utilities. The package runs on
-Linux, macOS, and Windows (experimental) and focuses on embedding TinyCC
-and enabling JIT-compiled bindings directly from R. Combined with
+unix-alikes ( windows may never be support, so use WSL2) and focuses on
+embedding TinyCC and enabling JIT-compiled bindings directly from R.
+Combined with
 [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
 provides C header parsers, it can be used to rapidly generate
 declarative bindings.
@@ -57,21 +58,20 @@ to avoid SIGEV issues. Without it, TCC cannot resolve host symbols (e.g.
 this with `RC_libtcc_add_host_symbols()`, which registers
 package-internal C functions via `tcc_add_symbol()` before relocation.
 Any new C function referenced by generated TCC code must be added there.
-
+<!--
 Windows support (experimental) required solving several interacting
 problems. R 4.2+ links against the Universal CRT (`ucrtbase.dll`) while
-TCC defaults to `msvcrt.dll`; mixing heaps across the two CRTs crashes
-on `free()`. The build system works around this by generating a `.def`
-file from `ucrtbase.dll` and naming it `msvcrt.def`, so all CRT symbols
-resolve from the same runtime. Several CRT functions commonly used in C
-code (`printf`, `snprintf`, `sprintf`) are inline functions in UCRT
-headers rather than direct DLL exports, so TCC’s JIT linker cannot
-resolve them. The package’s own codegen avoids these functions; user
-code that needs formatted output should use R API functions instead
-(e.g. `Rf_warning()`, `Rprintf()`). Async callbacks and `fork()`-based
+TCC defaults to `msvcrt.dll`; mixing heaps across the two CRTs crashes on
+`free()`. The build system works around this by generating a `.def` file
+from `ucrtbase.dll` and naming it `msvcrt.def`, so all CRT symbols resolve
+from the same runtime. Several CRT functions commonly used in C code
+(`printf`, `snprintf`, `sprintf`) are inline functions in UCRT headers
+rather than direct DLL exports, so TCC's JIT linker cannot resolve them.
+The package's own codegen avoids these functions; user code that needs
+formatted output should use R API functions instead (e.g.
+`Rf_warning()`, `Rprintf()`). Async callbacks and `fork()`-based
 parallelism are not available on Windows.
-
-Ownership semantics are explicit. Pointers from `tcc_malloc()` are
+--> Ownership semantics are explicit. Pointers from `tcc_malloc()` are
 tagged `rtinycc_owned` and can be released with `tcc_free()` (or by
 their R finalizer). Generated struct constructors use a struct-specific
 tag (`struct_<name>`) with an `RC_free_finalizer`; free them with
@@ -179,7 +179,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5ee3e17f3490"
+#> [1] "0x6299dece5d40"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -210,11 +210,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5ee3df5d8240>
+#> <pointer: 0x6299de722f30>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5ee3df413c20>
+#> <pointer: 0x6299e04ef560>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5ee3df5d8240>
+#> <pointer: 0x6299de722f30>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -325,7 +325,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5ee3e1640a58 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @6299e0306b70 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -341,7 +341,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5ee3e1640a58 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @6299e0306b70 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Structs and unions
@@ -366,15 +366,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5ee3e0e52aa0>
+#> <pointer: 0x6299de51f1c0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5ee3e0e52aa0>
+#> <pointer: 0x6299de51f1c0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5ee3df93c8b0>
+#> <pointer: 0x6299dfb59c20>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5ee3df93c8b0>
+#> <pointer: 0x6299dfb59c20>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -419,9 +419,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5ee3dee11230>
+#> <pointer: 0x6299e040a8e0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5ee3dee11230>
+#> <pointer: 0x6299e040a8e0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -708,7 +708,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5ee3e2d91ef0>
+#> <pointer: 0x6299e25ca220>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -761,11 +761,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5ee3e151cca0>
+#> <pointer: 0x6299e1fe72b0>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5ee3e1792d20>
+#> <pointer: 0x6299e24c3a00>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -794,9 +794,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5ee3dffb8160>
+#> <pointer: 0x6299de2c9f10>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5ee3dffb8160>
+#> <pointer: 0x6299de2c9f10>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
