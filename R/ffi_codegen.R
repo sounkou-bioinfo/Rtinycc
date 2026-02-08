@@ -1037,12 +1037,11 @@ generate_ffi_code <- function(
   if (nzchar(cb_tramps$code)) {
     parts <- c(
       parts,
-      "#include <stdio.h>",
       "",
       "/* Callback trampoline support */",
       "typedef struct { int id; int refs; } callback_token_t;",
       if (cb_tramps$needs_sync) {
-        "SEXP RC_invoke_callback(SEXP, SEXP);"
+        "SEXP RC_invoke_callback_id(int, SEXP);"
       } else {
         NULL
       },

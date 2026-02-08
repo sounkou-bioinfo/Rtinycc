@@ -1093,6 +1093,13 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     return RC_invoke_callback_internal(id, args);
 }
 
+// Invoke callback by integer id directly (no snprintf needed)
+// This avoids CRT stdio dependency in JIT code (snprintf is not a
+// direct export from ucrtbase.dll on Windows)
+SEXP RC_invoke_callback_id(int id, SEXP args) {
+    return RC_invoke_callback_internal(id, args);
+}
+
 #ifndef _WIN32
 static void cbq_push(cb_task_t *task) {
     pthread_mutex_lock(&cbq_mutex);
@@ -1346,6 +1353,7 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     tcc_add_symbol(s, "RC_free_finalizer", RC_free_finalizer);
     tcc_add_symbol(s, "RC_invoke_callback", RC_invoke_callback);
+    tcc_add_symbol(s, "RC_invoke_callback_id", RC_invoke_callback_id);
     tcc_add_symbol(s, "RC_callback_async_schedule_c",
                    RC_callback_async_schedule_c);
     return R_NilValue;

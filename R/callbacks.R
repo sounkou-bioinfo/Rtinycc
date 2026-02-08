@@ -350,7 +350,7 @@ tcc_callback_async_drain <- function() {
 generate_trampoline <- function(trampoline_name, sig) {
   # Generate a trampoline function that:
   # 1. Takes a user data pointer + C arguments
-  # 2. Calls RC_invoke_callback() to invoke the R function
+  # 2. Calls RC_invoke_callback_id() to invoke the R function
   # 3. Returns the result
 
   n_args <- length(sig$arg_types)
@@ -382,10 +382,7 @@ generate_trampoline <- function(trampoline_name, sig) {
       trampoline_name
     ),
     get_c_default_return(sig$return_type, indent = 4L),
-    "  }",
-    "  char buf[32];",
-    "  snprintf(buf, sizeof(buf), \"%d\", tok->id);",
-    "  SEXP idstr = PROTECT(mkString(buf));"
+    "  }"
   )
 
   # Build argument conversion
@@ -409,11 +406,9 @@ generate_trampoline <- function(trampoline_name, sig) {
   }
 
   # Call the runtime
-  lines <- c(lines, "  SEXP result = RC_invoke_callback(idstr, args);")
+  lines <- c(lines, "  SEXP result = RC_invoke_callback_id(tok->id, args);")
 
   if (n_args > 0) {
-    lines <- c(lines, "  UNPROTECT(2);")
-  } else {
     lines <- c(lines, "  UNPROTECT(1);")
   }
 
