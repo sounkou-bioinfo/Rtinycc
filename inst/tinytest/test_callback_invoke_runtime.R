@@ -184,7 +184,6 @@ if (.Platform$OS.type != "windows") {
       on.exit(
         {
           close_if_valid(cb_async)
-          f
         },
         add = TRUE
       )

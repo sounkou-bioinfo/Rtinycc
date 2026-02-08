@@ -1029,7 +1029,7 @@ static SEXP RC_invoke_callback_internal(int id, SEXP args) {
     
     // Evaluate the call
     int err = 0;
-    SEXP result = PROTECT(R_tryEval(call, R_GlobalEnv, &err));
+    SEXP result = PROTECT(R_tryEvalSilent(call, R_GlobalEnv, &err));
     if (err) {
         UNPROTECT(2);  // call and result
         Rf_warning("Callback raised an error");
