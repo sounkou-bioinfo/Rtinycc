@@ -233,14 +233,15 @@ x <- sample(10000)
 bench::mark(
   Rtinycc_vec = {
     y <- as.integer(x)
+    y <- y + 0L
     ffi_vec$add_vec(y, length(y))
     y
   },
   Rbuiltin_vec = {
     y <- as.integer(x)
+    y <- y + 0L
     y + 1L
-  },
-  check = FALSE
+  }
 )
 
 ```
