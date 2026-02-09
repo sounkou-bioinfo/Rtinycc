@@ -249,7 +249,7 @@ bench::mark(
 
 This example benchmarks the classic convolution routine written in plain C (no manual
 `SEXP` code). Rtinycc generates the `.Call` wrappers automatically. We also compare
-against `quickr`.
+against `quickr` which is expected to be faster due to compiler optimiztion.
 
 ```{r benchmark-convolve}
 library(quickr)
