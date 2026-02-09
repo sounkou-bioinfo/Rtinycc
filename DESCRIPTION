@@ -15,7 +15,8 @@ License: GPL (>= 3)
 Depends: R (>= 4.4.0)
 Suggests:
     tinytest,
-    treesitter.c (>= 0.0.4)
+    treesitter.c (>= 0.0.4),
+    quickr
 SystemRequirements: GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
