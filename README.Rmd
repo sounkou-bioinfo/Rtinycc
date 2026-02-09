@@ -209,6 +209,16 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$add(5L, 3L)
+
+# compare to the R C builtin  `+` in a loop 
+# expected to be slower due to compiler optimization
+# and no overhead of .Call and GC triggered by the convertions
+r_p <- sample(10000)
+bench::mark(
+  Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
+  Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
+
+)
 ```
 
 ### Linking external libraries
@@ -228,6 +238,9 @@ math <- tcc_ffi() |>
 math$sqrt(16.0)
 math$sin(pi / 2)
 math$floor(3.7)
+
+
+
 ```
 
 ### Working with arrays
