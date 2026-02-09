@@ -180,7 +180,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x59cd74569b50"
+#> [1] "0x628b42a30b50"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -211,11 +211,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x59cd74529e20>
+#> <pointer: 0x628b429f0e20>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x59cd750c0990>
+#> <pointer: 0x628b43587990>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x59cd74529e20>
+#> <pointer: 0x628b429f0e20>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -273,11 +273,13 @@ bench::mark(
   Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
 
 )
+#> Warning: Some expressions had a GC in every iteration; so filtering is
+#> disabled.
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      28.9ms   28.9ms      34.6   53.98KB    554. 
-#> 2 Rbuiltin    540.6µs  569.2µs    1722.     9.05KB     23.2
+#> 1 Rtinycc      30.7ms   31.7ms      25.2   53.98KB     25.2
+#> 2 Rbuiltin    541.1µs  575.9µs    1633.     9.05KB     22.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -306,78 +308,9 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.2µs   28.1µs    38324.    39.1KB     26.8
-#> 2 Rbuiltin_vec   17.4µs   18.1µs    52928.    78.2KB     79.5
+#> 1 Rtinycc_vec    20.2µs   28.7µs    35968.    39.1KB     25.2
+#> 2 Rbuiltin_vec     17µs   17.9µs    53610.    78.2KB     80.5
 ```
-
-## Benchmark
-
-This example benchmarks the classic convolution routine written in plain
-C (no manual `SEXP` code). Rtinycc generates the `.Call` wrappers
-automatically. We also compare against `quickr` which is expected to be
-faster due to compiler optimiztion.
-
-``` r
-library(quickr)
-
-slow_convolve <- function(a, b) {
-  declare(type(a = double(NA)), type(b = double(NA)))
-  ab <- double(length(a) + length(b) - 1)
-  for (i in seq_along(a)) {
-    for (j in seq_along(b)) {
-      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
-    }
-  }
-  ab
-}
-
-ffi_conv <- tcc_ffi() |>
-  tcc_source(" \
-    #include <stdlib.h>\
-    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
-      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
-      if (!ab) return NULL;\
-      for (int i = 0; i < na; i++) {\
-        for (int j = 0; j < nb; j++) {\
-          ab[i + j] += a[i] * b[j];\
-        }\
-      }\
-      return ab;\
-    }\
-  ") |>
-  tcc_bind(
-    convolve = list(
-      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
-      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
-    )
-  ) |>
-  tcc_compile()
-
-set.seed(1)
-a <- runif(100000)
-b <- runif(100)
-na <- length(a)
-nb <- length(b)
-nab <- na + nb - 1L
-
-quick_convolve <- quick(slow_convolve)
-timings <- bench::mark(
-  R = slow_convolve(a, b),
-  quickr = quick_convolve(a, b),
-  Rtinycc = ffi_conv$convolve(a, na, b, nb, nab),
-  min_time = 2
-)
-timings
-#> # A tibble: 3 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R          628.18ms  628.7ms      1.59     847KB     1.59
-#> 2 quickr       3.77ms   4.25ms    235.       782KB     4.11
-#> 3 Rtinycc     56.89ms  58.88ms     17.0      782KB     0
-plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
-```
-
-<img src="man/figures/README-benchmark-convolve-1.png" width="100%" />
 
 ### Linking external libraries
 
@@ -439,7 +372,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @59cd85098bd8 13 INTSXP g0c0 [MARK,REF(65535)]  1 : 100 (compact)
+#> @628b4706b5a0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -455,8 +388,77 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @59cd85098bd8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @628b4706b5a0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
+
+### Benchmark
+
+This example benchmarks the classic convolution routine written in plain
+C (no manual `SEXP` code). Rtinycc generates the `.Call` wrappers
+automatically. We also compare against `quickr` which is expected to be
+faster due to compiler optimiztion.
+
+``` r
+library(quickr)
+
+slow_convolve <- function(a, b) {
+  declare(type(a = double(NA)), type(b = double(NA)))
+  ab <- double(length(a) + length(b) - 1)
+  for (i in seq_along(a)) {
+    for (j in seq_along(b)) {
+      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
+    }
+  }
+  ab
+}
+
+ffi_conv <- tcc_ffi() |>
+  tcc_source(" \
+    #include <stdlib.h>\
+    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
+      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
+      if (!ab) return NULL;\
+      for (int i = 0; i < na; i++) {\
+        for (int j = 0; j < nb; j++) {\
+          ab[i + j] += a[i] * b[j];\
+        }\
+      }\
+      return ab;\
+    }\
+  ") |>
+  tcc_bind(
+    convolve = list(
+      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
+      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+
+set.seed(1)
+a <- runif(100000)
+b <- runif(100)
+na <- length(a)
+nb <- length(b)
+nab <- na + nb - 1L
+
+quick_convolve <- quick(slow_convolve)
+timings <- bench::mark(
+  R = slow_convolve(a, b),
+  quickr = quick_convolve(a, b),
+  Rtinycc = ffi_conv$convolve(a, na, b, nb, nab),
+  min_time = 2
+)
+timings
+#> # A tibble: 3 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 R           629.4ms 631.04ms      1.58     847KB    1.58 
+#> 2 quickr       3.88ms   4.27ms    234.       782KB    4.11 
+#> 3 Rtinycc     55.42ms  57.48ms     17.4      782KB    0.512
+plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+<img src="man/figures/README-benchmark-convolve-1.png" width="100%" />
 
 ### Structs and unions
 
@@ -480,15 +482,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x59cd7a60dbc0>
+#> <pointer: 0x628b493b5480>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x59cd7a60dbc0>
+#> <pointer: 0x628b493b5480>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x59cd7aa08380>
+#> <pointer: 0x628b48a3e790>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x59cd7aa08380>
+#> <pointer: 0x628b48a3e790>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -533,9 +535,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x59cd7ac42760>
+#> <pointer: 0x628b48a00c20>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x59cd7ac42760>
+#> <pointer: 0x628b48a00c20>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -822,7 +824,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x59cd7af6f2c0>
+#> <pointer: 0x628b429ef600>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -875,11 +877,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x59cd7967afa0>
+#> <pointer: 0x628b43df2250>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x59cd7a534800>
+#> <pointer: 0x628b49ab00a0>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -908,9 +910,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x59cd7c613f60>
+#> <pointer: 0x628b47ce4630>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x59cd7c613f60>
+#> <pointer: 0x628b47ce4630>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

@@ -246,65 +246,6 @@ bench::mark(
 
 ```
 
-## Benchmark
-
-This example benchmarks the classic convolution routine written in plain C (no manual
-`SEXP` code). Rtinycc generates the `.Call` wrappers automatically. We also compare
-against `quickr` which is expected to be faster due to compiler optimiztion.
-
-```{r benchmark-convolve}
-library(quickr)
-
-slow_convolve <- function(a, b) {
-  declare(type(a = double(NA)), type(b = double(NA)))
-  ab <- double(length(a) + length(b) - 1)
-  for (i in seq_along(a)) {
-    for (j in seq_along(b)) {
-      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
-    }
-  }
-  ab
-}
-
-ffi_conv <- tcc_ffi() |>
-  tcc_source(" \
-    #include <stdlib.h>\
-    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
-      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
-      if (!ab) return NULL;\
-      for (int i = 0; i < na; i++) {\
-        for (int j = 0; j < nb; j++) {\
-          ab[i + j] += a[i] * b[j];\
-        }\
-      }\
-      return ab;\
-    }\
-  ") |>
-  tcc_bind(
-    convolve = list(
-      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
-      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
-    )
-  ) |>
-  tcc_compile()
-
-set.seed(1)
-a <- runif(100000)
-b <- runif(100)
-na <- length(a)
-nb <- length(b)
-nab <- na + nb - 1L
-
-quick_convolve <- quick(slow_convolve)
-timings <- bench::mark(
-  R = slow_convolve(a, b),
-  quickr = quick_convolve(a, b),
-  Rtinycc = ffi_conv$convolve(a, na, b, nb, nab),
-  min_time = 2
-)
-timings
-plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
-```
 
 ### Linking external libraries
 
@@ -375,6 +316,65 @@ y <- ffi$dup_array(x, length(x))
 y[1]
 
 .Internal(inspect(x))
+```
+### Benchmark
+
+This example benchmarks the classic convolution routine written in plain C (no manual
+`SEXP` code). Rtinycc generates the `.Call` wrappers automatically. We also compare
+against `quickr` which is expected to be faster due to compiler optimiztion.
+
+```{r benchmark-convolve}
+library(quickr)
+
+slow_convolve <- function(a, b) {
+  declare(type(a = double(NA)), type(b = double(NA)))
+  ab <- double(length(a) + length(b) - 1)
+  for (i in seq_along(a)) {
+    for (j in seq_along(b)) {
+      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
+    }
+  }
+  ab
+}
+
+ffi_conv <- tcc_ffi() |>
+  tcc_source(" \
+    #include <stdlib.h>\
+    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
+      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
+      if (!ab) return NULL;\
+      for (int i = 0; i < na; i++) {\
+        for (int j = 0; j < nb; j++) {\
+          ab[i + j] += a[i] * b[j];\
+        }\
+      }\
+      return ab;\
+    }\
+  ") |>
+  tcc_bind(
+    convolve = list(
+      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
+      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+
+set.seed(1)
+a <- runif(100000)
+b <- runif(100)
+na <- length(a)
+nb <- length(b)
+nab <- na + nb - 1L
+
+quick_convolve <- quick(slow_convolve)
+timings <- bench::mark(
+  R = slow_convolve(a, b),
+  quickr = quick_convolve(a, b),
+  Rtinycc = ffi_conv$convolve(a, na, b, nb, nab),
+  min_time = 2
+)
+timings
+plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ### Structs and unions
