@@ -17,6 +17,7 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+      DEBUG_DIR: ${{ runner.temp }}/win_gdb
 
     steps:
       - uses: actions/checkout@v4
@@ -64,17 +65,13 @@ jobs:
           if [ -z "$RUNS" ]; then RUNS=3; fi
           echo "Running plain R CMD check up to $RUNS times"
 
-          ARTDIR="$GITHUB_WORKSPACE/artifacts/plain"
-          WORKDIR="$(mktemp -d)"
+          ARTDIR="$DEBUG_DIR/plain"
           mkdir -p "$ARTDIR"
 
           ok=0
           i=1
           while [ "$i" -le "$RUNS" ]; do
             echo "==== attempt $i/$RUNS ===="
-            rm -rf "$WORKDIR/run-$i"
-            mkdir -p "$WORKDIR/run-$i"
-
             R CMD build . --no-build-vignettes > "$ARTDIR/build-$i.log" 2>&1 || true
             PKG=$(ls -1t *.tar.gz 2>/dev/null | head -n1)
             if [ -z "$PKG" ]; then
@@ -107,7 +104,7 @@ jobs:
         run: |
           set -euxo pipefail
 
-          ARTDIR="$GITHUB_WORKSPACE/artifacts/gdb"
+          ARTDIR="$DEBUG_DIR/gdb"
           mkdir -p "$ARTDIR"
 
           R CMD build . --no-build-vignettes > "$ARTDIR/build.log" 2>&1
@@ -118,12 +115,36 @@ jobs:
           set pagination off
           set print thread-events off
           set confirm off
+          set breakpoint pending on
+          break abort
+          commands
+            bt full
+            thread apply all bt full
+            continue
+          end
+          break _exit
+          commands
+            bt full
+            thread apply all bt full
+            continue
+          end
+          break exit
+          commands
+            bt full
+            thread apply all bt full
+            continue
+          end
           catch signal SIGSEGV
+          commands
+            bt full
+            thread apply all bt full
+            continue
+          end
           catch signal SIGABRT
           commands
             bt full
             thread apply all bt full
-            quit
+            continue
           end
           run
           quit
@@ -142,6 +163,6 @@ jobs:
         with:
           name: win_gdb-artifacts
           path: |
-            artifacts/**
+            ${{ env.DEBUG_DIR }}/**
             *.Rcheck/**
           if-no-files-found: warn
