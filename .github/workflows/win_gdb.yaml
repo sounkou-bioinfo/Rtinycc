@@ -67,8 +67,8 @@ jobs:
           PKG=$(ls -1t *.tar.gz | head -n1)
           R CMD INSTALL "$PKG" > "$ARTDIR/install.log" 2>&1
 
-          Rscript -e 'cat(system.file(package="Rtinycc"), "\n")' > "$ARTDIR/pkg_root.txt"
-          PKGROOT=$(cat "$ARTDIR/pkg_root.txt")
+          Rscript -e 'cat(normalizePath(system.file(package="Rtinycc"), winslash = "/", mustWork = TRUE))' > "$ARTDIR/pkg_root.txt"
+          PKGROOT=$(tr -d '\r\n' < "$ARTDIR/pkg_root.txt")
 
           OBJDUMP=$(command -v x86_64-w64-mingw32-objdump || command -v objdump)
           echo "objdump=$OBJDUMP" > "$ARTDIR/objdump.txt"
@@ -76,17 +76,38 @@ jobs:
           "$OBJDUMP" -p "$PKGROOT/libs/x64/Rtinycc.dll" > "$ARTDIR/Rtinycc.dll.imports.txt" || true
           "$OBJDUMP" -p "$PKGROOT/libs/x64/libtcc.dll" > "$ARTDIR/libtcc.dll.imports.txt" || true
 
-          rg -n "DLL Name|msvcrt|ucrt|api-ms-win|KERNEL32|R.dll" "$ARTDIR"/*.imports.txt > "$ARTDIR/imports.summary.txt" || true
+          grep -Ein "DLL Name|msvcrt|ucrt|api-ms-win|KERNEL32|R\.dll" "$ARTDIR"/*.imports.txt > "$ARTDIR/imports.summary.txt" || true
 
           if [ -f "$PKGROOT/tinycc/lib/msvcrt.def" ]; then
             cp "$PKGROOT/tinycc/lib/msvcrt.def" "$ARTDIR/msvcrt.def"
-            rg -n "ucrt|msvcrt|malloc|free|exit|abort" "$ARTDIR/msvcrt.def" > "$ARTDIR/msvcrt.def.summary.txt" || true
+            grep -Ein "ucrt|msvcrt|malloc|free|exit|abort" "$ARTDIR/msvcrt.def" > "$ARTDIR/msvcrt.def.summary.txt" || true
           fi
 
           if [ -f "$PKGROOT/tinycc/lib/R.def" ]; then
             cp "$PKGROOT/tinycc/lib/R.def" "$ARTDIR/R.def"
-            rg -n "Rf_error|R_NilValue|R_RegisterCFinalizerEx" "$ARTDIR/R.def" > "$ARTDIR/R.def.summary.txt" || true
+            grep -Ein "Rf_error|R_NilValue|R_RegisterCFinalizerEx" "$ARTDIR/R.def" > "$ARTDIR/R.def.summary.txt" || true
           fi
+
+          {
+            echo "PKGROOT=$PKGROOT"
+            echo "--- tinycc/lib directory ---"
+            ls -la "$PKGROOT/tinycc/lib" || true
+            echo "--- tinycc/include directory ---"
+            ls -la "$PKGROOT/tinycc/include" || true
+          } > "$ARTDIR/tinycc-layout.txt"
+
+          # Inspect key TinyCC Windows headers for CRT assumptions (msvcrt/ucrt and exit helpers).
+          for hdr in \
+            "$PKGROOT/tinycc/include/stdlib.h" \
+            "$PKGROOT/tinycc/include/stdio.h" \
+            "$PKGROOT/tinycc/include/winapi/wincrt.h" \
+            "$PKGROOT/tinycc/include/winapi/_mingw.h"; do
+            if [ -f "$hdr" ]; then
+              base=$(basename "$hdr")
+              cp "$hdr" "$ARTDIR/$base"
+              grep -Ein "msvcrt|ucrt|__MSVCRT_VERSION__|_UCRT|_exit|exit|abort" "$hdr" > "$ARTDIR/$base.crt.summary.txt" || true
+            fi
+          done
 
       - name: Reproduce flaky post-test exit (plain check loop)
         id: plain
@@ -156,35 +177,35 @@ jobs:
             info sharedlibrary
             bt full
             thread apply all bt full
-            continue
+            quit 86
           end
           break _exit
           commands
             info sharedlibrary
             bt full
             thread apply all bt full
-            continue
+            quit 87
           end
           break exit
           commands
             info sharedlibrary
             bt full
             thread apply all bt full
-            continue
+            quit 88
           end
           catch signal SIGSEGV
           commands
             info sharedlibrary
             bt full
             thread apply all bt full
-            continue
+            quit 89
           end
           catch signal SIGABRT
           commands
             info sharedlibrary
             bt full
             thread apply all bt full
-            continue
+            quit 90
           end
           run
           quit
