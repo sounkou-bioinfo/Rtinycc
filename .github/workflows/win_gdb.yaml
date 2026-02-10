@@ -63,22 +63,28 @@ jobs:
           RUNS="${{ github.event.inputs.runs || '3' }}"
           if [ -z "$RUNS" ]; then RUNS=3; fi
           echo "Running plain R CMD check up to $RUNS times"
+
+          ARTDIR="$GITHUB_WORKSPACE/artifacts/plain"
+          WORKDIR="$(mktemp -d)"
+          mkdir -p "$ARTDIR"
+
           ok=0
           i=1
           while [ "$i" -le "$RUNS" ]; do
             echo "==== attempt $i/$RUNS ===="
-            rm -rf check
-            mkdir -p check
-            R CMD build . --no-build-vignettes > "check/build-$i.log" 2>&1 || true
+            rm -rf "$WORKDIR/run-$i"
+            mkdir -p "$WORKDIR/run-$i"
+
+            R CMD build . --no-build-vignettes > "$ARTDIR/build-$i.log" 2>&1 || true
             PKG=$(ls -1t *.tar.gz 2>/dev/null | head -n1)
             if [ -z "$PKG" ]; then
-              echo "No tarball produced" | tee "check/check-$i.log"
+              echo "No tarball produced" | tee "$ARTDIR/check-$i.log"
             else
               set +e
-              R CMD check --as-cran --no-manual "$PKG" > "check/check-$i.log" 2>&1
+              R CMD check --as-cran --no-manual "$PKG" > "$ARTDIR/check-$i.log" 2>&1
               rc=$?
               set -e
-              echo "attempt $i rc=$rc" | tee -a "check/check-$i.log"
+              echo "attempt $i rc=$rc" | tee -a "$ARTDIR/check-$i.log"
               if [ "$rc" -eq 0 ]; then
                 ok=1
                 break
@@ -86,6 +92,7 @@ jobs:
             fi
             i=$((i+1))
           done
+
           if [ "$ok" -eq 1 ]; then
             echo "plain_success=1" >> "$GITHUB_OUTPUT"
           else
@@ -99,31 +106,35 @@ jobs:
         continue-on-error: true
         run: |
           set -euxo pipefail
-          rm -rf check-gdb
-          mkdir -p check-gdb
 
-          R CMD build . --no-build-vignettes > check-gdb/build.log 2>&1
+          ARTDIR="$GITHUB_WORKSPACE/artifacts/gdb"
+          mkdir -p "$ARTDIR"
+
+          R CMD build . --no-build-vignettes > "$ARTDIR/build.log" 2>&1
           PKG=$(ls -1t *.tar.gz | head -n1)
 
-          # Use a gdb command file to avoid parser issues from -ex quoting.
-          cat > check-gdb/gdb.cmd <<'GDBCMD'
+          # Catch crash signals and print stack only when a signal is trapped.
+          cat > "$ARTDIR/gdb.cmd" <<'GDBCMD'
           set pagination off
           set print thread-events off
           set confirm off
+          catch signal SIGSEGV
+          catch signal SIGABRT
+          commands
+            bt full
+            thread apply all bt full
+            quit
+          end
           run
-          bt full
-          thread apply all bt full
           quit
           GDBCMD
 
-          # Run the actual check process under gdb (not an rcmdcheck wrapper)
-          # so post-test teardown failures stay in the debugged process.
           set +e
-          gdb --batch -x check-gdb/gdb.cmd \
-            --args R CMD check --as-cran --no-manual "$PKG" > check-gdb/gdb.log 2>&1
+          gdb --batch -x "$ARTDIR/gdb.cmd" \
+            --args R CMD check --as-cran --no-manual "$PKG" > "$ARTDIR/gdb.log" 2>&1
           GDB_RC=$?
           set -e
-          echo "gdb_exit_code=$GDB_RC" | tee -a check-gdb/gdb.log
+          echo "gdb_exit_code=$GDB_RC" | tee -a "$ARTDIR/gdb.log"
 
       - name: Upload debug artifacts
         if: always()
@@ -131,7 +142,6 @@ jobs:
         with:
           name: win_gdb-artifacts
           path: |
-            check/**
-            check-gdb/**
+            artifacts/**
             *.Rcheck/**
           if-no-files-found: warn
