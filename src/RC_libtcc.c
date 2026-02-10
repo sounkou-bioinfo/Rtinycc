@@ -32,6 +32,7 @@ SEXP RC_set_shutting_down(SEXP flag) {
 /* Releases a TCCState when its R external pointer is garbage collected. */
 static void RC_tcc_finalizer(SEXP ext) {
     if (g_rtinycc_shutting_down) {
+        R_ClearExternalPtr(ext);
         return;
     }
     void *ptr = R_ExternalPtrAddr(ext);
@@ -51,6 +52,10 @@ static void RC_null_finalizer(SEXP ext) {
 /* Generic finalizer: calls free() on the pointer and clears the EXTPTR.
  * Used for owned pointers (tcc_malloc, tcc_cstring) and struct helpers. */
 void RC_free_finalizer(SEXP ext) {
+    if (g_rtinycc_shutting_down) {
+        R_ClearExternalPtr(ext);
+        return;
+    }
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         free(ptr);
@@ -770,6 +775,10 @@ static int cbq_initialized = 0;
 static void RC_callback_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
+        if (g_rtinycc_shutting_down) {
+            R_ClearExternalPtr(ext);
+            return;
+        }
         // Release the preserved R function
         if (token->id >= 0 && token->id < MAX_CALLBACKS) {
             callback_entry_t *entry = &callback_registry[token->id];
@@ -805,6 +814,10 @@ static void RC_callback_finalizer(SEXP ext) {
 static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
+        if (g_rtinycc_shutting_down) {
+            R_ClearExternalPtr(ext);
+            return;
+        }
         token->refs -= 1;
         if (token->refs <= 0) {
             free(token);
@@ -1344,6 +1357,23 @@ SEXP RC_callback_async_drain() {
     cbq_drain_tasks();
     return R_NilValue;
 }
+
+static void cbq_shutdown(void) {
+    cbq_drain_tasks();
+    if (cbq_ih) {
+        removeInputHandler(&R_InputHandlers, cbq_ih);
+        cbq_ih = NULL;
+    }
+    if (cbq_pipe[0] >= 0) {
+        close(cbq_pipe[0]);
+        cbq_pipe[0] = -1;
+    }
+    if (cbq_pipe[1] >= 0) {
+        close(cbq_pipe[1]);
+        cbq_pipe[1] = -1;
+    }
+    cbq_initialized = 0;
+}
 #endif
 
 // Cleanup all callbacks during package unload
@@ -1351,24 +1381,31 @@ SEXP RC_cleanup_callbacks() {
     // Clean up all valid callbacks in the registry
     for (int i = 0; i < MAX_CALLBACKS; i++) {
         callback_entry_t *entry = &callback_registry[i];
-        if (entry->valid && entry->fun != NULL) {
+        if (entry->fun != NULL) {
             R_ReleaseObject(entry->fun);
-            entry->valid = 0;
-            if (entry->return_type) {
-                free(entry->return_type);
-                entry->return_type = NULL;
-            }
-            if (entry->arg_types) {
-                for (int j = 0; j < entry->n_args; j++) {
-                    if (entry->arg_types[j]) {
-                        free(entry->arg_types[j]);
-                    }
-                }
-                free(entry->arg_types);
-                entry->arg_types = NULL;
-            }
+            entry->fun = NULL;
         }
+        if (entry->return_type) {
+            free(entry->return_type);
+            entry->return_type = NULL;
+        }
+        if (entry->arg_types) {
+            for (int j = 0; j < entry->n_args; j++) {
+                if (entry->arg_types[j]) {
+                    free(entry->arg_types[j]);
+                }
+            }
+            free(entry->arg_types);
+            entry->arg_types = NULL;
+        }
+        entry->valid = 0;
+        entry->n_args = 0;
+        entry->threadsafe = 0;
+        entry->trampoline = NULL;
     }
+#ifndef _WIN32
+    cbq_shutdown();
+#endif
     return R_NilValue;
 }
 

@@ -220,3 +220,58 @@ if (.Platform$OS.type != "windows") {
     info = "Async callback scheduled from worker thread"
   )
 }
+
+
+# Test: cstring callback return uses UTF-8 string conversion (no CHAR(STRSXP) ABI bug)
+expect_true({
+  cb_str <- tcc_callback(function() "hello", signature = "const char* (*)(void)")
+  cb_ptr_str <- tcc_callback_ptr(cb_str)
+  on.exit({ close_if_valid(cb_str) }, add = TRUE)
+
+  code_str <- "
+#define _Complex
+
+const char* call_cb_str(const char* (*cb)(void* ctx), void* ctx) {
+  return cb(ctx);
+}
+"
+
+  ffi_str <- tcc_ffi() |>
+    tcc_source(code_str) |>
+    tcc_bind(
+      call_cb_str = list(
+        args = list("callback:const char*(void)", "ptr"),
+        returns = "cstring"
+      )
+    ) |>
+    tcc_compile()
+
+  identical(ffi_str$call_cb_str(cb_str, cb_ptr_str), "hello")
+}, info = "CString callback return is stable")
+
+# Test: bool callback uses bool ABI in trampoline signature
+expect_true({
+  cb_bool <- tcc_callback(function(x) !isTRUE(x), signature = "bool (*)(bool)")
+  cb_ptr_bool <- tcc_callback_ptr(cb_bool)
+  on.exit({ close_if_valid(cb_bool) }, add = TRUE)
+
+  code_bool <- "
+#define _Complex
+
+int call_cb_bool(bool (*cb)(void* ctx, bool), void* ctx, bool x) {
+  return cb(ctx, x) ? 1 : 0;
+}
+"
+
+  ffi_bool <- tcc_ffi() |>
+    tcc_source(code_bool) |>
+    tcc_bind(
+      call_cb_bool = list(
+        args = list("callback:bool(bool)", "ptr", "bool"),
+        returns = "i32"
+      )
+    ) |>
+    tcc_compile()
+
+  identical(ffi_bool$call_cb_bool(cb_bool, cb_ptr_bool, TRUE), 0L)
+}, info = "Bool callback ABI remains consistent")
