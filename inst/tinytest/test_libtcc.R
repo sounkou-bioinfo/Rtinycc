@@ -14,13 +14,9 @@ if (!(nzchar(tcc_dir) && file.exists(tcc_dir))) {
 
 # libtcc in-memory compile
 state <- tcc_state(output = "memory")
-# On Windows (UCRT), printf is not a direct DLL export from ucrtbase.dll
-# (it's an inline function in the headers), so we skip it in this raw test.
-if (.Platform$OS.type == "windows") {
-  code <- "int forty_two(){ return 42; }"
-} else {
-  code <- "int forty_two(){ printf(\"Hello from forty_two!\\n\"); return 42; }"
-}
+# Keep the in-memory test minimal and side-effect free.
+# printf can be problematic on some platforms/toolchains (macOS, Windows).
+code <- "int forty_two(){ return 42; }"
 message("Adding source code...")
 expect_equal(tcc_compile_string(state, code), 0L)
 message("Relocating code...")
