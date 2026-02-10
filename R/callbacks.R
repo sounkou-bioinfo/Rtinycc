@@ -420,7 +420,7 @@ generate_trampoline <- function(trampoline_name, sig) {
   } else {
     lines <- c(
       lines,
-      sprintf("  return %s(result);", get_r_to_c_converter(sig$return_type))
+      sprintf("  return %s;", get_r_to_c_return_expr(sig$return_type, "result"))
     )
   }
 
@@ -581,7 +581,11 @@ map_c_to_sexp_type <- function(c_type) {
     c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
   ) {
     "int"
-  } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
+  } else if (c_type %in% c("long")) {
+    "long"
+  } else if (c_type %in% c("unsigned long")) {
+    "unsigned long"
+  } else if (c_type %in% c("long long", "int64_t", "i64")) {
     "long long"
   } else if (
     c_type %in%
@@ -604,7 +608,7 @@ map_c_to_sexp_type <- function(c_type) {
   } else if (c_type %in% c("void*", "void *", "ptr")) {
     "void*"
   } else if (c_type %in% c("bool", "_Bool")) {
-    "int"
+    "bool"
   } else {
     "void*" # Default to pointer
   }
@@ -698,32 +702,36 @@ get_sexp_constructor_call <- function(c_type, arg_expr) {
   sprintf("%s(%s)", ctor, arg_expr)
 }
 
-# Get R to C converter function
-get_r_to_c_converter <- function(c_type) {
+# Get R-to-C return expression for trampoline return values
+get_r_to_c_return_expr <- function(c_type, result_expr = "result") {
   c_type <- trimws(c_type)
   is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
 
   if (is_ptr) {
-    "R_ExternalPtrAddr"
+    sprintf("R_ExternalPtrAddr(%s)", result_expr)
   } else if (
     c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
   ) {
-    "asInteger"
-  } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
-    "asReal" # Convert to double then cast
+    sprintf("Rf_asInteger(%s)", result_expr)
+  } else if (c_type %in% c("long")) {
+    sprintf("(long)Rf_asInteger(%s)", result_expr)
+  } else if (c_type %in% c("long long", "int64_t", "i64")) {
+    sprintf("(long long)Rf_asReal(%s)", result_expr) # Convert to double then cast
   } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16")) {
-    "asInteger"
+    sprintf("Rf_asInteger(%s)", result_expr)
+  } else if (c_type %in% c("unsigned long")) {
+    sprintf("(unsigned long)Rf_asReal(%s)", result_expr)
   } else if (c_type %in% c("uint32_t", "u32", "uint64_t", "u64")) {
-    "asReal"
+    sprintf("(unsigned long long)Rf_asReal(%s)", result_expr)
   } else if (c_type %in% c("double", "float", "f64", "f32")) {
-    "asReal"
+    sprintf("Rf_asReal(%s)", result_expr)
   } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    "CHAR"
+    sprintf("Rf_translateCharUTF8(Rf_asChar(%s))", result_expr)
   } else if (c_type %in% c("void*", "void *", "ptr")) {
-    "R_ExternalPtrAddr"
+    sprintf("R_ExternalPtrAddr(%s)", result_expr)
   } else if (c_type %in% c("bool", "_Bool")) {
-    "asLogical"
+    sprintf("Rf_asLogical(%s)", result_expr)
   } else {
-    "R_ExternalPtrAddr"
+    sprintf("R_ExternalPtrAddr(%s)", result_expr)
   }
 }

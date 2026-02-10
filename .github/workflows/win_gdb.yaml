@@ -1,0 +1,137 @@
+name: win_gdb
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "How many repeated check attempts before giving up"
+        required: false
+        default: "3"
+
+permissions: read-all
+
+jobs:
+  win-gdb:
+    runs-on: windows-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - name: Ensure gdb is available (MSYS2/Rtools)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if command -v gdb >/dev/null 2>&1; then
+            gdb --version
+            exit 0
+          fi
+          if command -v pacman >/dev/null 2>&1; then
+            pacman -S --noconfirm --needed gdb
+          fi
+          command -v gdb
+          gdb --version
+
+      - name: Toolchain info
+        shell: bash
+        run: |
+          set -euxo pipefail
+          which R
+          R --version
+          which gdb || true
+          gdb --version || true
+
+      - name: Reproduce flaky post-test exit (plain check loop)
+        id: plain
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -eu
+          RUNS="${{ github.event.inputs.runs || '3' }}"
+          if [ -z "$RUNS" ]; then RUNS=3; fi
+          echo "Running plain R CMD check up to $RUNS times"
+          ok=0
+          i=1
+          while [ "$i" -le "$RUNS" ]; do
+            echo "==== attempt $i/$RUNS ===="
+            rm -rf check
+            mkdir -p check
+            R CMD build . --no-build-vignettes > "check/build-$i.log" 2>&1 || true
+            PKG=$(ls -1t *.tar.gz 2>/dev/null | head -n1)
+            if [ -z "$PKG" ]; then
+              echo "No tarball produced" | tee "check/check-$i.log"
+            else
+              set +e
+              R CMD check --no-manual "$PKG" > "check/check-$i.log" 2>&1
+              rc=$?
+              set -e
+              echo "attempt $i rc=$rc" | tee -a "check/check-$i.log"
+              if [ "$rc" -eq 0 ]; then
+                ok=1
+                break
+              fi
+            fi
+            i=$((i+1))
+          done
+          if [ "$ok" -eq 1 ]; then
+            echo "plain_success=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "plain_success=0" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Run check under gdb and capture backtrace on crash
+        if: steps.plain.outputs.plain_success == '0'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euxo pipefail
+          rm -rf check-gdb
+          mkdir -p check-gdb
+
+          R CMD build . --no-build-vignettes > check-gdb/build.log 2>&1
+          PKG=$(ls -1t *.tar.gz | head -n1)
+
+          # Use a gdb command file to avoid parser issues from -ex quoting.
+          cat > check-gdb/gdb.cmd <<'GDBCMD'
+          set pagination off
+          set print thread-events off
+          set confirm off
+          run
+          bt full
+          thread apply all bt full
+          quit
+          GDBCMD
+
+          # Run the actual check process under gdb (not an rcmdcheck wrapper)
+          # so post-test teardown failures stay in the debugged process.
+          set +e
+          gdb --batch -x check-gdb/gdb.cmd \
+            --args R CMD check --no-manual "$PKG" > check-gdb/gdb.log 2>&1
+          GDB_RC=$?
+          set -e
+          echo "gdb_exit_code=$GDB_RC" | tee -a check-gdb/gdb.log
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win_gdb-artifacts
+          path: |
+            check/**
+            check-gdb/**
+            *.Rcheck/**
+          if-no-files-found: warn
