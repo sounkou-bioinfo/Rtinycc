@@ -10,8 +10,14 @@
   # avoid late-runtime crashes due to DLL/CRT teardown order.
   try(.Call(RC_set_shutting_down, TRUE), silent = TRUE)
 
-  # Best-effort registry/queue cleanup. In shutdown mode this is intentionally
-  # shallow (no R object release / allocator-sensitive frees).
+  if (.Platform$OS.type == "windows") {
+    # Windows unload/reload is particularly fragile for mixed DLL stacks
+    # (R + libtcc + CRT). During session termination we intentionally avoid
+    # explicit native teardown/unload and let process exit reclaim resources.
+    return(invisible(NULL))
+  }
+
+  # Best-effort registry/queue cleanup on Unix-like platforms.
   try(.Call(RC_cleanup_callbacks), silent = TRUE)
 
   library.dynam.unload("Rtinycc", libpath)
