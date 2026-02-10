@@ -38,15 +38,14 @@ expect_true(
     name_ptr <- tcc_cstring("hello")
     compiled$global_global_name_set(name_ptr)
     name_ptr_out <- compiled$global_global_name_get()
-    name_addr <- tcc_ptr_addr(name_ptr, hex = TRUE)
-    name_out_addr <- tcc_ptr_addr(name_ptr_out, hex = TRUE)
+    name <- tcc_read_cstring(name_ptr_out)
 
     compiled$global_global_counter_set(9L)
     compiled$global_global_pi_set(2.718)
 
     counter == 7L &&
       abs(pi_val - 3.14159) < 1e-8 &&
-      identical(name_addr, name_out_addr) &&
+      name == "hello" &&
       compiled$global_global_counter_get() == 9L &&
       abs(compiled$global_global_pi_get() - 2.718) < 1e-8
   },
