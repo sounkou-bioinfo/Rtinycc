@@ -1,4 +1,4 @@
-name: windows-exit-debug
+name: win_gdb
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
 permissions: read-all
 
 jobs:
-  windows-exit-debug:
+  win-gdb:
     runs-on: windows-latest
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -26,12 +26,26 @@ jobs:
           r-version: release
           use-public-rspm: true
 
-      - uses: r-lib/actions/setup-rtools@v2
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
+
+
+      - name: Ensure gdb is available (MSYS2/Rtools)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if command -v gdb >/dev/null 2>&1; then
+            gdb --version
+            exit 0
+          fi
+          if command -v pacman >/dev/null 2>&1; then
+            pacman -S --noconfirm --needed gdb
+          fi
+          command -v gdb
+          gdb --version
 
       - name: Toolchain info
         shell: bash
@@ -119,7 +133,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exit-debug-artifacts
+          name: win_gdb-artifacts
           path: |
             check/**
             check-gdb/**
