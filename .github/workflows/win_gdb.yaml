@@ -54,6 +54,40 @@ jobs:
           which gdb || true
           gdb --version || true
 
+
+      - name: Inspect Windows CRT linkage (Rtinycc/libtcc)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DEBUG_DIR="${RUNNER_TEMP:-$TMPDIR}/win_gdb"
+          ARTDIR="$DEBUG_DIR/crt"
+          mkdir -p "$ARTDIR"
+
+          R CMD build . --no-build-vignettes > "$ARTDIR/build.log" 2>&1
+          PKG=$(ls -1t *.tar.gz | head -n1)
+          R CMD INSTALL "$PKG" > "$ARTDIR/install.log" 2>&1
+
+          Rscript -e 'cat(system.file(package="Rtinycc"), "\n")' > "$ARTDIR/pkg_root.txt"
+          PKGROOT=$(cat "$ARTDIR/pkg_root.txt")
+
+          OBJDUMP=$(command -v x86_64-w64-mingw32-objdump || command -v objdump)
+          echo "objdump=$OBJDUMP" > "$ARTDIR/objdump.txt"
+
+          "$OBJDUMP" -p "$PKGROOT/libs/x64/Rtinycc.dll" > "$ARTDIR/Rtinycc.dll.imports.txt" || true
+          "$OBJDUMP" -p "$PKGROOT/libs/x64/libtcc.dll" > "$ARTDIR/libtcc.dll.imports.txt" || true
+
+          rg -n "DLL Name|msvcrt|ucrt|api-ms-win|KERNEL32|R.dll" "$ARTDIR"/*.imports.txt > "$ARTDIR/imports.summary.txt" || true
+
+          if [ -f "$PKGROOT/tinycc/lib/msvcrt.def" ]; then
+            cp "$PKGROOT/tinycc/lib/msvcrt.def" "$ARTDIR/msvcrt.def"
+            rg -n "ucrt|msvcrt|malloc|free|exit|abort" "$ARTDIR/msvcrt.def" > "$ARTDIR/msvcrt.def.summary.txt" || true
+          fi
+
+          if [ -f "$PKGROOT/tinycc/lib/R.def" ]; then
+            cp "$PKGROOT/tinycc/lib/R.def" "$ARTDIR/R.def"
+            rg -n "Rf_error|R_NilValue|R_RegisterCFinalizerEx" "$ARTDIR/R.def" > "$ARTDIR/R.def.summary.txt" || true
+          fi
+
       - name: Reproduce flaky post-test exit (plain check loop)
         id: plain
         shell: bash
@@ -119,30 +153,35 @@ jobs:
           set breakpoint pending on
           break abort
           commands
+            info sharedlibrary
             bt full
             thread apply all bt full
             continue
           end
           break _exit
           commands
+            info sharedlibrary
             bt full
             thread apply all bt full
             continue
           end
           break exit
           commands
+            info sharedlibrary
             bt full
             thread apply all bt full
             continue
           end
           catch signal SIGSEGV
           commands
+            info sharedlibrary
             bt full
             thread apply all bt full
             continue
           end
           catch signal SIGABRT
           commands
+            info sharedlibrary
             bt full
             thread apply all bt full
             continue
