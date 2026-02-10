@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
+SEXP RC_set_shutting_down(SEXP flag);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path);
@@ -80,6 +81,7 @@ int RC_callback_async_schedule_c(int id, int n_args, const void *args);
 // .Call entries
 static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_state_new",   (DL_FUNC) &RC_libtcc_state_new,   3},
+    {"RC_set_shutting_down",  (DL_FUNC) &RC_set_shutting_down,  1},
     {"RC_libtcc_add_file",    (DL_FUNC) &RC_libtcc_add_file,    2},
     {"RC_libtcc_add_include_path",    (DL_FUNC) &RC_libtcc_add_include_path,    2},
     {"RC_libtcc_add_sysinclude_path", (DL_FUNC) &RC_libtcc_add_sysinclude_path, 2},

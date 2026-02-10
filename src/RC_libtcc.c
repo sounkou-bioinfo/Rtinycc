@@ -20,8 +20,20 @@
 #include <inttypes.h>
 #include <string.h>
 
+/* Set during package unload to avoid teardown crashes on some platforms. */
+static volatile int g_rtinycc_shutting_down = 0;
+
+/* Set shutdown flag from R (.onUnload). */
+SEXP RC_set_shutting_down(SEXP flag) {
+    g_rtinycc_shutting_down = Rf_asLogical(flag) ? 1 : 0;
+    return R_NilValue;
+}
+
 /* Releases a TCCState when its R external pointer is garbage collected. */
 static void RC_tcc_finalizer(SEXP ext) {
+    if (g_rtinycc_shutting_down) {
+        return;
+    }
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
