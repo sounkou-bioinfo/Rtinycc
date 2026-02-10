@@ -75,7 +75,7 @@ jobs:
               echo "No tarball produced" | tee "check/check-$i.log"
             else
               set +e
-              R CMD check --no-manual "$PKG" > "check/check-$i.log" 2>&1
+              R CMD check --as-cran --no-manual "$PKG" > "check/check-$i.log" 2>&1
               rc=$?
               set -e
               echo "attempt $i rc=$rc" | tee -a "check/check-$i.log"
@@ -120,7 +120,7 @@ jobs:
           # so post-test teardown failures stay in the debugged process.
           set +e
           gdb --batch -x check-gdb/gdb.cmd \
-            --args R CMD check --no-manual "$PKG" > check-gdb/gdb.log 2>&1
+            --args R CMD check --as-cran --no-manual "$PKG" > check-gdb/gdb.log 2>&1
           GDB_RC=$?
           set -e
           echo "gdb_exit_code=$GDB_RC" | tee -a check-gdb/gdb.log
