@@ -1378,7 +1378,27 @@ static void cbq_shutdown(void) {
 
 // Cleanup all callbacks during package unload
 SEXP RC_cleanup_callbacks() {
-    // Clean up all valid callbacks in the registry
+    // During shutdown keep cleanup shallow to avoid teardown-order crashes.
+    if (g_rtinycc_shutting_down) {
+        for (int i = 0; i < MAX_CALLBACKS; i++) {
+            callback_entry_t *entry = &callback_registry[i];
+            entry->fun = NULL;
+            entry->return_type = NULL;
+            entry->arg_types = NULL;
+            entry->valid = 0;
+            entry->n_args = 0;
+            entry->threadsafe = 0;
+            entry->trampoline = NULL;
+        }
+#ifndef _WIN32
+        cbq_head = NULL;
+        cbq_tail = NULL;
+        cbq_initialized = 0;
+#endif
+        return R_NilValue;
+    }
+
+    // Normal unload path while runtime is alive: release all registry resources.
     for (int i = 0; i < MAX_CALLBACKS; i++) {
         callback_entry_t *entry = &callback_registry[i];
         if (entry->fun != NULL) {

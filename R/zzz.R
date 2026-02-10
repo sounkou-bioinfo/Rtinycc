@@ -6,11 +6,13 @@
 }
 
 .onUnload <- function(libpath) {
-  # Release preserved callbacks / async queue resources before DLL unload.
-  try(.Call(RC_cleanup_callbacks), silent = TRUE)
-
-  # Mark shutdown so finalizers avoid teardown-sensitive native cleanup.
+  # Enter shutdown mode first so native teardown paths stay minimal and
+  # avoid late-runtime crashes due to DLL/CRT teardown order.
   try(.Call(RC_set_shutting_down, TRUE), silent = TRUE)
+
+  # Best-effort registry/queue cleanup. In shutdown mode this is intentionally
+  # shallow (no R object release / allocator-sensitive frees).
+  try(.Call(RC_cleanup_callbacks), silent = TRUE)
 
   library.dynam.unload("Rtinycc", libpath)
 }
