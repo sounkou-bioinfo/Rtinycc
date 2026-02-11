@@ -226,6 +226,12 @@ tcc_treesitter_defines <- function(
 #' @return A single FFI type string.
 #' @export
 #'
+#' @details
+#' This mapper is intentionally conservative for pointer types. `char*` is
+#' treated as a raw pointer (`ptr`) because C does not guarantee NUL-terminated
+#' strings. If you know the API expects a C string, map it explicitly to
+#' `cstring` in your custom mapper.
+#'
 #' @examples
 #' \dontrun{
 #' tcc_map_c_type_to_ffi("int")
@@ -236,68 +242,14 @@ tcc_map_c_type_to_ffi <- function(c_type) {
   x <- gsub("\\s+", " ", x)
   x <- gsub("\\b(const|volatile|restrict)\\b", "", x)
   x <- gsub("\\s+", " ", trimws(x))
-
-  # Strings and pointers
-  if (grepl("char\\s*\\*", x)) {
-    return("cstring")
-  }
-  if (grepl("\\*", x)) {
-    return("ptr")
-  }
-
   x <- sub("\\s+[A-Za-z_][A-Za-z0-9_]*$", "", x)
   x <- trimws(x)
 
-  if (x %in% c("void")) {
-    return("void")
-  }
-  if (x %in% c("bool", "_Bool")) {
-    return("bool")
-  }
-  if (x %in% c("SEXP", "sexp")) {
-    return("sexp")
-  }
-
-  if (x %in% c("int", "int32_t")) {
-    return("i32")
-  }
-  if (x %in% c("short", "short int", "int16_t")) {
-    return("i16")
-  }
-  if (x %in% c("char", "int8_t")) {
-    return("i8")
-  }
-  if (x %in% c("long", "long int", "long long", "int64_t")) {
-    return("i64")
-  }
-
-  if (x %in% c("unsigned int", "uint32_t")) {
-    return("u32")
-  }
-  if (x %in% c("unsigned short", "unsigned short int", "uint16_t")) {
-    return("u16")
-  }
-  if (x %in% c("unsigned char", "uint8_t")) {
-    return("u8")
-  }
-  if (
-    x %in%
-      c("unsigned long", "unsigned long int", "unsigned long long", "uint64_t")
-  ) {
-    return("u64")
-  }
-  if (x %in% c("size_t")) {
-    return("u64")
-  }
-
-  if (x %in% c("double")) {
-    return("f64")
-  }
-  if (x %in% c("float")) {
-    return("f32")
-  }
-
-  "ptr"
+  ffi_c_type_map_rule(
+    x,
+    grepl("char\\s*\\*", x),
+    grepl("\\*", x)
+  )
 }
 
 #' Generate bindings from a header

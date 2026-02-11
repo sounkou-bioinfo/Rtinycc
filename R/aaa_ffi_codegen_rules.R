@@ -1129,175 +1129,739 @@ r_to_c_return_lines_rule("float", c_type, result_var, indent) %as% {
     )
 }
 
+cb_kind_key_rule(type_name, TRUE) %as% {
+    "ptr"
+}
+cb_kind_key_rule("void*", FALSE) %as% {
+    "ptr"
+}
+cb_kind_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+cb_kind_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+cb_kind_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+cb_kind_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+cb_kind_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+cb_kind_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+cb_kind_key_rule("double", FALSE) %as% {
+    "real"
+}
+cb_kind_key_rule("float", FALSE) %as% {
+    "real"
+}
+cb_kind_key_rule("f64", FALSE) %as% {
+    "real"
+}
+cb_kind_key_rule("f32", FALSE) %as% {
+    "real"
+}
+cb_kind_key_rule("bool", FALSE) %as% {
+    "logical"
+}
+cb_kind_key_rule("_Bool", FALSE) %as% {
+    "logical"
+}
 cb_kind_key_rule(type_name, is_ptr) %as% {
-    if (isTRUE(is_ptr) || type_name %in% c("void*", "void *", "ptr")) {
-        return("ptr")
-    }
-    if (type_name %in% c("char*", "const char*", "string", "cstring")) {
-        return("cstring")
-    }
-    if (type_name %in% c("double", "float", "f64", "f32")) {
-        return("real")
-    }
-    if (type_name %in% c("bool", "_Bool")) {
-        return("logical")
-    }
     "int"
 }
 
+c_r_key_rule(type_name, TRUE) %as% {
+    "ptr"
+}
+c_r_key_rule("void*", FALSE) %as% {
+    "ptr"
+}
+c_r_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+c_r_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+c_r_key_rule("int", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("int32_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("i32", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("int16_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("i16", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("int8_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("i8", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("long", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("long long", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("int64_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("i64", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("uint8_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("u8", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("uint16_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("u16", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("uint32_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("u32", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("uint64_t", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("u64", FALSE) %as% {
+    "i32"
+}
+c_r_key_rule("double", FALSE) %as% {
+    "f64"
+}
+c_r_key_rule("float", FALSE) %as% {
+    "f64"
+}
+c_r_key_rule("f64", FALSE) %as% {
+    "f64"
+}
+c_r_key_rule("f32", FALSE) %as% {
+    "f64"
+}
+c_r_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+c_r_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+c_r_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+c_r_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+c_r_key_rule("bool", FALSE) %as% {
+    "bool"
+}
+c_r_key_rule("_Bool", FALSE) %as% {
+    "bool"
+}
+c_r_key_rule("void", FALSE) %as% {
+    "void"
+}
+c_r_key_rule("SEXP", FALSE) %as% {
+    "sexp"
+}
+c_r_key_rule("sexp", FALSE) %as% {
+    "sexp"
+}
 c_r_key_rule(type_name, is_ptr) %as% {
-    if (isTRUE(is_ptr)) {
-        return("ptr")
-    }
-    if (type_name %in% c(
-        "int",
-        "int32_t",
-        "i32",
-        "int16_t",
-        "i16",
-        "int8_t",
-        "i8",
-        "long",
-        "long long",
-        "int64_t",
-        "i64",
-        "uint8_t",
-        "u8",
-        "uint16_t",
-        "u16",
-        "uint32_t",
-        "u32",
-        "uint64_t",
-        "u64"
-    )) {
-        return("i32")
-    }
-    if (type_name %in% c("double", "float", "f64", "f32")) {
-        return("f64")
-    }
-    if (type_name %in% c("char*", "const char*", "string", "cstring")) {
-        return("cstring")
-    }
-    if (type_name %in% c("void*", "void *", "ptr")) {
-        return("ptr")
-    }
-    if (type_name %in% c("bool", "_Bool")) {
-        return("bool")
-    }
-    if (type_name == "void") {
-        return("void")
-    }
-    if (type_name %in% c("SEXP", "sexp")) {
-        return("sexp")
-    }
     "ptr"
 }
 
-sexp_ctor_key_rule(type_name, is_ptr) %as% {
-    if (isTRUE(is_ptr) || type_name %in% c("void*", "void *", "ptr")) {
-        return("ptr")
-    }
-    if (type_name %in% c(
-        "int",
-        "int32_t",
-        "i32",
-        "int16_t",
-        "i16",
-        "int8_t",
-        "i8",
-        "uint8_t",
-        "u8",
-        "uint16_t",
-        "u16"
-    )) {
-        return("int")
-    }
-    if (type_name %in% c(
-        "long",
-        "long long",
-        "int64_t",
-        "i64",
-        "uint32_t",
-        "u32",
-        "uint64_t",
-        "u64"
-    )) {
-        return("real")
-    }
-    if (type_name %in% c("double", "float", "f64", "f32")) {
-        return("real")
-    }
-    if (type_name %in% c("char*", "const char*", "string", "cstring")) {
-        return("cstring")
-    }
-    if (type_name %in% c("bool", "_Bool")) {
-        return("bool")
-    }
+sexp_ctor_key_rule(type_name, TRUE) %as% {
     "ptr"
 }
-
-r_to_c_key_rule(type_name, is_ptr) %as% {
-    if (isTRUE(is_ptr) || type_name %in% c("void*", "void *", "ptr")) {
-        return("ptr")
-    }
-    if (type_name %in% c(
-        "int",
-        "int32_t",
-        "i32",
-        "int16_t",
-        "i16",
-        "int8_t",
-        "i8",
-        "uint8_t",
-        "u8",
-        "uint16_t",
-        "u16"
-    )) {
-        return("int")
-    }
-    if (type_name %in% c(
-        "long",
-        "long long",
-        "int64_t",
-        "i64",
-        "uint32_t",
-        "u32",
-        "uint64_t",
-        "u64",
-        "double",
-        "float",
-        "f64",
-        "f32"
-    )) {
-        return("real")
-    }
-    if (type_name %in% c("char*", "const char*", "string", "cstring")) {
-        return("cstring")
-    }
-    if (type_name %in% c("bool", "_Bool")) {
-        return("bool")
-    }
+sexp_ctor_key_rule("void*", FALSE) %as% {
     "ptr"
 }
-
-default_key_rule(type_name, is_ptr) %as% {
-    if (type_name == "void") {
-        return("void")
-    }
-    if (type_name %in% c("SEXP", "sexp")) {
-        return("sexp")
-    }
-    if (isTRUE(is_ptr) || type_name %in% c("void*", "void *", "ptr")) {
-        return("ptr")
-    }
-    if (type_name %in% c("char*", "const char*", "string", "cstring")) {
-        return("cstring")
-    }
-    if (type_name %in% c("double", "float", "f64", "f32")) {
-        return("real")
-    }
-    if (type_name %in% c("bool", "_Bool")) {
-        return("logical")
-    }
+sexp_ctor_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+sexp_ctor_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+sexp_ctor_key_rule("int", FALSE) %as% {
     "int"
+}
+sexp_ctor_key_rule("int32_t", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("i32", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("int16_t", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("i16", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("int8_t", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("i8", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("uint8_t", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("u8", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("uint16_t", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("u16", FALSE) %as% {
+    "int"
+}
+sexp_ctor_key_rule("long", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("long long", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("int64_t", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("i64", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("uint32_t", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("u32", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("uint64_t", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("u64", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("double", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("float", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("f64", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("f32", FALSE) %as% {
+    "real"
+}
+sexp_ctor_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+sexp_ctor_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+sexp_ctor_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+sexp_ctor_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+sexp_ctor_key_rule("bool", FALSE) %as% {
+    "bool"
+}
+sexp_ctor_key_rule("_Bool", FALSE) %as% {
+    "bool"
+}
+sexp_ctor_key_rule(type_name, is_ptr) %as% {
+    "ptr"
+}
+
+r_to_c_key_rule(type_name, TRUE) %as% {
+    "ptr"
+}
+r_to_c_key_rule("void*", FALSE) %as% {
+    "ptr"
+}
+r_to_c_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+r_to_c_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+r_to_c_key_rule("int", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("int32_t", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("i32", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("int16_t", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("i16", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("int8_t", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("i8", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("uint8_t", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("u8", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("uint16_t", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("u16", FALSE) %as% {
+    "int"
+}
+r_to_c_key_rule("long", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("long long", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("int64_t", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("i64", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("uint32_t", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("u32", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("uint64_t", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("u64", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("double", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("float", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("f64", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("f32", FALSE) %as% {
+    "real"
+}
+r_to_c_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+r_to_c_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+r_to_c_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+r_to_c_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+r_to_c_key_rule("bool", FALSE) %as% {
+    "bool"
+}
+r_to_c_key_rule("_Bool", FALSE) %as% {
+    "bool"
+}
+r_to_c_key_rule(type_name, is_ptr) %as% {
+    "ptr"
+}
+
+default_key_rule("void", FALSE) %as% {
+    "void"
+}
+default_key_rule("SEXP", FALSE) %as% {
+    "sexp"
+}
+default_key_rule("sexp", FALSE) %as% {
+    "sexp"
+}
+default_key_rule(type_name, TRUE) %as% {
+    "ptr"
+}
+default_key_rule("void*", FALSE) %as% {
+    "ptr"
+}
+default_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+default_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+default_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+default_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+default_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+default_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+default_key_rule("double", FALSE) %as% {
+    "real"
+}
+default_key_rule("float", FALSE) %as% {
+    "real"
+}
+default_key_rule("f64", FALSE) %as% {
+    "real"
+}
+default_key_rule("f32", FALSE) %as% {
+    "real"
+}
+default_key_rule("bool", FALSE) %as% {
+    "logical"
+}
+default_key_rule("_Bool", FALSE) %as% {
+    "logical"
+}
+default_key_rule(type_name, is_ptr) %as% {
+    "int"
+}
+
+sexp_type_key_rule(type_name, TRUE) %as% {
+    "ptr"
+}
+sexp_type_key_rule("int", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("int32_t", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("i32", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("int16_t", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("i16", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("int8_t", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("i8", FALSE) %as% {
+    "int"
+}
+sexp_type_key_rule("long", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("long long", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("int64_t", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("i64", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("uint8_t", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("u8", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("uint16_t", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("u16", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("uint32_t", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("u32", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("uint64_t", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("u64", FALSE) %as% {
+    "longlong"
+}
+sexp_type_key_rule("double", FALSE) %as% {
+    "real"
+}
+sexp_type_key_rule("float", FALSE) %as% {
+    "real"
+}
+sexp_type_key_rule("f64", FALSE) %as% {
+    "real"
+}
+sexp_type_key_rule("f32", FALSE) %as% {
+    "real"
+}
+sexp_type_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+sexp_type_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+sexp_type_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+sexp_type_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+sexp_type_key_rule("void*", FALSE) %as% {
+    "ptr"
+}
+sexp_type_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+sexp_type_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+sexp_type_key_rule("bool", FALSE) %as% {
+    "bool"
+}
+sexp_type_key_rule("_Bool", FALSE) %as% {
+    "bool"
+}
+sexp_type_key_rule(type_name, is_ptr) %as% {
+    "ptr"
+}
+
+return_key_rule("void", FALSE) %as% {
+    "void"
+}
+return_key_rule("SEXP", FALSE) %as% {
+    "sexp"
+}
+return_key_rule("sexp", FALSE) %as% {
+    "sexp"
+}
+return_key_rule(type_name, TRUE) %as% {
+    "ptr"
+}
+return_key_rule("void*", FALSE) %as% {
+    "ptr"
+}
+return_key_rule("void *", FALSE) %as% {
+    "ptr"
+}
+return_key_rule("ptr", FALSE) %as% {
+    "ptr"
+}
+return_key_rule("char*", FALSE) %as% {
+    "cstring"
+}
+return_key_rule("const char*", FALSE) %as% {
+    "cstring"
+}
+return_key_rule("string", FALSE) %as% {
+    "cstring"
+}
+return_key_rule("cstring", FALSE) %as% {
+    "cstring"
+}
+return_key_rule("bool", FALSE) %as% {
+    "bool"
+}
+return_key_rule("_Bool", FALSE) %as% {
+    "bool"
+}
+return_key_rule("int8_t", FALSE) %as% {
+    "i8"
+}
+return_key_rule("i8", FALSE) %as% {
+    "i8"
+}
+return_key_rule("int16_t", FALSE) %as% {
+    "i16"
+}
+return_key_rule("i16", FALSE) %as% {
+    "i16"
+}
+return_key_rule("int32_t", FALSE) %as% {
+    "i32"
+}
+return_key_rule("i32", FALSE) %as% {
+    "i32"
+}
+return_key_rule("int", FALSE) %as% {
+    "int"
+}
+return_key_rule("long", FALSE) %as% {
+    "int"
+}
+return_key_rule("short", FALSE) %as% {
+    "int"
+}
+return_key_rule("uint8_t", FALSE) %as% {
+    "u8"
+}
+return_key_rule("u8", FALSE) %as% {
+    "u8"
+}
+return_key_rule("uint16_t", FALSE) %as% {
+    "u16"
+}
+return_key_rule("u16", FALSE) %as% {
+    "u16"
+}
+return_key_rule("uint32_t", FALSE) %as% {
+    "u32"
+}
+return_key_rule("u32", FALSE) %as% {
+    "u32"
+}
+return_key_rule("int64_t", FALSE) %as% {
+    "i64"
+}
+return_key_rule("i64", FALSE) %as% {
+    "i64"
+}
+return_key_rule("long long", FALSE) %as% {
+    "i64"
+}
+return_key_rule("uint64_t", FALSE) %as% {
+    "u64"
+}
+return_key_rule("u64", FALSE) %as% {
+    "u64"
+}
+return_key_rule("double", FALSE) %as% {
+    "double"
+}
+return_key_rule("f64", FALSE) %as% {
+    "double"
+}
+return_key_rule("float", FALSE) %as% {
+    "float"
+}
+return_key_rule("f32", FALSE) %as% {
+    "float"
+}
+return_key_rule(type_name, is_ptr) %as% {
+    "ptr"
+}
+
+ffi_c_type_map_rule(type_name, TRUE, is_ptr) %as% {
+    "ptr"
+}
+ffi_c_type_map_rule(type_name, FALSE, TRUE) %as% {
+    "ptr"
+}
+ffi_c_type_map_rule("void", FALSE, FALSE) %as% {
+    "void"
+}
+ffi_c_type_map_rule("bool", FALSE, FALSE) %as% {
+    "bool"
+}
+ffi_c_type_map_rule("_Bool", FALSE, FALSE) %as% {
+    "bool"
+}
+ffi_c_type_map_rule("SEXP", FALSE, FALSE) %as% {
+    "sexp"
+}
+ffi_c_type_map_rule("sexp", FALSE, FALSE) %as% {
+    "sexp"
+}
+ffi_c_type_map_rule("int", FALSE, FALSE) %as% {
+    "i32"
+}
+ffi_c_type_map_rule("int32_t", FALSE, FALSE) %as% {
+    "i32"
+}
+ffi_c_type_map_rule("short", FALSE, FALSE) %as% {
+    "i16"
+}
+ffi_c_type_map_rule("short int", FALSE, FALSE) %as% {
+    "i16"
+}
+ffi_c_type_map_rule("int16_t", FALSE, FALSE) %as% {
+    "i16"
+}
+ffi_c_type_map_rule("char", FALSE, FALSE) %as% {
+    "i8"
+}
+ffi_c_type_map_rule("int8_t", FALSE, FALSE) %as% {
+    "i8"
+}
+ffi_c_type_map_rule("long", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("long int", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("long long", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("int64_t", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("unsigned int", FALSE, FALSE) %as% {
+    "u32"
+}
+ffi_c_type_map_rule("uint32_t", FALSE, FALSE) %as% {
+    "u32"
+}
+ffi_c_type_map_rule("unsigned short", FALSE, FALSE) %as% {
+    "u16"
+}
+ffi_c_type_map_rule("unsigned short int", FALSE, FALSE) %as% {
+    "u16"
+}
+ffi_c_type_map_rule("uint16_t", FALSE, FALSE) %as% {
+    "u16"
+}
+ffi_c_type_map_rule("unsigned char", FALSE, FALSE) %as% {
+    "u8"
+}
+ffi_c_type_map_rule("uint8_t", FALSE, FALSE) %as% {
+    "u8"
+}
+ffi_c_type_map_rule("unsigned long", FALSE, FALSE) %as% {
+    "u64"
+}
+ffi_c_type_map_rule("unsigned long int", FALSE, FALSE) %as% {
+    "u64"
+}
+ffi_c_type_map_rule("unsigned long long", FALSE, FALSE) %as% {
+    "u64"
+}
+ffi_c_type_map_rule("uint64_t", FALSE, FALSE) %as% {
+    "u64"
+}
+ffi_c_type_map_rule("size_t", FALSE, FALSE) %as% {
+    "u64"
+}
+ffi_c_type_map_rule("double", FALSE, FALSE) %as% {
+    "f64"
+}
+ffi_c_type_map_rule("float", FALSE, FALSE) %as% {
+    "f32"
+}
+ffi_c_type_map_rule(type_name, is_char_ptr, is_ptr) %as% {
+    "ptr"
 }

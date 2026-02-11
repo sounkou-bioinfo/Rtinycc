@@ -651,6 +651,8 @@ tcc_callback_close(cb)
 
 For header-driven bindings, we use `treesitter.c` to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, `tcc_generate_bindings()` handles the code generation.
 
+The default mapper is conservative for pointers: `char*` is treated as `ptr` because C does not guarantee NUL-terminated strings. If you know a parameter is a C string, provide a custom mapper that returns `cstring` for that type.
+
 ```{r ffi-treesitter}
 header <- '
 double sqrt(double x);

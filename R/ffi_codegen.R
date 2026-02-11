@@ -741,6 +741,7 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
   if (
     is.list(mem_spec) && !is.null(mem_spec$type) && mem_spec$type == "struct"
   ) {
+    # TODO : this looks fake, we could allocate memcopy another memory address into it
     return(c()) # Cannot set whole struct easily
   }
 

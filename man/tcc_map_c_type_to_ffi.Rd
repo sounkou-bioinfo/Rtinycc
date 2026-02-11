@@ -15,6 +15,12 @@ A single FFI type string.
 \description{
 Map a C type string to an Rtinycc FFI type
 }
+\details{
+This mapper is intentionally conservative for pointer types. \verb{char*} is
+treated as a raw pointer (\code{ptr}) because C does not guarantee NUL-terminated
+strings. If you know the API expects a C string, map it explicitly to
+\code{cstring} in your custom mapper.
+}
 \examples{
 \dontrun{
 tcc_map_c_type_to_ffi("int")

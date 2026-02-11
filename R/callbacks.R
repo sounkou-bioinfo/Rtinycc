@@ -510,32 +510,7 @@ normalize_cb_kind_key <- function(c_type) {
 }
 
 normalize_sexp_type_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (is_ptr_type(c_type)) {
-    return("ptr")
-  }
-  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
-    return("int")
-  }
-  if (c_type %in% c("long", "long long", "int64_t", "i64")) {
-    return("longlong")
-  }
-  if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32", "uint64_t", "u64")) {
-    return("longlong")
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return("real")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("bool")
-  }
-  "ptr"
+  sexp_type_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 normalize_r_type_key <- function(c_type) {
@@ -555,56 +530,7 @@ normalize_default_key <- function(c_type) {
 }
 
 normalize_return_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (c_type == "void") {
-    return("void")
-  }
-  if (c_type %in% c("SEXP", "sexp")) {
-    return("sexp")
-  }
-  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("bool")
-  }
-  if (c_type %in% c("int8_t", "i8")) {
-    return("i8")
-  }
-  if (c_type %in% c("int16_t", "i16")) {
-    return("i16")
-  }
-  if (c_type %in% c("int32_t", "i32")) {
-    return("i32")
-  }
-  if (c_type %in% c("int", "long", "short")) {
-    return("int")
-  }
-  if (c_type %in% c("uint8_t", "u8")) {
-    return("u8")
-  }
-  if (c_type %in% c("uint16_t", "u16")) {
-    return("u16")
-  }
-  if (c_type %in% c("uint32_t", "u32")) {
-    return("u32")
-  }
-  if (c_type %in% c("int64_t", "i64", "long long")) {
-    return("i64")
-  }
-  if (c_type %in% c("uint64_t", "u64")) {
-    return("u64")
-  }
-  if (c_type %in% c("double", "f64")) {
-    return("double")
-  }
-  if (c_type %in% c("float", "f32")) {
-    return("float")
-  }
-  "ptr"
+  return_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 map_c_to_cb_arg_kind <- function(c_type) {
