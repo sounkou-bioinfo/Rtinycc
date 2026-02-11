@@ -20,6 +20,33 @@ Updated tcc_ffi object (for chaining)
 Register a global C symbol so the compiled object exposes getter/setter
 functions \verb{global_<name>_get()} and \verb{global_<name>_set()}.
 }
+\details{
+Globals are limited to scalar FFI types. Array types are rejected.
+Scalar conversions follow the same rules as wrapper arguments:
+\itemize{
+\item Integer inputs (\code{i8}, \code{i16}, \code{i32}, \code{u8}, \code{u16}) must be finite and
+within range; \code{NA} values error.
+\item Large integer types (\code{i64}, \code{u32}, \code{u64}) are mediated through R numeric
+(double). Values must be integer-valued and within range; for \code{i64}/\code{u64}
+only exact integers up to $2^53$ are accepted.
+\item \code{bool} rejects \code{NA} logicals.
+}
+
+Ownership notes:
+\itemize{
+\item \code{ptr} globals store the raw address from an external pointer. If the
+external pointer owns memory, keep it alive; otherwise the pointer may
+be freed while the global still points to it.
+\item \code{cstring} globals store a borrowed pointer to R's string data
+(UTF-8 translation). Do not free it; for C-owned strings prefer a \code{ptr}
+global and manage lifetime explicitly (e.g., with \code{tcc_cstring()}).
+}
+}
+\note{
+Global helpers are generated inside the compiled TCC unit. Recompiling
+creates a new instance of the global variable; existing compiled objects
+continue to refer to their own copy.
+}
 \examples{
 ffi <- tcc_ffi() |>
   tcc_source("int global_counter = 7;") |>
