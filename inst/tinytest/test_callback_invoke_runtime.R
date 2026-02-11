@@ -70,7 +70,10 @@ res <- tryCatch(
   }
 )
 
-expect_true(isTRUE(warned && is.na(res)), info = "Callback errors yield warning and NA")
+expect_true(
+  isTRUE(warned && is.na(res)),
+  info = "Callback errors yield warning and NA"
+)
 close_if_valid(cb_err)
 
 # Test: pointer return and pointer args use externalptr
@@ -120,7 +123,10 @@ res <- withCallingHandlers(
     invokeRestart("muffleWarning")
   }
 )
-expect_true(isTRUE(warned && is.na(res)), info = "Closed callback yields warning and NA")
+expect_true(
+  isTRUE(warned && is.na(res)),
+  info = "Closed callback yields warning and NA"
+)
 close_if_valid(cb_closed)
 
 # Test: async scheduling from worker thread (Unix-like only)
@@ -153,6 +159,9 @@ if (.Platform$OS.type != "windows") {
   rc <- ffi_async$spawn_async(cb_async, cb_ptr_async, 2L)
   tcc_callback_async_drain()
 
-  expect_true(isTRUE(rc == 0L && hits == 2L), info = "Async callback scheduled from worker thread")
+  expect_true(
+    isTRUE(rc == 0L && hits == 2L),
+    info = "Async callback scheduled from worker thread"
+  )
   close_if_valid(cb_async)
 }

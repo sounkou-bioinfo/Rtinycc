@@ -989,7 +989,8 @@ tcc_platform_lib_paths <- function() {
   # this is a R package, so
   # we can assume 64 bit archs and wsl2, macos
   #  and Rtools
-  switch(sysname,
+  switch(
+    sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -1058,7 +1059,8 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(sysname,
+    lib_name <- switch(
+      sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
