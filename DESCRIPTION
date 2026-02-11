@@ -1,7 +1,7 @@
 Package: Rtinycc
 Title: Builds 'TinyCC' 'Cli' and Library for 'C' Scripting in 'R'
 Version: 0.0.3.9000
-Authors@R:c(
+Authors@R: c(
     person(given = "Sounkou Mahamane", family = "Toure", 
     email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
     person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
@@ -21,5 +21,5 @@ SystemRequirements: GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-URL: https://github.com/sounkou-bioinfo/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc
+URL: https://github.com/sounkou-bioinfo/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc/
 BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues
