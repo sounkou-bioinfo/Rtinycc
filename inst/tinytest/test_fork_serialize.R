@@ -71,6 +71,46 @@ if (
     info = "Fork: struct accessors work in forked children"
   )
 
+  # --- Test 2b: union accessors across fork ------------------------------
+  ffi_union <- tcc_ffi() |>
+    tcc_source("union duo { int i; float f; };") |>
+    tcc_union(
+      "duo",
+      members = list(i = "i32", f = "f32"),
+      active = "i"
+    ) |>
+    tcc_compile()
+
+  results2b <- parallel::mclapply(
+    1:2,
+    function(i) {
+      tryCatch(
+        {
+          u <- ffi_union$union_duo_new()
+          ffi_union$union_duo_set_i(u, i * 10L)
+          val <- ffi_union$union_duo_get_i(u)
+          ffi_union$union_duo_free(u)
+          val
+        },
+        error = function(e) e
+      )
+    },
+    mc.cores = 2
+  )
+
+  fork_union_ok <- vapply(results2b, is.integer, logical(1))
+  expect_true(
+    all(fork_union_ok),
+    info = "Fork: union accessors work in forked children"
+  )
+  if (all(fork_union_ok)) {
+    expect_equal(
+      unlist(results2b),
+      c(10L, 20L),
+      info = "Fork: union results correct"
+    )
+  }
+
   # --- Test 3: callback across fork (may be unsafe) ---------------------
   # Callbacks hold R function pointers which should survive fork
   # since R environments are duplicated by COW
@@ -108,6 +148,13 @@ if (
     all(fork_cb_ok),
     info = "Fork: callbacks work in forked children"
   )
+  if (all(fork_cb_ok)) {
+    expect_equal(
+      unlist(results3),
+      c(2.0, 3.0),
+      info = "Fork: callback results correct"
+    )
+  }
   tcc_callback_close(cb)
 
   # --- Test 4: parent still works after children exit -------------------

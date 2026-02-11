@@ -413,16 +413,10 @@ generate_trampoline <- function(trampoline_name, sig) {
   }
 
   # Convert result back to C type
-  if (sig$return_type == "void") {
-    lines <- c(lines, "  return;")
-  } else if (sig$return_type %in% c("SEXP", "sexp")) {
-    lines <- c(lines, "  return result;")
-  } else {
-    lines <- c(
-      lines,
-      sprintf("  return %s(result);", get_r_to_c_converter(sig$return_type))
-    )
-  }
+  lines <- c(
+    lines,
+    get_r_to_c_return_lines(sig$return_type, "result", indent = 2L)
+  )
 
   lines <- c(lines, "}")
 
@@ -695,6 +689,9 @@ get_sexp_constructor_call <- function(c_type, arg_expr) {
   if (ctor == "R_MakeExternalPtr") {
     return(sprintf("R_MakeExternalPtr(%s, R_NilValue, R_NilValue)", arg_expr))
   }
+  if (ctor == "mkString") {
+    return(sprintf("(%s ? mkString(%s) : R_NilValue)", arg_expr, arg_expr))
+  }
   sprintf("%s(%s)", ctor, arg_expr)
 }
 
@@ -726,4 +723,210 @@ get_r_to_c_converter <- function(c_type) {
   } else {
     "R_ExternalPtrAddr"
   }
+}
+
+get_r_to_c_return_lines <- function(c_type, result_var, indent = 2L) {
+  c_type <- trimws(c_type)
+  pad <- paste(rep(" ", indent), collapse = "")
+  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+  default_line <- get_c_default_return(c_type, indent = indent)
+
+  if (c_type == "void") {
+    return(paste0(pad, "return;"))
+  }
+  if (c_type %in% c("SEXP", "sexp")) {
+    return(paste0(pad, "return ", result_var, ";"))
+  }
+  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
+    return(paste0(pad, "return R_ExternalPtrAddr(", result_var, ");"))
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return(c(
+      paste0(pad, "if (", result_var, " == R_NilValue) return NULL;"),
+      paste0(
+        pad,
+        "if (!Rf_isString(",
+        result_var,
+        ") || XLENGTH(",
+        result_var,
+        ") < 1) {"
+      ),
+      paste0(pad, "  Rf_warning(\"callback returned non-string\");"),
+      paste0(pad, "  return NULL;"),
+      paste0(pad, "}"),
+      paste0(pad, "SEXP _str = STRING_ELT(", result_var, ", 0);"),
+      paste0(pad, "if (_str == NA_STRING) return NULL;"),
+      paste0(pad, "return Rf_translateCharUTF8(_str);")
+    ))
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return(c(
+      paste0(pad, "int _v = asLogical(", result_var, ");"),
+      paste0(pad, "if (_v == NA_LOGICAL) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA logical\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (_v != 0);")
+    ))
+  }
+  if (c_type %in% c("int8_t", "i8")) {
+    return(c(
+      paste0(pad, "int _v = asInteger(", result_var, ");"),
+      paste0(pad, "if (_v == NA_INTEGER) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < INT8_MIN || _v > INT8_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range i8\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (int8_t)_v;")
+    ))
+  }
+  if (c_type %in% c("int16_t", "i16")) {
+    return(c(
+      paste0(pad, "int _v = asInteger(", result_var, ");"),
+      paste0(pad, "if (_v == NA_INTEGER) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < INT16_MIN || _v > INT16_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range i16\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (int16_t)_v;")
+    ))
+  }
+  if (c_type %in% c("int32_t", "i32")) {
+    return(c(
+      paste0(pad, "int _v = asInteger(", result_var, ");"),
+      paste0(pad, "if (_v == NA_INTEGER) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (int32_t)_v;")
+    ))
+  }
+  if (c_type %in% c("int", "long", "short")) {
+    return(c(
+      paste0(pad, "int _v = asInteger(", result_var, ");"),
+      paste0(pad, "if (_v == NA_INTEGER) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return _v;")
+    ))
+  }
+  if (c_type %in% c("uint8_t", "u8")) {
+    return(c(
+      paste0(pad, "int _v = asInteger(", result_var, ");"),
+      paste0(pad, "if (_v == NA_INTEGER) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < 0 || _v > UINT8_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range u8\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (uint8_t)_v;")
+    ))
+  }
+  if (c_type %in% c("uint16_t", "u16")) {
+    return(c(
+      paste0(pad, "int _v = asInteger(", result_var, ");"),
+      paste0(pad, "if (_v == NA_INTEGER) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < 0 || _v > UINT16_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range u16\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (uint16_t)_v;")
+    ))
+  }
+  if (c_type %in% c("uint32_t", "u32")) {
+    return(c(
+      paste0(pad, "double _v = asReal(", result_var, ");"),
+      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < 0 || _v > (double)UINT32_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range u32\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (trunc(_v) != _v) {"),
+      paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (uint32_t)_v;")
+    ))
+  }
+  if (c_type %in% c("int64_t", "i64", "long long")) {
+    return(c(
+      paste0(pad, "double _v = asReal(", result_var, ");"),
+      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (fabs(_v) > 9007199254740992.0) {"),
+      paste0(pad, "  Rf_warning(\"callback i64 precision loss in R numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (trunc(_v) != _v) {"),
+      paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < (double)INT64_MIN || _v > (double)INT64_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range i64\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (int64_t)_v;")
+    ))
+  }
+  if (c_type %in% c("uint64_t", "u64")) {
+    return(c(
+      paste0(pad, "double _v = asReal(", result_var, ");"),
+      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v < 0) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range u64\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (fabs(_v) > 9007199254740992.0) {"),
+      paste0(pad, "  Rf_warning(\"callback u64 precision loss in R numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (trunc(_v) != _v) {"),
+      paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "if (_v > (double)UINT64_MAX) {"),
+      paste0(pad, "  Rf_warning(\"callback returned out-of-range u64\");"),
+      default_line,
+      paste0(pad, "}"),
+      paste0(pad, "return (uint64_t)_v;")
+    ))
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return(c(
+      paste0(pad, "double _v = asReal(", result_var, ");"),
+      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+      default_line,
+      paste0(pad, "}"),
+      if (c_type %in% c("float", "f32")) {
+        paste0(pad, "return (float)_v;")
+      } else {
+        paste0(pad, "return _v;")
+      }
+    ))
+  }
+
+  c(
+    paste0(pad, "return R_ExternalPtrAddr(", result_var, ");")
+  )
 }

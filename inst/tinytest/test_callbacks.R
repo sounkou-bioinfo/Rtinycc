@@ -197,3 +197,32 @@ tcc_callback_close(cb5)
 
 # Final validation
 expect_false(tcc_callback_valid(cb), info = "All callbacks cleaned up")
+
+# ==========================================================================
+# Test 16: Trampoline codegen safeguards
+# ==========================================================================
+sig_cstr <- list(return_type = "const char*", arg_types = c("const char*"))
+tramp_cstr <- Rtinycc:::generate_trampoline("tramp_cstr", sig_cstr)
+expect_true(
+  grepl("? mkString", tramp_cstr, fixed = TRUE),
+  info = "Trampoline guards NULL cstring args"
+)
+expect_true(
+  grepl("Rf_translateCharUTF8", tramp_cstr),
+  info = "Trampoline translates cstring returns"
+)
+expect_true(
+  grepl("NA_STRING", tramp_cstr),
+  info = "Trampoline handles NA cstring returns"
+)
+
+sig_bool <- list(return_type = "bool", arg_types = character())
+tramp_bool <- Rtinycc:::generate_trampoline("tramp_bool", sig_bool)
+expect_true(
+  grepl("asLogical", tramp_bool),
+  info = "Trampoline converts logical returns"
+)
+expect_true(
+  grepl("NA_LOGICAL", tramp_bool),
+  info = "Trampoline guards NA logical returns"
+)

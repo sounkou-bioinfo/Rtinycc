@@ -8,241 +8,11 @@
 # Generate C code to extract R SEXP to C type
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
-
-  switch(ffi_type,
-    i8 = sprintf(
-      paste(
-        "  int _%s = asInteger(%s);",
-        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
-        "  if (_%s < INT8_MIN || _%s > INT8_MAX) Rf_error(\"i8 out of range\");",
-        "  int8_t %s = (int8_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    i16 = sprintf(
-      paste(
-        "  int _%s = asInteger(%s);",
-        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
-        "  if (_%s < INT16_MIN || _%s > INT16_MAX) Rf_error(\"i16 out of range\");",
-        "  int16_t %s = (int16_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    i32 = sprintf(
-      paste(
-        "  int _%s = asInteger(%s);",
-        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
-        "  if (_%s < INT32_MIN || _%s > INT32_MAX) Rf_error(\"i32 out of range\");",
-        "  int32_t %s = (int32_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    i64 = sprintf(
-      paste(
-        "  double _%s = asReal(%s);",
-        "  if (ISNA(_%s) || ISNAN(_%s)) Rf_error(\"numeric value is NA\");",
-        "  if (fabs(_%s) > 9007199254740992.0) Rf_error(\"i64 requires exact integer (|x| <= 2^53)\");",
-        "  if (trunc(_%s) != _%s) Rf_error(\"i64 requires integer value\");",
-        "  if (_%s < (double)INT64_MIN || _%s > (double)INT64_MAX) Rf_error(\"i64 out of range\");",
-        "  int64_t %s = (int64_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    u8 = sprintf(
-      paste(
-        "  int _%s = asInteger(%s);",
-        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
-        "  if (_%s < 0 || _%s > UINT8_MAX) Rf_error(\"u8 out of range\");",
-        "  uint8_t %s = (uint8_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    u16 = sprintf(
-      paste(
-        "  int _%s = asInteger(%s);",
-        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
-        "  if (_%s < 0 || _%s > UINT16_MAX) Rf_error(\"u16 out of range\");",
-        "  uint16_t %s = (uint16_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    u32 = sprintf(
-      paste(
-        "  double _%s = asReal(%s);",
-        "  if (ISNA(_%s) || ISNAN(_%s)) Rf_error(\"numeric value is NA\");",
-        "  if (_%s < 0 || _%s > (double)UINT32_MAX) Rf_error(\"u32 out of range\");",
-        "  if (trunc(_%s) != _%s) Rf_error(\"u32 requires integer value\");",
-        "  uint32_t %s = (uint32_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    u64 = sprintf(
-      paste(
-        "  double _%s = asReal(%s);",
-        "  if (ISNA(_%s) || ISNAN(_%s)) Rf_error(\"numeric value is NA\");",
-        "  if (_%s < 0) Rf_error(\"u64 out of range\");",
-        "  if (fabs(_%s) > 9007199254740992.0) Rf_error(\"u64 requires exact integer (|x| <= 2^53)\");",
-        "  if (trunc(_%s) != _%s) Rf_error(\"u64 requires integer value\");",
-        "  if (_%s > (double)UINT64_MAX) Rf_error(\"u64 out of range\");",
-        "  uint64_t %s = (uint64_t)_%s;",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    f32 = sprintf("  float %s = (float)asReal(%s);", arg_name, r_name),
-    f64 = sprintf("  double %s = asReal(%s);", arg_name, r_name),
-    bool = sprintf(
-      paste(
-        "  int _%s = asLogical(%s);",
-        "  if (_%s == NA_LOGICAL) Rf_error(\"logical value is NA\");",
-        "  bool %s = (bool)(_%s != 0);",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    cstring = sprintf(
-      paste(
-        "  SEXP _%s = STRING_ELT(%s, 0);",
-        "  const char* %s = (_%s == NA_STRING) ? NULL : Rf_translateCharUTF8(_%s);",
-        sep = "\n"
-      ),
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    ptr = sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name),
-    buffer = sprintf("  void* %s = RAW(%s);", arg_name, r_name),
-    "buffer<f64>" = sprintf("  double* %s = REAL(%s);", arg_name, r_name),
-    "buffer<f32>" = sprintf(
-      "  float* %s = (float*)REAL(%s);",
-      arg_name,
-      r_name
-    ),
-    "buffer<i32>" = sprintf("  int32_t* %s = INTEGER(%s);", arg_name, r_name),
-    "buffer<i64>" = sprintf(
-      "  int64_t* %s = (int64_t*)REAL(%s);",
-      arg_name,
-      r_name
-    ),
-    "buffer<u8>" = sprintf("  uint8_t* %s = RAW(%s);", arg_name, r_name),
-    # Array types - R native vectors (zero-copy)
-    raw = sprintf("  uint8_t* %s = RAW(%s);", arg_name, r_name),
-    integer_array = sprintf("  int32_t* %s = INTEGER(%s);", arg_name, r_name),
-    numeric_array = sprintf("  double* %s = REAL(%s);", arg_name, r_name),
-    logical_array = sprintf("  int* %s = LOGICAL(%s);", arg_name, r_name),
-    character_array = sprintf("  SEXP* %s = STRING_PTR(%s);", arg_name, r_name),
-    cstring_array = sprintf(
-      paste(
-        "  if (!Rf_isString(%s)) Rf_error(\"expected character vector\");",
-        "  R_xlen_t _%s_n = XLENGTH(%s);",
-        "  const char** %s = (const char**) R_alloc((size_t)_%s_n, sizeof(const char*));",
-        "  for (R_xlen_t _%s_i = 0; _%s_i < _%s_n; _%s_i++) {",
-        "    SEXP _%s_elt = STRING_ELT(%s, _%s_i);",
-        "    %s[_%s_i] = (_%s_elt == NA_STRING) ? NULL : Rf_translateCharUTF8(_%s_elt);",
-        "  }",
-        sep = "\n"
-      ),
-      r_name,
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      r_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name,
-      arg_name
-    ),
-    sexp = sprintf("  SEXP %s = %s;", arg_name, r_name),
-    callback = sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name),
-    {
-      # Handle enum types
-      if (startsWith(ffi_type, "enum:")) {
-        sprintf("  int %s = asInteger(%s);", arg_name, r_name)
-      } else if (startsWith(ffi_type, "callback")) {
-        # Callback type - extract pointer from external ptr
-        sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
-      } else {
-        stop("Unsupported FFI type: ", ffi_type, call. = FALSE)
-      }
-    }
-  )
+  special <- ffi_input_special_rule(ffi_type, arg_name, r_name)
+  if (!is.null(special)) {
+    return(special)
+  }
+  ffi_input_rule(ffi_type, arg_name, r_name)
 }
 
 # Generate C code to convert C return value to R SEXP
@@ -264,49 +34,8 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
       }
       len_name <- arg_names[[as.integer(len_arg)]]
 
-      alloc_line <- switch(base_type,
-        raw = sprintf("SEXP out = PROTECT(allocVector(RAWSXP, %s));", len_name),
-        integer_array = sprintf(
-          "SEXP out = PROTECT(allocVector(INTSXP, %s));",
-          len_name
-        ),
-        numeric_array = sprintf(
-          "SEXP out = PROTECT(allocVector(REALSXP, %s));",
-          len_name
-        ),
-        logical_array = sprintf(
-          "SEXP out = PROTECT(allocVector(LGLSXP, %s));",
-          len_name
-        ),
-        stop("Unsupported array return type: ", base_type, call. = FALSE)
-      )
-
-      copy_line <- switch(base_type,
-        raw = sprintf(
-          "  if (%s > 0) memcpy(RAW(out), %s, sizeof(uint8_t) * %s);",
-          len_name,
-          value_expr,
-          len_name
-        ),
-        integer_array = sprintf(
-          "  if (%s > 0) memcpy(INTEGER(out), %s, sizeof(int32_t) * %s);",
-          len_name,
-          value_expr,
-          len_name
-        ),
-        numeric_array = sprintf(
-          "  if (%s > 0) memcpy(REAL(out), %s, sizeof(double) * %s);",
-          len_name,
-          value_expr,
-          len_name
-        ),
-        logical_array = sprintf(
-          "  if (%s > 0) memcpy(LOGICAL(out), %s, sizeof(int) * %s);",
-          len_name,
-          value_expr,
-          len_name
-        )
-      )
+      alloc_line <- array_return_alloc_line(base_type, len_name)
+      copy_line <- array_return_copy_line(base_type, len_name, value_expr)
 
       free_line <- if (isTRUE(ffi_type$free)) {
         sprintf("  if (%s) free(%s);", value_expr, value_expr)
@@ -331,48 +60,11 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
   }
 
   check_ffi_type(ffi_type, "return value")
-
-  switch(ffi_type,
-    i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
-    i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
-    i32 = sprintf("return ScalarInteger(%s);", value_expr),
-    i64 = sprintf("return ScalarReal((double)%s);", value_expr),
-    u8 = sprintf("return ScalarInteger((int)%s);", value_expr),
-    u16 = sprintf("return ScalarInteger((int)%s);", value_expr),
-    u32 = sprintf("return ScalarReal((double)%s);", value_expr),
-    u64 = sprintf("return ScalarReal((double)%s);", value_expr),
-    f32 = sprintf("return ScalarReal((double)%s);", value_expr),
-    f64 = sprintf("return ScalarReal(%s);", value_expr),
-    bool = sprintf("return ScalarLogical((int)%s);", value_expr),
-    cstring = sprintf(
-      paste(
-        "if (%s) {",
-        "    SEXP out = PROTECT(mkString(%s));",
-        "    UNPROTECT(1);",
-        "    return out;",
-        "} else {",
-        "    return R_NilValue;",
-        "}",
-        sep = "\n"
-      ),
-      value_expr,
-      value_expr
-    ),
-    ptr = sprintf(
-      "return R_MakeExternalPtr(%s, R_NilValue, R_NilValue);",
-      value_expr
-    ),
-    sexp = sprintf("return %s;", value_expr),
-    void = sprintf("%s;\n  return R_NilValue;", value_expr),
-    {
-      # Handle enum types (matched via check_ffi_type returning i32 info)
-      if (startsWith(ffi_type, "enum:")) {
-        sprintf("return ScalarInteger((int)%s);", value_expr)
-      } else {
-        stop("Unsupported FFI return type: ", ffi_type, call. = FALSE)
-      }
-    }
-  )
+  special <- ffi_return_special_rule(ffi_type, value_expr)
+  if (!is.null(special)) {
+    return(special)
+  }
+  ffi_return_rule(ffi_type, value_expr)
 }
 
 # Callback helper: generate a unique trampoline name per wrapper argument
@@ -688,33 +380,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec
   }
 
-  return_code <- switch(type_name,
-    i8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
-    i16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
-    i32 = sprintf("return ScalarInteger(p->%s);", field_name),
-    i64 = sprintf("return ScalarReal((double)p->%s);", field_name),
-    u8 = sprintf("return ScalarInteger((int)p->%s);", field_name),
-    u16 = sprintf("return ScalarInteger((int)p->%s);", field_name),
-    u32 = sprintf("return ScalarReal((double)p->%s);", field_name),
-    u64 = sprintf("return ScalarReal((double)p->%s);", field_name),
-    f32 = sprintf("return ScalarReal((double)p->%s);", field_name),
-    f64 = sprintf("return ScalarReal(p->%s);", field_name),
-    bool = sprintf("return ScalarLogical((int)p->%s);", field_name),
-    cstring = c(
-      sprintf("  if (p->%s) {", field_name),
-      sprintf("    SEXP out = PROTECT(mkString(p->%s));", field_name),
-      "    UNPROTECT(1);",
-      "    return out;",
-      "  } else {",
-      "    return R_NilValue;",
-      "  }"
-    ),
-    ptr = sprintf(
-      "return R_MakeExternalPtr(p->%s, R_NilValue, ext);",
-      field_name
-    ),
-    sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", field_name) # Default: return pointer to field
-  )
+  return_code <- struct_field_getter_lines(type_name, field_name)
 
   c(
     sprintf(
@@ -737,20 +403,7 @@ generate_struct_array_getter <- function(struct_name, field_name, field_spec) {
     stop("Array field '", field_name, "' missing size", call. = FALSE)
   }
 
-  return_code <- switch(type_name,
-    i8 = sprintf("return ScalarInteger((int)p->%s[idx]);", field_name),
-    i16 = sprintf("return ScalarInteger((int)p->%s[idx]);", field_name),
-    i32 = sprintf("return ScalarInteger(p->%s[idx]);", field_name),
-    i64 = sprintf("return ScalarReal((double)p->%s[idx]);", field_name),
-    u8 = sprintf("return ScalarInteger((int)p->%s[idx]);", field_name),
-    u16 = sprintf("return ScalarInteger((int)p->%s[idx]);", field_name),
-    u32 = sprintf("return ScalarReal((double)p->%s[idx]);", field_name),
-    u64 = sprintf("return ScalarReal((double)p->%s[idx]);", field_name),
-    f32 = sprintf("return ScalarReal((double)p->%s[idx]);", field_name),
-    f64 = sprintf("return ScalarReal(p->%s[idx]);", field_name),
-    bool = sprintf("return ScalarLogical((int)p->%s[idx]);", field_name),
-    sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
-  )
+  return_code <- struct_array_field_getter_lines(type_name, field_name)
 
   c(
     sprintf(
@@ -778,20 +431,7 @@ generate_struct_array_setter <- function(struct_name, field_name, field_spec) {
     stop("Array field '", field_name, "' missing size", call. = FALSE)
   }
 
-  setter_code <- switch(type_name,
-    i8 = sprintf("p->%s[idx] = (int8_t)asInteger(val);", field_name),
-    i16 = sprintf("p->%s[idx] = (int16_t)asInteger(val);", field_name),
-    i32 = sprintf("p->%s[idx] = asInteger(val);", field_name),
-    i64 = sprintf("p->%s[idx] = (int64_t)REAL(val)[0];", field_name),
-    u8 = sprintf("p->%s[idx] = (uint8_t)asInteger(val);", field_name),
-    u16 = sprintf("p->%s[idx] = (uint16_t)asInteger(val);", field_name),
-    u32 = sprintf("p->%s[idx] = (uint32_t)REAL(val)[0];", field_name),
-    u64 = sprintf("p->%s[idx] = (uint64_t)REAL(val)[0];", field_name),
-    f32 = sprintf("p->%s[idx] = (float)asReal(val);", field_name),
-    f64 = sprintf("p->%s[idx] = asReal(val);", field_name),
-    bool = sprintf("p->%s[idx] = (bool)asLogical(val);", field_name),
-    sprintf("p->%s[idx] = (uint8_t)asInteger(val);", field_name)
-  )
+  setter_code <- struct_array_field_setter_lines(type_name, field_name)
 
   c(
     sprintf(
@@ -823,30 +463,7 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
     size <- NULL
   }
 
-  setter_code <- switch(type_name,
-    i8 = sprintf("p->%s = (int8_t)asInteger(val);", field_name),
-    i16 = sprintf("p->%s = (int16_t)asInteger(val);", field_name),
-    i32 = sprintf("p->%s = asInteger(val);", field_name),
-    i64 = sprintf("p->%s = (int64_t)REAL(val)[0];", field_name),
-    u8 = sprintf("p->%s = (uint8_t)asInteger(val);", field_name),
-    u16 = sprintf("p->%s = (uint16_t)asInteger(val);", field_name),
-    u32 = sprintf("p->%s = (uint32_t)REAL(val)[0];", field_name),
-    u64 = sprintf("p->%s = (uint64_t)REAL(val)[0];", field_name),
-    f32 = sprintf("p->%s = (float)asReal(val);", field_name),
-    f64 = sprintf("p->%s = asReal(val);", field_name),
-    bool = sprintf("p->%s = (bool)asLogical(val);", field_name),
-    cstring = if (!is.null(size)) {
-      c(
-        sprintf("  const char *src = CHAR(STRING_ELT(val, 0));"),
-        sprintf("  strncpy(p->%s, src, %d);", field_name, size - 1),
-        sprintf("  p->%s[%d] = '\\0';", field_name, size - 1)
-      )
-    } else {
-      sprintf("p->%s = CHAR(STRING_ELT(val, 0));", field_name)
-    },
-    ptr = sprintf("p->%s = R_ExternalPtrAddr(val);", field_name),
-    sprintf("// Cannot set field of type %s", type_name)
-  )
+  setter_code <- struct_field_setter_lines(type_name, field_name, size)
 
   c(
     sprintf(
@@ -1043,12 +660,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
   }
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
-
-  return_code <- switch(type_name,
-    i32 = sprintf("return ScalarInteger(p->%s);", mem_name),
-    f32 = sprintf("return ScalarReal((double)p->%s);", mem_name),
-    sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name)
-  )
+  return_code <- union_field_getter_lines(type_name, mem_name)
 
   c(
     sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
@@ -1060,6 +672,71 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
   )
 }
 
+array_return_alloc_line <- function(base_type, len_name) {
+  array_return_alloc_line_rule(base_type, len_name)
+}
+
+array_return_copy_line <- function(base_type, len_name, value_expr) {
+  array_return_copy_line_rule(base_type, len_name, value_expr)
+}
+
+struct_field_getter_lines <- function(type_name, field_name) {
+  struct_field_getter_rule(type_name, field_name)
+}
+
+struct_array_field_getter_lines <- function(type_name, field_name) {
+  struct_array_field_getter_rule(type_name, field_name)
+}
+
+struct_array_field_setter_lines <- function(type_name, field_name) {
+  struct_array_field_setter_rule(type_name, field_name)
+}
+
+struct_field_setter_lines <- function(type_name, field_name, size) {
+  struct_field_setter_rule(type_name, field_name, size)
+}
+
+union_field_getter_lines <- function(type_name, mem_name) {
+  union_field_getter_rule(type_name, mem_name)
+}
+
+union_field_setter_lines <- function(type_name, mem_name, size) {
+  union_field_setter_rule(type_name, mem_name, size)
+}
+
+ffi_input_special_rule <- function(ffi_type, arg_name, r_name) {
+  special_map <- list(
+    "enum:" = function() ffi_input_enum_rule(ffi_type, arg_name, r_name),
+    "callback" = function() ffi_input_callback_rule(ffi_type, arg_name, r_name)
+  )
+  matched <- names(special_map)[vapply(
+    names(special_map),
+    startsWith,
+    logical(1),
+    x = ffi_type
+  )]
+  if (length(matched) == 0) {
+    return(NULL)
+  }
+  special_map[[matched[[1]]]]()
+}
+
+ffi_return_special_rule <- function(ffi_type, value_expr) {
+  special_map <- list(
+    "enum:" = function() ffi_return_enum_rule(ffi_type, value_expr)
+  )
+  matched <- names(special_map)[vapply(
+    names(special_map),
+    startsWith,
+    logical(1),
+    x = ffi_type
+  )]
+  if (length(matched) == 0) {
+    return(NULL)
+  }
+  special_map[[matched[[1]]]]()
+}
+
 generate_union_setter <- function(union_name, mem_name, mem_spec) {
   if (
     is.list(mem_spec) && !is.null(mem_spec$type) && mem_spec$type == "struct"
@@ -1069,11 +746,8 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
 
   type_name <- if (is.list(mem_spec)) mem_spec$type else mem_spec
 
-  setter_code <- switch(type_name,
-    i32 = sprintf("p->%s = asInteger(val);", mem_name),
-    f32 = sprintf("p->%s = (float)asReal(val);", mem_name),
-    sprintf("// Cannot set union member of type %s", type_name)
-  )
+  size <- if (is.list(mem_spec)) mem_spec$size else NULL
+  setter_code <- union_field_setter_lines(type_name, mem_name, size)
 
   c(
     sprintf(

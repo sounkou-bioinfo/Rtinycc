@@ -214,6 +214,14 @@ ffi_input_rule("ptr", arg_name, r_name) %as% {
     sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
 }
 
+ffi_input_enum_rule(type_name, arg_name, r_name) %as% {
+    sprintf("  int %s = asInteger(%s);", arg_name, r_name)
+}
+
+ffi_input_callback_rule(type_name, arg_name, r_name) %as% {
+    sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
+}
+
 ffi_input_rule("raw", arg_name, r_name) %as% {
     sprintf("  uint8_t* %s = RAW(%s);", arg_name, r_name)
 }
@@ -273,20 +281,6 @@ ffi_input_rule("sexp", arg_name, r_name) %as% {
 ffi_input_rule("callback", arg_name, r_name) %as% {
     sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
 }
-
-ffi_input_rule(type, arg_name, r_name) %when%
-    {
-        startsWith(type, "enum:")
-    } %as% {
-        sprintf("  int %s = asInteger(%s);", arg_name, r_name)
-    }
-
-ffi_input_rule(type, arg_name, r_name) %when%
-    {
-        startsWith(type, "callback")
-    } %as% {
-        sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
-    }
 
 ffi_input_rule(type, arg_name, r_name) %as% {
     stop("Unsupported FFI type: ", type, call. = FALSE)
@@ -381,13 +375,325 @@ ffi_return_rule("void", value_expr) %as% {
     sprintf("%s;\n  return R_NilValue;", value_expr)
 }
 
-ffi_return_rule(type, value_expr) %when%
-    {
-        startsWith(type, "enum:")
-    } %as% {
-        sprintf("return ScalarInteger((int)%s);", value_expr)
-    }
+ffi_return_enum_rule(type_name, value_expr) %as% {
+    sprintf("return ScalarInteger((int)%s);", value_expr)
+}
 
 ffi_return_rule(type, value_expr) %as% {
     stop("Unsupported FFI return type: ", type, call. = FALSE)
+}
+
+array_return_alloc_line_rule("raw", len_name) %as% {
+    sprintf("SEXP out = PROTECT(allocVector(RAWSXP, %s));", len_name)
+}
+
+array_return_alloc_line_rule("integer_array", len_name) %as% {
+    sprintf("SEXP out = PROTECT(allocVector(INTSXP, %s));", len_name)
+}
+
+array_return_alloc_line_rule("numeric_array", len_name) %as% {
+    sprintf("SEXP out = PROTECT(allocVector(REALSXP, %s));", len_name)
+}
+
+array_return_alloc_line_rule("logical_array", len_name) %as% {
+    sprintf("SEXP out = PROTECT(allocVector(LGLSXP, %s));", len_name)
+}
+
+array_return_alloc_line_rule(type, len_name) %as% {
+    stop("Unsupported array return type: ", type, call. = FALSE)
+}
+
+array_return_copy_line_rule("raw", len_name, value_expr) %as% {
+    sprintf(
+        "  if (%s > 0) memcpy(RAW(out), %s, sizeof(uint8_t) * %s);",
+        len_name,
+        value_expr,
+        len_name
+    )
+}
+
+array_return_copy_line_rule("integer_array", len_name, value_expr) %as% {
+    sprintf(
+        "  if (%s > 0) memcpy(INTEGER(out), %s, sizeof(int32_t) * %s);",
+        len_name,
+        value_expr,
+        len_name
+    )
+}
+
+array_return_copy_line_rule("numeric_array", len_name, value_expr) %as% {
+    sprintf(
+        "  if (%s > 0) memcpy(REAL(out), %s, sizeof(double) * %s);",
+        len_name,
+        value_expr,
+        len_name
+    )
+}
+
+array_return_copy_line_rule("logical_array", len_name, value_expr) %as% {
+    sprintf(
+        "  if (%s > 0) memcpy(LOGICAL(out), %s, sizeof(int) * %s);",
+        len_name,
+        value_expr,
+        len_name
+    )
+}
+
+array_return_copy_line_rule(type, len_name, value_expr) %as% {
+    stop("Unsupported array return type: ", type, call. = FALSE)
+}
+
+struct_field_getter_rule("i8", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s);", field_name)
+}
+
+struct_field_getter_rule("i16", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s);", field_name)
+}
+
+struct_field_getter_rule("i32", field_name) %as% {
+    sprintf("return ScalarInteger(p->%s);", field_name)
+}
+
+struct_field_getter_rule("i64", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s);", field_name)
+}
+
+struct_field_getter_rule("u8", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s);", field_name)
+}
+
+struct_field_getter_rule("u16", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s);", field_name)
+}
+
+struct_field_getter_rule("u32", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s);", field_name)
+}
+
+struct_field_getter_rule("u64", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s);", field_name)
+}
+
+struct_field_getter_rule("f32", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s);", field_name)
+}
+
+struct_field_getter_rule("f64", field_name) %as% {
+    sprintf("return ScalarReal(p->%s);", field_name)
+}
+
+struct_field_getter_rule("bool", field_name) %as% {
+    sprintf("return ScalarLogical((int)p->%s);", field_name)
+}
+
+struct_field_getter_rule("cstring", field_name) %as% {
+    c(
+        sprintf("  if (p->%s) {", field_name),
+        sprintf("    SEXP out = PROTECT(mkString(p->%s));", field_name),
+        "    UNPROTECT(1);",
+        "    return out;",
+        "  } else {",
+        "    return R_NilValue;",
+        "  }"
+    )
+}
+
+struct_field_getter_rule("ptr", field_name) %as% {
+    sprintf("return R_MakeExternalPtr(p->%s, R_NilValue, ext);", field_name)
+}
+
+struct_field_getter_rule(type_name, field_name) %as% {
+    sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", field_name)
+}
+
+struct_array_field_getter_rule("i8", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("i16", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("i32", field_name) %as% {
+    sprintf("return ScalarInteger(p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("i64", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("u8", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("u16", field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("u32", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("u64", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("f32", field_name) %as% {
+    sprintf("return ScalarReal((double)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("f64", field_name) %as% {
+    sprintf("return ScalarReal(p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule("bool", field_name) %as% {
+    sprintf("return ScalarLogical((int)p->%s[idx]);", field_name)
+}
+
+struct_array_field_getter_rule(type_name, field_name) %as% {
+    sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
+}
+
+struct_array_field_setter_rule("i8", field_name) %as% {
+    sprintf("p->%s[idx] = (int8_t)asInteger(val);", field_name)
+}
+
+struct_array_field_setter_rule("i16", field_name) %as% {
+    sprintf("p->%s[idx] = (int16_t)asInteger(val);", field_name)
+}
+
+struct_array_field_setter_rule("i32", field_name) %as% {
+    sprintf("p->%s[idx] = asInteger(val);", field_name)
+}
+
+struct_array_field_setter_rule("i64", field_name) %as% {
+    sprintf("p->%s[idx] = (int64_t)REAL(val)[0];", field_name)
+}
+
+struct_array_field_setter_rule("u8", field_name) %as% {
+    sprintf("p->%s[idx] = (uint8_t)asInteger(val);", field_name)
+}
+
+struct_array_field_setter_rule("u16", field_name) %as% {
+    sprintf("p->%s[idx] = (uint16_t)asInteger(val);", field_name)
+}
+
+struct_array_field_setter_rule("u32", field_name) %as% {
+    sprintf("p->%s[idx] = (uint32_t)REAL(val)[0];", field_name)
+}
+
+struct_array_field_setter_rule("u64", field_name) %as% {
+    sprintf("p->%s[idx] = (uint64_t)REAL(val)[0];", field_name)
+}
+
+struct_array_field_setter_rule("f32", field_name) %as% {
+    sprintf("p->%s[idx] = (float)REAL(val)[0];", field_name)
+}
+
+struct_array_field_setter_rule("f64", field_name) %as% {
+    sprintf("p->%s[idx] = REAL(val)[0];", field_name)
+}
+
+struct_array_field_setter_rule("bool", field_name) %as% {
+    sprintf("p->%s[idx] = (bool)asLogical(val);", field_name)
+}
+
+struct_array_field_setter_rule(type_name, field_name) %as% {
+    sprintf("p->%s[idx] = (uint8_t)asInteger(val);", field_name)
+}
+
+struct_field_setter_rule("i8", field_name, size) %as% {
+    sprintf("p->%s = (int8_t)asInteger(val);", field_name)
+}
+
+struct_field_setter_rule("i16", field_name, size) %as% {
+    sprintf("p->%s = (int16_t)asInteger(val);", field_name)
+}
+
+struct_field_setter_rule("i32", field_name, size) %as% {
+    sprintf("p->%s = asInteger(val);", field_name)
+}
+
+struct_field_setter_rule("i64", field_name, size) %as% {
+    sprintf("p->%s = (int64_t)REAL(val)[0];", field_name)
+}
+
+struct_field_setter_rule("u8", field_name, size) %as% {
+    sprintf("p->%s = (uint8_t)asInteger(val);", field_name)
+}
+
+struct_field_setter_rule("u16", field_name, size) %as% {
+    sprintf("p->%s = (uint16_t)asInteger(val);", field_name)
+}
+
+struct_field_setter_rule("u32", field_name, size) %as% {
+    sprintf("p->%s = (uint32_t)REAL(val)[0];", field_name)
+}
+
+struct_field_setter_rule("u64", field_name, size) %as% {
+    sprintf("p->%s = (uint64_t)REAL(val)[0];", field_name)
+}
+
+struct_field_setter_rule("f32", field_name, size) %as% {
+    sprintf("p->%s = (float)asReal(val);", field_name)
+}
+
+struct_field_setter_rule("f64", field_name, size) %as% {
+    sprintf("p->%s = asReal(val);", field_name)
+}
+
+struct_field_setter_rule("bool", field_name, size) %as% {
+    sprintf("p->%s = (bool)asLogical(val);", field_name)
+}
+
+struct_field_setter_rule("ptr", field_name, size) %as% {
+    sprintf("p->%s = R_ExternalPtrAddr(val);", field_name)
+}
+
+struct_field_setter_rule("cstring", field_name, size) %as% {
+    if (!is.null(size)) {
+        return(c(
+            "  const char *src = CHAR(STRING_ELT(val, 0));",
+            sprintf("  strncpy(p->%s, src, %d);", field_name, size - 1),
+            sprintf("  p->%s[%d] = '\\0';", field_name, size - 1)
+        ))
+    }
+    sprintf("p->%s = CHAR(STRING_ELT(val, 0));", field_name)
+}
+
+struct_field_setter_rule(type_name, field_name, size) %as% {
+    sprintf("// Cannot set field of type %s", type_name)
+}
+
+union_field_getter_rule(type_name, mem_name) %as% {
+    struct_field_getter_rule(type_name, mem_name)
+}
+
+union_field_setter_rule("raw", mem_name, size) %as% {
+    sprintf("// Cannot set union member array type raw")
+}
+
+union_field_setter_rule("integer_array", mem_name, size) %as% {
+    sprintf("// Cannot set union member array type integer_array")
+}
+
+union_field_setter_rule("numeric_array", mem_name, size) %as% {
+    sprintf("// Cannot set union member array type numeric_array")
+}
+
+union_field_setter_rule("logical_array", mem_name, size) %as% {
+    sprintf("// Cannot set union member array type logical_array")
+}
+
+union_field_setter_rule("character_array", mem_name, size) %as% {
+    sprintf("// Cannot set union member array type character_array")
+}
+
+union_field_setter_rule("cstring_array", mem_name, size) %as% {
+    sprintf("// Cannot set union member array type cstring_array")
+}
+
+union_field_setter_rule(type_name, mem_name, size) %as% {
+    struct_field_setter_rule(type_name, mem_name, size)
 }
