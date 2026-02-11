@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes ( windows may never be support, so use WSL2) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes ( windows may never be supported to subtle UCRT issues, so use WSL2) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
 
 
 ## How it works
