@@ -65,6 +65,28 @@ functions <code>global_&lt;name&gt;_get()</code> and <code>global_&lt;name&gt;_s
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>Updated tcc_ffi object (for chaining)</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Globals are limited to scalar FFI types. Array types are rejected.
+Scalar conversions follow the same rules as wrapper arguments:</p><ul><li><p>Integer inputs (<code>i8</code>, <code>i16</code>, <code>i32</code>, <code>u8</code>, <code>u16</code>) must be finite and
+within range; <code>NA</code> values error.</p></li>
+<li><p>Large integer types (<code>i64</code>, <code>u32</code>, <code>u64</code>) are mediated through R numeric
+(double). Values must be integer-valued and within range; for <code>i64</code>/<code>u64</code>
+only exact integers up to $2^53$ are accepted.</p></li>
+<li><p><code>bool</code> rejects <code>NA</code> logicals.</p></li>
+</ul><p>Ownership notes:</p><ul><li><p><code>ptr</code> globals store the raw address from an external pointer. If the
+external pointer owns memory, keep it alive; otherwise the pointer may
+be freed while the global still points to it.</p></li>
+<li><p><code>cstring</code> globals store a borrowed pointer to R's string data
+(UTF-8 translation). Do not free it; for C-owned strings prefer a <code>ptr</code>
+global and manage lifetime explicitly (e.g., with <code><a href="tcc_cstring.html">tcc_cstring()</a></code>).</p></li>
+</ul></div>
+    <div class="section level2">
+    <h2 id="note">Note<a class="anchor" aria-label="anchor" href="#note"></a></h2>
+    <p>Global helpers are generated inside the compiled TCC unit. Recompiling
+creates a new instance of the global variable; existing compiled objects
+continue to refer to their own copy.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
