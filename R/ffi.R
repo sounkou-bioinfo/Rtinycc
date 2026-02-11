@@ -961,9 +961,10 @@ recompile_into <- function(target) {
 # Platform-dependent library search paths
 tcc_platform_lib_paths <- function() {
   sysname <- Sys.info()["sysname"]
-
-  switch(
-    sysname,
+  # this is a R package, so
+  # we can assume 64 bit archs and wsl2, macos
+  #  and Rtools
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -976,7 +977,21 @@ tcc_platform_lib_paths <- function() {
       "/usr/lib/i386-linux-gnu",
       "/lib/x86_64-linux-gnu",
       "/lib32/x86_64-linux-gnu",
-      "/lib/x86_64-linux-gnu/"
+      "/lib/x86_64-linux-gnu/",
+      # linux-unknown-gnu is for Alpine Linux with musl
+      # which uses different library paths
+      "/usr/lib/x86_64-linux-gnu",
+      "/usr/lib/i386-linux-gnu",
+      "/lib/x86_64-linux-gnu",
+      "/lib32/x86_64-linux-gnu",
+      "/usr/lib/x86_64-linux-musl",
+      "/usr/lib/i386-linux-musl",
+      "/lib/x86_64-linux-musl",
+      "/lib32/x86_64-linux-musl",
+      # amd/aarch64 multiarch paths
+      "/usr/lib/amd64-linux-gnu",
+      "/usr/lib/aarch64-linux-gnu"
+      # manylinux paths
     ),
     Darwin = c(
       "/usr/lib",
@@ -989,8 +1004,10 @@ tcc_platform_lib_paths <- function() {
     Windows = c(
       "C:/msys64/mingw64/lib", # MSYS2
       "C:/msys64/mingw32/lib",
-      "C:/Rtools/mingw_64/lib", # Rtools
-      "C:/Rtools/mingw_32/lib"
+      "C:/Rtools45/mingw_64/lib", # Rtools
+      "C:/Rtools45/mingw_32/lib",
+      "C:/Rtools44/mingw_64/lib", # Rtools
+      "C:/Rtools44/mingw_32/lib"
     ),
     # Default fallback
     c("/usr/lib", "/usr/local/lib")
@@ -1016,8 +1033,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(
-      sysname,
+    lib_name <- switch(sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),
