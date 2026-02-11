@@ -242,9 +242,52 @@ tcc_map_c_type_to_ffi <- function(c_type) {
   x <- gsub("\\s+", " ", x)
   x <- gsub("\\b(const|volatile|restrict)\\b", "", x)
   x <- gsub("\\s+", " ", trimws(x))
-  x <- sub("\\s+[A-Za-z_][A-Za-z0-9_]*$", "", x)
-  x <- trimws(x)
 
+  strip_trailing_identifier <- function(type_str) {
+    parts <- strsplit(type_str, "\\s+")[[1]]
+    if (length(parts) < 2) {
+      return(type_str)
+    }
+    last <- parts[length(parts)]
+    type_tokens <- c(
+      "void",
+      "bool",
+      "_Bool",
+      "SEXP",
+      "sexp",
+      "char",
+      "short",
+      "int",
+      "long",
+      "signed",
+      "unsigned",
+      "float",
+      "double",
+      "size_t",
+      "ssize_t",
+      "ptrdiff_t",
+      "intptr_t",
+      "uintptr_t",
+      "off_t",
+      "int8_t",
+      "int16_t",
+      "int32_t",
+      "int64_t",
+      "uint8_t",
+      "uint16_t",
+      "uint32_t",
+      "uint64_t",
+      "__int32",
+      "__int64"
+    )
+    if (last %in% type_tokens) {
+      return(type_str)
+    }
+    paste(parts[-length(parts)], collapse = " ")
+  }
+
+  x <- strip_trailing_identifier(x)
+  x <- trimws(x)
   ffi_c_type_map_rule(
     x,
     grepl("char\\s*\\*", x),

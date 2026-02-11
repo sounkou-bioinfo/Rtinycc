@@ -1790,7 +1790,16 @@ ffi_c_type_map_rule("sexp", FALSE, FALSE) %as% {
 ffi_c_type_map_rule("int", FALSE, FALSE) %as% {
     "i32"
 }
+ffi_c_type_map_rule("signed", FALSE, FALSE) %as% {
+    "i32"
+}
 ffi_c_type_map_rule("int32_t", FALSE, FALSE) %as% {
+    "i32"
+}
+ffi_c_type_map_rule("__int32", FALSE, FALSE) %as% {
+    "i32"
+}
+ffi_c_type_map_rule("signed int", FALSE, FALSE) %as% {
     "i32"
 }
 ffi_c_type_map_rule("short", FALSE, FALSE) %as% {
@@ -1799,10 +1808,19 @@ ffi_c_type_map_rule("short", FALSE, FALSE) %as% {
 ffi_c_type_map_rule("short int", FALSE, FALSE) %as% {
     "i16"
 }
+ffi_c_type_map_rule("signed short", FALSE, FALSE) %as% {
+    "i16"
+}
+ffi_c_type_map_rule("signed short int", FALSE, FALSE) %as% {
+    "i16"
+}
 ffi_c_type_map_rule("int16_t", FALSE, FALSE) %as% {
     "i16"
 }
 ffi_c_type_map_rule("char", FALSE, FALSE) %as% {
+    "i8"
+}
+ffi_c_type_map_rule("signed char", FALSE, FALSE) %as% {
     "i8"
 }
 ffi_c_type_map_rule("int8_t", FALSE, FALSE) %as% {
@@ -1817,13 +1835,49 @@ ffi_c_type_map_rule("long int", FALSE, FALSE) %as% {
 ffi_c_type_map_rule("long long", FALSE, FALSE) %as% {
     "i64"
 }
+ffi_c_type_map_rule("long long int", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("signed long", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("signed long int", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("signed long long", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("signed long long int", FALSE, FALSE) %as% {
+    "i64"
+}
 ffi_c_type_map_rule("int64_t", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("__int64", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("intptr_t", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("ptrdiff_t", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("ssize_t", FALSE, FALSE) %as% {
+    "i64"
+}
+ffi_c_type_map_rule("off_t", FALSE, FALSE) %as% {
     "i64"
 }
 ffi_c_type_map_rule("unsigned int", FALSE, FALSE) %as% {
     "u32"
 }
+ffi_c_type_map_rule("unsigned", FALSE, FALSE) %as% {
+    "u32"
+}
 ffi_c_type_map_rule("uint32_t", FALSE, FALSE) %as% {
+    "u32"
+}
+ffi_c_type_map_rule("unsigned __int32", FALSE, FALSE) %as% {
     "u32"
 }
 ffi_c_type_map_rule("unsigned short", FALSE, FALSE) %as% {
@@ -1850,13 +1904,25 @@ ffi_c_type_map_rule("unsigned long int", FALSE, FALSE) %as% {
 ffi_c_type_map_rule("unsigned long long", FALSE, FALSE) %as% {
     "u64"
 }
+ffi_c_type_map_rule("unsigned long long int", FALSE, FALSE) %as% {
+    "u64"
+}
 ffi_c_type_map_rule("uint64_t", FALSE, FALSE) %as% {
+    "u64"
+}
+ffi_c_type_map_rule("unsigned __int64", FALSE, FALSE) %as% {
     "u64"
 }
 ffi_c_type_map_rule("size_t", FALSE, FALSE) %as% {
     "u64"
 }
+ffi_c_type_map_rule("uintptr_t", FALSE, FALSE) %as% {
+    "u64"
+}
 ffi_c_type_map_rule("double", FALSE, FALSE) %as% {
+    "f64"
+}
+ffi_c_type_map_rule("long double", FALSE, FALSE) %as% {
     "f64"
 }
 ffi_c_type_map_rule("float", FALSE, FALSE) %as% {
