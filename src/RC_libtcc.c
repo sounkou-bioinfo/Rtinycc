@@ -4,18 +4,12 @@
  */
 
 #include "libtcc.h"
+#include "platform_async.h"
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Error.h>
 #include <R_ext/Print.h>
 #include <R_ext/Parse.h>
-#ifndef _WIN32
-#include <R_ext/eventloop.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
-#endif
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
@@ -707,64 +701,96 @@ typedef struct {
     int refs;              // Reference count for outstanding external pointers
 } callback_token_t;
 
-#ifdef _WIN32
 SEXP RC_callback_async_init() {
-    Rf_error("Async callbacks are not supported on Windows");
+    if (!RC_platform_async_is_supported()) {
+        Rf_error("Async callbacks are not supported on Windows");
+    }
+    if (RC_platform_async_init() != 0) {
+        Rf_error("Failed to initialize async callback queue");
+    }
     return R_NilValue;
 }
 
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
-    (void) callback_ext;
-    (void) args;
-    Rf_error("Async callbacks are not supported on Windows");
+    if (!RC_platform_async_is_supported()) {
+        Rf_error("Async callbacks are not supported on Windows");
+    }
+    if (!Rf_inherits(callback_ext, "tcc_callback")) {
+        Rf_error("Expected a 'tcc_callback' external pointer");
+    }
+    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(callback_ext);
+    if (!token) {
+        Rf_error("Callback is closed");
+    }
+    if (token->id < 0 || token->id >= MAX_CALLBACKS || !callback_registry[token->id].valid) {
+        Rf_error("Invalid or expired callback");
+    }
+    if (!RC_platform_async_is_initialized()) {
+        Rf_error("Async callback queue is not initialized. Call tcc_callback_async_enable().");
+    }
+
+    int n_args = (args == R_NilValue) ? 0 : (int)XLENGTH(args);
+    cb_arg_t *cb_args = NULL;
+    if (n_args > 0) {
+        cb_args = (cb_arg_t*) calloc((size_t)n_args, sizeof(cb_arg_t));
+        if (!cb_args) {
+            Rf_error("Out of memory");
+        }
+        for (int i = 0; i < n_args; i++) {
+            SEXP val = VECTOR_ELT(args, i);
+            if (Rf_isInteger(val) || TYPEOF(val) == INTSXP) {
+                cb_args[i].kind = CB_ARG_INT;
+                cb_args[i].v.i = Rf_asInteger(val);
+            } else if (Rf_isLogical(val) || TYPEOF(val) == LGLSXP) {
+                cb_args[i].kind = CB_ARG_LOGICAL;
+                cb_args[i].v.i = Rf_asLogical(val);
+            } else if (Rf_isReal(val) || TYPEOF(val) == REALSXP) {
+                cb_args[i].kind = CB_ARG_REAL;
+                cb_args[i].v.d = Rf_asReal(val);
+            } else if (TYPEOF(val) == STRSXP) {
+                const char *s = Rf_translateCharUTF8(STRING_ELT(val, 0));
+                cb_args[i].kind = CB_ARG_CSTRING;
+                cb_args[i].v.s = (char*) s;
+            } else if (TYPEOF(val) == EXTPTRSXP) {
+                cb_args[i].kind = CB_ARG_PTR;
+                cb_args[i].v.p = R_ExternalPtrAddr(val);
+            } else {
+                free(cb_args);
+                Rf_error("Unsupported async callback argument type");
+            }
+        }
+    }
+
+    int rc = RC_platform_async_schedule(token->id, n_args, cb_args);
+    if (cb_args) {
+        free(cb_args);
+    }
+    if (rc != 0) {
+        Rf_error("Async callback scheduling failed");
+    }
     return R_NilValue;
 }
 
 SEXP RC_callback_async_drain() {
-    Rf_error("Async callbacks are not supported on Windows");
+    if (!RC_platform_async_is_supported()) {
+        Rf_error("Async callbacks are not supported on Windows");
+    }
+    RC_platform_async_drain();
     return R_NilValue;
 }
 
-/* Stub: async scheduling is not available on Windows. */
-typedef struct { int kind; union { int i; double d; void *p; char *s; } v; } cb_arg_t;
-int RC_callback_async_schedule_c(int id, int n_args, const void *args) {
-    (void) id; (void) n_args; (void) args;
-    return -1;
+int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
+    if (!RC_platform_async_is_supported()) {
+        return -1;
+    }
+    if (!RC_platform_async_is_initialized()) {
+        return -1;
+    }
+    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
+        return -2;
+    }
+    return RC_platform_async_schedule(id, n_args, args);
 }
-#else
-// Async callback dispatch (main-thread queue)
-typedef enum {
-    CB_ARG_INT,
-    CB_ARG_REAL,
-    CB_ARG_LOGICAL,
-    CB_ARG_PTR,
-    CB_ARG_CSTRING
-} cb_arg_kind_t;
-
-typedef struct {
-    cb_arg_kind_t kind;
-    union {
-        int i;
-        double d;
-        void *p;
-        char *s;
-    } v;
-} cb_arg_t;
-
-typedef struct cb_task {
-    int id;
-    int n_args;
-    cb_arg_t *args;
-    struct cb_task *next;
-} cb_task_t;
-
-static cb_task_t *cbq_head = NULL;
-static cb_task_t *cbq_tail = NULL;
-static pthread_mutex_t cbq_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int cbq_pipe[2] = {-1, -1};
-static InputHandler *cbq_ih = NULL;
-static int cbq_initialized = 0;
-#endif
 
 // Finalizer for callback tokens
 static void RC_callback_finalizer(SEXP ext) {
@@ -1001,7 +1027,7 @@ static SEXP RC_callback_default_sexp(const char *return_type) {
     return R_NilValue;
 }
 
-static SEXP RC_invoke_callback_internal(int id, SEXP args) {
+SEXP RC_invoke_callback_internal(int id, SEXP args) {
     if (id < 0 || id >= MAX_CALLBACKS) {
         Rf_warning("Invalid or expired callback: %d", id);
         return R_NilValue;
@@ -1128,223 +1154,6 @@ SEXP RC_invoke_callback_id(int id, SEXP args) {
     return RC_invoke_callback_internal(id, args);
 }
 
-#ifndef _WIN32
-static void cbq_push(cb_task_t *task) {
-    pthread_mutex_lock(&cbq_mutex);
-    if (cbq_tail) {
-        cbq_tail->next = task;
-    } else {
-        cbq_head = task;
-    }
-    cbq_tail = task;
-    pthread_mutex_unlock(&cbq_mutex);
-}
-
-static cb_task_t *cbq_pop_all(void) {
-    pthread_mutex_lock(&cbq_mutex);
-    cb_task_t *head = cbq_head;
-    cbq_head = NULL;
-    cbq_tail = NULL;
-    pthread_mutex_unlock(&cbq_mutex);
-    return head;
-}
-
-static SEXP cb_task_to_args(cb_task_t *task) {
-    if (task->n_args <= 0) {
-        return R_NilValue;
-    }
-    SEXP args = PROTECT(Rf_allocVector(VECSXP, task->n_args));
-    for (int i = 0; i < task->n_args; i++) {
-        cb_arg_t *a = &task->args[i];
-        switch (a->kind) {
-            case CB_ARG_INT:
-                SET_VECTOR_ELT(args, i, Rf_ScalarInteger(a->v.i));
-                break;
-            case CB_ARG_REAL:
-                SET_VECTOR_ELT(args, i, Rf_ScalarReal(a->v.d));
-                break;
-            case CB_ARG_LOGICAL:
-                SET_VECTOR_ELT(args, i, Rf_ScalarLogical(a->v.i));
-                break;
-            case CB_ARG_PTR:
-                SET_VECTOR_ELT(args, i, R_MakeExternalPtr(a->v.p, R_NilValue, R_NilValue));
-                break;
-            case CB_ARG_CSTRING:
-                SET_VECTOR_ELT(args, i, Rf_mkString(a->v.s ? a->v.s : ""));
-                break;
-        }
-    }
-    UNPROTECT(1);
-    return args;
-}
-
-static void cbq_free_task(cb_task_t *task) {
-    if (!task) return;
-    if (task->args) {
-        for (int i = 0; i < task->n_args; i++) {
-            if (task->args[i].kind == CB_ARG_CSTRING && task->args[i].v.s) {
-                free(task->args[i].v.s);
-            }
-        }
-        free(task->args);
-    }
-    free(task);
-}
-
-static void cbq_drain_tasks(void) {
-    cb_task_t *task = cbq_pop_all();
-    while (task) {
-        cb_task_t *next = task->next;
-        SEXP args = cb_task_to_args(task);
-        int id = task->id;
-        // Execute on main thread; errors handled by R_tryEval inside
-        RC_invoke_callback_internal(id, args);
-        cbq_free_task(task);
-        task = next;
-    }
-}
-
-static void cbq_input_handler(void *data) {
-    (void) data;
-    // Drain the pipe
-    char buf[32];
-    while (read(cbq_pipe[0], buf, sizeof(buf)) > 0) {
-        // consume
-    }
-    cbq_drain_tasks();
-}
-
-SEXP RC_callback_async_init() {
-    if (cbq_initialized) {
-        return R_NilValue;
-    }
-    if (pipe(cbq_pipe) != 0) {
-        Rf_error("Failed to create async pipe: %s", strerror(errno));
-    }
-    int flags = fcntl(cbq_pipe[0], F_GETFL, 0);
-    if (flags < 0 || fcntl(cbq_pipe[0], F_SETFL, flags | O_NONBLOCK) < 0) {
-        Rf_error("Failed to set async pipe non-blocking: %s", strerror(errno));
-    }
-    cbq_ih = addInputHandler(R_InputHandlers, cbq_pipe[0], cbq_input_handler, 10);
-    if (!cbq_ih) {
-        Rf_error("Failed to register input handler");
-    }
-    cbq_initialized = 1;
-    return R_NilValue;
-}
-
-SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
-    if (!Rf_inherits(callback_ext, "tcc_callback")) {
-        Rf_error("Expected a 'tcc_callback' external pointer");
-    }
-    callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(callback_ext);
-    if (!token) {
-        Rf_error("Callback is closed");
-    }
-    if (token->id < 0 || token->id >= MAX_CALLBACKS || !callback_registry[token->id].valid) {
-        Rf_error("Invalid or expired callback");
-    }
-
-    int n_args = (args == R_NilValue) ? 0 : (int)XLENGTH(args);
-    cb_task_t *task = (cb_task_t*) calloc(1, sizeof(cb_task_t));
-    if (!task) Rf_error("Out of memory");
-    task->id = token->id;
-    task->n_args = n_args;
-    task->args = NULL;
-    task->next = NULL;
-
-    if (n_args > 0) {
-        task->args = (cb_arg_t*) calloc((size_t)n_args, sizeof(cb_arg_t));
-        if (!task->args) {
-            free(task);
-            Rf_error("Out of memory");
-        }
-        for (int i = 0; i < n_args; i++) {
-            SEXP val = VECTOR_ELT(args, i);
-            if (Rf_isInteger(val) || TYPEOF(val) == INTSXP) {
-                task->args[i].kind = CB_ARG_INT;
-                task->args[i].v.i = Rf_asInteger(val);
-            } else if (Rf_isLogical(val) || TYPEOF(val) == LGLSXP) {
-                task->args[i].kind = CB_ARG_LOGICAL;
-                task->args[i].v.i = Rf_asLogical(val);
-            } else if (Rf_isReal(val) || TYPEOF(val) == REALSXP) {
-                task->args[i].kind = CB_ARG_REAL;
-                task->args[i].v.d = Rf_asReal(val);
-            } else if (TYPEOF(val) == STRSXP) {
-                const char *s = Rf_translateCharUTF8(STRING_ELT(val, 0));
-                task->args[i].kind = CB_ARG_CSTRING;
-                task->args[i].v.s = s ? strdup(s) : NULL;
-            } else if (TYPEOF(val) == EXTPTRSXP) {
-                task->args[i].kind = CB_ARG_PTR;
-                task->args[i].v.p = R_ExternalPtrAddr(val);
-            } else {
-                cbq_free_task(task);
-                Rf_error("Unsupported async callback argument type");
-            }
-        }
-    }
-
-    if (!cbq_initialized) {
-        cbq_free_task(task);
-        Rf_error("Async callback queue is not initialized. Call tcc_callback_async_enable().");
-    }
-
-    cbq_push(task);
-    // Wake up event loop
-    if (cbq_pipe[1] >= 0) {
-        ssize_t wr = write(cbq_pipe[1], "x", 1);
-        if (wr < 0) {
-            // ignore wakeup failure
-        }
-    }
-    return R_NilValue;
-}
-
-// Thread-safe scheduling API for worker threads (no R API usage)
-int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
-    if (!cbq_initialized) {
-        return -1;
-    }
-    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
-        return -2;
-    }
-
-    cb_task_t *task = (cb_task_t*) calloc(1, sizeof(cb_task_t));
-    if (!task) return -3;
-    task->id = id;
-    task->n_args = n_args;
-    task->args = NULL;
-    task->next = NULL;
-
-    if (n_args > 0) {
-        task->args = (cb_arg_t*) calloc((size_t) n_args, sizeof(cb_arg_t));
-        if (!task->args) {
-            free(task);
-            return -3;
-        }
-        for (int i = 0; i < n_args; i++) {
-            task->args[i] = args[i];
-            if (task->args[i].kind == CB_ARG_CSTRING && task->args[i].v.s) {
-                task->args[i].v.s = strdup(task->args[i].v.s);
-            }
-        }
-    }
-
-    cbq_push(task);
-    if (cbq_pipe[1] >= 0) {
-        ssize_t wr = write(cbq_pipe[1], "x", 1);
-        if (wr < 0) {
-            // ignore wakeup failure
-        }
-    }
-    return 0;
-}
-
-SEXP RC_callback_async_drain() {
-    cbq_drain_tasks();
-    return R_NilValue;
-}
-#endif
 
 // Cleanup all callbacks during package unload
 SEXP RC_cleanup_callbacks() {
