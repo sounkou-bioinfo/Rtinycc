@@ -506,20 +506,7 @@ is_ptr_type <- function(c_type) {
 }
 
 normalize_cb_kind_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return("real")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("logical")
-  }
-  "int"
+  cb_kind_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 normalize_sexp_type_key <- function(c_type) {
@@ -552,98 +539,19 @@ normalize_sexp_type_key <- function(c_type) {
 }
 
 normalize_r_type_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (is_ptr_type(c_type)) {
-    return("ptr")
-  }
-  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8", "long", "long long", "int64_t", "i64", "uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32", "uint64_t", "u64")) {
-    return("i32")
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return("f64")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("bool")
-  }
-  if (c_type == "void") {
-    return("void")
-  }
-  if (c_type %in% c("SEXP", "sexp")) {
-    return("sexp")
-  }
-  "ptr"
+  c_r_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 normalize_sexp_ctor_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8", "uint8_t", "u8", "uint16_t", "u16")) {
-    return("int")
-  }
-  if (c_type %in% c("long", "long long", "int64_t", "i64", "uint32_t", "u32", "uint64_t", "u64")) {
-    return("real")
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return("real")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("bool")
-  }
-  "ptr"
+  sexp_ctor_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 normalize_r_to_c_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8", "uint8_t", "u8", "uint16_t", "u16")) {
-    return("int")
-  }
-  if (c_type %in% c("long", "long long", "int64_t", "i64", "uint32_t", "u32", "uint64_t", "u64", "double", "float", "f64", "f32")) {
-    return("real")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("bool")
-  }
-  "ptr"
+  r_to_c_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 normalize_default_key <- function(c_type) {
-  c_type <- trimws(c_type)
-  if (c_type == "void") {
-    return("void")
-  }
-  if (c_type %in% c("SEXP", "sexp")) {
-    return("sexp")
-  }
-  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
-    return("ptr")
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("cstring")
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return("real")
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return("logical")
-  }
-  "int"
+  default_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
 }
 
 normalize_return_key <- function(c_type) {
