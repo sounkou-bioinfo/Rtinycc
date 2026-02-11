@@ -6,13 +6,15 @@ library(tinytest)
 
 # Test 1: Generate C input code for R API mode (SEXP conversion)
 code <- Rtinycc:::generate_c_input("x", "arg1_", "i32")
-expect_true(grepl("int32_t x = asInteger", code))
+expect_true(grepl("int _x = asInteger", code))
+expect_true(grepl("int32_t x = \(int32_t\)_x", code))
 
 code <- Rtinycc:::generate_c_input("y", "arg2_", "f64")
 expect_true(grepl("double y = asReal", code))
 
 code <- Rtinycc:::generate_c_input("flag", "arg3_", "bool")
-expect_true(grepl("bool flag =", code))
+expect_true(grepl("int _flag = asLogical", code))
+expect_true(grepl("bool flag = \(bool\)\(_flag != 0\)", code))
 
 # Test 2: Generate C input for array types
 code <- Rtinycc:::generate_c_input("buf", "arg1_", "raw")

@@ -130,6 +130,16 @@ FFI_TYPES <- list(
     c_element = "SEXP"
   ),
 
+  # R character vector → const char** (allocated with R_alloc in wrapper)
+  cstring_array = list(
+    c_type = "const char**",
+    r_type = "character",
+    size = NA_integer_,
+    kind = "array",
+    r_accessor = NA_character_,
+    c_element = "const char*"
+  ),
+
   # R-specific: pass R object directly (SEXP)
   sexp = list(
     c_type = "SEXP",
@@ -160,13 +170,13 @@ SCALAR_TYPES <- names(Filter(function(x) x$kind == "scalar", FFI_TYPES))
 # Validate FFI type
 check_ffi_type <- function(type, context = "argument") {
   # Check for enum:type pattern
-  if (grepl("^enum:", type)) {
+  if (startsWith(type, "enum:")) {
     # Enum types are always i32 (int)
     return(list(c_type = "int", r_type = "integer", size = 4L, kind = "scalar"))
   }
 
   # Check for callback:type pattern (e.g., callback:double(int,int))
-  if (grepl("^callback", type) || grepl("^callback_async", type)) {
+  if (startsWith(type, "callback") || startsWith(type, "callback_async")) {
     # Callback types are always void* (function pointer)
     return(list(
       c_type = "void*",

@@ -7,25 +7,152 @@
 
 # Generate C code to extract R SEXP to C type
 generate_c_input <- function(arg_name, r_name, ffi_type) {
-  type_info <- check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
+  check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
 
   switch(ffi_type,
-    i8 = sprintf("  int8_t %s = (int8_t)asInteger(%s);", arg_name, r_name),
-    i16 = sprintf("  int16_t %s = (int16_t)asInteger(%s);", arg_name, r_name),
-    i32 = sprintf("  int32_t %s = asInteger(%s);", arg_name, r_name),
-    i64 = sprintf("  int64_t %s = (int64_t)asReal(%s);", arg_name, r_name),
-    u8 = sprintf(
-      "  uint8_t %s = (uint8_t)(asInteger(%s) & 0xFF);",
+    i8 = sprintf(
+      paste(
+        "  int _%s = asInteger(%s);",
+        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
+        "  if (_%s < INT8_MIN || _%s > INT8_MAX) Rf_error(\"i8 out of range\");",
+        "  int8_t %s = (int8_t)_%s;",
+        sep = "\n"
+      ),
       arg_name,
-      r_name
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
+    i16 = sprintf(
+      paste(
+        "  int _%s = asInteger(%s);",
+        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
+        "  if (_%s < INT16_MIN || _%s > INT16_MAX) Rf_error(\"i16 out of range\");",
+        "  int16_t %s = (int16_t)_%s;",
+        sep = "\n"
+      ),
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
+    i32 = sprintf(
+      paste(
+        "  int _%s = asInteger(%s);",
+        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
+        "  if (_%s < INT32_MIN || _%s > INT32_MAX) Rf_error(\"i32 out of range\");",
+        "  int32_t %s = (int32_t)_%s;",
+        sep = "\n"
+      ),
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
+    i64 = sprintf(
+      paste(
+        "  double _%s = asReal(%s);",
+        "  if (ISNA(_%s) || ISNAN(_%s)) Rf_error(\"numeric value is NA\");",
+        "  if (fabs(_%s) > 9007199254740992.0) Rf_error(\"i64 requires exact integer (|x| <= 2^53)\");",
+        "  if (trunc(_%s) != _%s) Rf_error(\"i64 requires integer value\");",
+        "  if (_%s < (double)INT64_MIN || _%s > (double)INT64_MAX) Rf_error(\"i64 out of range\");",
+        "  int64_t %s = (int64_t)_%s;",
+        sep = "\n"
+      ),
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
+    u8 = sprintf(
+      paste(
+        "  int _%s = asInteger(%s);",
+        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
+        "  if (_%s < 0 || _%s > UINT8_MAX) Rf_error(\"u8 out of range\");",
+        "  uint8_t %s = (uint8_t)_%s;",
+        sep = "\n"
+      ),
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
     ),
     u16 = sprintf(
-      "  uint16_t %s = (uint16_t)(asInteger(%s) & 0xFFFF);",
+      paste(
+        "  int _%s = asInteger(%s);",
+        "  if (_%s == NA_INTEGER) Rf_error(\"integer value is NA\");",
+        "  if (_%s < 0 || _%s > UINT16_MAX) Rf_error(\"u16 out of range\");",
+        "  uint16_t %s = (uint16_t)_%s;",
+        sep = "\n"
+      ),
       arg_name,
-      r_name
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
     ),
-    u32 = sprintf("  uint32_t %s = (uint32_t)asReal(%s);", arg_name, r_name),
-    u64 = sprintf("  uint64_t %s = (uint64_t)asReal(%s);", arg_name, r_name),
+    u32 = sprintf(
+      paste(
+        "  double _%s = asReal(%s);",
+        "  if (ISNA(_%s) || ISNAN(_%s)) Rf_error(\"numeric value is NA\");",
+        "  if (_%s < 0 || _%s > (double)UINT32_MAX) Rf_error(\"u32 out of range\");",
+        "  if (trunc(_%s) != _%s) Rf_error(\"u32 requires integer value\");",
+        "  uint32_t %s = (uint32_t)_%s;",
+        sep = "\n"
+      ),
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
+    u64 = sprintf(
+      paste(
+        "  double _%s = asReal(%s);",
+        "  if (ISNA(_%s) || ISNAN(_%s)) Rf_error(\"numeric value is NA\");",
+        "  if (_%s < 0) Rf_error(\"u64 out of range\");",
+        "  if (fabs(_%s) > 9007199254740992.0) Rf_error(\"u64 requires exact integer (|x| <= 2^53)\");",
+        "  if (trunc(_%s) != _%s) Rf_error(\"u64 requires integer value\");",
+        "  if (_%s > (double)UINT64_MAX) Rf_error(\"u64 out of range\");",
+        "  uint64_t %s = (uint64_t)_%s;",
+        sep = "\n"
+      ),
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
     f32 = sprintf("  float %s = (float)asReal(%s);", arg_name, r_name),
     f64 = sprintf("  double %s = asReal(%s);", arg_name, r_name),
     bool = sprintf(
@@ -74,13 +201,41 @@ generate_c_input <- function(arg_name, r_name, ffi_type) {
     numeric_array = sprintf("  double* %s = REAL(%s);", arg_name, r_name),
     logical_array = sprintf("  int* %s = LOGICAL(%s);", arg_name, r_name),
     character_array = sprintf("  SEXP* %s = STRING_PTR(%s);", arg_name, r_name),
+    cstring_array = sprintf(
+      paste(
+        "  if (!Rf_isString(%s)) Rf_error(\"expected character vector\");",
+        "  R_xlen_t _%s_n = XLENGTH(%s);",
+        "  const char** %s = (const char**) R_alloc((size_t)_%s_n, sizeof(const char*));",
+        "  for (R_xlen_t _%s_i = 0; _%s_i < _%s_n; _%s_i++) {",
+        "    SEXP _%s_elt = STRING_ELT(%s, _%s_i);",
+        "    %s[_%s_i] = (_%s_elt == NA_STRING) ? NULL : Rf_translateCharUTF8(_%s_elt);",
+        "  }",
+        sep = "\n"
+      ),
+      r_name,
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      r_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name,
+      arg_name
+    ),
     sexp = sprintf("  SEXP %s = %s;", arg_name, r_name),
     callback = sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name),
     {
       # Handle enum types
-      if (grepl("^enum:", ffi_type)) {
+      if (startsWith(ffi_type, "enum:")) {
         sprintf("  int %s = asInteger(%s);", arg_name, r_name)
-      } else if (grepl("^callback(:|$)", ffi_type)) {
+      } else if (startsWith(ffi_type, "callback")) {
         # Callback type - extract pointer from external ptr
         sprintf("  void* %s = R_ExternalPtrAddr(%s);", arg_name, r_name)
       } else {
@@ -181,11 +336,27 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
-    i64 = sprintf("return ScalarReal((double)%s);", value_expr),
+    i64 = sprintf(
+      paste(
+        "  if (fabs((double)%s) > 9007199254740992.0) Rf_warning(\"i64 precision loss in R numeric\");",
+        "  return ScalarReal((double)%s);",
+        sep = "\n"
+      ),
+      value_expr,
+      value_expr
+    ),
     u8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     u16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     u32 = sprintf("return ScalarReal((double)%s);", value_expr),
-    u64 = sprintf("return ScalarReal((double)%s);", value_expr),
+    u64 = sprintf(
+      paste(
+        "  if ((double)%s > 9007199254740992.0) Rf_warning(\"u64 precision loss in R numeric\");",
+        "  return ScalarReal((double)%s);",
+        sep = "\n"
+      ),
+      value_expr,
+      value_expr
+    ),
     f32 = sprintf("return ScalarReal((double)%s);", value_expr),
     f64 = sprintf("return ScalarReal(%s);", value_expr),
     bool = sprintf("return ScalarLogical((int)%s);", value_expr),
@@ -211,7 +382,7 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
     void = sprintf("%s;\n  return R_NilValue;", value_expr),
     {
       # Handle enum types (matched via check_ffi_type returning i32 info)
-      if (grepl("^enum:", ffi_type)) {
+      if (startsWith(ffi_type, "enum:")) {
         sprintf("return ScalarInteger((int)%s);", value_expr)
       } else {
         stop("Unsupported FFI return type: ", ffi_type, call. = FALSE)
@@ -252,7 +423,7 @@ generate_c_wrapper <- function(
   is_external = FALSE
 ) {
   n_args <- length(arg_types)
-  return_info <- check_ffi_type(
+  check_ffi_type(
     if (is.list(return_type)) return_type$type else return_type,
     "return value"
   )
@@ -1087,6 +1258,8 @@ generate_ffi_code <- function(
     "#include <stdint.h>",
     "#include <stdbool.h>",
     "#include <stddef.h>",
+    "#include <limits.h>",
+    "#include <math.h>",
     ""
   )
 

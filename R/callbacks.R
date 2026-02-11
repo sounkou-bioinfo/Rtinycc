@@ -262,15 +262,15 @@ is_callback_type <- function(type) {
     return(FALSE)
   }
   type == "callback" ||
-    grepl("^callback:", type) ||
-    grepl("^callback_async:", type)
+    startsWith(type, "callback:") ||
+    startsWith(type, "callback_async:")
 }
 
 is_callback_async_type <- function(type) {
   if (!is.character(type)) {
     return(FALSE)
   }
-  grepl("^callback_async:", type)
+  startsWith(type, "callback_async:")
 }
 
 #' Parse callback type specification
@@ -283,13 +283,13 @@ parse_callback_type <- function(type) {
     return(NULL)
   }
 
-  if (grepl("^callback:", type)) {
+  if (startsWith(type, "callback:")) {
     # Extract signature after "callback:"
     sig_str <- sub("^callback:", "", type)
     return(parse_callback_signature(sig_str))
   }
 
-  if (grepl("^callback_async:", type)) {
+  if (startsWith(type, "callback_async:")) {
     sig_str <- sub("^callback_async:", "", type)
     return(parse_callback_signature(sig_str))
   }
