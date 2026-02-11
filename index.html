@@ -161,7 +161,7 @@ parallelism are not available on Windows.
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5a689bd8dab0"</span></span>
+<span><span class="co">#&gt; [1] "0x623b969b9ab0"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -182,11 +182,11 @@ parallelism are not available on Windows.
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689c300bd0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b96f2cbd0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a68999d21c0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b945fe1c0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689c300bd0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b96f2cbd0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -228,11 +228,13 @@ parallelism are not available on Windows.
 <span>  Rbuiltin <span class="op">=</span> <span class="op">{</span> <span class="kw">for</span> <span class="op">(</span> <span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">r_p</span><span class="op">)</span><span class="op">)</span> <span class="va">i</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">}</span></span>
 <span></span>
 <span><span class="op">)</span></span>
+<span><span class="co">#&gt; Warning: Some expressions had a GC in every iteration; so filtering is</span></span>
+<span><span class="co">#&gt; disabled.</span></span>
 <span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc      28.6ms   28.6ms      35.0   53.98KB    560. </span></span>
-<span><span class="co">#&gt; 2 Rbuiltin    545.2µs  562.1µs    1758.     9.05KB     23.0</span></span>
+<span><span class="co">#&gt; 1 Rtinycc      30.2ms   32.2ms      25.6   53.98KB     25.6</span></span>
+<span><span class="co">#&gt; 2 Rbuiltin    546.6µs  592.5µs    1609.     9.05KB     22.0</span></span>
 <span></span>
 <span><span class="co"># For performance-sensitive code, move the loop into C and operate on arrays.</span></span>
 <span><span class="va">ffi_vec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -261,8 +263,8 @@ parallelism are not available on Windows.
 <span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
 <span><span class="co">#&gt;   expression        min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt;   &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc_vec    20.1µs   20.8µs    45685.    39.1KB     32.0</span></span>
-<span><span class="co">#&gt; 2 Rbuiltin_vec   17.3µs   18.1µs    54892.    78.2KB     82.5</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 Rtinycc_vec    20.2µs   28.9µs    35592.    39.1KB     24.9</span></span>
+<span><span class="co">#&gt; 2 Rbuiltin_vec   18.1µs   18.5µs    50353.    78.2KB     75.6</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
@@ -321,7 +323,7 @@ parallelism are not available on Windows.
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @5a689e9b2c38 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @623b988ec828 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -337,7 +339,7 @@ parallelism are not available on Windows.
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @5a689e9b2c38 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @623b988ec828 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="benchmark">Benchmark<a class="anchor" aria-label="anchor" href="#benchmark"></a>
@@ -397,9 +399,9 @@ parallelism are not available on Windows.
 <span><span class="co">#&gt; # A tibble: 3 × 6</span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 R           601.7ms  602.4ms      1.66     847KB    1.66 </span></span>
-<span><span class="co">#&gt; 2 quickr        3.7ms   4.29ms    234.       782KB    4.10 </span></span>
-<span><span class="co">#&gt; 3 Rtinycc      55.5ms  57.52ms     17.4      782KB    0.512</span></span>
+<span><span class="co">#&gt; 1 R          600.66ms  603.5ms      1.66     847KB    1.66 </span></span>
+<span><span class="co">#&gt; 2 quickr       3.76ms    4.3ms    233.       782KB    4.10 </span></span>
+<span><span class="co">#&gt; 3 Rtinycc     56.42ms   57.6ms     17.3      782KB    0.509</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">timings</span>, type <span class="op">=</span> <span class="st">"boxplot"</span><span class="op">)</span> <span class="op">+</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu">scale_x_bench_time</span><span class="op">(</span>base <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
 <p><img src="reference/figures/README-benchmark-convolve-1.png" width="100%"></p>
 </div>
@@ -424,15 +426,15 @@ parallelism are not available on Windows.
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689fa53660&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9d211c10&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689fa53660&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9d211c10&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689e345020&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9b7af080&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689e345020&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9b7af080&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -474,9 +476,9 @@ parallelism are not available on Windows.
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689f9d4180&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b94a59ea0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689f9d4180&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b94a59ea0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -742,7 +744,7 @@ parallelism are not available on Windows.
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a6899a84950&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9a67c410&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -788,11 +790,11 @@ parallelism are not available on Windows.
 <span><span class="va">o</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">i</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_set_a</span><span class="op">(</span><span class="va">i</span>, <span class="fl">42L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689b9eca60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9a6a3340&gt;</span></span>
 <span></span>
 <span><span class="co"># Write the inner pointer into the outer struct</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">i</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689b13a1a0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9660b750&gt;</span></span>
 <span></span>
 <span><span class="co"># Read it back through indirection</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -819,9 +821,9 @@ parallelism are not available on Windows.
 <span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">0xCAL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689a194f60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9a603220&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span>, <span class="fl">0xFEL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5a689a194f60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x623b9a603220&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 202</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span><span class="op">)</span></span>
