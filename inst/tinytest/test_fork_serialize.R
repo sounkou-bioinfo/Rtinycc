@@ -200,11 +200,10 @@ raw_ptr <- serialize(ptr, NULL)
 ptr_restored <- unserialize(raw_ptr)
 
 res10 <- tryCatch(tcc_ptr_is_null(ptr_restored), error = function(e) e)
-if (inherits(res10, "error")) {
-  expect_true(TRUE, info = "Deserialized pointer errors on use")
-} else {
-  expect_true(res10, info = "Deserialized pointer reads as NULL")
-}
+expect_true(
+  inherits(res10, "error") || isTRUE(res10),
+  info = "Deserialized pointer errors on use or reads as NULL"
+)
 tcc_free(ptr)
 
 # --- Test 11: tcc_state external pointer still dead ---------------------

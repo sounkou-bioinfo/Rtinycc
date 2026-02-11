@@ -7,7 +7,6 @@ library(Rtinycc)
 # ============================================================================
 # Test 1: Basic callback creation
 # ============================================================================
-expect_true(TRUE, info = "Callback test suite initialized")
 
 # Create a simple callback
 counter <- 0
