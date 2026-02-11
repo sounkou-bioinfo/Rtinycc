@@ -697,3 +697,434 @@ union_field_setter_rule("cstring_array", mem_name, size) %as% {
 union_field_setter_rule(type_name, mem_name, size) %as% {
     struct_field_setter_rule(type_name, mem_name, size)
 }
+
+cb_arg_kind_rule("ptr") %as% {
+    "CB_ARG_PTR"
+}
+
+cb_arg_kind_rule("cstring") %as% {
+    "CB_ARG_CSTRING"
+}
+
+cb_arg_kind_rule("real") %as% {
+    "CB_ARG_REAL"
+}
+
+cb_arg_kind_rule("logical") %as% {
+    "CB_ARG_LOGICAL"
+}
+
+cb_arg_kind_rule("int") %as% {
+    "CB_ARG_INT"
+}
+
+cb_arg_value_rule("ptr", arg_expr) %as% {
+    list(field = "p", expr = arg_expr)
+}
+
+cb_arg_value_rule("cstring", arg_expr) %as% {
+    list(field = "s", expr = arg_expr)
+}
+
+cb_arg_value_rule("real", arg_expr) %as% {
+    list(field = "d", expr = arg_expr)
+}
+
+cb_arg_value_rule("logical", arg_expr) %as% {
+    list(field = "i", expr = arg_expr)
+}
+
+cb_arg_value_rule("int", arg_expr) %as% {
+    list(field = "i", expr = arg_expr)
+}
+
+c_default_return_rule("void", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return;")
+}
+
+c_default_return_rule("sexp", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return R_NilValue;")
+}
+
+c_default_return_rule("ptr", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return NULL;")
+}
+
+c_default_return_rule("cstring", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return NULL;")
+}
+
+c_default_return_rule("real", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return NA_REAL;")
+}
+
+c_default_return_rule("logical", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return -1;")
+}
+
+c_default_return_rule("int", indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return NA_INTEGER;")
+}
+
+c_sexp_type_rule("ptr") %as% {
+    "void*"
+}
+
+c_sexp_type_rule("int") %as% {
+    "int"
+}
+
+c_sexp_type_rule("longlong") %as% {
+    "long long"
+}
+
+c_sexp_type_rule("real") %as% {
+    "double"
+}
+
+c_sexp_type_rule("cstring") %as% {
+    "const char*"
+}
+
+c_sexp_type_rule("bool") %as% {
+    "int"
+}
+
+c_r_type_rule("ptr") %as% {
+    "ptr"
+}
+
+c_r_type_rule("i32") %as% {
+    "i32"
+}
+
+c_r_type_rule("f64") %as% {
+    "f64"
+}
+
+c_r_type_rule("cstring") %as% {
+    "cstring"
+}
+
+c_r_type_rule("bool") %as% {
+    "bool"
+}
+
+c_r_type_rule("void") %as% {
+    "void"
+}
+
+c_r_type_rule("sexp") %as% {
+    "sexp"
+}
+
+sexp_constructor_rule("ptr") %as% {
+    "R_MakeExternalPtr"
+}
+
+sexp_constructor_rule("int") %as% {
+    "ScalarInteger"
+}
+
+sexp_constructor_rule("real") %as% {
+    "ScalarReal"
+}
+
+sexp_constructor_rule("cstring") %as% {
+    "mkString"
+}
+
+sexp_constructor_rule("bool") %as% {
+    "ScalarLogical"
+}
+
+sexp_constructor_call_rule("ptr", arg_expr) %as% {
+    sprintf("R_MakeExternalPtr(%s, R_NilValue, R_NilValue)", arg_expr)
+}
+
+sexp_constructor_call_rule("cstring", arg_expr) %as% {
+    sprintf("(%s ? mkString(%s) : R_NilValue)", arg_expr, arg_expr)
+}
+
+sexp_constructor_call_rule("int", arg_expr) %as% {
+    sprintf("ScalarInteger(%s)", arg_expr)
+}
+
+sexp_constructor_call_rule("real", arg_expr) %as% {
+    sprintf("ScalarReal(%s)", arg_expr)
+}
+
+sexp_constructor_call_rule("bool", arg_expr) %as% {
+    sprintf("ScalarLogical(%s)", arg_expr)
+}
+
+r_to_c_converter_rule("ptr") %as% {
+    "R_ExternalPtrAddr"
+}
+
+r_to_c_converter_rule("int") %as% {
+    "asInteger"
+}
+
+r_to_c_converter_rule("real") %as% {
+    "asReal"
+}
+
+r_to_c_converter_rule("cstring") %as% {
+    "CHAR"
+}
+
+r_to_c_converter_rule("bool") %as% {
+    "asLogical"
+}
+
+r_to_c_return_lines_rule("void", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return;")
+}
+
+r_to_c_return_lines_rule("sexp", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return ", result_var, ";")
+}
+
+r_to_c_return_lines_rule("ptr", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    paste0(pad, "return R_ExternalPtrAddr(", result_var, ");")
+}
+
+r_to_c_return_lines_rule("cstring", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    c(
+        paste0(pad, "if (", result_var, " == R_NilValue) return NULL;"),
+        paste0(
+            pad,
+            "if (!Rf_isString(",
+            result_var,
+            ") || XLENGTH(",
+            result_var,
+            ") < 1) {"
+        ),
+        paste0(pad, "  Rf_warning(\"callback returned non-string\");"),
+        paste0(pad, "  return NULL;"),
+        paste0(pad, "}"),
+        paste0(pad, "SEXP _str = STRING_ELT(", result_var, ", 0);"),
+        paste0(pad, "if (_str == NA_STRING) return NULL;"),
+        paste0(pad, "return Rf_translateCharUTF8(_str);")
+    )
+}
+
+r_to_c_return_lines_rule("bool", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asLogical(", result_var, ");"),
+        paste0(pad, "if (_v == NA_LOGICAL) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA logical\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (_v != 0);")
+    )
+}
+
+r_to_c_return_lines_rule("i8", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asInteger(", result_var, ");"),
+        paste0(pad, "if (_v == NA_INTEGER) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < INT8_MIN || _v > INT8_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range i8\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (int8_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("i16", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asInteger(", result_var, ");"),
+        paste0(pad, "if (_v == NA_INTEGER) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < INT16_MIN || _v > INT16_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range i16\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (int16_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("i32", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asInteger(", result_var, ");"),
+        paste0(pad, "if (_v == NA_INTEGER) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (int32_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("int", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asInteger(", result_var, ");"),
+        paste0(pad, "if (_v == NA_INTEGER) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return _v;")
+    )
+}
+
+r_to_c_return_lines_rule("u8", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asInteger(", result_var, ");"),
+        paste0(pad, "if (_v == NA_INTEGER) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < 0 || _v > UINT8_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range u8\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (uint8_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("u16", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "int _v = asInteger(", result_var, ");"),
+        paste0(pad, "if (_v == NA_INTEGER) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < 0 || _v > UINT16_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range u16\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (uint16_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("u32", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "double _v = asReal(", result_var, ");"),
+        paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < 0 || _v > (double)UINT32_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range u32\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (trunc(_v) != _v) {"),
+        paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (uint32_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("i64", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "double _v = asReal(", result_var, ");"),
+        paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (fabs(_v) > 9007199254740992.0) {"),
+        paste0(pad, "  Rf_warning(\"callback i64 precision loss in R numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (trunc(_v) != _v) {"),
+        paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < (double)INT64_MIN || _v > (double)INT64_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range i64\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (int64_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("u64", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "double _v = asReal(", result_var, ");"),
+        paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v < 0) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range u64\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (fabs(_v) > 9007199254740992.0) {"),
+        paste0(pad, "  Rf_warning(\"callback u64 precision loss in R numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (trunc(_v) != _v) {"),
+        paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "if (_v > (double)UINT64_MAX) {"),
+        paste0(pad, "  Rf_warning(\"callback returned out-of-range u64\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (uint64_t)_v;")
+    )
+}
+
+r_to_c_return_lines_rule("double", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "double _v = asReal(", result_var, ");"),
+        paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return _v;")
+    )
+}
+
+r_to_c_return_lines_rule("float", c_type, result_var, indent) %as% {
+    pad <- paste(rep(" ", indent), collapse = "")
+    default_line <- get_c_default_return(c_type, indent = indent)
+    c(
+        paste0(pad, "double _v = asReal(", result_var, ");"),
+        paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
+        paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
+        default_line,
+        paste0(pad, "}"),
+        paste0(pad, "return (float)_v;")
+    )
+}

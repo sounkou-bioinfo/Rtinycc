@@ -500,433 +500,248 @@ generate_cb_arg_assignment <- function(index, c_type) {
   )
 }
 
-map_c_to_cb_arg_kind <- function(c_type) {
+is_ptr_type <- function(c_type) {
   c_type <- trimws(c_type)
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+  grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+}
 
-  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
-    return("CB_ARG_PTR")
+normalize_cb_kind_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
   }
   if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return("CB_ARG_CSTRING")
+    return("cstring")
   }
   if (c_type %in% c("double", "float", "f64", "f32")) {
-    return("CB_ARG_REAL")
+    return("real")
   }
   if (c_type %in% c("bool", "_Bool")) {
-    return("CB_ARG_LOGICAL")
+    return("logical")
   }
-  "CB_ARG_INT"
+  "int"
+}
+
+normalize_sexp_type_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (is_ptr_type(c_type)) {
+    return("ptr")
+  }
+  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")) {
+    return("int")
+  }
+  if (c_type %in% c("long", "long long", "int64_t", "i64")) {
+    return("longlong")
+  }
+  if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32", "uint64_t", "u64")) {
+    return("longlong")
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return("real")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("cstring")
+  }
+  if (c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("bool")
+  }
+  "ptr"
+}
+
+normalize_r_type_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (is_ptr_type(c_type)) {
+    return("ptr")
+  }
+  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8", "long", "long long", "int64_t", "i64", "uint8_t", "u8", "uint16_t", "u16", "uint32_t", "u32", "uint64_t", "u64")) {
+    return("i32")
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return("f64")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("cstring")
+  }
+  if (c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("bool")
+  }
+  if (c_type == "void") {
+    return("void")
+  }
+  if (c_type %in% c("SEXP", "sexp")) {
+    return("sexp")
+  }
+  "ptr"
+}
+
+normalize_sexp_ctor_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
+  }
+  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8", "uint8_t", "u8", "uint16_t", "u16")) {
+    return("int")
+  }
+  if (c_type %in% c("long", "long long", "int64_t", "i64", "uint32_t", "u32", "uint64_t", "u64")) {
+    return("real")
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return("real")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("cstring")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("bool")
+  }
+  "ptr"
+}
+
+normalize_r_to_c_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
+  }
+  if (c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8", "uint8_t", "u8", "uint16_t", "u16")) {
+    return("int")
+  }
+  if (c_type %in% c("long", "long long", "int64_t", "i64", "uint32_t", "u32", "uint64_t", "u64", "double", "float", "f64", "f32")) {
+    return("real")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("cstring")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("bool")
+  }
+  "ptr"
+}
+
+normalize_default_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (c_type == "void") {
+    return("void")
+  }
+  if (c_type %in% c("SEXP", "sexp")) {
+    return("sexp")
+  }
+  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("cstring")
+  }
+  if (c_type %in% c("double", "float", "f64", "f32")) {
+    return("real")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("logical")
+  }
+  "int"
+}
+
+normalize_return_key <- function(c_type) {
+  c_type <- trimws(c_type)
+  if (c_type == "void") {
+    return("void")
+  }
+  if (c_type %in% c("SEXP", "sexp")) {
+    return("sexp")
+  }
+  if (is_ptr_type(c_type) || c_type %in% c("void*", "void *", "ptr")) {
+    return("ptr")
+  }
+  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
+    return("cstring")
+  }
+  if (c_type %in% c("bool", "_Bool")) {
+    return("bool")
+  }
+  if (c_type %in% c("int8_t", "i8")) {
+    return("i8")
+  }
+  if (c_type %in% c("int16_t", "i16")) {
+    return("i16")
+  }
+  if (c_type %in% c("int32_t", "i32")) {
+    return("i32")
+  }
+  if (c_type %in% c("int", "long", "short")) {
+    return("int")
+  }
+  if (c_type %in% c("uint8_t", "u8")) {
+    return("u8")
+  }
+  if (c_type %in% c("uint16_t", "u16")) {
+    return("u16")
+  }
+  if (c_type %in% c("uint32_t", "u32")) {
+    return("u32")
+  }
+  if (c_type %in% c("int64_t", "i64", "long long")) {
+    return("i64")
+  }
+  if (c_type %in% c("uint64_t", "u64")) {
+    return("u64")
+  }
+  if (c_type %in% c("double", "f64")) {
+    return("double")
+  }
+  if (c_type %in% c("float", "f32")) {
+    return("float")
+  }
+  "ptr"
+}
+
+map_c_to_cb_arg_kind <- function(c_type) {
+  cb_arg_kind_rule(normalize_cb_kind_key(c_type))
 }
 
 map_c_to_cb_arg_value <- function(c_type, arg_expr) {
-  c_type <- trimws(c_type)
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-
-  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
-    return(list(field = "p", expr = arg_expr))
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return(list(field = "s", expr = arg_expr))
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return(list(field = "d", expr = arg_expr))
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return(list(field = "i", expr = arg_expr))
-  }
-  list(field = "i", expr = arg_expr)
+  cb_arg_value_rule(normalize_cb_kind_key(c_type), arg_expr)
 }
 
 # Get default C return statement for a type
 get_c_default_return <- function(c_type, indent = 2L) {
-  c_type <- trimws(c_type)
-  pad <- paste(rep(" ", indent), collapse = "")
-  if (c_type == "void") {
-    return(paste0(pad, "return;"))
-  }
-  if (c_type %in% c("SEXP", "sexp")) {
-    return(paste0(pad, "return R_NilValue;"))
-  }
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
-    return(paste0(pad, "return NULL;"))
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return(paste0(pad, "return NULL;"))
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return(paste0(pad, "return NA_REAL;"))
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return(paste0(pad, "return -1;"))
-  }
-  return(paste0(pad, "return NA_INTEGER;"))
+  c_default_return_rule(normalize_default_key(c_type), indent)
 }
 
 # Map C types to R SEXP types for trampoline arguments
 map_c_to_sexp_type <- function(c_type) {
-  c_type <- trimws(c_type)
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-
-  if (is_ptr) {
-    "void*"
-  } else if (
-    c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
-  ) {
-    "int"
-  } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
-    "long long"
-  } else if (
-    c_type %in%
-      c(
-        "uint8_t",
-        "u8",
-        "uint16_t",
-        "u16",
-        "uint32_t",
-        "u32",
-        "uint64_t",
-        "u64"
-      )
-  ) {
-    "long long"
-  } else if (c_type %in% c("double", "float", "f64", "f32")) {
-    "double"
-  } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    "const char*"
-  } else if (c_type %in% c("void*", "void *", "ptr")) {
-    "void*"
-  } else if (c_type %in% c("bool", "_Bool")) {
-    "int"
-  } else {
-    "void*" # Default to pointer
-  }
+  c_sexp_type_rule(normalize_sexp_type_key(c_type))
 }
 
 # Map C types to FFI types
 map_c_to_r_type <- function(c_type) {
-  c_type <- trimws(c_type)
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-
-  if (is_ptr) {
-    "ptr"
-  } else if (
-    c_type %in%
-      c(
-        "int",
-        "int32_t",
-        "i32",
-        "int16_t",
-        "i16",
-        "int8_t",
-        "i8",
-        "long",
-        "long long",
-        "int64_t",
-        "i64",
-        "uint8_t",
-        "u8",
-        "uint16_t",
-        "u16",
-        "uint32_t",
-        "u32",
-        "uint64_t",
-        "u64"
-      )
-  ) {
-    "i32"
-  } else if (c_type %in% c("double", "float", "f64", "f32")) {
-    "f64"
-  } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    "cstring"
-  } else if (c_type %in% c("void*", "void *", "ptr")) {
-    "ptr"
-  } else if (c_type %in% c("bool", "_Bool")) {
-    "bool"
-  } else if (c_type == "void") {
-    "void"
-  } else if (c_type %in% c("SEXP", "sexp")) {
-    "sexp"
-  } else {
-    "ptr"
-  }
+  c_r_type_rule(normalize_r_type_key(c_type))
 }
 
 # Get SEXP constructor for C type
 get_sexp_constructor <- function(c_type) {
-  c_type <- trimws(c_type)
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-
-  if (is_ptr) {
-    "R_MakeExternalPtr"
-  } else if (
-    c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
-  ) {
-    "ScalarInteger"
-  } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
-    "ScalarReal" # R doesn't have 64-bit integers, use double
-  } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16")) {
-    "ScalarInteger"
-  } else if (c_type %in% c("uint32_t", "u32", "uint64_t", "u64")) {
-    "ScalarReal"
-  } else if (c_type %in% c("double", "float", "f64", "f32")) {
-    "ScalarReal"
-  } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    "mkString"
-  } else if (c_type %in% c("void*", "void *", "ptr")) {
-    "R_MakeExternalPtr"
-  } else if (c_type %in% c("bool", "_Bool")) {
-    "ScalarLogical"
-  } else {
-    "R_MakeExternalPtr"
-  }
+  sexp_constructor_rule(normalize_sexp_ctor_key(c_type))
 }
 
 # Get SEXP constructor call for a C expression
 get_sexp_constructor_call <- function(c_type, arg_expr) {
-  ctor <- get_sexp_constructor(c_type)
-  if (ctor == "R_MakeExternalPtr") {
-    return(sprintf("R_MakeExternalPtr(%s, R_NilValue, R_NilValue)", arg_expr))
-  }
-  if (ctor == "mkString") {
-    return(sprintf("(%s ? mkString(%s) : R_NilValue)", arg_expr, arg_expr))
-  }
-  sprintf("%s(%s)", ctor, arg_expr)
+  sexp_constructor_call_rule(normalize_sexp_ctor_key(c_type), arg_expr)
 }
 
 # Get R to C converter function
 get_r_to_c_converter <- function(c_type) {
-  c_type <- trimws(c_type)
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-
-  if (is_ptr) {
-    "R_ExternalPtrAddr"
-  } else if (
-    c_type %in% c("int", "int32_t", "i32", "int16_t", "i16", "int8_t", "i8")
-  ) {
-    "asInteger"
-  } else if (c_type %in% c("long", "long long", "int64_t", "i64")) {
-    "asReal" # Convert to double then cast
-  } else if (c_type %in% c("uint8_t", "u8", "uint16_t", "u16")) {
-    "asInteger"
-  } else if (c_type %in% c("uint32_t", "u32", "uint64_t", "u64")) {
-    "asReal"
-  } else if (c_type %in% c("double", "float", "f64", "f32")) {
-    "asReal"
-  } else if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    "CHAR"
-  } else if (c_type %in% c("void*", "void *", "ptr")) {
-    "R_ExternalPtrAddr"
-  } else if (c_type %in% c("bool", "_Bool")) {
-    "asLogical"
-  } else {
-    "R_ExternalPtrAddr"
-  }
+  r_to_c_converter_rule(normalize_r_to_c_key(c_type))
 }
 
 get_r_to_c_return_lines <- function(c_type, result_var, indent = 2L) {
-  c_type <- trimws(c_type)
-  pad <- paste(rep(" ", indent), collapse = "")
-  is_ptr <- grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
-  default_line <- get_c_default_return(c_type, indent = indent)
-
-  if (c_type == "void") {
-    return(paste0(pad, "return;"))
-  }
-  if (c_type %in% c("SEXP", "sexp")) {
-    return(paste0(pad, "return ", result_var, ";"))
-  }
-  if (is_ptr || c_type %in% c("void*", "void *", "ptr")) {
-    return(paste0(pad, "return R_ExternalPtrAddr(", result_var, ");"))
-  }
-  if (c_type %in% c("char*", "const char*", "string", "cstring")) {
-    return(c(
-      paste0(pad, "if (", result_var, " == R_NilValue) return NULL;"),
-      paste0(
-        pad,
-        "if (!Rf_isString(",
-        result_var,
-        ") || XLENGTH(",
-        result_var,
-        ") < 1) {"
-      ),
-      paste0(pad, "  Rf_warning(\"callback returned non-string\");"),
-      paste0(pad, "  return NULL;"),
-      paste0(pad, "}"),
-      paste0(pad, "SEXP _str = STRING_ELT(", result_var, ", 0);"),
-      paste0(pad, "if (_str == NA_STRING) return NULL;"),
-      paste0(pad, "return Rf_translateCharUTF8(_str);")
-    ))
-  }
-  if (c_type %in% c("bool", "_Bool")) {
-    return(c(
-      paste0(pad, "int _v = asLogical(", result_var, ");"),
-      paste0(pad, "if (_v == NA_LOGICAL) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA logical\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (_v != 0);")
-    ))
-  }
-  if (c_type %in% c("int8_t", "i8")) {
-    return(c(
-      paste0(pad, "int _v = asInteger(", result_var, ");"),
-      paste0(pad, "if (_v == NA_INTEGER) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < INT8_MIN || _v > INT8_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range i8\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (int8_t)_v;")
-    ))
-  }
-  if (c_type %in% c("int16_t", "i16")) {
-    return(c(
-      paste0(pad, "int _v = asInteger(", result_var, ");"),
-      paste0(pad, "if (_v == NA_INTEGER) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < INT16_MIN || _v > INT16_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range i16\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (int16_t)_v;")
-    ))
-  }
-  if (c_type %in% c("int32_t", "i32")) {
-    return(c(
-      paste0(pad, "int _v = asInteger(", result_var, ");"),
-      paste0(pad, "if (_v == NA_INTEGER) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (int32_t)_v;")
-    ))
-  }
-  if (c_type %in% c("int", "long", "short")) {
-    return(c(
-      paste0(pad, "int _v = asInteger(", result_var, ");"),
-      paste0(pad, "if (_v == NA_INTEGER) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return _v;")
-    ))
-  }
-  if (c_type %in% c("uint8_t", "u8")) {
-    return(c(
-      paste0(pad, "int _v = asInteger(", result_var, ");"),
-      paste0(pad, "if (_v == NA_INTEGER) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < 0 || _v > UINT8_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range u8\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (uint8_t)_v;")
-    ))
-  }
-  if (c_type %in% c("uint16_t", "u16")) {
-    return(c(
-      paste0(pad, "int _v = asInteger(", result_var, ");"),
-      paste0(pad, "if (_v == NA_INTEGER) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA integer\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < 0 || _v > UINT16_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range u16\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (uint16_t)_v;")
-    ))
-  }
-  if (c_type %in% c("uint32_t", "u32")) {
-    return(c(
-      paste0(pad, "double _v = asReal(", result_var, ");"),
-      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < 0 || _v > (double)UINT32_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range u32\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (trunc(_v) != _v) {"),
-      paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (uint32_t)_v;")
-    ))
-  }
-  if (c_type %in% c("int64_t", "i64", "long long")) {
-    return(c(
-      paste0(pad, "double _v = asReal(", result_var, ");"),
-      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (fabs(_v) > 9007199254740992.0) {"),
-      paste0(pad, "  Rf_warning(\"callback i64 precision loss in R numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (trunc(_v) != _v) {"),
-      paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < (double)INT64_MIN || _v > (double)INT64_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range i64\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (int64_t)_v;")
-    ))
-  }
-  if (c_type %in% c("uint64_t", "u64")) {
-    return(c(
-      paste0(pad, "double _v = asReal(", result_var, ");"),
-      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v < 0) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range u64\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (fabs(_v) > 9007199254740992.0) {"),
-      paste0(pad, "  Rf_warning(\"callback u64 precision loss in R numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (trunc(_v) != _v) {"),
-      paste0(pad, "  Rf_warning(\"callback returned non-integer numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "if (_v > (double)UINT64_MAX) {"),
-      paste0(pad, "  Rf_warning(\"callback returned out-of-range u64\");"),
-      default_line,
-      paste0(pad, "}"),
-      paste0(pad, "return (uint64_t)_v;")
-    ))
-  }
-  if (c_type %in% c("double", "float", "f64", "f32")) {
-    return(c(
-      paste0(pad, "double _v = asReal(", result_var, ");"),
-      paste0(pad, "if (ISNA(_v) || ISNAN(_v)) {"),
-      paste0(pad, "  Rf_warning(\"callback returned NA numeric\");"),
-      default_line,
-      paste0(pad, "}"),
-      if (c_type %in% c("float", "f32")) {
-        paste0(pad, "return (float)_v;")
-      } else {
-        paste0(pad, "return _v;")
-      }
-    ))
-  }
-
-  c(
-    paste0(pad, "return R_ExternalPtrAddr(", result_var, ");")
+  r_to_c_return_lines_rule(
+    normalize_return_key(c_type),
+    c_type,
+    result_var,
+    indent
   )
 }
