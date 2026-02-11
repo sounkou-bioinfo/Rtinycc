@@ -330,33 +330,17 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
     ffi_type <- base_type
   }
 
-  type_info <- check_ffi_type(ffi_type, "return value")
+  check_ffi_type(ffi_type, "return value")
 
   switch(ffi_type,
     i8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     i32 = sprintf("return ScalarInteger(%s);", value_expr),
-    i64 = sprintf(
-      paste(
-        "  if (fabs((double)%s) > 9007199254740992.0) Rf_warning(\"i64 precision loss in R numeric\");",
-        "  return ScalarReal((double)%s);",
-        sep = "\n"
-      ),
-      value_expr,
-      value_expr
-    ),
+    i64 = sprintf("return ScalarReal((double)%s);", value_expr),
     u8 = sprintf("return ScalarInteger((int)%s);", value_expr),
     u16 = sprintf("return ScalarInteger((int)%s);", value_expr),
     u32 = sprintf("return ScalarReal((double)%s);", value_expr),
-    u64 = sprintf(
-      paste(
-        "  if ((double)%s > 9007199254740992.0) Rf_warning(\"u64 precision loss in R numeric\");",
-        "  return ScalarReal((double)%s);",
-        sep = "\n"
-      ),
-      value_expr,
-      value_expr
-    ),
+    u64 = sprintf("return ScalarReal((double)%s);", value_expr),
     f32 = sprintf("return ScalarReal((double)%s);", value_expr),
     f64 = sprintf("return ScalarReal(%s);", value_expr),
     bool = sprintf("return ScalarLogical((int)%s);", value_expr),
@@ -423,7 +407,7 @@ generate_c_wrapper <- function(
   is_external = FALSE
 ) {
   n_args <- length(arg_types)
-  check_ffi_type(
+  return_info <- check_ffi_type(
     if (is.list(return_type)) return_type$type else return_type,
     "return value"
   )

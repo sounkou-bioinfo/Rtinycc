@@ -4,6 +4,7 @@
 
 ## usethis namespace: start
 #' @useDynLib Rtinycc, .registration = TRUE
+#' @importFrom lambda.r %as% %when%
 ## usethis namespace: end
 NULL
 

@@ -13,6 +13,8 @@ Description: Builds 'TinyCC' (Tiny 'C' Compiler) 'cli' and library for R package
     'C' "scripting".
 License: GPL (>= 3)
 Depends: R (>= 4.4.0)
+Imports:
+    lambda.r
 Suggests:
     tinytest,
     treesitter.c (>= 0.0.4),
