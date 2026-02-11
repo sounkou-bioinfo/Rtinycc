@@ -14,16 +14,137 @@
 #include <inttypes.h>
 #include <string.h>
 
+// ============================================================================
+// Forward declarations
+// ============================================================================
+
+SEXP RC_set_shutting_down(SEXP flag);
+static void RC_tcc_finalizer(SEXP ext);
+static void RC_null_finalizer(SEXP ext);
+void RC_free_finalizer(SEXP ext);
+SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
+SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
+SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
+SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path);
+SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path);
+SEXP RC_libtcc_add_library(SEXP ext, SEXP library);
+SEXP RC_libtcc_compile_string(SEXP ext, SEXP code);
+SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
+SEXP RC_libtcc_relocate(SEXP ext);
+SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
+SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type);
+SEXP RC_libtcc_ptr_valid(SEXP ptr);
+SEXP RC_libtcc_output_file(SEXP ext, SEXP filename);
+SEXP RC_get_external_ptr_addr(SEXP ext);
+SEXP RC_get_external_ptr_hex(SEXP ext);
+SEXP RC_null_pointer();
+SEXP RC_malloc(SEXP size);
+SEXP RC_free(SEXP ptr);
+SEXP RC_data_ptr(SEXP ptr_ref);
+SEXP RC_ptr_set(SEXP ptr_ref, SEXP ptr_value);
+SEXP RC_ptr_free_set_null(SEXP ptr_ref);
+SEXP RC_ptr_is_owned(SEXP ptr);
+SEXP RC_create_cstring(SEXP str);
+SEXP RC_read_cstring(SEXP ptr);
+SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes);
+SEXP RC_read_bytes(SEXP ptr, SEXP nbytes);
+SEXP RC_write_bytes(SEXP ptr, SEXP raw);
+SEXP RC_read_i8(SEXP ptr, SEXP offset);
+SEXP RC_read_u8_typed(SEXP ptr, SEXP offset);
+SEXP RC_read_i16(SEXP ptr, SEXP offset);
+SEXP RC_read_u16(SEXP ptr, SEXP offset);
+SEXP RC_read_i32_typed(SEXP ptr, SEXP offset);
+SEXP RC_read_u32(SEXP ptr, SEXP offset);
+SEXP RC_read_i64(SEXP ptr, SEXP offset);
+SEXP RC_read_u64(SEXP ptr, SEXP offset);
+SEXP RC_read_f32(SEXP ptr, SEXP offset);
+SEXP RC_read_f64_typed(SEXP ptr, SEXP offset);
+SEXP RC_read_ptr(SEXP ptr, SEXP offset);
+SEXP RC_write_i8(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u8(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_i16(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u16(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_i32(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_f32(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_f64(SEXP ptr, SEXP offset, SEXP value);
+SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value);
+static int RC_callback_find_free_slot();
+SEXP RC_callback_async_init();
+SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
+SEXP RC_callback_async_drain();
+int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
+static void RC_callback_finalizer(SEXP ext);
+static void RC_callback_ptr_finalizer(SEXP ext);
+SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
+SEXP RC_unregister_callback(SEXP callback_ext);
+SEXP RC_get_callback_ptr(SEXP callback_ext);
+SEXP RC_callback_is_valid(SEXP callback_ext);
+static SEXP RC_callback_default_sexp(const char *return_type);
+SEXP RC_invoke_callback_internal(int id, SEXP args);
+SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
+SEXP RC_invoke_callback_id(int id, SEXP args);
+SEXP RC_cleanup_callbacks();
+SEXP RC_libtcc_add_host_symbols(SEXP ext);
+
+// ============================================================================
+// Types and constants
+// ============================================================================
+
+// Callback registry entry - stores preserved R function and metadata
+typedef struct {
+    SEXP fun;              // Preserved R function object
+    char *return_type;     // Return type string
+    char **arg_types;      // Array of argument type strings
+    int n_args;            // Number of arguments
+    int threadsafe;        // Thread-safety flag
+    int valid;             // Whether this entry is still valid
+    void *trampoline;      // Pointer to trampoline function (if generated)
+} callback_entry_t;
+
+// Static array of callbacks (simple fixed-size for now)
+#define MAX_CALLBACKS 256
+static callback_entry_t callback_registry[MAX_CALLBACKS];
+
+// Callback token structure - passed back to R as external ptr
+typedef struct {
+    int id;                // Index into callback_registry (or -1 when closed)
+    int refs;              // Reference count for outstanding external pointers
+} callback_token_t;
+
+// ============================================================================
+// Shutdown and finalizers
+// ============================================================================
+
+/**
+ * @section Shutdown and finalizers
+ * @param flag Logical scalar from R indicating shutdown state.
+ * @example
+ *  .Call("RC_set_shutting_down", TRUE)
+ */
+
 /* Set during package unload to avoid teardown crashes on some platforms. */
 static volatile int g_rtinycc_shutting_down = 0;
 
-/* Set shutdown flag from R (.onUnload). */
+/**
+ * Set shutdown flag from R (.onUnload).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_set_shutting_down(SEXP flag) {
     g_rtinycc_shutting_down = Rf_asLogical(flag) ? 1 : 0;
     return R_NilValue;
 }
 
-/* Releases a TCCState when its R external pointer is garbage collected. */
+/**
+ * Releases a TCCState when its R external pointer is garbage collected.
+ * Ownership: frees owned TCCState.
+ * Allocation: none.
+ * Protection: none.
+ */
 static void RC_tcc_finalizer(SEXP ext) {
     if (g_rtinycc_shutting_down) {
         return;
@@ -36,14 +157,23 @@ static void RC_tcc_finalizer(SEXP ext) {
     }
 }
 
-/* No-op finalizer for borrowed / NULL pointers. */
+/**
+ * No-op finalizer for borrowed / NULL pointers.
+ * Ownership: does not free.
+ * Allocation: none.
+ * Protection: none.
+ */
 static void RC_null_finalizer(SEXP ext) {
     // NULL pointer doesn't need cleanup
     R_ClearExternalPtr(ext);
 }
 
-/* Generic finalizer: calls free() on the pointer and clears the EXTPTR.
- * Used for owned pointers (tcc_malloc, tcc_cstring) and struct helpers. */
+/**
+ * Generic finalizer: calls free() on the pointer and clears the EXTPTR.
+ * Ownership: frees owned heap memory (malloc/free).
+ * Allocation: none.
+ * Protection: none.
+ */
 void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
@@ -52,7 +182,26 @@ void RC_free_finalizer(SEXP ext) {
     }
 }
 
-/* Unwrap and validate a tcc_state external pointer. */
+// ============================================================================
+// TCC state and compilation
+// ============================================================================
+
+/**
+ * @section TCC state and compilation
+ * @param ext External pointer to a TCC state.
+ * @param lib_path Character vector of library search paths.
+ * @param include_path Character vector of include search paths.
+ * @param output_type Integer TCC output mode.
+ * @example
+ *  state <- .Call("RC_libtcc_state_new", lib_paths, include_paths, 1L)
+ */
+
+/**
+ * Unwrap and validate a tcc_state external pointer.
+ * Ownership: borrowed; does not take ownership.
+ * Allocation: none.
+ * Protection: none.
+ */
 static inline TCCState *RC_tcc_state(SEXP ext) {
     if (!Rf_inherits(ext, "tcc_state")) {
         Rf_error("expected a 'tcc_state' external pointer");
@@ -64,8 +213,12 @@ static inline TCCState *RC_tcc_state(SEXP ext) {
     return s;
 }
 
-/* Create a new TCCState, configure output type, and add include/lib paths.
- * Returns an external pointer of class "tcc_state". */
+/**
+ * Create a new TCCState, configure output type, and add include/lib paths.
+ * Ownership: returns owned external pointer (finalizer frees TCCState).
+ * Allocation: tcc_new (heap) + external pointer.
+ * Protection: PROTECT(1), UNPROTECT(1).
+ */
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     TCCState *s = tcc_new();
     if (!s) {
@@ -122,7 +275,12 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     return ext;
 }
 
-/* Add a source or object file to the compilation. */
+/**
+ * Add a source or object file to the compilation.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
     const char *fname = Rf_translateCharUTF8(STRING_ELT(path, 0));
@@ -130,7 +288,12 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
-/* Append a user include path (-I). */
+/**
+ * Append a user include path (-I).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
     const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
@@ -138,7 +301,12 @@ SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
-/* Append a system include path (-isystem). */
+/**
+ * Append a system include path (-isystem).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
     const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
@@ -146,7 +314,12 @@ SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
-/* Append a library search path (-L). */
+/**
+ * Append a library search path (-L).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
     const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
@@ -154,7 +327,12 @@ SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path) {
     return Rf_ScalarInteger(rc);
 }
 
-/* Link a library (-l). */
+/**
+ * Link a library (-l).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
     TCCState *s = RC_tcc_state(ext);
     const char *lib = Rf_translateCharUTF8(STRING_ELT(library, 0));
@@ -164,7 +342,12 @@ SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
 
 
 
-/* Compile a C source string in-memory. Returns 0 on success. */
+/**
+ * Compile a C source string in-memory. Returns 0 on success.
+ * Ownership: none.
+ * Allocation: handled by TCC.
+ * Protection: none.
+ */
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);
      const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
@@ -172,7 +355,12 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     return Rf_ScalarInteger(rc);
 }
 
-/* Register a host symbol so TCC-compiled code can reference it. */
+/**
+ * Register a host symbol so TCC-compiled code can reference it.
+ * Ownership: none (borrows function pointer).
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr) {
     TCCState *s = RC_tcc_state(ext);
     const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
@@ -181,13 +369,37 @@ SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr) {
     return Rf_ScalarInteger(rc);
 }
 
-/* Relocate compiled code, resolving all symbols. Returns 0 on success. */
+/**
+ * Relocate compiled code, resolving all symbols. Returns 0 on success.
+ * Ownership: none.
+ * Allocation: handled by TCC.
+ * Protection: none.
+ */
 SEXP RC_libtcc_relocate(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     int rc = tcc_relocate(s);
     return Rf_ScalarInteger(rc);
 }
 
+// ============================================================================
+// Symbol lookup and invocation
+// ============================================================================
+
+/**
+ * @section Symbol lookup and invocation
+ * @param ext External pointer to a TCC state.
+ * @param name Symbol name to resolve.
+ * @param ret_type Return type selector ("int", "double", "void").
+ * @example
+ *  fn <- .Call("RC_libtcc_get_symbol", state, "my_fn")
+ */
+
+/**
+ * Look up a symbol after relocation and return it as a DL_FUNC external pointer.
+ * Ownership: returns owned external pointer (no free required).
+ * Allocation: external pointer only.
+ * Protection: PROTECT(1), UNPROTECT(1).
+ */
 /* Look up a symbol after relocation and return it as a DL_FUNC external
  * pointer tagged "native symbol" so .Call() can invoke it directly. */
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
@@ -210,6 +422,12 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     return ptr;
 }
 
+/**
+ * Call a zero-argument symbol, casting to the requested return type.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Call a zero-argument symbol, casting to the requested return type
  * ("int", "double", or "void"). Useful for quick tests. */
 SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type) {
@@ -243,6 +461,24 @@ SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type) {
     Rf_error("unsupported return type '%s' (expected int, double, or void)", rtype);
 }
 
+// ============================================================================
+// Pointer utilities and memory ownership
+// ============================================================================
+
+/**
+ * @section Pointer utilities and memory ownership
+ * @param ptr External pointer to inspect.
+ * @param size Allocation size in bytes.
+ * @example
+ *  p <- .Call("RC_malloc", 8L)
+ */
+
+/**
+ * Return TRUE if the external pointer address is non-NULL.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Return TRUE if the external pointer address is non-NULL. */
 SEXP RC_libtcc_ptr_valid(SEXP ptr) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
@@ -252,6 +488,12 @@ SEXP RC_libtcc_ptr_valid(SEXP ptr) {
     return Rf_ScalarLogical(p != NULL);
 }
 
+/**
+ * Write compilation output to a file (obj, dll, or exe).
+ * Ownership: none.
+ * Allocation: handled by TCC.
+ * Protection: none.
+ */
 /* Write compilation output to a file (obj, dll, or exe). */
 SEXP RC_libtcc_output_file(SEXP ext, SEXP filename) {
     TCCState *s = RC_tcc_state(ext);
@@ -260,12 +502,24 @@ SEXP RC_libtcc_output_file(SEXP ext, SEXP filename) {
     return Rf_ScalarInteger(rc);
 }
 
+/**
+ * Return pointer address as a double (numeric).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Return pointer address as a double (numeric). */
 SEXP RC_get_external_ptr_addr(SEXP ext) {
     void *addr = R_ExternalPtrAddr(ext);
     return Rf_ScalarReal((double)(uintptr_t)addr);
 }
 
+/**
+ * Return pointer address as a hex string ("0x...").
+ * Ownership: returns a new R string (R-managed).
+ * Allocation: R_Calloc buffer, freed via R_Free.
+ * Protection: none.
+ */
 /* Return pointer address as a hex string ("0x..."). */
 SEXP RC_get_external_ptr_hex(SEXP ext) {
     void *raw = R_ExternalPtrAddr(ext);
@@ -287,6 +541,12 @@ SEXP RC_get_external_ptr_hex(SEXP ext) {
     return res;
 }
 
+/**
+ * Create a NULL external pointer tagged "rtinycc_null".
+ * Ownership: returned external pointer is owned by R.
+ * Allocation: external pointer.
+ * Protection: none.
+ */
 /* Create a NULL external pointer tagged "rtinycc_null". */
 SEXP RC_null_pointer() {
     SEXP ptr = R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
@@ -294,6 +554,12 @@ SEXP RC_null_pointer() {
     return ptr;
 }
 
+/**
+ * Allocate `size` bytes via malloc.
+ * Ownership: returned pointer is owned (rtinycc_owned).
+ * Allocation: malloc + external pointer.
+ * Protection: none.
+ */
 /* Allocate `size` bytes via malloc. Returns an external pointer tagged
  * "rtinycc_owned" with RC_free_finalizer registered. */
 SEXP RC_malloc(SEXP size) {
@@ -312,6 +578,12 @@ SEXP RC_malloc(SEXP size) {
     return ptr;
 }
 
+/**
+ * Free an owned pointer. Errors if tag is not rtinycc_owned.
+ * Ownership: releases owned heap memory.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Free an owned pointer. Errors if the tag is not "rtinycc_owned" or NULL
  * (i.e. refuses to free struct or borrowed pointers). */
 SEXP RC_free(SEXP ptr) {
@@ -333,6 +605,12 @@ SEXP RC_free(SEXP ptr) {
     return R_NilValue;
 }
 
+/**
+ * Dereference a pointer-to-pointer (void**).
+ * Ownership: returns borrowed external pointer (no free).
+ * Allocation: external pointer only.
+ * Protection: none.
+ */
 /* Dereference a pointer-to-pointer (void**). Returns a borrowed external
  * pointer tagged "rtinycc_borrowed" with a no-op finalizer. */
 SEXP RC_data_ptr(SEXP ptr_ref) {
@@ -353,6 +631,12 @@ SEXP RC_data_ptr(SEXP ptr_ref) {
     return out;
 }
 
+/**
+ * Write ptr_value's address into the memory pointed to by ptr_ref.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Write ptr_value's address into the memory pointed to by ptr_ref. */
 SEXP RC_ptr_set(SEXP ptr_ref, SEXP ptr_value) {
     if (TYPEOF(ptr_ref) != EXTPTRSXP || TYPEOF(ptr_value) != EXTPTRSXP) {
@@ -369,6 +653,12 @@ SEXP RC_ptr_set(SEXP ptr_ref, SEXP ptr_value) {
     return ptr_ref;
 }
 
+/**
+ * Free the pointed-to memory and set the pointer to NULL.
+ * Ownership: frees heap memory at *ptr_ref.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Free the pointed-to memory and set the pointer to NULL. */
 SEXP RC_ptr_free_set_null(SEXP ptr_ref) {
     if (TYPEOF(ptr_ref) != EXTPTRSXP) {
@@ -389,6 +679,12 @@ SEXP RC_ptr_free_set_null(SEXP ptr_ref) {
     return ptr_ref;
 }
 
+/**
+ * TRUE if the pointer tag is "rtinycc_owned", FALSE otherwise.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* TRUE if the pointer tag is "rtinycc_owned", FALSE otherwise. */
 SEXP RC_ptr_is_owned(SEXP ptr) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
@@ -401,6 +697,25 @@ SEXP RC_ptr_is_owned(SEXP ptr) {
     return Rf_ScalarLogical(tag == Rf_install("rtinycc_owned"));
 }
 
+// ============================================================================
+// C string helpers
+// ============================================================================
+
+/**
+ * @section C string helpers
+ * @param str Character vector from R.
+ * @param ptr External pointer to a C string.
+ * @param nbytes Number of bytes to read.
+ * @example
+ *  p <- .Call("RC_create_cstring", "hello")
+ */
+
+/**
+ * Allocate a malloc'd copy of an R string as a C string (NUL-terminated).
+ * Ownership: returned pointer is owned (rtinycc_owned).
+ * Allocation: malloc + external pointer.
+ * Protection: none.
+ */
 /* Allocate a malloc'd copy of an R string as a C string (NUL-terminated).
  * Returns an external pointer tagged "rtinycc_owned". */
 SEXP RC_create_cstring(SEXP str) {
@@ -421,6 +736,12 @@ SEXP RC_create_cstring(SEXP str) {
     return ptr;
 }
 
+/**
+ * Read a NUL-terminated C string from an external pointer.
+ * Ownership: returns R-managed string.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Read a NUL-terminated C string from an external pointer.
  * Returns "" (not NA) if the pointer is NULL. */
 SEXP RC_read_cstring(SEXP ptr) {
@@ -436,6 +757,12 @@ SEXP RC_read_cstring(SEXP ptr) {
     return Rf_ScalarString(Rf_mkCharCE(data, CE_UTF8));
 }
 
+/**
+ * Read exactly nbytes from a C string (fixed-length read).
+ * Ownership: returns R-managed string.
+ * Allocation: R_Calloc buffer, freed via R_Free.
+ * Protection: PROTECT(1), UNPROTECT(1).
+ */
 /* Read exactly nbytes from a C string (fixed-length read).
  * Returns NA_STRING if the pointer is NULL. */
 SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes) {
@@ -471,6 +798,25 @@ SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes) {
     return out;
 }
 
+// ============================================================================
+// Raw bytes and typed read/write helpers
+// ============================================================================
+
+/**
+ * @section Raw bytes and typed read/write helpers
+ * @param ptr External pointer to a memory region.
+ * @param offset Byte offset into the memory region.
+ * @param value Scalar value to write.
+ * @example
+ *  bytes <- .Call("RC_read_bytes", ptr, 16L)
+ */
+
+/**
+ * Copy nbytes from a pointer into a raw vector.
+ * Ownership: returns R-managed raw vector.
+ * Allocation: R alloc (PROTECT/UNPROTECT).
+ * Protection: PROTECT(1), UNPROTECT(1).
+ */
 /* Copy nbytes from a pointer into a raw vector. */
 SEXP RC_read_bytes(SEXP ptr, SEXP nbytes) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
@@ -494,6 +840,12 @@ SEXP RC_read_bytes(SEXP ptr, SEXP nbytes) {
     return out;
 }
 
+/**
+ * Copy a raw vector into memory at ptr. Caller must ensure sufficient space.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Copy a raw vector into memory at ptr. Caller must ensure sufficient space. */
 SEXP RC_write_bytes(SEXP ptr, SEXP raw) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
@@ -518,6 +870,12 @@ SEXP RC_write_bytes(SEXP ptr, SEXP raw) {
 // Typed read/write helpers (Bun-style)
 // ============================================================================
 
+/**
+ * Helper: validate external pointer and compute base + byte_offset.
+ * Ownership: borrowed pointer.
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Helper: validate external pointer and compute base + byte_offset. */
 static inline unsigned char *ptr_at(SEXP ptr, SEXP offset) {
     if (TYPEOF(ptr) != EXTPTRSXP) Rf_error("Expected external pointer");
@@ -528,66 +886,132 @@ static inline unsigned char *ptr_at(SEXP ptr, SEXP offset) {
 
 /* --- scalar reads -------------------------------------------------------- */
 
+/**
+ * Read int8 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_i8(SEXP ptr, SEXP offset) {
     int8_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarInteger((int)v);
 }
 
+/**
+ * Read uint8 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_u8_typed(SEXP ptr, SEXP offset) {
     uint8_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarInteger((int)v);
 }
 
+/**
+ * Read int16 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_i16(SEXP ptr, SEXP offset) {
     int16_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarInteger((int)v);
 }
 
+/**
+ * Read uint16 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_u16(SEXP ptr, SEXP offset) {
     uint16_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarInteger((int)v);
 }
 
+/**
+ * Read int32 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_i32_typed(SEXP ptr, SEXP offset) {
     int32_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarInteger(v);
 }
 
+/**
+ * Read uint32 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_u32(SEXP ptr, SEXP offset) {
     uint32_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarReal((double)v);
 }
 
+/**
+ * Read int64 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_i64(SEXP ptr, SEXP offset) {
     int64_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarReal((double)v);
 }
 
+/**
+ * Read uint64 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_u64(SEXP ptr, SEXP offset) {
     uint64_t v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarReal((double)v);
 }
 
+/**
+ * Read float32 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_f32(SEXP ptr, SEXP offset) {
     float v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarReal((double)v);
 }
 
+/**
+ * Read float64 at byte offset.
+ * Ownership: returns R-managed scalar.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_read_f64_typed(SEXP ptr, SEXP offset) {
     double v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
     return Rf_ScalarReal(v);
 }
 
+/**
+ * Read a pointer value at byte offset (dereference void**).
+ * Ownership: returns borrowed external pointer.
+ * Allocation: external pointer only.
+ * Protection: none.
+ */
 /* Read a pointer value at byte offset (dereference void**). */
 SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
     void *v;
@@ -597,66 +1021,132 @@ SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
 
 /* --- scalar writes ------------------------------------------------------- */
 
+/**
+ * Write int8 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_i8(SEXP ptr, SEXP offset, SEXP value) {
     int8_t v = (int8_t)Rf_asInteger(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write uint8 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_u8(SEXP ptr, SEXP offset, SEXP value) {
     uint8_t v = (uint8_t)Rf_asInteger(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write int16 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_i16(SEXP ptr, SEXP offset, SEXP value) {
     int16_t v = (int16_t)Rf_asInteger(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write uint16 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_u16(SEXP ptr, SEXP offset, SEXP value) {
     uint16_t v = (uint16_t)Rf_asInteger(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write int32 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_i32(SEXP ptr, SEXP offset, SEXP value) {
     int32_t v = (int32_t)Rf_asInteger(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write uint32 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value) {
     uint32_t v = (uint32_t)Rf_asReal(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write int64 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value) {
     int64_t v = (int64_t)Rf_asReal(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write uint64 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value) {
     uint64_t v = (uint64_t)Rf_asReal(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write float32 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_f32(SEXP ptr, SEXP offset, SEXP value) {
     float v = (float)Rf_asReal(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write float64 at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_f64(SEXP ptr, SEXP offset, SEXP value) {
     double v = Rf_asReal(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
 
+/**
+ * Write pointer value at byte offset.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value) {
     void *v = NULL;
     if (TYPEOF(value) == EXTPTRSXP) {
@@ -670,21 +1160,22 @@ SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value) {
 // Callback Registration and Invocation
 // ============================================================================
 
-// Callback registry entry - stores preserved R function and metadata
-typedef struct {
-    SEXP fun;              // Preserved R function object
-    char *return_type;     // Return type string
-    char **arg_types;      // Array of argument type strings
-    int n_args;            // Number of arguments
-    int threadsafe;        // Thread-safety flag
-    int valid;             // Whether this entry is still valid
-    void *trampoline;      // Pointer to trampoline function (if generated)
-} callback_entry_t;
+/**
+ * @section Callback registration and invocation
+ * @param fun R function to register as a callback.
+ * @param return_type Return type string (e.g. "i32", "f64", "void").
+ * @param arg_types Character vector of argument types.
+ * @param threadsafe Logical scalar indicating thread-safety.
+ * @example
+ *  cb <- .Call("RC_register_callback", fn, "i32", c("i32"), FALSE)
+ */
 
-// Static array of callbacks (simple fixed-size for now)
-#define MAX_CALLBACKS 256
-static callback_entry_t callback_registry[MAX_CALLBACKS];
-
+/**
+ * Find a free callback registry slot.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 // Find a free callback registry slot (returns -1 if none available)
 static int RC_callback_find_free_slot() {
     for (int i = 0; i < MAX_CALLBACKS; i++) {
@@ -695,12 +1186,10 @@ static int RC_callback_find_free_slot() {
     return -1;
 }
 
-// Callback token structure - passed back to R as external ptr
-typedef struct {
-    int id;                // Index into callback_registry (or -1 when closed)
-    int refs;              // Reference count for outstanding external pointers
-} callback_token_t;
-
+/**
+ * Initialize async callback queue.
+ * @return R_NilValue on success.
+ */
 SEXP RC_callback_async_init() {
     if (!RC_platform_async_is_supported()) {
         Rf_error("Async callbacks are not supported on Windows");
@@ -711,6 +1200,12 @@ SEXP RC_callback_async_init() {
     return R_NilValue;
 }
 
+/**
+ * Schedule async callback execution on the main thread.
+ * @param callback_ext tcc_callback external pointer.
+ * @param args List of arguments to pass to the callback.
+ * @return R_NilValue on success.
+ */
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     if (!RC_platform_async_is_supported()) {
         Rf_error("Async callbacks are not supported on Windows");
@@ -771,6 +1266,10 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     return R_NilValue;
 }
 
+/**
+ * Drain pending async callbacks on the main thread.
+ * @return R_NilValue on success.
+ */
 SEXP RC_callback_async_drain() {
     if (!RC_platform_async_is_supported()) {
         Rf_error("Async callbacks are not supported on Windows");
@@ -779,6 +1278,13 @@ SEXP RC_callback_async_drain() {
     return R_NilValue;
 }
 
+/**
+ * Schedule async callback from C worker threads.
+ * @param id Callback registry id.
+ * @param n_args Number of arguments.
+ * @param args Array of cb_arg_t values.
+ * @return 0 on success, negative error code otherwise.
+ */
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
     if (!RC_platform_async_is_supported()) {
         return -1;
@@ -792,6 +1298,12 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
     return RC_platform_async_schedule(id, n_args, args);
 }
 
+/**
+ * Finalizer for callback tokens.
+ * Ownership: releases preserved R function and frees token when refs hit 0.
+ * Allocation: frees heap memory (malloc/free).
+ * Protection: none.
+ */
 // Finalizer for callback tokens
 static void RC_callback_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
@@ -827,6 +1339,12 @@ static void RC_callback_finalizer(SEXP ext) {
     }
 }
 
+/**
+ * Finalizer for callback pointer handles.
+ * Ownership: decrements refs and frees token when refs hit 0.
+ * Allocation: frees heap memory (malloc/free).
+ * Protection: none.
+ */
 // Finalizer for callback pointer handles
 static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
@@ -839,6 +1357,14 @@ static void RC_callback_ptr_finalizer(SEXP ext) {
     }
 }
 
+/**
+ * Register an R function as a callback.
+ * @param fun R function to register.
+ * @param return_type Return type string.
+ * @param arg_types Character vector of argument types.
+ * @param threadsafe Logical scalar indicating thread-safety.
+ * @return tcc_callback external pointer.
+ */
 /* Register an R function as a callback. Returns an external pointer of
  * class "tcc_callback" holding a callback_token_t. */
 SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe) {
@@ -904,6 +1430,11 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     return ext;
 }
 
+/**
+ * Unregister a callback, releasing the preserved R function.
+ * @param callback_ext tcc_callback external pointer.
+ * @return R_NilValue.
+ */
 /* Unregister a callback, releasing the preserved R function. */
 SEXP RC_unregister_callback(SEXP callback_ext) {
     if (!Rf_inherits(callback_ext, "tcc_callback")) {
@@ -922,6 +1453,11 @@ SEXP RC_unregister_callback(SEXP callback_ext) {
     return R_NilValue;
 }
 
+/**
+ * Return the callback token address as an external pointer (trampoline user-data).
+ * @param callback_ext tcc_callback external pointer.
+ * @return tcc_callback_ptr external pointer.
+ */
 /* Return the callback token address as an external pointer (user-data
  * for trampolines). Increments the token refcount. */
 SEXP RC_get_callback_ptr(SEXP callback_ext) {
@@ -943,6 +1479,11 @@ SEXP RC_get_callback_ptr(SEXP callback_ext) {
     return ptr;
 }
 
+/**
+ * Check whether a callback is still valid (not closed, slot in range).
+ * @param callback_ext tcc_callback external pointer.
+ * @return Logical scalar.
+ */
 /* Check whether a callback is still valid (not closed, slot in range). */
 SEXP RC_callback_is_valid(SEXP callback_ext) {
     if (!Rf_inherits(callback_ext, "tcc_callback")) {
@@ -964,6 +1505,12 @@ SEXP RC_callback_is_valid(SEXP callback_ext) {
 
 // Invoke callback from trampoline
 // This is called by generated trampolines
+/**
+ * Produce a default SEXP for a callback return type.
+ * Ownership: returns R-managed scalar or external pointer.
+ * Allocation: R allocations only.
+ * Protection: none.
+ */
 static SEXP RC_callback_default_sexp(const char *return_type) {
     if (return_type == NULL) {
         return R_NilValue;
@@ -1027,6 +1574,12 @@ static SEXP RC_callback_default_sexp(const char *return_type) {
     return R_NilValue;
 }
 
+/**
+ * Invoke a callback by registry id.
+ * @param id Callback registry id.
+ * @param args List of arguments (VECSXP) or R_NilValue.
+ * @return Converted result based on return type.
+ */
 SEXP RC_invoke_callback_internal(int id, SEXP args) {
     if (id < 0 || id >= MAX_CALLBACKS) {
         Rf_warning("Invalid or expired callback: %d", id);
@@ -1138,8 +1691,12 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
     return converted;
 }
 
-// Invoke callback from trampoline
-// This is called by generated trampolines
+/**
+ * Invoke callback by string id (trampoline entry point).
+ * @param callback_id Character scalar id.
+ * @param args List of arguments.
+ * @return Converted result.
+ */
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     // callback_id is a character string with the callback identifier
     const char *id_str = Rf_translateCharUTF8(STRING_ELT(callback_id, 0));
@@ -1147,14 +1704,27 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
     return RC_invoke_callback_internal(id, args);
 }
 
-// Invoke callback by integer id directly (no snprintf needed)
-// This avoids CRT stdio dependency in JIT code (snprintf is not a
-// direct export from ucrtbase.dll on Windows)
+/**
+ * Invoke callback by integer id (no snprintf needed).
+ * @param id Callback registry id.
+ * @param args List of arguments.
+ * @return Converted result.
+ */
 SEXP RC_invoke_callback_id(int id, SEXP args) {
     return RC_invoke_callback_internal(id, args);
 }
 
 
+/**
+ * Cleanup all callbacks during package unload.
+ * @return R_NilValue.
+ */
+/**
+ * Cleanup all callbacks during package unload.
+ * Ownership: releases preserved R functions and frees stored metadata.
+ * Allocation: frees heap memory (malloc/free).
+ * Protection: none.
+ */
 // Cleanup all callbacks during package unload
 SEXP RC_cleanup_callbacks() {
     // Clean up all valid callbacks in the registry
@@ -1182,9 +1752,26 @@ SEXP RC_cleanup_callbacks() {
 }
 
 
+// ============================================================================
+// Host symbol registration
+// ============================================================================
+
+/**
+ * @section Host symbol registration
+ * @param ext External pointer to a TCC state.
+ * @example
+ *  .Call("RC_libtcc_add_host_symbols", state)
+ */
+
+/**
+ * Register host symbols that TCC-compiled code may reference.
+ * Ownership: none (borrows function pointers).
+ * Allocation: none.
+ * Protection: none.
+ */
 /* Register host symbols that TCC-compiled code may reference.
-   On macOS (without -flat_namespace) these are not visible to TCC
-   through the dynamic linker, so we must add them explicitly. */
+    On macOS (without -flat_namespace) these are not visible to TCC
+    through the dynamic linker, so we must add them explicitly. */
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     tcc_add_symbol(s, "RC_free_finalizer", RC_free_finalizer);

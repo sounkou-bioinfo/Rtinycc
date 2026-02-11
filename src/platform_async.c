@@ -9,18 +9,42 @@
 
 #if RTINYCC_OS_WINDOWS
 
+/**
+ * Return 0 on Windows (async callbacks not supported).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 int RC_platform_async_is_supported(void) {
     return 0;
 }
 
+/**
+ * Return 0 on Windows (no async queue).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 int RC_platform_async_is_initialized(void) {
     return 0;
 }
 
+/**
+ * Initialize async queue (Windows stub).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 int RC_platform_async_init(void) {
     return -1;
 }
 
+/**
+ * Schedule async callback (Windows stub).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     (void) id;
     (void) n_args;
@@ -28,6 +52,12 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     return -1;
 }
 
+/**
+ * Drain async callbacks (Windows stub).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 void RC_platform_async_drain(void) {
 }
 
@@ -57,14 +87,32 @@ static int cbq_pipe[2] = {-1, -1};
 static InputHandler *cbq_ih = NULL;
 static int cbq_initialized = 0;
 
+/**
+ * Return 1 on Unix-like platforms.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 int RC_platform_async_is_supported(void) {
     return 1;
 }
 
+/**
+ * Return 1 if async queue initialized.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 int RC_platform_async_is_initialized(void) {
     return cbq_initialized;
 }
 
+/**
+ * Push task onto async queue.
+ * Ownership: takes ownership of task pointer.
+ * Allocation: none.
+ * Protection: none.
+ */
 static void cbq_push(cb_task_t *task) {
     pthread_mutex_lock(&cbq_mutex);
     if (cbq_tail) {
@@ -76,6 +124,12 @@ static void cbq_push(cb_task_t *task) {
     pthread_mutex_unlock(&cbq_mutex);
 }
 
+/**
+ * Pop all tasks from queue (caller owns list).
+ * Ownership: returns owned list.
+ * Allocation: none.
+ * Protection: none.
+ */
 static cb_task_t *cbq_pop_all(void) {
     pthread_mutex_lock(&cbq_mutex);
     cb_task_t *head = cbq_head;
@@ -85,6 +139,12 @@ static cb_task_t *cbq_pop_all(void) {
     return head;
 }
 
+/**
+ * Convert a task's args to an R list.
+ * Ownership: returns R-managed list.
+ * Allocation: R allocations only.
+ * Protection: PROTECT(1), UNPROTECT(1).
+ */
 static SEXP cb_task_to_args(cb_task_t *task) {
     if (task->n_args <= 0) {
         return R_NilValue;
@@ -114,6 +174,12 @@ static SEXP cb_task_to_args(cb_task_t *task) {
     return args;
 }
 
+/**
+ * Free task and owned argument data.
+ * Ownership: frees heap memory (malloc/free).
+ * Allocation: none.
+ * Protection: none.
+ */
 static void cbq_free_task(cb_task_t *task) {
     if (!task) return;
     if (task->args) {
@@ -127,6 +193,12 @@ static void cbq_free_task(cb_task_t *task) {
     free(task);
 }
 
+/**
+ * Drain and execute all queued tasks on main thread.
+ * Ownership: consumes queue entries.
+ * Allocation: none.
+ * Protection: none.
+ */
 static void cbq_drain_tasks(void) {
     cb_task_t *task = cbq_pop_all();
     while (task) {
@@ -139,6 +211,12 @@ static void cbq_drain_tasks(void) {
     }
 }
 
+/**
+ * Input handler to drain pipe and execute tasks.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 static void cbq_input_handler(void *data) {
     (void) data;
     char buf[32];
@@ -147,6 +225,12 @@ static void cbq_input_handler(void *data) {
     cbq_drain_tasks();
 }
 
+/**
+ * Initialize async callback queue.
+ * Ownership: none.
+ * Allocation: pipe, queue state.
+ * Protection: none.
+ */
 int RC_platform_async_init(void) {
     if (cbq_initialized) {
         return 0;
@@ -166,6 +250,12 @@ int RC_platform_async_init(void) {
     return 0;
 }
 
+/**
+ * Schedule an async callback.
+ * Ownership: copies args into owned queue storage.
+ * Allocation: queue nodes and arg copies (malloc/free).
+ * Protection: none.
+ */
 int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     if (!cbq_initialized) {
         return -1;
@@ -201,6 +291,12 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     return 0;
 }
 
+/**
+ * Drain pending async callbacks.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
 void RC_platform_async_drain(void) {
     cbq_drain_tasks();
 }
