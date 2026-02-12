@@ -11,6 +11,13 @@ AR=`"${R_HOME}/bin/R" CMD config AR`
 THISDir=$(dirname "$0")
 THISDir=$(cd "$THISDir" && pwd)
 TINYCC_SRC="${THISDir}/src/tinycc"
+# per tinycc mob ci
+#set MSYS2_PATH_TYPE=inherit
+#set MSYSTEM=MINGW64
+set MSYSTEM=UCRT64
+#set CHERE_INVOKING=yes
+
+
 
 echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..."
 "${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack

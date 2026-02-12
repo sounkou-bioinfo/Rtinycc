@@ -8,11 +8,11 @@ PKG_CPPFLAGS = -I$(TINYCC_DIR)/libtcc
 # This keeps _exit/abort/etc. out of Rtinycc.dll — they stay in the
 # companion libtcc.dll which install.libs.R copies next to Rtinycc.dll.
 LIBTCC_DLL := $(wildcard $(TINYCC_DIR)/lib/libtcc.dll)
-
+WPKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
 ifneq ($(LIBTCC_DLL),)
-	PKG_LIBS = $(LIBTCC_DLL)
+        PKG_LIBS = $(LIBTCC_DLL)
 else
-	PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
+        PKG_LIBS = -L$(TINYCC_DIR)/lib -ltcc
 endif
 
 all: $(SHLIB)
