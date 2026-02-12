@@ -18,6 +18,13 @@ tcc_map_c_type_to_ffi(c_type)
 
 A single FFI type string.
 
+## Details
+
+This mapper is intentionally conservative for pointer types. `char*` is
+treated as a raw pointer (`ptr`) because C does not guarantee
+NUL-terminated strings. If you know the API expects a C string, map it
+explicitly to `cstring` in your custom mapper.
+
 ## Examples
 
 ``` r

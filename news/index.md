@@ -2,6 +2,11 @@
 
 ## Rtinycc 0.0.3.9000 (development version)
 
+- Refactor FFI codegen and callbacks to use lambda.r guard rules instead
+  of long `if`/`else` or `switch` chains. This keeps type-mapping logic
+  centralized in `R/aaa_ffi_codegen_rules.R`, makes behavior easier to
+  extend, and reduces duplication across codegen sites.
+
 - Fix exit-time segfaults on Windows (and potential issues on other
   platforms) by setting `onexit = FALSE` on all
   `R_RegisterCFinalizerEx()` calls. External pointer finalizers for TCC

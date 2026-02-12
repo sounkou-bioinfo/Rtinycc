@@ -54,6 +54,13 @@
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A single FFI type string.</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>This mapper is intentionally conservative for pointer types. <code>char*</code> is
+treated as a raw pointer (<code>ptr</code>) because C does not guarantee NUL-terminated
+strings. If you know the API expects a C string, map it explicitly to
+<code>cstring</code> in your custom mapper.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
