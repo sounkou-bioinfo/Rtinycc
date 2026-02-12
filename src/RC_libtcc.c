@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
+#if RTINYCC_OS_WINDOWS
+#include <windows.h>
+#endif
 
 // ============================================================================
 // Forward declarations
@@ -152,8 +155,14 @@ static void RC_tcc_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
+#if RTINYCC_OS_WINDOWS
+        // On Windows, skip tcc_delete() entirely to avoid DLL unload order crashes
+        // The OS will reclaim all memory when the process exits
+        R_ClearExternalPtr(ext);
+#else
         tcc_delete(s);
         R_ClearExternalPtr(ext);
+#endif
     }
 }
 
