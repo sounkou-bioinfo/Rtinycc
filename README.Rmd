@@ -546,38 +546,55 @@ cb_async <- tcc_callback(
 )
 
 code_async <- '
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <pthread.h>
+#endif
 
 struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
 
+#ifdef _WIN32
+static DWORD WINAPI worker(LPVOID data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  return 0;
+}
+#else
 static void* worker(void* data) {
   struct task* t = (struct task*) data;
   t->cb(t->ctx, t->value);
   return NULL;
 }
+#endif
 
 int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   if (!cb || !ctx) return -1;
-  const int n = 100;
-  struct task tasks[100];
-  pthread_t th[100];
-  for (int i = 0; i < n; i++) {
-    tasks[i].cb = cb;
-    tasks[i].ctx = ctx;
-    tasks[i].value = value;
-    if (pthread_create(&th[i], NULL, worker, &tasks[i]) != 0) {
-      for (int j = 0; j < i; j++) pthread_join(th[j], NULL);
-      return -2;
-    }
-  }
-  for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
+  struct task t;
+  t.cb = cb;
+  t.ctx = ctx;
+  t.value = value;
+#ifdef _WIN32
+  HANDLE th = CreateThread(NULL, 0, worker, &t, 0, NULL);
+  if (!th) return -2;
+  WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+#else
+  pthread_t th;
+  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;
+  pthread_join(th, NULL);
+#endif
   return 0;
 }
 '
 
 ffi_async <- tcc_ffi() |>
-  tcc_source(code_async) |>
-  tcc_library("pthread") |>
+  tcc_source(code_async)
+if (.Platform$OS.type != "windows") {
+  ffi_async <- ffi_async |>
+    tcc_library("pthread")
+}
+ffi_async <- ffi_async |>
   tcc_bind(
     spawn_async = list(
       args = list("callback_async:void(int)", "ptr", "i32"),
