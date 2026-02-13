@@ -7,9 +7,9 @@ if (is.na(loops) || loops < 1L) {
 
 cat(sprintf("[r-unload] loops=%d\n", loops))
 
-library(Rtinycc)
 
 for (i in seq_len(loops)) {
+    library(Rtinycc)
     ffi <- tcc_ffi() |>
         tcc_source("int add2(int a, int b) { return a + b; }") |>
         tcc_bind(add2 = list(args = list("i32", "i32"), returns = "i32")) |>
@@ -27,6 +27,7 @@ for (i in seq_len(loops)) {
         cat(sprintf("[r-unload] completed %d loops\n", i))
         flush.console()
     }
+    detach("package:Rtinycc", unload = TRUE, character.only = TRUE)
 }
 
 cat("[r-unload] detaching package\n")

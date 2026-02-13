@@ -24,6 +24,19 @@ jobs:
           r-version: release
           use-public-rspm: true
 
+      - name: Install gdb (Rtools UCRT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v gdb >/dev/null 2>&1; then
+            gdb --version | head -n 1
+          else
+            /c/rtools45/usr/bin/pacman -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-gdb
+            echo 'C:/rtools45/ucrt64/bin' >> "$GITHUB_PATH"
+            export PATH="/c/rtools45/ucrt64/bin:$PATH"
+            gdb --version | head -n 1
+          fi
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           needs: check
@@ -105,6 +118,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}"
           cp -f "$RUNNER_TEMP"/harness-*.log "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/dumps/*.dmp "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}" 2>/dev/null || true
+          git -C "$GITHUB_WORKSPACE" rev-parse HEAD > "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/git-head.txt" 2>/dev/null || true
+          (cd "$GITHUB_WORKSPACE" && find . -maxdepth 3 | sort) > "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace-tree.txt" 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace"
+          cp -f "$GITHUB_WORKSPACE"/DESCRIPTION "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/configure.win "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/src/Makevars.win "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/src/install.libs.R "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/tools/windows_tcc_lifecycle_stress.c "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/.github/workflows/windows-segfault-diagnose.yaml "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/workspace/" 2>/dev/null || true
           Rscript -e "sessionInfo()" > "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/sessionInfo.txt" 2>&1 || true
 
       - uses: actions/upload-artifact@v4
@@ -124,6 +146,19 @@ jobs:
         with:
           r-version: release
           use-public-rspm: true
+
+      - name: Install gdb (Rtools UCRT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v gdb >/dev/null 2>&1; then
+            gdb --version | head -n 1
+          else
+            /c/rtools45/usr/bin/pacman -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-gdb
+            echo 'C:/rtools45/ucrt64/bin' >> "$GITHUB_PATH"
+            export PATH="/c/rtools45/ucrt64/bin:$PATH"
+            gdb --version | head -n 1
+          fi
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
@@ -151,6 +186,30 @@ jobs:
           set -euo pipefail
           Rscript "$GITHUB_WORKSPACE/scripts/windows_r_unload_stress.R" 100 \
             2>&1 | tee "$RUNNER_TEMP/r-unload-direct.log"
+
+      - name: Tinytest probe (plain)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" plain \
+            > "$RUNNER_TEMP/tinytest-probe-plain.log" 2>&1
+          rc=$?
+          echo "$rc" > "$RUNNER_TEMP/tinytest-probe-plain.exit"
+          echo "tinytest-probe-plain exit code: $rc"
+          set -e
+
+      - name: Tinytest probe (flag shutdown)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" flag_shutdown \
+            > "$RUNNER_TEMP/tinytest-probe-flag.log" 2>&1
+          rc=$?
+          echo "$rc" > "$RUNNER_TEMP/tinytest-probe-flag.exit"
+          echo "tinytest-probe-flag exit code: $rc"
+          set -e
 
       - name: Run unload stress under gdb (if available)
         shell: bash
@@ -180,9 +239,26 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/artifacts-r"
           cp -f "$RUNNER_TEMP"/r-unload-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/tinytest-probe-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/tinytest-probe-*.exit "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/rcmdcheck.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -rf ./*.Rcheck "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/dumps-r/*.dmp "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          git -C "$GITHUB_WORKSPACE" rev-parse HEAD > "$RUNNER_TEMP/artifacts-r/git-head.txt" 2>/dev/null || true
+          (cd "$GITHUB_WORKSPACE" && find . -maxdepth 4 | sort) > "$RUNNER_TEMP/artifacts-r/workspace-tree.txt" 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/artifacts-r/workspace"
+          cp -rf "$GITHUB_WORKSPACE"/.github "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          cp -rf "$GITHUB_WORKSPACE"/R "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          cp -rf "$GITHUB_WORKSPACE"/src "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          cp -rf "$GITHUB_WORKSPACE"/scripts "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          cp -rf "$GITHUB_WORKSPACE"/tools "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          cp -rf "$GITHUB_WORKSPACE"/inst/tinytest "$RUNNER_TEMP/artifacts-r/workspace/inst/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/DESCRIPTION "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/configure.win "$RUNNER_TEMP/artifacts-r/workspace/" 2>/dev/null || true
+          PKGROOT="$(Rscript -e 'cat(normalizePath(system.file(package = "Rtinycc"), winslash = "/", mustWork = TRUE))' 2>/dev/null || true)"
+          if [ -n "${PKGROOT}" ] && [ -d "${PKGROOT}" ]; then
+            cp -rf "${PKGROOT}" "$RUNNER_TEMP/artifacts-r/installed-Rtinycc"
+          fi
           Rscript -e "sessionInfo()" > "$RUNNER_TEMP/artifacts-r/sessionInfo.txt" 2>&1 || true
 
       - uses: actions/upload-artifact@v4
