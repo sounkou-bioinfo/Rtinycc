@@ -129,7 +129,7 @@ static SEXP cb_task_to_args(cb_task_t *task) {
                 SET_VECTOR_ELT(args, i, R_MakeExternalPtr(a->v.p, R_NilValue, R_NilValue));
                 break;
             case CB_ARG_CSTRING:
-                SET_VECTOR_ELT(args, i, Rf_mkString(a->v.s ? a->v.s : ""));
+                SET_VECTOR_ELT(args, i, Rf_ScalarString(Rf_mkCharCE(a->v.s ? a->v.s : "", CE_UTF8)));
                 break;
         }
     }
@@ -392,7 +392,7 @@ static SEXP cb_task_to_args(cb_task_t *task) {
                 SET_VECTOR_ELT(args, i, R_MakeExternalPtr(a->v.p, R_NilValue, R_NilValue));
                 break;
             case CB_ARG_CSTRING:
-                SET_VECTOR_ELT(args, i, Rf_mkString(a->v.s ? a->v.s : ""));
+                SET_VECTOR_ELT(args, i, Rf_ScalarString(Rf_mkCharCE(a->v.s ? a->v.s : "", CE_UTF8)));
                 break;
         }
     }

@@ -765,7 +765,7 @@ SEXP RC_read_cstring(SEXP ptr) {
     
     char *data = (char*)R_ExternalPtrAddr(ptr);
     if (!data) {
-        return Rf_ScalarString(Rf_mkChar(""));
+        return Rf_ScalarString(Rf_mkCharCE("", CE_UTF8));
     }
     
     return Rf_ScalarString(Rf_mkCharCE(data, CE_UTF8));
@@ -795,7 +795,7 @@ SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes) {
 
     SEXP out = PROTECT(Rf_allocVector(STRSXP, 1));
     if (n == 0) {
-        SET_STRING_ELT(out, 0, Rf_mkChar(""));
+        SET_STRING_ELT(out, 0, Rf_mkCharCE("", CE_UTF8));
         UNPROTECT(1);
         return out;
     }
