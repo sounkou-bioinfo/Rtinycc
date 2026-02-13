@@ -10,7 +10,8 @@ Authors@R: c(
 Description: Builds 'TinyCC' (Tiny 'C' Compiler) 'cli' and library for R package use.
     This package compiles 'TinyCC' from source code and provides R functions to interact with the TinyCC compiler.
     'TinyCC' is a small and fast 'C' compiler that can be used for various purposes, including preprocessing of headers, just-in-time compilation 'C' code in 'R' for
-    'C' "scripting".
+    'C' "scripting". A simple 'C' 'FFI' is provided in this work including support for 'C' callbacks into 'R' and a 'C' trampoline code generator to handle type conversions and 'R' API interactions. 
+    The package is designed to be cross-platform, supporting both Unix-like systems and Windows (albeit with severe limitations).
 License: GPL (>= 3)
 Depends: R (>= 4.4.0)
 Imports:
