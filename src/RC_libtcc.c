@@ -613,7 +613,7 @@ SEXP RC_malloc(SEXP size) {
  * Allocation: none.
  * Protection: none.
  */
-/* Free an owned pointer. Errors if the tag is not "rtinycc_owned" or NULL
+/* Free an owned pointer. Errors unless tag is "rtinycc_owned"
  * (i.e. refuses to free struct or borrowed pointers). */
 SEXP RC_free(SEXP ptr) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
@@ -621,7 +621,7 @@ SEXP RC_free(SEXP ptr) {
     }
 
     SEXP tag = R_ExternalPtrTag(ptr);
-    if (!Rf_isNull(tag) && tag != Rf_install("rtinycc_owned")) {
+    if (tag != Rf_install("rtinycc_owned")) {
         Rf_error("Pointer is not owned by Rtinycc; refusing to free");
     }
     

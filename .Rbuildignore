@@ -14,3 +14,4 @@ src/*.o
 ^AGENTS.md$
 ^\.sync/.*$
 ^treesiter\.c/.*$
+^winbuild/.*$
