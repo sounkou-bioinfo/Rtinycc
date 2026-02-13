@@ -59,7 +59,9 @@ it, TCC cannot resolve host symbols (e.g. `RC_free_finalizer`) through
 the dynamic linker. Rtinycc works around this with
 `RC_libtcc_add_host_symbols()`, which registers package-internal C
 functions via `tcc_add_symbol()` before relocation. Any new C function
-referenced by generated TCC code must be added there. <!--
+referenced by generated TCC code must be added there.
+
+<!--
 Windows support (experimental) required solving several interacting
 problems. R 4.2+ links against the Universal CRT (`ucrtbase.dll`) while
 TCC defaults to `msvcrt.dll`; mixing heaps across the two CRTs crashes on
@@ -72,7 +74,9 @@ The package's own codegen avoids these functions; user code that needs
 formatted output should use R API functions instead (e.g.
 `Rf_warning()`, `Rprintf()`). Async callbacks and `fork()`-based
 parallelism are not available on Windows.
---> Ownership semantics are explicit. Pointers from `tcc_malloc()` are
+-->
+
+Ownership semantics are explicit. Pointers from `tcc_malloc()` are
 tagged `rtinycc_owned` and can be released with `tcc_free()` (or by
 their R finalizer). Generated struct constructors use a struct-specific
 tag (`struct_<name>`) with an `RC_free_finalizer`; free them with
@@ -180,7 +184,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x61155dfbadf0"
+#> [1] "0x5e452a404cc0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -211,11 +215,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x61155e6f8770>
+#> <pointer: 0x5e452ae429f0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x61155bfe4830>
+#> <pointer: 0x5e452b588c40>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x61155e6f8770>
+#> <pointer: 0x5e452ae429f0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -278,8 +282,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      29.2ms   31.2ms      27.0   53.98KB     34.8
-#> 2 Rbuiltin    541.3µs    585µs    1625.     9.05KB     28.0
+#> 1 Rtinycc      30.5ms   31.9ms      28.4   53.98KB     37.8
+#> 2 Rbuiltin    542.7µs  581.7µs    1638.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -308,8 +312,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.2µs   28.7µs    37718.    39.1KB     26.4
-#> 2 Rbuiltin_vec   17.4µs   18.3µs    54230.    78.2KB     81.5
+#> 1 Rtinycc_vec    20.3µs   29.9µs    33291.    39.1KB     23.3
+#> 2 Rbuiltin_vec   16.9µs   17.6µs    53506.    78.2KB     75.0
 ```
 
 ### Linking external libraries
@@ -372,7 +376,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @611560385230 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5e452d77b8d0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -388,7 +392,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @611560385230 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5e452d77b8d0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -452,9 +456,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R           605.2ms  605.2ms      1.65     847KB    4.96 
-#> 2 quickr       3.74ms   4.11ms    244.       782KB    4.10 
-#> 3 Rtinycc     55.29ms   57.2ms     17.6      782KB    0.504
+#> 1 R           601.8ms 602.03ms      1.66     847KB    1.66 
+#> 2 quickr        3.6ms   4.12ms    243.       782KB    4.65 
+#> 3 Rtinycc      55.4ms   57.3ms     17.6      782KB    0.502
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -482,15 +486,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x61156296a2f0>
+#> <pointer: 0x5e4529cc3ee0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x61156296a2f0>
+#> <pointer: 0x5e4529cc3ee0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x611562fe4e40>
+#> <pointer: 0x5e452dc6da90>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x611562fe4e40>
+#> <pointer: 0x5e452dc6da90>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -535,9 +539,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x611561cfe7e0>
+#> <pointer: 0x5e452f5ca000>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x611561cfe7e0>
+#> <pointer: 0x5e452f5ca000>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -784,6 +788,11 @@ signatures and generate binding specifications automatically. For
 struct, enum, and global helpers, `tcc_generate_bindings()` handles the
 code generation.
 
+The default mapper is conservative for pointers: `char*` is treated as
+`ptr` because C does not guarantee NUL-terminated strings. If you know a
+parameter is a C string, provide a custom mapper that returns `cstring`
+for that type.
+
 ``` r
 header <- '
 double sqrt(double x);
@@ -824,7 +833,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x61155c66bd20>
+#> <pointer: 0x5e4529ed9100>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -877,11 +886,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x611560114da0>
+#> <pointer: 0x5e453a53dd90>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x61155c807cf0>
+#> <pointer: 0x5e452ec04a80>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -910,9 +919,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x611561c080a0>
+#> <pointer: 0x5e45297e0a40>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x611561c080a0>
+#> <pointer: 0x5e45297e0a40>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
