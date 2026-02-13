@@ -30,6 +30,9 @@ for (i in seq_len(loops)) {
     detach("package:Rtinycc", unload = TRUE, character.only = TRUE)
 }
 
+library(Rtinycc)
+
+
 cat("[r-unload] detaching package\n")
 detach("package:Rtinycc", unload = TRUE, character.only = TRUE)
 gc()
