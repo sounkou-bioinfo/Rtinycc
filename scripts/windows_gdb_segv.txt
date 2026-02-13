@@ -1,10 +1,16 @@
 set pagination off
 set confirm off
 set print thread-events off
+set breakpoint pending on
+set detach-on-fork off
+set follow-fork-mode child
+set follow-exec-mode same
 handle SIGSEGV stop print nopass
 run
 echo \n=== inferior-status ===\n
 info program
+echo \n=== inferiors ===\n
+info inferiors
 echo \n=== backtrace ===\n
 bt
 echo \n=== all-threads ===\n

@@ -176,9 +176,20 @@ jobs:
         run: |
           $dumpDir = Join-Path $env:RUNNER_TEMP "dumps-r"
           New-Item -Path $dumpDir -ItemType Directory -Force | Out-Null
-          New-Item -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Force | Out-Null
-          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Name "DumpFolder" -Value $dumpDir -PropertyType ExpandString -Force | Out-Null
-          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Name "DumpType" -Value 2 -PropertyType DWord -Force | Out-Null
+          $base = "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $base -Force | Out-Null
+          New-ItemProperty -Path $base -Name "DumpFolder" -Value $dumpDir -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path $base -Name "DumpType" -Value 2 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty -Path $base -Name "DumpCount" -Value 20 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting" -Name "DontShowUI" -Value 1 -PropertyType DWord -Force | Out-Null
+          foreach ($exe in @("Rscript.exe", "Rterm.exe", "R.exe")) {
+            $k = Join-Path $base $exe
+            New-Item -Path $k -Force | Out-Null
+            New-ItemProperty -Path $k -Name "DumpFolder" -Value $dumpDir -PropertyType ExpandString -Force | Out-Null
+            New-ItemProperty -Path $k -Name "DumpType" -Value 2 -PropertyType DWord -Force | Out-Null
+            New-ItemProperty -Path $k -Name "DumpCount" -Value 20 -PropertyType DWord -Force | Out-Null
+          }
+          Write-Host "WER dump folder: $dumpDir"
 
       - name: Run unload stress script
         shell: bash
@@ -192,11 +203,13 @@ jobs:
         run: |
           set -euo pipefail
           set +e
+          export RTINYCC_DEBUG=1
           Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" plain \
             > "$RUNNER_TEMP/tinytest-probe-plain.log" 2>&1
           rc=$?
           echo "$rc" > "$RUNNER_TEMP/tinytest-probe-plain.exit"
           echo "tinytest-probe-plain exit code: $rc"
+          sleep 3
           set -e
 
       - name: Tinytest probe (flag shutdown)
@@ -204,11 +217,13 @@ jobs:
         run: |
           set -euo pipefail
           set +e
+          export RTINYCC_DEBUG=1
           Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" flag_shutdown \
             > "$RUNNER_TEMP/tinytest-probe-flag.log" 2>&1
           rc=$?
           echo "$rc" > "$RUNNER_TEMP/tinytest-probe-flag.exit"
           echo "tinytest-probe-flag exit code: $rc"
+          sleep 3
           set -e
 
       - name: Tinytest probe (plain) under gdb
@@ -216,6 +231,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
+          export RTINYCC_DEBUG=1
           gdb --batch \
             -x "$GITHUB_WORKSPACE/scripts/windows_gdb_segv.txt" \
             --args Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" plain \
@@ -223,6 +239,7 @@ jobs:
           rc=$?
           echo "$rc" > "$RUNNER_TEMP/tinytest-probe-plain-gdb.exit"
           echo "tinytest-probe-plain-gdb exit code: $rc"
+          sleep 3
           set -e
 
       - name: Tinytest probe (flag) under gdb
@@ -230,6 +247,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
+          export RTINYCC_DEBUG=1
           gdb --batch \
             -x "$GITHUB_WORKSPACE/scripts/windows_gdb_segv.txt" \
             --args Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" flag_shutdown \
@@ -237,6 +255,7 @@ jobs:
           rc=$?
           echo "$rc" > "$RUNNER_TEMP/tinytest-probe-flag-gdb.exit"
           echo "tinytest-probe-flag-gdb exit code: $rc"
+          sleep 3
           set -e
 
       - name: Run unload stress under gdb (if available)
@@ -273,6 +292,10 @@ jobs:
           cp -f "$RUNNER_TEMP"/rcmdcheck.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -rf ./*.Rcheck "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/dumps-r/*.dmp "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          if [ -d "$USERPROFILE/AppData/Local/CrashDumps" ]; then
+            cp -f "$USERPROFILE"/AppData/Local/CrashDumps/*.dmp "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          fi
+          find "$RUNNER_TEMP" -maxdepth 4 -type f \( -iname '*.dmp' -o -iname '*.mdmp' \) -print > "$RUNNER_TEMP/artifacts-r/dump-file-list.txt" 2>/dev/null || true
           git -C "$GITHUB_WORKSPACE" rev-parse HEAD > "$RUNNER_TEMP/artifacts-r/git-head.txt" 2>/dev/null || true
           (cd "$GITHUB_WORKSPACE" && find . -maxdepth 4 | sort) > "$RUNNER_TEMP/artifacts-r/workspace-tree.txt" 2>/dev/null || true
           mkdir -p "$RUNNER_TEMP/artifacts-r/workspace"
