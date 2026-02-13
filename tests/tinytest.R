@@ -12,7 +12,6 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       res <- tinytest::run_test_file(f)
       n_fail <- n_fail + sum(vapply(res, isFALSE, logical(1)))
       rm(res)
-      gc()
     }
 
     if (n_fail > 0L) {
