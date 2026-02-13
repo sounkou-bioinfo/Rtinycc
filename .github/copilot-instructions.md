@@ -91,9 +91,11 @@ In UCRT, `snprintf` is an inline function in the headers that calls `__stdio_com
 
 The fix: `RC_invoke_callback_id(int id, SEXP args)` in `RC_libtcc.c` takes the int directly. The trampoline codegen in `R/callbacks.R` now calls `RC_invoke_callback_id(tok->id, args)` instead, eliminating the `snprintf`, `mkString`, and `atoi` round-trip entirely. The forward declaration in `R/ffi_codegen.R` was updated to match.
 
-### Async callbacks: Windows stubs
+### Async callbacks on Windows
 
-Async callbacks rely on `pipe()`, `pthread_create`, and R's `addInputHandler()` — none of which exist on Windows. `RC_libtcc.c` has `#ifdef _WIN32` stubs that call `Rf_error("Async callbacks are not supported on Windows")` for the R-facing functions, and return `-1` for the C-facing `RC_callback_async_schedule_c`. The async callback tests in `test_callback_invoke_runtime.R` are guarded with `if (.Platform$OS.type != "windows")`.
+Async callbacks are supported on Windows via a thread-safe queue in `src/platform_async.c`. Scheduling from worker threads is supported, and queued callbacks execute on the main R thread when `tcc_callback_async_drain()` is called. Unlike Unix builds, Windows does not use `pipe()` + `addInputHandler()` for dispatch.
+
+Tests in `test_callback_invoke_runtime.R` are cross-platform; worker-thread callback tests use Win32 threads on Windows and `pthread` on Unix-like systems.
 
 ### No libm on Windows
 
