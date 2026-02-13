@@ -646,6 +646,31 @@ sqlite$close_db(db)
 tcc_callback_close(cb)
 ```
 
+To check whether a callback mismatch comes from manual `tcc_bind()` specs or from header mapping/codegen, you can generate the same binding from a header fragment and inspect the inferred signature. For callback signatures in `tcc_bind()`, the first `void*` user-data parameter is passed through `tcc_callback_ptr(cb)` and should not be repeated inside `callback:...`.
+
+```{r ffi-sqlite-generated-bindings-check, eval=FALSE}
+sqlite_header <- '
+int sqlite3_exec(
+  void *db,
+  const char *sql,
+  int (*callback)(void *, int, char **, char **),
+  void *ctx,
+  char **errmsg
+);
+'
+
+sqlite_mapper <- function(c_type) {
+  x <- trimws(c_type)
+  if (grepl("\\(\\*", x)) {
+    return("callback:int(int, char **, char **)")
+  }
+  tcc_map_c_type_to_ffi(x)
+}
+
+sqlite_symbols <- tcc_treesitter_bindings(sqlite_header, mapper = sqlite_mapper)
+str(sqlite_symbols$sqlite3_exec)
+```
+
 ## Header parsing with treesitter.c
 
 For header-driven bindings, we use `treesitter.c` to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, `tcc_generate_bindings()` handles the code generation.
