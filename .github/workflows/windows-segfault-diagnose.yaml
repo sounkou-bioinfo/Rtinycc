@@ -212,6 +212,22 @@ jobs:
           sleep 3
           set -e
 
+      - name: Tinytest prefix probes (plain)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          export RTINYCC_DEBUG=1
+          for n in 4 8 12 16 20 24; do
+            Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_prefix_probe.R" "$n" plain \
+              > "$RUNNER_TEMP/tinytest-prefix-${n}-plain.log" 2>&1
+            rc=$?
+            echo "$rc" > "$RUNNER_TEMP/tinytest-prefix-${n}-plain.exit"
+            echo "tinytest-prefix-${n}-plain exit code: $rc"
+            sleep 2
+          done
+          set -e
+
       - name: Tinytest probe (flag shutdown)
         shell: bash
         run: |
@@ -224,6 +240,22 @@ jobs:
           echo "$rc" > "$RUNNER_TEMP/tinytest-probe-flag.exit"
           echo "tinytest-probe-flag exit code: $rc"
           sleep 3
+          set -e
+
+      - name: Tinytest prefix probes (flag shutdown)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          export RTINYCC_DEBUG=1
+          for n in 4 8 12 16 20 24; do
+            Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_prefix_probe.R" "$n" flag_shutdown \
+              > "$RUNNER_TEMP/tinytest-prefix-${n}-flag.log" 2>&1
+            rc=$?
+            echo "$rc" > "$RUNNER_TEMP/tinytest-prefix-${n}-flag.exit"
+            echo "tinytest-prefix-${n}-flag exit code: $rc"
+            sleep 2
+          done
           set -e
 
       - name: Tinytest probe (plain) under gdb
@@ -288,6 +320,8 @@ jobs:
           cp -f "$RUNNER_TEMP"/r-unload-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/tinytest-probe-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/tinytest-probe-*.exit "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/tinytest-prefix-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/tinytest-prefix-*.exit "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$GITHUB_WORKSPACE"/scripts/windows_gdb_segv.txt "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/rcmdcheck.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -rf ./*.Rcheck "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
