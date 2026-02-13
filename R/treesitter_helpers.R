@@ -283,6 +283,25 @@ tcc_map_c_type_to_ffi <- function(c_type) {
     if (last %in% type_tokens) {
       return(type_str)
     }
+
+    # Keep standalone pointer stars, e.g. "void *" / "char **".
+    if (grepl("^\\*+$", last)) {
+      return(type_str)
+    }
+
+    # Pointer declarator with attached identifier, e.g. "*sql", "**errmsg".
+    # Keep pointer stars as part of the type while dropping the identifier.
+    if (grepl("^\\*+[A-Za-z_][A-Za-z0-9_]*(\\[[^]]*\\])?$", last)) {
+      stars <- sub("^([*]+).*$", "\\1", last)
+      return(paste(c(parts[-length(parts)], stars), collapse = " "))
+    }
+
+    # Plain trailing identifier (optionally array declarator), e.g. "x",
+    # "name[8]".
+    if (grepl("^[A-Za-z_][A-Za-z0-9_]*(\\[[^]]*\\])?$", last)) {
+      return(paste(parts[-length(parts)], collapse = " "))
+    }
+
     paste(parts[-length(parts)], collapse = " ")
   }
 
@@ -361,13 +380,94 @@ tcc_treesitter_bindings <- function(
   }
 
   normalize_params <- function(params) {
+    split_top_level_commas <- function(x) {
+      if (!nzchar(x)) {
+        return(character(0))
+      }
+      out <- character(0)
+      start <- 1L
+      depth_paren <- 0L
+      depth_brack <- 0L
+      depth_brace <- 0L
+      n <- nchar(x)
+      for (i in seq_len(n)) {
+        ch <- substr(x, i, i)
+        if (ch == "(") {
+          depth_paren <- depth_paren + 1L
+        } else if (ch == ")") {
+          depth_paren <- max(0L, depth_paren - 1L)
+        } else if (ch == "[") {
+          depth_brack <- depth_brack + 1L
+        } else if (ch == "]") {
+          depth_brack <- max(0L, depth_brack - 1L)
+        } else if (ch == "{") {
+          depth_brace <- depth_brace + 1L
+        } else if (ch == "}") {
+          depth_brace <- max(0L, depth_brace - 1L)
+        } else if (
+          ch == "," && depth_paren == 0L && depth_brack == 0L &&
+            depth_brace == 0L
+        ) {
+          out <- c(out, trimws(substr(x, start, i - 1L)))
+          start <- i + 1L
+        }
+      }
+      out <- c(out, trimws(substr(x, start, n)))
+      out[nzchar(out)]
+    }
+
+    normalize_c_type_ws <- function(x) {
+      x <- gsub("\\*", " * ", x)
+      x <- gsub("\\s+", " ", x)
+      trimws(x)
+    }
+
+    compact_function_pointer_params <- function(params_vec) {
+      if (length(params_vec) == 0) {
+        return(params_vec)
+      }
+      out <- character(0)
+      i <- 1L
+      n <- length(params_vec)
+      while (i <= n) {
+        tok <- params_vec[[i]]
+        out <- c(out, tok)
+
+        if (grepl("\\(\\s*\\*\\s*\\)", tok) && grepl("\\)", tok)) {
+          inner <- sub("^.*\\)\\s*\\((.*)\\)\\s*$", "\\1", tok)
+          inner_parts <- split_top_level_commas(inner)
+          k <- length(inner_parts)
+          if (k > 0 && (i + k) <= n) {
+            next_tokens <- params_vec[(i + 1L):(i + k)]
+            same <- all(
+              mapply(
+                function(a, b) {
+                  identical(normalize_c_type_ws(a), normalize_c_type_ws(b))
+                },
+                next_tokens,
+                inner_parts,
+                USE.NAMES = FALSE
+              )
+            )
+            if (same) {
+              i <- i + k
+            }
+          }
+        }
+
+        i <- i + 1L
+      }
+      out
+    }
+
     if (is.list(params)) {
       params <- params[[1]]
     }
     params <- as.character(params)
     if (length(params) == 1 && grepl(",", params)) {
-      params <- unlist(strsplit(params, ","))
+      params <- split_top_level_commas(params)
     }
+    params <- compact_function_pointer_params(params)
     params <- trimws(params)
     if (
       length(params) == 1 && (is.na(params) || params == "" || params == "void")

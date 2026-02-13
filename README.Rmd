@@ -716,7 +716,7 @@ int sqlite3_exec(
 
 sqlite_mapper <- function(c_type) {
   x <- trimws(c_type)
-  if (grepl("\\(\\*", x)) {
+  if (grepl("\\(\\s*\\*", x)) {
     return("callback:int(int, char **, char **)")
   }
   tcc_map_c_type_to_ffi(x)

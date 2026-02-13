@@ -41,6 +41,40 @@ expect_true(
   info = "Parse functions and map to FFI bindings"
 )
 
+# Test 1b: mapper preserves pointer stars with trailing identifiers
+expect_true(
+  {
+    tcc_map_c_type_to_ffi("void *db") == "ptr" &&
+      tcc_map_c_type_to_ffi("const char *sql") == "ptr" &&
+      tcc_map_c_type_to_ffi("char **errmsg") == "ptr"
+  },
+  info = "Type mapper handles pointer declarators with parameter names"
+)
+
+# Test 1c: callback function-pointer args are not split on inner commas
+expect_true(
+  {
+    header <- "\nint sqlite3_exec(\n  void *db,\n  const char *sql,\n  int (*callback)(void *, int, char **, char **),\n  void *ctx,\n  char **errmsg\n);\n"
+
+    sqlite_mapper <- function(c_type) {
+      x <- trimws(c_type)
+      if (grepl("\\(\\s*\\*", x)) {
+        return("callback:int(int, char **, char **)")
+      }
+      tcc_map_c_type_to_ffi(x)
+    }
+
+    syms <- tcc_treesitter_bindings(header, mapper = sqlite_mapper)
+    spec <- syms$sqlite3_exec
+    args <- unlist(spec$args)
+
+    length(args) == 5 &&
+      all(args == c("ptr", "ptr", "callback:int(int, char **, char **)", "ptr", "ptr")) &&
+      identical(spec$returns, "i32")
+  },
+  info = "Function-pointer callback parameter maps to single callback arg"
+)
+
 # Test 2: struct members and accessors (including bitfield)
 expect_true(
   {
