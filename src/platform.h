@@ -28,7 +28,8 @@
 // Unix-like (non-Windows) detection.
 #define RTINYCC_OS_UNIX (!RTINYCC_OS_WINDOWS)
 
-// Async callbacks supported on Unix-like platforms.
-#define RTINYCC_HAS_ASYNC_CALLBACKS RTINYCC_OS_UNIX
+// Async callback queue support is available on all currently supported
+// platforms (Unix-like and Windows).
+#define RTINYCC_HAS_ASYNC_CALLBACKS 1
 
 #endif
