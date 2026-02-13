@@ -1,0 +1,181 @@
+name: windows-segfault-diagnose
+
+on:
+  push:
+    branches: [windows_segfault]
+  pull_request:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  tinycc-c-lifecycle:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cross_free: [0, 1]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Install package (build TinyCC assets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          R CMD INSTALL --preclean --no-multiarch .
+
+      - name: Discover installed paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKGROOT="$(Rscript -e 'cat(normalizePath(system.file(package = "Rtinycc"), winslash = "/", mustWork = TRUE))')"
+          echo "PKGROOT=$PKGROOT" >> "$GITHUB_ENV"
+          echo "PKGROOT=$PKGROOT"
+          ls -la "$PKGROOT"
+          ls -la "$PKGROOT/tinycc"
+
+      - name: Build TinyCC lifecycle harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          CC="$(R CMD config CC)"
+          CC="${CC%% *}"
+          "$CC" -O0 -g -Wall -Wextra \
+            -I"$PKGROOT/tinycc/libtcc" \
+            "$GITHUB_WORKSPACE/tools/windows_tcc_lifecycle_stress.c" \
+            -L"$PKGROOT/tinycc/lib" -ltcc \
+            -o "$RUNNER_TEMP/windows_tcc_lifecycle_stress.exe"
+
+      - name: Enable local crash dumps (WER)
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "dumps"
+          New-Item -Path $dumpDir -ItemType Directory -Force | Out-Null
+          New-Item -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Force | Out-Null
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Name "DumpFolder" -Value $dumpDir -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Name "DumpType" -Value 2 -PropertyType DWord -Force | Out-Null
+          Write-Host "WER dump folder: $dumpDir"
+
+      - name: Run harness directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$PKGROOT/tinycc/lib:$PKGROOT/libs/x64:$PATH"
+          "$RUNNER_TEMP/windows_tcc_lifecycle_stress.exe" \
+            "$PKGROOT/tinycc/lib" "$PKGROOT/tinycc/include" 2000 "${{ matrix.cross_free }}" \
+            2>&1 | tee "$RUNNER_TEMP/harness-direct-crossfree-${{ matrix.cross_free }}.log"
+
+      - name: Run harness under gdb (if available)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$PKGROOT/tinycc/lib:$PKGROOT/libs/x64:$PATH"
+          if command -v gdb >/dev/null 2>&1; then
+            gdb --batch \
+              -x "$GITHUB_WORKSPACE/scripts/windows_gdb_bt.txt" \
+              --args "$RUNNER_TEMP/windows_tcc_lifecycle_stress.exe" \
+                "$PKGROOT/tinycc/lib" "$PKGROOT/tinycc/include" 2000 "${{ matrix.cross_free }}" \
+              > "$RUNNER_TEMP/harness-gdb-crossfree-${{ matrix.cross_free }}.log" 2>&1 || true
+          else
+            echo "gdb not found on PATH" > "$RUNNER_TEMP/harness-gdb-crossfree-${{ matrix.cross_free }}.log"
+          fi
+
+      - name: Collect diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}"
+          cp -f "$RUNNER_TEMP"/harness-*.log "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/dumps/*.dmp "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}" 2>/dev/null || true
+          Rscript -e "sessionInfo()" > "$RUNNER_TEMP/artifacts-c-${{ matrix.cross_free }}/sessionInfo.txt" 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-c-lifecycle-crossfree-${{ matrix.cross_free }}
+          path: ${{ runner.temp }}/artifacts-c-${{ matrix.cross_free }}
+
+  rtinycc-r-unload:
+    runs-on: windows-latest
+    needs: [tinycc-c-lifecycle]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::tinytest
+          needs: check
+
+      - name: Install package
+        shell: bash
+        run: |
+          set -euo pipefail
+          R CMD INSTALL --preclean --no-multiarch .
+
+      - name: Enable local crash dumps (WER)
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "dumps-r"
+          New-Item -Path $dumpDir -ItemType Directory -Force | Out-Null
+          New-Item -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Force | Out-Null
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Name "DumpFolder" -Value $dumpDir -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps" -Name "DumpType" -Value 2 -PropertyType DWord -Force | Out-Null
+
+      - name: Run unload stress script
+        shell: bash
+        run: |
+          set -euo pipefail
+          Rscript "$GITHUB_WORKSPACE/scripts/windows_r_unload_stress.R" 100 \
+            2>&1 | tee "$RUNNER_TEMP/r-unload-direct.log"
+
+      - name: Run unload stress under gdb (if available)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v gdb >/dev/null 2>&1; then
+            gdb --batch \
+              -x "$GITHUB_WORKSPACE/scripts/windows_gdb_bt.txt" \
+              --args Rscript "$GITHUB_WORKSPACE/scripts/windows_r_unload_stress.R" 100 \
+              > "$RUNNER_TEMP/r-unload-gdb.log" 2>&1 || true
+          else
+            echo "gdb not found on PATH" > "$RUNNER_TEMP/r-unload-gdb.log"
+          fi
+
+      - name: Windows R CMD check smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          R CMD build .
+          TAR_GZ="$(ls -1t *.tar.gz | head -n 1)"
+          R CMD check --no-manual "$TAR_GZ" 2>&1 | tee "$RUNNER_TEMP/rcmdcheck.log"
+
+      - name: Collect diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/artifacts-r"
+          cp -f "$RUNNER_TEMP"/r-unload-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/rcmdcheck.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -rf ./*.Rcheck "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP"/dumps-r/*.dmp "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          Rscript -e "sessionInfo()" > "$RUNNER_TEMP/artifacts-r/sessionInfo.txt" 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-r-unload-diagnostics
+          path: ${{ runner.temp }}/artifacts-r

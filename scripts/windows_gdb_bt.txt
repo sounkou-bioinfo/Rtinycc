@@ -1,0 +1,12 @@
+set pagination off
+set confirm off
+set print thread-events off
+set disassemble-next-line on
+run
+echo \n=== backtrace ===\n
+bt
+echo \n=== all threads ===\n
+thread apply all bt
+echo \n=== shared libraries ===\n
+info sharedlibrary
+quit
