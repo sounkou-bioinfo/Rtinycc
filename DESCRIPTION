@@ -7,7 +7,7 @@ Authors@R: c(
     person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
     comment = "Tinycc Compiler (tinycc) authors and COPYRIGHT holders")
     )
-Description: Builds 'TinyCC' (Tiny 'C' Compiler) 'cli' and library for R package use.
+Description: Builds 'TinyCC' (Tiny 'C' Compiler) <https://github.com/TinyCC/tinycc> 'cli' and library for R package use.
     This package compiles 'TinyCC' from source code and provides R functions to interact with the TinyCC compiler.
     'TinyCC' is a small and fast 'C' compiler that can be used for various purposes, including preprocessing of headers, just-in-time compilation 'C' code in 'R' for
     'C' "scripting". A simple 'C' 'FFI' is provided in this work including support for 'C' callbacks into 'R' and a 'C' trampoline code generator to handle type conversions and 'R' API interactions. 
