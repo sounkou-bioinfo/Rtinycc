@@ -69,11 +69,15 @@ returns a `malloc`-owned buffer.
 
 
 
+Asynchronous callbacks into `R` from `C` code in Rtinycc is adapted from Simon Urbanek's [`background`](https://github.com/s-u/background) package implementation.
+
+
+
 Windows support (experimental) required solving several interacting problems. R 4.2+ on Windows uses the Universal CRT (`ucrtbase.dll`) while TinyCC's default import-definition set is centered on `msvcrt`. The build system mitigates this by generating an import-definition file from `ucrtbase.dll` and storing it as `msvcrt.def`, so TinyCC's `-lmsvcrt` lookup is redirected toward UCRT exports.
 
-This mitigation reduces cross-CRT allocation/free hazards, but it is not a universal guarantee for every CRT-facing symbol across all toolchains. In practice, we also avoid `printf`-family usage in core JIT smoke paths and prefer R API output (`Rf_warning()`, `Rprintf()`) for diagnostics.
+This mitigation reduces cross-CRT allocation/free hazards, but it is not a universal guarantee for every CRT-facing symbol across all toolchains. In practice, we also avoid `printf`-family and prefer R API output (`Rf_warning()`, `Rprintf()`) for diagnostics.
 
-Async callbacks are supported on Windows via a queued model and execute when `tcc_callback_async_drain()` is called from the main thread. `fork()`-based parallelism is not available there. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
+`fork()`-based parallelism is not available. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
 
 
 
@@ -533,7 +537,7 @@ tcc_callback_close(cb_err)
 
 For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread when you call `tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once before use.
 
-The async callback runtime in Rtinycc is adapted from Simon Urbanek's `background` package implementation: <https://github.com/s-u/background>.
+
 
 ```{r callback-async}
 tcc_callback_async_enable()
