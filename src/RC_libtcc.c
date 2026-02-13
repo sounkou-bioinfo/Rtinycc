@@ -1238,8 +1238,13 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
         Rf_error("Async callback queue is not initialized. Call tcc_callback_async_enable().");
     }
 
+    if (args != R_NilValue && TYPEOF(args) != VECSXP) {
+        Rf_error("Expected args to be a list or NULL");
+    }
+
     int n_args = (args == R_NilValue) ? 0 : (int)XLENGTH(args);
     cb_arg_t *cb_args = NULL;
+    const char *err_msg = NULL;
     if (n_args > 0) {
         cb_args = (cb_arg_t*) calloc((size_t)n_args, sizeof(cb_arg_t));
         if (!cb_args) {
@@ -1264,10 +1269,15 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
                 cb_args[i].kind = CB_ARG_PTR;
                 cb_args[i].v.p = R_ExternalPtrAddr(val);
             } else {
-                free(cb_args);
-                Rf_error("Unsupported async callback argument type");
+                err_msg = "Unsupported async callback argument type";
+                break;
             }
         }
+    }
+
+    if (err_msg) {
+        free(cb_args);
+        Rf_error("%s", err_msg);
     }
 
     int rc = RC_platform_async_schedule(token->id, n_args, cb_args);
@@ -1393,46 +1403,65 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     if (!Rf_isString(arg_types)) {
         Rf_error("Expected character vector for arg_types");
     }
+
+    if (!Rf_isLogical(threadsafe) && !Rf_isInteger(threadsafe)) {
+        Rf_error("Expected logical or integer scalar for threadsafe");
+    }
     
     // Find an available slot
     int id = RC_callback_find_free_slot();
     if (id < 0) {
         Rf_error("Callback registry full (max %d)", MAX_CALLBACKS);
     }
+
+    const char *err_msg = NULL;
     callback_entry_t *entry = &callback_registry[id];
-    
-    // Preserve the R function
-    entry->fun = fun;
-    R_PreserveObject(fun);
-    
-    // Store return type
+    int n_args = (int)XLENGTH(arg_types);
+    int is_threadsafe = Rf_asInteger(threadsafe);
+    char *return_type_dup = NULL;
+    char **arg_types_dup = NULL;
+
+    // Build metadata first so error paths can cleanly unwind before mutating registry
     const char *rtype = Rf_translateCharUTF8(STRING_ELT(return_type, 0));
-    entry->return_type = strdup(rtype);
-    
-    // Store argument types
-    entry->n_args = (int)XLENGTH(arg_types);
-    if (entry->n_args > 0) {
-        entry->arg_types = malloc(entry->n_args * sizeof(char*));
-        if (!entry->arg_types) {
-            Rf_error("Memory allocation failed");
-        }
-        for (int i = 0; i < entry->n_args; i++) {
-            const char *atype = Rf_translateCharUTF8(STRING_ELT(arg_types, i));
-            entry->arg_types[i] = strdup(atype);
-        }
-    } else {
-        entry->arg_types = NULL;
+    return_type_dup = strdup(rtype);
+    if (!return_type_dup) {
+        err_msg = "Memory allocation failed";
+        goto fail;
     }
-    
-    entry->threadsafe = Rf_asInteger(threadsafe);
+
+    if (n_args > 0) {
+        arg_types_dup = (char**) calloc((size_t)n_args, sizeof(char*));
+        if (!arg_types_dup) {
+            err_msg = "Memory allocation failed";
+            goto fail;
+        }
+        for (int i = 0; i < n_args; i++) {
+            const char *atype = Rf_translateCharUTF8(STRING_ELT(arg_types, i));
+            arg_types_dup[i] = strdup(atype);
+            if (!arg_types_dup[i]) {
+                err_msg = "Memory allocation failed";
+                goto fail;
+            }
+        }
+    }
+
+    // Create token
+    callback_token_t *token = (callback_token_t*) malloc(sizeof(callback_token_t));
+    if (!token) {
+        err_msg = "Memory allocation failed";
+        goto fail;
+    }
+
+    // Preserve R function and commit metadata to registry
+    R_PreserveObject(fun);
+    entry->fun = fun;
+    entry->return_type = return_type_dup;
+    entry->arg_types = arg_types_dup;
+    entry->n_args = n_args;
+    entry->threadsafe = is_threadsafe;
     entry->valid = 1;
     entry->trampoline = NULL;
-    
-    // Create token
-    callback_token_t *token = malloc(sizeof(callback_token_t));
-    if (!token) {
-        Rf_error("Memory allocation failed");
-    }
+
     token->id = id;
     token->refs = 1;
     
@@ -1442,6 +1471,20 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     UNPROTECT(1);
     
     return ext;
+
+fail:
+    if (arg_types_dup) {
+        for (int i = 0; i < n_args; i++) {
+            if (arg_types_dup[i]) {
+                free(arg_types_dup[i]);
+            }
+        }
+        free(arg_types_dup);
+    }
+    if (return_type_dup) {
+        free(return_type_dup);
+    }
+    Rf_error("%s", err_msg ? err_msg : "Failed to register callback");
 }
 
 /**
@@ -1712,6 +1755,10 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
  * @return Converted result.
  */
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
+    if (!Rf_isString(callback_id) || XLENGTH(callback_id) != 1) {
+        Rf_warning("Invalid callback id");
+        return R_NilValue;
+    }
     // callback_id is a character string with the callback identifier
     const char *id_str = Rf_translateCharUTF8(STRING_ELT(callback_id, 0));
     int id = atoi(id_str);

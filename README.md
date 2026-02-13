@@ -191,7 +191,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x555c160eff50"
+#> [1] "0x57705b4c4680"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -222,11 +222,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x555c14290930>
+#> <pointer: 0x57705a6472d0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x555c143c9550>
+#> <pointer: 0x57705877f550>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x555c14290930>
+#> <pointer: 0x57705a6472d0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -289,8 +289,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      30.2ms   33.7ms      25.3   53.98KB     33.0
-#> 2 Rbuiltin    547.9µs  591.2µs    1605.     9.05KB     28.0
+#> 1 Rtinycc      31.6ms   47.4ms      18.9   53.98KB     24.5
+#> 2 Rbuiltin    548.3µs  595.7µs    1596.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -319,8 +319,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.2µs   28.7µs    35170.    39.1KB     24.6
-#> 2 Rbuiltin_vec   17.3µs   32.8µs    35580.    78.2KB     49.9
+#> 1 Rtinycc_vec    19.8µs   28.3µs    36678.    39.1KB     25.7
+#> 2 Rbuiltin_vec   17.3µs   32.8µs    35784.    78.2KB     50.2
 ```
 
 ### Linking external libraries
@@ -383,7 +383,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @555c17aa2b58 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @57705c952e68 13 INTSXP g0c0 [MARK,REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -399,7 +399,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @555c17aa2b58 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @57705c952e68 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -463,9 +463,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R          614.07ms 616.34ms      1.62     847KB     1.62
-#> 2 quickr       3.76ms   4.26ms    234.       782KB     4.63
-#> 3 Rtinycc     56.83ms  58.28ms     17.1      782KB     0
+#> 1 R          620.95ms 620.95ms      1.61     847KB    4.83 
+#> 2 quickr       3.81ms   4.28ms    234.       782KB    4.10 
+#> 3 Rtinycc      56.5ms  59.54ms     16.9      782KB    0.513
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -493,15 +493,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x555c17caa650>
+#> <pointer: 0x5770688967f0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x555c17caa650>
+#> <pointer: 0x5770688967f0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x555c16774700>
+#> <pointer: 0x57705d5ce6f0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x555c16774700>
+#> <pointer: 0x57705d5ce6f0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -546,9 +546,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x555c1b5b8920>
+#> <pointer: 0x57705ad5bdb0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x555c1b5b8920>
+#> <pointer: 0x57705ad5bdb0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -890,7 +890,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x555c24253ca0>
+#> <pointer: 0x57705d81c660>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -943,11 +943,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x555c148d6150>
+#> <pointer: 0x57705fb97600>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x555c2419a430>
+#> <pointer: 0x57705d093040>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -976,9 +976,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x555c199decd0>
+#> <pointer: 0x577068291ae0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x555c199decd0>
+#> <pointer: 0x577068291ae0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
