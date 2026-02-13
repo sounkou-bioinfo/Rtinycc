@@ -16,10 +16,6 @@
   teardown code while the runtime is shutting down caused crashes on
   Windows due to DLL unload ordering and CRT heap teardown races.
 
-- Treesitter helper examples are now wrapped in `\dontrun{}` and the
-  treesitter helper tests are skipped on Windows to avoid process-exit
-  crashes related to `treesitter.c` cleanup.
-
 - Experimental Windows support. The package now builds and passes R CMD
   check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC
   from source via `configure.win`, dynamically links `libtcc.dll`, and
