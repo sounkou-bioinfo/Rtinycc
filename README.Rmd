@@ -551,6 +551,7 @@ code_async <- '
 #else
 #include <pthread.h>
 #endif
+#include <stdlib.h>
 
 struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
 
@@ -558,31 +559,56 @@ struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
 static DWORD WINAPI worker(LPVOID data) {
   struct task* t = (struct task*) data;
   t->cb(t->ctx, t->value);
+  free(t);
   return 0;
 }
 #else
 static void* worker(void* data) {
   struct task* t = (struct task*) data;
   t->cb(t->ctx, t->value);
+  free(t);
   return NULL;
 }
 #endif
 
-int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
-  if (!cb || !ctx) return -1;
-  struct task t;
-  t.cb = cb;
-  t.ctx = ctx;
-  t.value = value;
+int spawn_async_many(void (*cb)(void* ctx, int), void* ctx, int value, int n) {
+  if (!cb || !ctx || n < 0) return -1;
 #ifdef _WIN32
-  HANDLE th = CreateThread(NULL, 0, worker, &t, 0, NULL);
-  if (!th) return -2;
-  WaitForSingleObject(th, INFINITE);
-  CloseHandle(th);
+  HANDLE* th = (HANDLE*) calloc((size_t)n, sizeof(HANDLE));
+  if (!th) return -3;
+  for (int i = 0; i < n; i++) {
+    struct task* t = (struct task*) malloc(sizeof(struct task));
+    if (!t) { free(th); return -3; }
+    t->cb = cb;
+    t->ctx = ctx;
+    t->value = value;
+    th[i] = CreateThread(NULL, 0, worker, t, 0, NULL);
+    if (!th[i]) { free(t); free(th); return -2; }
+  }
+  for (int i = 0; i < n; i++) {
+    WaitForSingleObject(th[i], INFINITE);
+    CloseHandle(th[i]);
+  }
+  free(th);
 #else
-  pthread_t th;
-  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;
-  pthread_join(th, NULL);
+  pthread_t* th = (pthread_t*) calloc((size_t)n, sizeof(pthread_t));
+  if (!th) return -3;
+  for (int i = 0; i < n; i++) {
+    struct task* t = (struct task*) malloc(sizeof(struct task));
+    if (!t) { free(th); return -3; }
+    t->cb = cb;
+    t->ctx = ctx;
+    t->value = value;
+    if (pthread_create(&th[i], NULL, worker, t) != 0) {
+      free(t);
+      free(th);
+      return -2;
+    }
+  }
+  for (int i = 0; i < n; i++) {
+    pthread_join(th[i], NULL);
+  }
+  free(th);
 #endif
   return 0;
 }
@@ -596,19 +622,22 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_async <- ffi_async |>
   tcc_bind(
-    spawn_async = list(
-      args = list("callback_async:void(int)", "ptr", "i32"),
+    spawn_async_many = list(
+      args = list("callback_async:void(int)", "ptr", "i32", "i32"),
       returns = "i32"
     )
   ) |>
   tcc_compile()
 
-ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
-deadline <- Sys.time() + 1
-while (hits < 2L && Sys.time() < deadline) {
+n_calls <- 200L
+cb_ptr_async <- tcc_callback_ptr(cb_async)
+rc <- ffi_async$spawn_async_many(cb_async, cb_ptr_async, 1L, n_calls)
+
+deadline <- Sys.time() + 3
+while (hits < n_calls && Sys.time() < deadline) {
   Sys.sleep(0.01)
 }
-hits
+list(ok = isTRUE(rc == 0L), hits = hits, expected = n_calls)
 tcc_callback_close(cb_async)
 ```
 
