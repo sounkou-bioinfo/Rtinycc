@@ -1,0 +1,14 @@
+set pagination off
+set confirm off
+set print thread-events off
+handle SIGSEGV stop print nopass
+run
+echo \n=== inferior-status ===\n
+info program
+echo \n=== backtrace ===\n
+bt
+echo \n=== all-threads ===\n
+thread apply all bt
+echo \n=== modules ===\n
+info sharedlibrary
+quit

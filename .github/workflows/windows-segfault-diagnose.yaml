@@ -211,6 +211,34 @@ jobs:
           echo "tinytest-probe-flag exit code: $rc"
           set -e
 
+      - name: Tinytest probe (plain) under gdb
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          gdb --batch \
+            -x "$GITHUB_WORKSPACE/scripts/windows_gdb_segv.txt" \
+            --args Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" plain \
+            > "$RUNNER_TEMP/tinytest-probe-plain-gdb.log" 2>&1
+          rc=$?
+          echo "$rc" > "$RUNNER_TEMP/tinytest-probe-plain-gdb.exit"
+          echo "tinytest-probe-plain-gdb exit code: $rc"
+          set -e
+
+      - name: Tinytest probe (flag) under gdb
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          gdb --batch \
+            -x "$GITHUB_WORKSPACE/scripts/windows_gdb_segv.txt" \
+            --args Rscript "$GITHUB_WORKSPACE/scripts/windows_tinytest_shutdown_probe.R" flag_shutdown \
+            > "$RUNNER_TEMP/tinytest-probe-flag-gdb.log" 2>&1
+          rc=$?
+          echo "$rc" > "$RUNNER_TEMP/tinytest-probe-flag-gdb.exit"
+          echo "tinytest-probe-flag-gdb exit code: $rc"
+          set -e
+
       - name: Run unload stress under gdb (if available)
         shell: bash
         run: |
@@ -241,6 +269,7 @@ jobs:
           cp -f "$RUNNER_TEMP"/r-unload-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/tinytest-probe-*.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/tinytest-probe-*.exit "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
+          cp -f "$GITHUB_WORKSPACE"/scripts/windows_gdb_segv.txt "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/rcmdcheck.log "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -rf ./*.Rcheck "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
           cp -f "$RUNNER_TEMP"/dumps-r/*.dmp "$RUNNER_TEMP/artifacts-r" 2>/dev/null || true
