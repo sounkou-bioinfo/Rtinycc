@@ -1,7 +1,7 @@
 # Number of pending async callbacks
 
-Returns how many async callback invocations are currently queued and not
-yet executed on the main R thread.
+Returns how many async callback invocations are currently outstanding on
+the main-thread dispatcher (queued plus currently executing).
 
 ## Usage
 

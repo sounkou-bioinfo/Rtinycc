@@ -1,7 +1,7 @@
 # Whether the async callback queue is drained
 
 Convenience helper that returns \codeTRUE when no async callback is
-currently queued.
+currently outstanding on the dispatcher.
 
 ## Usage
 
