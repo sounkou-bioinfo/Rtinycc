@@ -1,7 +1,8 @@
 # Drain the async callback queue
 
-This is mainly useful for tests; normally callbacks are executed by the
-event loop once scheduled.
+This is mainly useful for tests or when you need deterministic flushing
+in non-interactive code paths. Normally callbacks are drained
+automatically by the event loop dispatcher.
 
 ## Usage
 
