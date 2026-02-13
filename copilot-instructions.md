@@ -69,6 +69,18 @@ is tracked and enforced in `RC_free` and
   `stop(..., call. = FALSE)`.
 - Update README examples when you change user-facing behavior.
 
+## Lambda.r guard patterns (codegen and callbacks)
+
+We prefer lambda.r guard rules over long `if`/`else` or `switch` chains
+for type mapping and codegen decisions. Put guards in
+`R/aaa_ffi_codegen_rules.R` and route normalization helpers to rule
+dispatch. This keeps behavior discoverable, testable, and easy to extend
+without touching multiple call sites.
+
+Motivation: codegen logic changes frequently, and rule dispatch makes it
+possible to add or override behavior without editing large control
+blocks.
+
 ## macOS host symbol visibility
 
 On macOS the configure script strips `-flat_namespace` from TCC’s

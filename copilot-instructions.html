@@ -69,6 +69,11 @@
 <li>Update README examples when you change user-facing behavior.</li>
 </ul></div>
 <div class="section level2">
+<h2 id="lambdar-guard-patterns-codegen-and-callbacks">Lambda.r guard patterns (codegen and callbacks)<a class="anchor" aria-label="anchor" href="#lambdar-guard-patterns-codegen-and-callbacks"></a></h2>
+<p>We prefer lambda.r guard rules over long <code>if</code>/<code>else</code> or <code>switch</code> chains for type mapping and codegen decisions. Put guards in <code>R/aaa_ffi_codegen_rules.R</code> and route normalization helpers to rule dispatch. This keeps behavior discoverable, testable, and easy to extend without touching multiple call sites.</p>
+<p>Motivation: codegen logic changes frequently, and rule dispatch makes it possible to add or override behavior without editing large control blocks.</p>
+</div>
+<div class="section level2">
 <h2 id="macos-host-symbol-visibility">macOS host symbol visibility<a class="anchor" aria-label="anchor" href="#macos-host-symbol-visibility"></a></h2>
 <p>On macOS the configure script strips <code>-flat_namespace</code> from TCC’s Makefile to avoid SIGEV-related issues. Without flat namespace, TCC cannot resolve symbols exported by the R package (<code>RC_free_finalizer</code>, <code>RC_invoke_callback</code>, <code>RC_invoke_callback_id</code>, <code>RC_callback_async_schedule_c</code>) through the dynamic linker at relocation time, causing “undefined symbol” errors.</p>
 <p>The fix is <code>RC_libtcc_add_host_symbols()</code> in <code>src/RC_libtcc.c</code>, which explicitly registers these host symbols via <code><a href="reference/tcc_add_symbol.html">tcc_add_symbol()</a></code> before <code><a href="reference/tcc_relocate.html">tcc_relocate()</a></code>. This is called from <code>R/ffi.R</code> at both compilation call sites. Any new C function that generated TCC code references must be added to <code>RC_libtcc_add_host_symbols()</code> or it will break on macOS and Windows.</p>
