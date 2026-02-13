@@ -15,3 +15,4 @@ src/*.o
 ^\.sync/.*$
 ^treesiter\.c/.*$
 ^winbuild/.*$
+^scripts/.*$
