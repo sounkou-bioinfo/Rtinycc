@@ -29,7 +29,7 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
 
     n_fail <- 0L
     fail_info <- list()
-    log_dir <- file.path(tempdir(), "tinytest-subprocess-logs")
+    log_dir <- file.path(getwd(), "tinytest-subprocess-logs")
     dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
     for (f in files) {
