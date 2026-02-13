@@ -77,21 +77,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="$PKGROOT/tinycc/lib:$PKGROOT/libs/x64:$PATH"
+          export PATH="$PKGROOT/tinycc:$PKGROOT/tinycc/lib:$PKGROOT/libs/x64:$PATH"
           "$RUNNER_TEMP/windows_tcc_lifecycle_stress.exe" \
-            "$PKGROOT/tinycc/lib" "$PKGROOT/tinycc/include" 2000 "${{ matrix.cross_free }}" \
+            "$PKGROOT/tinycc" "$PKGROOT/tinycc/include" 2000 "${{ matrix.cross_free }}" \
             2>&1 | tee "$RUNNER_TEMP/harness-direct-crossfree-${{ matrix.cross_free }}.log"
 
       - name: Run harness under gdb (if available)
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="$PKGROOT/tinycc/lib:$PKGROOT/libs/x64:$PATH"
+          export PATH="$PKGROOT/tinycc:$PKGROOT/tinycc/lib:$PKGROOT/libs/x64:$PATH"
           if command -v gdb >/dev/null 2>&1; then
             gdb --batch \
               -x "$GITHUB_WORKSPACE/scripts/windows_gdb_bt.txt" \
               --args "$RUNNER_TEMP/windows_tcc_lifecycle_stress.exe" \
-                "$PKGROOT/tinycc/lib" "$PKGROOT/tinycc/include" 2000 "${{ matrix.cross_free }}" \
+                "$PKGROOT/tinycc" "$PKGROOT/tinycc/include" 2000 "${{ matrix.cross_free }}" \
               > "$RUNNER_TEMP/harness-gdb-crossfree-${{ matrix.cross_free }}.log" 2>&1 || true
           else
             echo "gdb not found on PATH" > "$RUNNER_TEMP/harness-gdb-crossfree-${{ matrix.cross_free }}.log"

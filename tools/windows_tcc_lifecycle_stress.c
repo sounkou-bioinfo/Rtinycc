@@ -60,7 +60,10 @@ typedef int (*fn_ping_t)(int);
 typedef int (*fn_round_t)(unsigned long long);
 typedef void *(*fn_alloc_t)(unsigned long long);
 
-static int run_once(const char *lib_path, const char *include_path, int cross_free) {
+static int run_once(const char *tcc_root, const char *include_path, int cross_free) {
+  char lib_dir[1024];
+  char lib_tcc_dir[1024];
+
   TCCState *s = tcc_new();
   if (!s) {
     fprintf(stderr, "tcc_new failed\n");
@@ -69,9 +72,13 @@ static int run_once(const char *lib_path, const char *include_path, int cross_fr
 
   tcc_set_error_func(s, stderr, tcc_err);
 
-  if (lib_path && *lib_path) {
-    tcc_set_lib_path(s, lib_path);
-    tcc_add_library_path(s, lib_path);
+  if (tcc_root && *tcc_root) {
+    tcc_set_lib_path(s, tcc_root);
+
+    snprintf(lib_dir, sizeof(lib_dir), "%s/lib", tcc_root);
+    snprintf(lib_tcc_dir, sizeof(lib_tcc_dir), "%s/lib/tcc", tcc_root);
+    tcc_add_library_path(s, lib_dir);
+    tcc_add_library_path(s, lib_tcc_dir);
   }
   if (include_path && *include_path) {
     tcc_add_include_path(s, include_path);
@@ -144,13 +151,13 @@ static int run_once(const char *lib_path, const char *include_path, int cross_fr
 }
 
 int main(int argc, char **argv) {
-  const char *lib_path = "";
+  const char *tcc_root = "";
   const char *include_path = "";
   int iterations = 1000;
   int cross_free = 1;
 
   if (argc >= 3) {
-    lib_path = argv[1];
+    tcc_root = argv[1];
     include_path = argv[2];
   }
   if (argc >= 4) {
@@ -165,11 +172,11 @@ int main(int argc, char **argv) {
   }
 
   fprintf(stdout,
-          "[harness] lib_path=%s include_path=%s iterations=%d cross_free=%d\n",
-          lib_path, include_path, iterations, cross_free);
+          "[harness] tcc_root=%s include_path=%s iterations=%d cross_free=%d\n",
+          tcc_root, include_path, iterations, cross_free);
 
   for (int i = 1; i <= iterations; ++i) {
-    int rc = run_once(lib_path, include_path, cross_free);
+    int rc = run_once(tcc_root, include_path, cross_free);
     if (rc != 0) {
       fprintf(stderr, "[harness] failure at iteration %d rc=%d\n", i, rc);
       return rc;
