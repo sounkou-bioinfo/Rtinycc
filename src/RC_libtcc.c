@@ -21,6 +21,7 @@
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
 void RC_free_finalizer(SEXP ext);
+static void RC_tcc_error_to_warning(void *opaque, const char *msg);
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
@@ -138,6 +139,20 @@ static int RC_is_heap_owned_tag(SEXP tag) {
 }
 
 /**
+ * TinyCC diagnostic callback routed to R warnings.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
+static void RC_tcc_error_to_warning(void *opaque, const char *msg) {
+    (void) opaque;
+    if (!msg || !msg[0]) {
+        return;
+    }
+    Rf_warning("%s", msg);
+}
+
+/**
  * Releases a TCCState when its R external pointer is garbage collected.
  * Ownership: frees owned TCCState.
  * Allocation: none.
@@ -224,8 +239,8 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         Rf_error("tcc_new failed");
     }
 
-    /* Route libtcc diagnostics through R (stdout, sink-able) */
-    tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) Rprintf);
+    /* Route libtcc diagnostics through R warnings */
+    tcc_set_error_func(s, NULL, RC_tcc_error_to_warning);
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
