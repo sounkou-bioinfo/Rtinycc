@@ -110,8 +110,9 @@
 <p>The fix: <code>RC_invoke_callback_id(int id, SEXP args)</code> in <code>RC_libtcc.c</code> takes the int directly. The trampoline codegen in <code>R/callbacks.R</code> now calls <code>RC_invoke_callback_id(tok-&gt;id, args)</code> instead, eliminating the <code>snprintf</code>, <code>mkString</code>, and <code>atoi</code> round-trip entirely. The forward declaration in <code>R/ffi_codegen.R</code> was updated to match.</p>
 </div>
 <div class="section level3">
-<h3 id="async-callbacks-windows-stubs">Async callbacks: Windows stubs<a class="anchor" aria-label="anchor" href="#async-callbacks-windows-stubs"></a></h3>
-<p>Async callbacks rely on <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code>, <code>pthread_create</code>, and R’s <code>addInputHandler()</code> — none of which exist on Windows. <code>RC_libtcc.c</code> has <code>#ifdef _WIN32</code> stubs that call <code>Rf_error("Async callbacks are not supported on Windows")</code> for the R-facing functions, and return <code>-1</code> for the C-facing <code>RC_callback_async_schedule_c</code>. The async callback tests in <code>test_callback_invoke_runtime.R</code> are guarded with <code>if (.Platform$OS.type != "windows")</code>.</p>
+<h3 id="async-callbacks-on-windows">Async callbacks on Windows<a class="anchor" aria-label="anchor" href="#async-callbacks-on-windows"></a></h3>
+<p>Async callbacks are supported on Windows via a thread-safe queue in <code>src/platform_async.c</code>. Scheduling from worker threads is supported, and queued callbacks execute on the main R thread when <code><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain()</a></code> is called. Unlike Unix builds, Windows does not use <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code> + <code>addInputHandler()</code> for dispatch.</p>
+<p>Tests in <code>test_callback_invoke_runtime.R</code> are cross-platform; worker-thread callback tests use Win32 threads on Windows and <code>pthread</code> on Unix-like systems.</p>
 </div>
 <div class="section level3">
 <h3 id="no-libm-on-windows">No libm on Windows<a class="anchor" aria-label="anchor" href="#no-libm-on-windows"></a></h3>

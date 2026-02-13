@@ -21,7 +21,8 @@
   from source via `configure.win`, dynamically links `libtcc.dll`, and
   generates `.def` files for R API symbol resolution. CRT heap
   consistency is ensured by redirecting TCC’s default msvcrt linkage to
-  `ucrtbase.dll`. Async callbacks and `fork()`-based parallelism remain
+  `ucrtbase.dll`. Async callbacks are supported on Windows via a queued
+  main-thread drain model, while `fork()`-based parallelism remains
   Unix-only. See `AGENTS.md` for implementation details.
 
 - `RC_invoke_callback_id()` replaces the `snprintf`-based callback
