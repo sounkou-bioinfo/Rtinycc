@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-Rtinycc is an R interface to [`TinyCC`](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes ( windows may never be supported due to subtle UCRT issues, so use WSL2) and focuses on embedding `TinyCC` and enabling JIT-compiled bindings directly from R. Combined with [`treesitter.c`](https://github.com/sounkou-bioinfo/treesitter.c), which provides `C` header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [`TinyCC`](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on Unix-like systems and on Windows (experimental), and focuses on embedding `TinyCC` and enabling JIT-compiled bindings directly from R. Combined with [`treesitter.c`](https://github.com/sounkou-bioinfo/treesitter.c), which provides `C` header parsers, it can be used to rapidly generate declarative bindings.
 
 
 ## How it works
@@ -73,7 +73,7 @@ Windows support (experimental) required solving several interacting problems. R 
 
 This mitigation reduces cross-CRT allocation/free hazards, but it is not a universal guarantee for every CRT-facing symbol across all toolchains. In practice, we also avoid `printf`-family usage in core JIT smoke paths and prefer R API output (`Rf_warning()`, `Rprintf()`) for diagnostics.
 
-Async callbacks on Windows use a queued model and execute when `tcc_callback_async_drain()` is called from the main thread. `fork()`-based parallelism is still not available there. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
+Async callbacks are supported on Windows via a queued model and execute when `tcc_callback_async_drain()` is called from the main thread. `fork()`-based parallelism is still not available there. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
 
 
 
@@ -533,6 +533,8 @@ tcc_callback_close(cb_err)
 
 For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread when you call `tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once before use.
 
+The async callback runtime in Rtinycc is adapted from Simon Urbanek's `background` package implementation: <https://github.com/s-u/background>.
+
 ```{r callback-async}
 tcc_callback_async_enable()
 
@@ -583,7 +585,7 @@ ffi_async <- tcc_ffi() |>
   ) |>
   tcc_compile()
 
-rc <- ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
+ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
 tcc_callback_async_drain()
 hits
 tcc_callback_close(cb_async)
@@ -816,3 +818,4 @@ GPL-3
 - [CFFI](https://cffi.readthedocs.io/)
 - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
 - [CSlug](https://cslug.readthedocs.io/en/latest/)
+- [background (Simon Urbanek)](https://github.com/s-u/background)
