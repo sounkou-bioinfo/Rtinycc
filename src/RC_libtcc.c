@@ -18,7 +18,6 @@
 // Forward declarations
 // ============================================================================
 
-SEXP RC_set_shutting_down(SEXP flag);
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
 void RC_free_finalizer(SEXP ext);
@@ -115,18 +114,8 @@ typedef struct {
 } callback_token_t;
 
 // ============================================================================
-// Shutdown and finalizers
+// Finalizers
 // ============================================================================
-
-/**
- * @section Shutdown and finalizers
- * @param flag Logical scalar from R indicating shutdown state.
- * @example
- *  .Call("RC_set_shutting_down", TRUE)
- */
-
-/* Set during package unload to avoid teardown crashes on some platforms. */
-static volatile int g_rtinycc_shutting_down = 0;
 
 static int RC_is_heap_owned_tag(SEXP tag) {
     if (TYPEOF(tag) != SYMSXP) {
@@ -149,27 +138,12 @@ static int RC_is_heap_owned_tag(SEXP tag) {
 }
 
 /**
- * Set shutdown flag from R (.onUnload).
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_set_shutting_down(SEXP flag) {
-    g_rtinycc_shutting_down = Rf_asLogical(flag) ? 1 : 0;
-    return R_NilValue;
-}
-
-/**
  * Releases a TCCState when its R external pointer is garbage collected.
  * Ownership: frees owned TCCState.
  * Allocation: none.
  * Protection: none.
  */
 static void RC_tcc_finalizer(SEXP ext) {
-    if (g_rtinycc_shutting_down) {
-        R_ClearExternalPtr(ext);
-        return;
-    }
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
@@ -196,10 +170,6 @@ static void RC_null_finalizer(SEXP ext) {
  * Protection: none.
  */
 void RC_free_finalizer(SEXP ext) {
-    if (g_rtinycc_shutting_down) {
-        R_ClearExternalPtr(ext);
-        return;
-    }
     void *ptr = R_ExternalPtrAddr(ext);
     if (!ptr) {
         return;
@@ -1335,10 +1305,6 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
  */
 // Finalizer for callback tokens
 static void RC_callback_finalizer(SEXP ext) {
-    if (g_rtinycc_shutting_down) {
-        R_ClearExternalPtr(ext);
-        return;
-    }
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
         // Release the preserved R function
@@ -1380,10 +1346,6 @@ static void RC_callback_finalizer(SEXP ext) {
  */
 // Finalizer for callback pointer handles
 static void RC_callback_ptr_finalizer(SEXP ext) {
-    if (g_rtinycc_shutting_down) {
-        R_ClearExternalPtr(ext);
-        return;
-    }
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
         token->refs -= 1;

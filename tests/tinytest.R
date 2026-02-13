@@ -12,16 +12,20 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       rscript <- file.path(R.home("bin"), "Rscript")
     }
 
-    runner_code <- paste(
-      "args <- commandArgs(trailingOnly = TRUE)",
-      "f <- args[[1]]",
-      "library(Rtinycc)",
-      "library(tinytest)",
-      "res <- tinytest::run_test_file(f)",
-      "n_fail <- sum(vapply(res, isFALSE, logical(1)))",
-      "quit(status = if (n_fail > 0L) 1L else 0L)",
-      sep = "; "
+    runner_file <- tempfile("tinytest-runner-", fileext = ".R")
+    writeLines(
+      c(
+        "args <- commandArgs(trailingOnly = TRUE)",
+        "f <- args[[1]]",
+        "library(Rtinycc)",
+        "library(tinytest)",
+        "res <- tinytest::run_test_file(f)",
+        "n_fail <- sum(vapply(res, isFALSE, logical(1)))",
+        "quit(status = if (n_fail > 0L) 1L else 0L)"
+      ),
+      con = runner_file
     )
+    on.exit(unlink(runner_file), add = TRUE)
 
     n_fail <- 0L
     fail_info <- list()
@@ -32,7 +36,7 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       log_file <- file.path(log_dir, paste0(basename(f), ".log"))
       status <- system2(
         rscript,
-        c("--vanilla", "-e", runner_code, f),
+        c("--vanilla", runner_file, f),
         stdout = log_file,
         stderr = log_file
       )
