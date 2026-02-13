@@ -4,16 +4,16 @@ Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc),
-providing both CLI access and a libtcc-backed in-memory compiler. It
-includes an experimental FFI inspired by [Bun’s
-FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
-predictable type conversions and pointer utilities. The package runs on
-unix-alikes ( windows may never be supported to subtle UCRT issues, so
-use WSL2) and focuses on embedding TinyCC and enabling JIT-compiled
-bindings directly from R. Combined with
-[treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
-provides C header parsers, it can be used to rapidly generate
+Rtinycc is an R interface to
+[`TinyCC`](https://github.com/TinyCC/tinycc), providing both CLI access
+and a libtcc-backed in-memory compiler. It includes an experimental FFI
+inspired by [Bun’s FFI](https://bun.com/docs/runtime/ffi) for binding C
+symbols with predictable type conversions and pointer utilities. The
+package runs on unix-alikes ( windows may never be supported due to
+subtle UCRT issues, so use WSL2) and focuses on embedding `TinyCC` and
+enabling JIT-compiled bindings directly from R. Combined with
+[`treesitter.c`](https://github.com/sounkou-bioinfo/treesitter.c), which
+provides `C` header parsers, it can be used to rapidly generate
 declarative bindings.
 
 ## How it works
@@ -71,6 +71,27 @@ Pointers from
 are tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array
 returns are copied into a fresh R vector; set `free = TRUE` only when
 the C function returns a `malloc`-owned buffer.
+
+Windows support (experimental) required solving several interacting
+problems. R 4.2+ on Windows uses the Universal CRT (`ucrtbase.dll`)
+while TinyCC’s default import-definition set is centered on `msvcrt`.
+The build system mitigates this by generating an import-definition file
+from `ucrtbase.dll` and storing it as `msvcrt.def`, so TinyCC’s
+`-lmsvcrt` lookup is redirected toward UCRT exports.
+
+This mitigation reduces cross-CRT allocation/free hazards, but it is not
+a universal guarantee for every CRT-facing symbol across all toolchains.
+In practice, we also avoid `printf`-family usage in core JIT smoke paths
+and prefer R API output (`Rf_warning()`, `Rprintf()`) for diagnostics.
+
+Async callbacks are currently disabled on Windows, and `fork()`-based
+parallelism is not available there. We also observed intermittent
+crashes when running
+[`tinytest::test_package()`](https://rdrr.io/pkg/tinytest/man/test_package.html)
+in a single long-lived R process on Windows; the same tests run
+one-by-one in fresh R processes do not reproduce the crash, which points
+to process-lifetime teardown/state interactions rather than a single
+isolated test failure.
 
 ## Installation
 
@@ -171,7 +192,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5da8d5672600"
+#> [1] "0x590f85e4faf0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -202,11 +223,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5da8d2f12b90>
+#> <pointer: 0x590f86720ea0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5da8d49d55d0>
+#> <pointer: 0x590f88593180>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5da8d2f12b90>
+#> <pointer: 0x590f86720ea0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -269,8 +290,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      29.8ms   32.2ms      25.1   53.98KB     32.9
-#> 2 Rbuiltin    543.1µs  577.4µs    1637.     9.05KB     28.0
+#> 1 Rtinycc        30ms   43.7ms      21.8   53.98KB     27.8
+#> 2 Rbuiltin      548µs  600.6µs    1568.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -299,8 +320,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    19.8µs   20.3µs    45582.    39.1KB     31.9
-#> 2 Rbuiltin_vec   16.7µs   17.3µs    53004.    78.2KB     74.3
+#> 1 Rtinycc_vec    20.1µs   28.5µs    36780.    39.1KB     25.8
+#> 2 Rbuiltin_vec     17µs   32.8µs    35805.    78.2KB     50.2
 ```
 
 ### Linking external libraries
@@ -363,7 +384,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5da8d71b8128 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @590f8b2d3db0 13 INTSXP g0c0 [MARK,REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -379,7 +400,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5da8d71b8128 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @590f8b2d3db0 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -443,9 +464,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R          599.77ms  599.8ms      1.67     847KB    5.00 
-#> 2 quickr       3.77ms    4.2ms    239.       782KB    4.09 
-#> 3 Rtinycc     55.46ms   57.1ms     17.6      782KB    0.503
+#> 1 R          603.19ms 603.19ms      1.66     847KB    4.97 
+#> 2 quickr       3.77ms   4.13ms    241.       782KB    4.10 
+#> 3 Rtinycc     55.42ms  57.41ms     17.6      782KB    0.502
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -474,15 +495,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5da8d3b3d920>
+#> <pointer: 0x590f88e6bbc0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5da8d3b3d920>
+#> <pointer: 0x590f88e6bbc0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5da8d4759910>
+#> <pointer: 0x590f96adad40>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5da8d4759910>
+#> <pointer: 0x590f96adad40>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -527,9 +548,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5da8d6c06f70>
+#> <pointer: 0x590f88829200>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5da8d6c06f70>
+#> <pointer: 0x590f88829200>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -829,7 +850,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5da8d88a4c00>
+#> <pointer: 0x590f8abe3640>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -884,11 +905,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5da8d51df850>
+#> <pointer: 0x590f9439cc40>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5da8d5ba45d0>
+#> <pointer: 0x590f888290c0>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -919,9 +940,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5da8e4100580>
+#> <pointer: 0x590f8abba1b0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5da8e4100580>
+#> <pointer: 0x590f8abba1b0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
