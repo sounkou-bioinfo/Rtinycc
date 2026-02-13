@@ -635,14 +635,13 @@ cb_ptr_async <- tcc_callback_ptr(cb_async)
 rc <- ffi_async$spawn_async_many(cb_async, cb_ptr_async, 1L, n_calls)
 
 deadline <- Sys.time() + 3
-start_time <- 
-while (hits < n_calls && Sys.time() < deadline) {
-  Sys.sleep(0.01)
+while (!tcc_callback_async_is_drained() && Sys.time() < deadline) {
+  tcc_callback_async_drain()
 }
 end <- Sys.time()
 list(ok = isTRUE(rc == 0L), hits = hits, expected = n_calls)
 tcc_callback_close(cb_async)
-start-end
+end - start
 ```
 
 ### SQLite: a complete example

@@ -27,6 +27,7 @@ static cb_task_t *cbq_tail = NULL;
 static CRITICAL_SECTION cbq_mutex;
 static int cbq_mutex_initialized = 0;
 static int cbq_initialized = 0;
+static int cbq_inflight = 0;
 static HWND cbq_message_window = NULL;
 static DWORD cbq_main_thread_id = 0;
 static volatile LONG cbq_drain_posted = 0;
@@ -108,12 +109,13 @@ static cb_task_t *cbq_pop_all(void) {
     return head;
 }
 
-static int cbq_pending_count(void) {
+static int cbq_work_count(void) {
     int n = 0;
     cbq_lock();
     for (cb_task_t *it = cbq_head; it != NULL; it = it->next) {
         n++;
     }
+    n += cbq_inflight;
     cbq_unlock();
     return n;
 }
@@ -164,8 +166,14 @@ static void cbq_drain_tasks(void) {
     cb_task_t *task = cbq_pop_all();
     while (task) {
         cb_task_t *next = task->next;
+        cbq_lock();
+        cbq_inflight += 1;
+        cbq_unlock();
         SEXP args = cb_task_to_args(task);
         RC_invoke_callback_internal(task->id, args);
+        cbq_lock();
+        cbq_inflight -= 1;
+        cbq_unlock();
         cbq_free_task(task);
         task = next;
     }
@@ -301,7 +309,7 @@ int RC_platform_async_pending(void) {
     if (!cbq_initialized) {
         return 0;
     }
-    return cbq_pending_count();
+    return cbq_work_count();
 }
 
 #else
@@ -326,6 +334,7 @@ typedef struct cb_task {
 static cb_task_t *cbq_head = NULL;
 static cb_task_t *cbq_tail = NULL;
 static pthread_mutex_t cbq_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int cbq_inflight = 0;
 static int cbq_pipe[2] = {-1, -1};
 static InputHandler *cbq_ih = NULL;
 static int cbq_initialized = 0;
@@ -382,12 +391,13 @@ static cb_task_t *cbq_pop_all(void) {
     return head;
 }
 
-static int cbq_pending_count(void) {
+static int cbq_work_count(void) {
     int n = 0;
     pthread_mutex_lock(&cbq_mutex);
     for (cb_task_t *it = cbq_head; it != NULL; it = it->next) {
         n++;
     }
+    n += cbq_inflight;
     pthread_mutex_unlock(&cbq_mutex);
     return n;
 }
@@ -456,9 +466,15 @@ static void cbq_drain_tasks(void) {
     cb_task_t *task = cbq_pop_all();
     while (task) {
         cb_task_t *next = task->next;
+        pthread_mutex_lock(&cbq_mutex);
+        cbq_inflight += 1;
+        pthread_mutex_unlock(&cbq_mutex);
         SEXP args = cb_task_to_args(task);
         int id = task->id;
         RC_invoke_callback_internal(id, args);
+        pthread_mutex_lock(&cbq_mutex);
+        cbq_inflight -= 1;
+        pthread_mutex_unlock(&cbq_mutex);
         cbq_free_task(task);
         task = next;
     }
@@ -558,7 +574,7 @@ int RC_platform_async_pending(void) {
     if (!cbq_initialized) {
         return 0;
     }
-    return cbq_pending_count();
+    return cbq_work_count();
 }
 
 #endif

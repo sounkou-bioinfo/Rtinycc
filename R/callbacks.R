@@ -348,8 +348,8 @@ tcc_callback_async_drain <- function() {
 
 #' Number of pending async callbacks
 #'
-#' Returns how many async callback invocations are currently queued and not yet
-#' executed on the main R thread.
+#' Returns how many async callback invocations are currently outstanding on the
+#' main-thread dispatcher (queued plus currently executing).
 #'
 #' @return Integer scalar >= 0
 #' @export
@@ -360,7 +360,7 @@ tcc_callback_async_pending <- function() {
 #' Whether the async callback queue is drained
 #'
 #' Convenience helper that returns \\code{TRUE} when no async callback is
-#' currently queued.
+#' currently outstanding on the dispatcher.
 #'
 #' @return Logical scalar
 #' @export

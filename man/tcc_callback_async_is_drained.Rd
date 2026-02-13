@@ -11,5 +11,5 @@ Logical scalar
 }
 \description{
 Convenience helper that returns \\code{TRUE} when no async callback is
-currently queued.
+currently outstanding on the dispatcher.
 }

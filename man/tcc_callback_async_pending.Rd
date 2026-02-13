@@ -10,6 +10,6 @@ tcc_callback_async_pending()
 Integer scalar >= 0
 }
 \description{
-Returns how many async callback invocations are currently queued and not yet
-executed on the main R thread.
+Returns how many async callback invocations are currently outstanding on the
+main-thread dispatcher (queued plus currently executing).
 }
