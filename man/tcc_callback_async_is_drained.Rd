@@ -10,6 +10,6 @@ tcc_callback_async_is_drained()
 Logical scalar
 }
 \description{
-Convenience helper that returns \\code{TRUE} when no async callback is
+Convenience helper that returns \code{TRUE} when no async callback is
 currently outstanding on the dispatcher.
 }
