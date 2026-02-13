@@ -128,6 +128,26 @@ typedef struct {
 /* Set during package unload to avoid teardown crashes on some platforms. */
 static volatile int g_rtinycc_shutting_down = 0;
 
+static int RC_is_heap_owned_tag(SEXP tag) {
+    if (TYPEOF(tag) != SYMSXP) {
+        return 0;
+    }
+    const char *name = CHAR(PRINTNAME(tag));
+    if (!name) {
+        return 0;
+    }
+    if (strcmp(name, "rtinycc_owned") == 0) {
+        return 1;
+    }
+    if (strncmp(name, "struct_", 7) == 0) {
+        return 1;
+    }
+    if (strncmp(name, "union_", 6) == 0) {
+        return 1;
+    }
+    return 0;
+}
+
 /**
  * Set shutdown flag from R (.onUnload).
  * Ownership: none.
@@ -147,6 +167,7 @@ SEXP RC_set_shutting_down(SEXP flag) {
  */
 static void RC_tcc_finalizer(SEXP ext) {
     if (g_rtinycc_shutting_down) {
+        R_ClearExternalPtr(ext);
         return;
     }
     void *ptr = R_ExternalPtrAddr(ext);
@@ -175,11 +196,19 @@ static void RC_null_finalizer(SEXP ext) {
  * Protection: none.
  */
 void RC_free_finalizer(SEXP ext) {
-    void *ptr = R_ExternalPtrAddr(ext);
-    if (ptr) {
-        free(ptr);
+    if (g_rtinycc_shutting_down) {
         R_ClearExternalPtr(ext);
+        return;
     }
+    void *ptr = R_ExternalPtrAddr(ext);
+    if (!ptr) {
+        return;
+    }
+    SEXP tag = R_ExternalPtrTag(ext);
+    if (RC_is_heap_owned_tag(tag)) {
+        free(ptr);
+    }
+    R_ClearExternalPtr(ext);
 }
 
 // ============================================================================
@@ -1306,6 +1335,10 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
  */
 // Finalizer for callback tokens
 static void RC_callback_finalizer(SEXP ext) {
+    if (g_rtinycc_shutting_down) {
+        R_ClearExternalPtr(ext);
+        return;
+    }
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
         // Release the preserved R function
@@ -1347,6 +1380,10 @@ static void RC_callback_finalizer(SEXP ext) {
  */
 // Finalizer for callback pointer handles
 static void RC_callback_ptr_finalizer(SEXP ext) {
+    if (g_rtinycc_shutting_down) {
+        R_ClearExternalPtr(ext);
+        return;
+    }
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
         token->refs -= 1;
