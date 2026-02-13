@@ -193,7 +193,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6381fc116150"
+#> [1] "0x555c160eff50"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -224,11 +224,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6381fb68d7f0>
+#> <pointer: 0x555c14290930>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6381fcab1e60>
+#> <pointer: 0x555c143c9550>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6381fb68d7f0>
+#> <pointer: 0x555c14290930>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -291,8 +291,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      29.6ms     30ms      33.0        0B     33.0
-#> 2 Rbuiltin    449.2µs    490µs    1847.         0B     66.0
+#> 1 Rtinycc      30.2ms   33.7ms      25.3   53.98KB     33.0
+#> 2 Rbuiltin    547.9µs  591.2µs    1605.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -321,8 +321,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.3µs   28.6µs    36089.    39.1KB     25.3
-#> 2 Rbuiltin_vec   17.1µs   17.7µs    53616.    78.2KB     80.5
+#> 1 Rtinycc_vec    20.2µs   28.7µs    35170.    39.1KB     24.6
+#> 2 Rbuiltin_vec   17.3µs   32.8µs    35580.    78.2KB     49.9
 ```
 
 ### Linking external libraries
@@ -385,7 +385,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @6381fdc9a630 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @555c17aa2b58 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -401,7 +401,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6381fdc9a630 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @555c17aa2b58 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -465,9 +465,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R           603.7ms 612.79ms      1.63     782KB    1.63 
-#> 2 quickr       3.77ms   4.21ms    237.       782KB    5.16 
-#> 3 Rtinycc     56.08ms  58.63ms     17.0      782KB    0.501
+#> 1 R          614.07ms 616.34ms      1.62     847KB     1.62
+#> 2 quickr       3.76ms   4.26ms    234.       782KB     4.63
+#> 3 Rtinycc     56.83ms  58.28ms     17.1      782KB     0
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -496,15 +496,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x638209754760>
+#> <pointer: 0x555c17caa650>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x638209754760>
+#> <pointer: 0x555c17caa650>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x638201782b10>
+#> <pointer: 0x555c16774700>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x638201782b10>
+#> <pointer: 0x555c16774700>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -549,9 +549,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x6381fc03c890>
+#> <pointer: 0x555c1b5b8920>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x6381fc03c890>
+#> <pointer: 0x555c1b5b8920>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -684,38 +684,55 @@ cb_async <- tcc_callback(
 )
 
 code_async <- '
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <pthread.h>
+#endif
 
 struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
 
+#ifdef _WIN32
+static DWORD WINAPI worker(LPVOID data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  return 0;
+}
+#else
 static void* worker(void* data) {
   struct task* t = (struct task*) data;
   t->cb(t->ctx, t->value);
   return NULL;
 }
+#endif
 
 int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   if (!cb || !ctx) return -1;
-  const int n = 100;
-  struct task tasks[100];
-  pthread_t th[100];
-  for (int i = 0; i < n; i++) {
-    tasks[i].cb = cb;
-    tasks[i].ctx = ctx;
-    tasks[i].value = value;
-    if (pthread_create(&th[i], NULL, worker, &tasks[i]) != 0) {
-      for (int j = 0; j < i; j++) pthread_join(th[j], NULL);
-      return -2;
-    }
-  }
-  for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
+  struct task t;
+  t.cb = cb;
+  t.ctx = ctx;
+  t.value = value;
+#ifdef _WIN32
+  HANDLE th = CreateThread(NULL, 0, worker, &t, 0, NULL);
+  if (!th) return -2;
+  WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+#else
+  pthread_t th;
+  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;
+  pthread_join(th, NULL);
+#endif
   return 0;
 }
 '
 
 ffi_async <- tcc_ffi() |>
-  tcc_source(code_async) |>
-  tcc_library("pthread") |>
+  tcc_source(code_async)
+if (.Platform$OS.type != "windows") {
+  ffi_async <- ffi_async |>
+    tcc_library("pthread")
+}
+ffi_async <- ffi_async |>
   tcc_bind(
     spawn_async = list(
       args = list("callback_async:void(int)", "ptr", "i32"),
@@ -728,7 +745,7 @@ ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
 #> [1] 0
 tcc_callback_async_drain()
 hits
-#> [1] 200
+#> [1] 2
 tcc_callback_close(cb_async)
 ```
 
@@ -886,7 +903,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6381ffb6d010>
+#> <pointer: 0x555c24253ca0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -941,11 +958,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x6381ff61e540>
+#> <pointer: 0x555c148d6150>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x638200965200>
+#> <pointer: 0x555c2419a430>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -976,9 +993,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x6381fc0bbfb0>
+#> <pointer: 0x555c199decd0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x6381fc0bbfb0>
+#> <pointer: 0x555c199decd0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
