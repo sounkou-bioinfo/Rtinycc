@@ -27,6 +27,41 @@ static cb_task_t *cbq_tail = NULL;
 static CRITICAL_SECTION cbq_mutex;
 static int cbq_mutex_initialized = 0;
 static int cbq_initialized = 0;
+static HWND cbq_message_window = NULL;
+static DWORD cbq_main_thread_id = 0;
+static volatile LONG cbq_drain_posted = 0;
+
+#ifndef HWND_MESSAGE
+#define HWND_MESSAGE ((HWND)-3)
+#endif
+
+#define WM_RTINYCC_ASYNC_DRAIN (WM_USER + 201)
+#define RTINYCC_ASYNC_WINDOW_CLASS "RtinyccAsyncDispatcherWindow"
+
+static void cbq_drain_tasks(void);
+
+static LRESULT CALLBACK cbq_window_proc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    (void) hwnd;
+    (void) wParam;
+    (void) lParam;
+    if (uMsg == WM_RTINYCC_ASYNC_DRAIN) {
+        InterlockedExchange(&cbq_drain_posted, 0);
+        cbq_drain_tasks();
+        return 0;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+static void cbq_post_drain_message(void) {
+    if (!cbq_message_window) {
+        return;
+    }
+    if (InterlockedExchange(&cbq_drain_posted, 1) == 0) {
+        if (!PostMessage(cbq_message_window, WM_RTINYCC_ASYNC_DRAIN, 0, 0)) {
+            InterlockedExchange(&cbq_drain_posted, 0);
+        }
+    }
+}
 
 static char *cbq_strdup(const char *s) {
     if (!s) {
@@ -156,9 +191,41 @@ int RC_platform_async_init(void) {
     if (cbq_initialized) {
         return 0;
     }
+
+    WNDCLASSA wndclass;
+    memset(&wndclass, 0, sizeof(wndclass));
+    wndclass.lpfnWndProc = cbq_window_proc;
+    wndclass.hInstance = GetModuleHandle(NULL);
+    wndclass.lpszClassName = RTINYCC_ASYNC_WINDOW_CLASS;
+
+    if (!RegisterClassA(&wndclass)) {
+        DWORD err = GetLastError();
+        if (err != ERROR_CLASS_ALREADY_EXISTS) {
+            return -4;
+        }
+    }
+
+    cbq_message_window = CreateWindowA(
+        RTINYCC_ASYNC_WINDOW_CLASS,
+        "RtinyccAsyncDispatcher",
+        0,
+        0,
+        0,
+        0,
+        0,
+        HWND_MESSAGE,
+        NULL,
+        wndclass.hInstance,
+        NULL
+    );
+    if (!cbq_message_window) {
+        return -4;
+    }
+
     InitializeCriticalSection(&cbq_mutex);
     cbq_mutex_initialized = 1;
     cbq_initialized = 1;
+    cbq_main_thread_id = GetCurrentThreadId();
     return 0;
 }
 
@@ -199,6 +266,11 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     }
 
     cbq_push(task);
+    if (GetCurrentThreadId() == cbq_main_thread_id) {
+        cbq_drain_tasks();
+    } else {
+        cbq_post_drain_message();
+    }
     return 0;
 }
 

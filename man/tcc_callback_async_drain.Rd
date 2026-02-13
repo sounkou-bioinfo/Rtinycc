@@ -10,6 +10,7 @@ tcc_callback_async_drain()
 NULL (invisible)
 }
 \description{
-This is mainly useful for tests; normally callbacks are executed by the
-event loop once scheduled.
+This is mainly useful for tests or when you need deterministic flushing in
+non-interactive code paths. Normally callbacks are drained automatically by
+the event loop dispatcher.
 }

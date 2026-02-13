@@ -299,8 +299,12 @@ parse_callback_type <- function(type) {
 
 #' Enable async callback dispatcher (main-thread queue)
 #'
-#' Initializes an event-loop handler so callbacks can be scheduled from
+#' Initializes the async callback dispatcher so callbacks can be scheduled from
 #' non-R threads and executed on the main R thread.
+#'
+#' On Unix-like platforms, this registers an event-loop input handler. On
+#' Windows, this sets up a hidden message-window dispatcher. In both cases,
+#' scheduled callbacks are drained automatically when the R event loop runs.
 #'
 #' @return NULL (invisible)
 #' @export
@@ -331,8 +335,9 @@ tcc_callback_async_schedule <- function(callback, args = list()) {
 
 #' Drain the async callback queue
 #'
-#' This is mainly useful for tests; normally callbacks are executed by the
-#' event loop once scheduled.
+#' This is mainly useful for tests or when you need deterministic flushing in
+#' non-interactive code paths. Normally callbacks are drained automatically by
+#' the event loop dispatcher.
 #'
 #' @return NULL (invisible)
 #' @export
