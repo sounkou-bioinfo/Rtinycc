@@ -29,8 +29,9 @@ cat(sprintf("symbol 'forty_two' address: %f\n", addr))
 cat(sprintf("address %% 8: %f\n", addr %% 8))
 expect_equal(tcc_call_symbol(state, "forty_two", return = "int"), 42L)
 # CLI compile to object
-# forty_two.c uses stdio.h / printf which are UCRT-inline on Windows,
-# so skip this CLI test there.
+# On Windows, stdio/printf symbol resolution can vary across
+# TinyCC+MinGW+UCRT combinations, so keep this smoke test focused on
+# in-memory JIT behavior and skip the CLI object path there.
 if (.Platform$OS.type != "windows") {
   src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
   expect_true(

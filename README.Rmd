@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes ( windows may never be supported to subtle UCRT issues, so use WSL2) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [`TinyCC`](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes ( windows may never be supported due to subtle UCRT issues, so use WSL2) and focuses on embedding `TinyCC` and enabling JIT-compiled bindings directly from R. Combined with [`treesitter.c`](https://github.com/sounkou-bioinfo/treesitter.c), which provides `C` header parsers, it can be used to rapidly generate declarative bindings.
 
 
 ## How it works
@@ -57,20 +57,7 @@ with `RC_libtcc_add_host_symbols()`, which registers package-internal C
 functions via `tcc_add_symbol()` before relocation. Any new C function
 referenced by generated TCC code must be added there.
 
-<!--
-Windows support (experimental) required solving several interacting
-problems. R 4.2+ links against the Universal CRT (`ucrtbase.dll`) while
-TCC defaults to `msvcrt.dll`; mixing heaps across the two CRTs crashes on
-`free()`. The build system works around this by generating a `.def` file
-from `ucrtbase.dll` and naming it `msvcrt.def`, so all CRT symbols resolve
-from the same runtime. Several CRT functions commonly used in C code
-(`printf`, `snprintf`, `sprintf`) are inline functions in UCRT headers
-rather than direct DLL exports, so TCC's JIT linker cannot resolve them.
-The package's own codegen avoids these functions; user code that needs
-formatted output should use R API functions instead (e.g.
-`Rf_warning()`, `Rprintf()`). Async callbacks and `fork()`-based
-parallelism are not available on Windows.
--->
+
 
 Ownership semantics are explicit. Pointers from `tcc_malloc()` are tagged `rtinycc_owned` and can be released with `tcc_free()` (or by their R
 finalizer). Generated struct constructors use a struct-specific tag
@@ -79,6 +66,16 @@ finalizer). Generated struct constructors use a struct-specific tag
 tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array returns are
 copied into a fresh R vector; set `free = TRUE` only when the C function
 returns a `malloc`-owned buffer.
+
+
+
+Windows support (experimental) required solving several interacting problems. R 4.2+ on Windows uses the Universal CRT (`ucrtbase.dll`) while TinyCC's default import-definition set is centered on `msvcrt`. The build system mitigates this by generating an import-definition file from `ucrtbase.dll` and storing it as `msvcrt.def`, so TinyCC's `-lmsvcrt` lookup is redirected toward UCRT exports.
+
+This mitigation reduces cross-CRT allocation/free hazards, but it is not a universal guarantee for every CRT-facing symbol across all toolchains. In practice, we also avoid `printf`-family usage in core JIT smoke paths and prefer R API output (`Rf_warning()`, `Rprintf()`) for diagnostics.
+
+Async callbacks are currently disabled on Windows, and `fork()`-based parallelism is not available there. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
+
+
 
 ## Installation
 

@@ -99,12 +99,16 @@ if [ -d "$TINYCC_SRC" ]; then
         echo "WARNING: R.dll not found; TCC JIT may not resolve R symbols"
     fi
 
-    # Generate ucrt.def to replace msvcrt.def.
-    # R 4.2+ uses UCRT; TCC defaults to msvcrt.  If JIT code calls
-    # calloc() from msvcrt and the host frees with UCRT's free(),
-    # the heap mismatch causes a crash.  Replacing msvcrt.def with
-    # ucrt.def (named msvcrt.def so TCC picks it up automatically)
-    # ensures JIT code uses the same CRT as R.
+    # Replace TinyCC's default msvcrt import definition with one
+    # generated from ucrtbase.dll (saved as msvcrt.def so TinyCC
+    # still finds it via -lmsvcrt).
+    #
+    # Why: R 4.2+ on Windows uses UCRT. Redirecting TinyCC's msvcrt
+    # import resolution toward UCRT reduces cross-CRT allocation/free
+    # hazards for symbols that are exported by ucrtbase.dll.
+    #
+    # Scope note: this does not guarantee that every CRT-facing symbol
+    # used by JIT code resolves identically across toolchains.
     UCRT_DLL=$(find /c/Windows/System32 -maxdepth 1 -iname "ucrtbase.dll" 2>/dev/null | head -n 1)
     if [ -n "$UCRT_DLL" ]; then
         echo "Generating ucrt.def from $UCRT_DLL ..."
