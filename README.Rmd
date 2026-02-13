@@ -532,7 +532,7 @@ tcc_callback_close(cb_err)
 
 ### Async callbacks
 
-For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread by the async dispatcher. Call `tcc_callback_async_enable()` once before use.
+For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread by the async dispatcher. Call `tcc_callback_async_enable()` once before use. In this example we spawn 200 threads in C that increment an R global variable.
 
 
 
