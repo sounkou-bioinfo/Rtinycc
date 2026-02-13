@@ -193,7 +193,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6529c6db5680"
+#> [1] "0x5a6559558550"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -224,11 +224,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6529c5f382d0>
+#> <pointer: 0x5a65591d8320>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6529c4070550>
+#> <pointer: 0x5a65585e6080>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6529c5f382d0>
+#> <pointer: 0x5a65591d8320>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -291,8 +291,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      29.4ms   59.7ms      19.7   53.98KB     25.0
-#> 2 Rbuiltin    552.2µs  598.8µs    1585.     9.05KB     28.0
+#> 1 Rtinycc      29.9ms   45.3ms      19.1   53.98KB     24.8
+#> 2 Rbuiltin    557.2µs  596.3µs    1590.     9.05KB     26.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -321,8 +321,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.1µs   20.6µs    45721.    39.1KB     32.0
-#> 2 Rbuiltin_vec   16.9µs   17.7µs    56192.    78.2KB     78.8
+#> 1 Rtinycc_vec    19.8µs   28.2µs    36633.    39.1KB     25.7
+#> 2 Rbuiltin_vec     17µs   17.7µs    52108.    78.2KB     73.1
 ```
 
 ### Linking external libraries
@@ -385,7 +385,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @6529c690e3c0 13 INTSXP g0c0 [MARK,REF(65535)]  1 : 100 (compact)
+#> @5a655cc49f68 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -401,7 +401,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6529c690e3c0 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
+#> @5a655cc49f68 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -465,9 +465,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R           601.4ms  601.4ms      1.66     847KB    4.99 
-#> 2 quickr        3.8ms    4.2ms    237.       782KB    4.11 
-#> 3 Rtinycc      55.5ms   57.4ms     17.4      782KB    0.513
+#> 1 R          626.92ms 626.92ms      1.60     847KB    4.79 
+#> 2 quickr       3.75ms   4.15ms    240.       782KB    4.10 
+#> 3 Rtinycc      55.4ms  57.38ms     17.5      782KB    0.514
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -496,15 +496,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x6529c44f14b0>
+#> <pointer: 0x5a655d742650>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x6529c44f14b0>
+#> <pointer: 0x5a655d742650>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x6529c8a98c50>
+#> <pointer: 0x5a655b85a4d0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x6529c8a98c50>
+#> <pointer: 0x5a655b85a4d0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -549,9 +549,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x6529c45406c0>
+#> <pointer: 0x5a655cbda750>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x6529c45406c0>
+#> <pointer: 0x5a655cbda750>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -668,9 +668,7 @@ For thread-safe scheduling from worker threads, use
 `callback_async:<signature>` in
 [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md).
 The callback is enqueued from any thread and executed on the main R
-thread when you call
-[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md).
-Call
+thread by the async dispatcher. Call
 [`tcc_callback_async_enable()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_enable.md)
 once before use.
 
@@ -743,7 +741,10 @@ ffi_async <- ffi_async |>
 
 ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
 #> [1] 0
-tcc_callback_async_drain()
+deadline <- Sys.time() + 1
+while (hits < 2L && Sys.time() < deadline) {
+  Sys.sleep(0.01)
+}
 hits
 #> [1] 2
 tcc_callback_close(cb_async)
@@ -903,7 +904,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6529cacf55a0>
+#> <pointer: 0x5a6568542e60>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -958,11 +959,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x6529caf91a80>
+#> <pointer: 0x5a655a761510>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x6529cb2e4130>
+#> <pointer: 0x5a6561359e30>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -993,9 +994,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x6529c421d170>
+#> <pointer: 0x5a655912d440>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x6529c421d170>
+#> <pointer: 0x5a655912d440>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
