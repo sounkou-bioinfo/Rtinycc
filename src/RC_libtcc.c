@@ -1206,7 +1206,7 @@ static int RC_callback_find_free_slot() {
  */
 SEXP RC_callback_async_init() {
     if (!RC_platform_async_is_supported()) {
-        Rf_error("Async callbacks are not supported on Windows");
+        Rf_error("Async callbacks are not supported on this platform");
     }
     if (RC_platform_async_init() != 0) {
         Rf_error("Failed to initialize async callback queue");
@@ -1222,7 +1222,7 @@ SEXP RC_callback_async_init() {
  */
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     if (!RC_platform_async_is_supported()) {
-        Rf_error("Async callbacks are not supported on Windows");
+        Rf_error("Async callbacks are not supported on this platform");
     }
     if (!Rf_inherits(callback_ext, "tcc_callback")) {
         Rf_error("Expected a 'tcc_callback' external pointer");
@@ -1286,7 +1286,7 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
  */
 SEXP RC_callback_async_drain() {
     if (!RC_platform_async_is_supported()) {
-        Rf_error("Async callbacks are not supported on Windows");
+        Rf_error("Async callbacks are not supported on this platform");
     }
     RC_platform_async_drain();
     return R_NilValue;

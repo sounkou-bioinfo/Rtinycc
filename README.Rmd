@@ -73,7 +73,7 @@ Windows support (experimental) required solving several interacting problems. R 
 
 This mitigation reduces cross-CRT allocation/free hazards, but it is not a universal guarantee for every CRT-facing symbol across all toolchains. In practice, we also avoid `printf`-family usage in core JIT smoke paths and prefer R API output (`Rf_warning()`, `Rprintf()`) for diagnostics.
 
-Async callbacks are currently disabled on Windows, and `fork()`-based parallelism is not available there. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
+Async callbacks on Windows use a queued model and execute when `tcc_callback_async_drain()` is called from the main thread. `fork()`-based parallelism is still not available there. We also observed intermittent crashes when running `tinytest::test_package()` in a single long-lived R process on Windows; the same tests run one-by-one in fresh R processes do not reproduce the crash, which points to process-lifetime teardown/state interactions rather than a single isolated test failure.
 
 
 

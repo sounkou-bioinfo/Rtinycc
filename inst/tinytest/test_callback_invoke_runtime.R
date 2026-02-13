@@ -129,6 +129,44 @@ expect_true(
 )
 close_if_valid(cb_closed)
 
+# Test: async scheduling + explicit drain (cross-platform)
+tcc_callback_async_enable()
+
+hits_basic <- 0L
+cb_async_basic <- tcc_callback(
+  function(x) {
+    hits_basic <<- hits_basic + x
+    NULL
+  },
+  signature = "void (*)(int)"
+)
+cb_ptr_async_basic <- tcc_callback_ptr(cb_async_basic)
+
+code_async_basic <- "\n#define _Complex\n\nint call_async(void (*cb)(void* ctx, int), void* ctx, int value) {\n  if (!cb || !ctx) return -1;\n  cb(ctx, value);\n  return 0;\n}\n"
+
+ffi_async_basic <- tcc_ffi() |>
+  tcc_source(code_async_basic) |>
+  tcc_bind(
+    call_async = list(
+      args = list("callback_async:void(int)", "ptr", "i32"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+rc_basic <- ffi_async_basic$call_async(cb_async_basic, cb_ptr_async_basic, 3L)
+expect_true(
+  isTRUE(rc_basic == 0L && hits_basic == 0L),
+  info = "Async callback is queued before drain"
+)
+
+tcc_callback_async_drain()
+expect_true(
+  isTRUE(hits_basic == 3L),
+  info = "Async callback runs when queue is drained"
+)
+close_if_valid(cb_async_basic)
+
 # Test: async scheduling from worker thread (Unix-like only)
 if (.Platform$OS.type != "windows") {
   tcc_callback_async_enable()
