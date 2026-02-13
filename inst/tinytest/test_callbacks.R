@@ -204,7 +204,7 @@ expect_false(tcc_callback_valid(cb), info = "All callbacks cleaned up")
 sig_cstr <- list(return_type = "const char*", arg_types = c("const char*"))
 tramp_cstr <- Rtinycc:::generate_trampoline("tramp_cstr", sig_cstr)
 expect_true(
-  grepl("? mkString", tramp_cstr, fixed = TRUE),
+  grepl("? Rf_ScalarString(Rf_mkCharCE", tramp_cstr, fixed = TRUE),
   info = "Trampoline guards NULL cstring args"
 )
 expect_true(

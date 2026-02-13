@@ -73,6 +73,8 @@ SEXP RC_cleanup_callbacks();
 SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
+SEXP RC_callback_async_pending();
+SEXP RC_callback_async_is_drained();
 int RC_callback_async_schedule_c(int id, int n_args, const void *args);
 
 
@@ -144,6 +146,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_callback_async_init", (DL_FUNC) &RC_callback_async_init, 0},
     {"RC_callback_async_schedule", (DL_FUNC) &RC_callback_async_schedule, 2},
     {"RC_callback_async_drain", (DL_FUNC) &RC_callback_async_drain, 0},
+    {"RC_callback_async_pending", (DL_FUNC) &RC_callback_async_pending, 0},
+    {"RC_callback_async_is_drained", (DL_FUNC) &RC_callback_async_is_drained, 0},
     
     {NULL, NULL, 0}
 };

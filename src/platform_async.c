@@ -108,6 +108,16 @@ static cb_task_t *cbq_pop_all(void) {
     return head;
 }
 
+static int cbq_pending_count(void) {
+    int n = 0;
+    cbq_lock();
+    for (cb_task_t *it = cbq_head; it != NULL; it = it->next) {
+        n++;
+    }
+    cbq_unlock();
+    return n;
+}
+
 static SEXP cb_task_to_args(cb_task_t *task) {
     if (task->n_args <= 0) {
         return R_NilValue;
@@ -287,6 +297,13 @@ void RC_platform_async_drain(void) {
     cbq_drain_tasks();
 }
 
+int RC_platform_async_pending(void) {
+    if (!cbq_initialized) {
+        return 0;
+    }
+    return cbq_pending_count();
+}
+
 #else
 
 #include <R_ext/eventloop.h>
@@ -363,6 +380,16 @@ static cb_task_t *cbq_pop_all(void) {
     cbq_tail = NULL;
     pthread_mutex_unlock(&cbq_mutex);
     return head;
+}
+
+static int cbq_pending_count(void) {
+    int n = 0;
+    pthread_mutex_lock(&cbq_mutex);
+    for (cb_task_t *it = cbq_head; it != NULL; it = it->next) {
+        n++;
+    }
+    pthread_mutex_unlock(&cbq_mutex);
+    return n;
 }
 
 /**
@@ -525,6 +552,13 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
  */
 void RC_platform_async_drain(void) {
     cbq_drain_tasks();
+}
+
+int RC_platform_async_pending(void) {
+    if (!cbq_initialized) {
+        return 0;
+    }
+    return cbq_pending_count();
 }
 
 #endif

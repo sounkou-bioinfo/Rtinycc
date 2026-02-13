@@ -34,7 +34,7 @@ rc <- Rtinycc:::generate_c_return("result", "f64")
 expect_true(grepl("ScalarReal", rc))
 
 rc <- Rtinycc:::generate_c_return("result", "cstring")
-expect_true(grepl("mkString", rc))
+expect_true(grepl("Rf_mkCharCE", rc))
 
 # Test 4: Generate full wrapper function
 wrapper <- Rtinycc:::generate_c_wrapper(

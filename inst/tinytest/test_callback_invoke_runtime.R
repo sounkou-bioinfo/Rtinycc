@@ -164,10 +164,25 @@ ffi_async_basic <- tcc_ffi() |>
 
 rc_basic <- ffi_async_basic$call_async(cb_async_basic, cb_ptr_async_basic, 3L)
 
+pending_basic <- tcc_callback_async_pending()
+drained_basic <- tcc_callback_async_is_drained()
+expect_true(
+  isTRUE(pending_basic >= 0L),
+  info = "Pending async queue count is available"
+)
+expect_true(
+  is.logical(drained_basic) && length(drained_basic) == 1,
+  info = "Drained-status API returns a logical scalar"
+)
+
 ok_basic <- wait_until(function() hits_basic == 3L)
 expect_true(
   isTRUE(rc_basic == 0L && ok_basic),
   info = "Async callback auto-dispatches without explicit drain"
+)
+expect_true(
+  isTRUE(tcc_callback_async_pending() == 0L && tcc_callback_async_is_drained()),
+  info = "Queue reports drained after callback execution"
 )
 close_if_valid(cb_async_basic)
 

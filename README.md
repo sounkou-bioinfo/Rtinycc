@@ -191,7 +191,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x63a070f8f650"
+#> [1] "0x572034ef7790"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -222,11 +222,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x63a073ba0490>
+#> <pointer: 0x572034d4fc80>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x63a070ff06b0>
+#> <pointer: 0x5720379fa280>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x63a073ba0490>
+#> <pointer: 0x572034d4fc80>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -289,8 +289,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      28.8ms   30.5ms      26.2   53.98KB     33.6
-#> 2 Rbuiltin    549.6µs  586.9µs    1598.     9.05KB     28.0
+#> 1 Rtinycc      29.2ms   34.1ms      22.7   53.98KB     30.2
+#> 2 Rbuiltin    539.9µs  575.9µs    1640.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -319,8 +319,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.1µs   20.7µs    43997.    39.1KB     30.8
-#> 2 Rbuiltin_vec     17µs   17.7µs    54677.    78.2KB     76.7
+#> 1 Rtinycc_vec    20.1µs   28.6µs    36942.    39.1KB     25.9
+#> 2 Rbuiltin_vec   17.4µs     33µs    35345.    78.2KB     49.6
 ```
 
 ### Linking external libraries
@@ -383,7 +383,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @63a0750a4a70 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5720397f4cd0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -399,7 +399,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @63a0750a4a70 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5720397f4cd0 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -463,9 +463,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R           601.1ms 601.07ms      1.66     847KB    4.99 
-#> 2 quickr        3.7ms   4.11ms    243.       782KB    4.09 
-#> 3 Rtinycc      55.3ms  57.26ms     17.5      782KB    0.513
+#> 1 R          601.86ms 601.86ms      1.66     847KB    4.98 
+#> 2 quickr       3.68ms   4.13ms    239.       782KB    4.11 
+#> 3 Rtinycc      55.3ms  57.13ms     17.6      782KB    0.504
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -493,15 +493,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x63a081375040>
+#> <pointer: 0x57203a5c5450>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x63a081375040>
+#> <pointer: 0x57203a5c5450>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x63a0802cda90>
+#> <pointer: 0x57203a5e8510>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x63a0802cda90>
+#> <pointer: 0x57203a5e8510>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -546,9 +546,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x63a0811744c0>
+#> <pointer: 0x572036b17c60>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x63a0811744c0>
+#> <pointer: 0x572036b17c60>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -668,7 +668,7 @@ tcc_callback_async_enable()
 
 hits <- 0L
 cb_async <- tcc_callback(
-  function(x) { hits <<- hits + x; NULL },
+  function(x) { Sys.sleep(0.001) ; hits <<- hits + x; NULL },
   signature = "void (*)(int)"
 )
 
@@ -757,13 +757,16 @@ ffi_async <- ffi_async |>
   tcc_compile()
 
 n_calls <- 200L
+start <- Sys.time()
 cb_ptr_async <- tcc_callback_ptr(cb_async)
 rc <- ffi_async$spawn_async_many(cb_async, cb_ptr_async, 1L, n_calls)
 
 deadline <- Sys.time() + 3
+start_time <- 
 while (hits < n_calls && Sys.time() < deadline) {
   Sys.sleep(0.01)
 }
+end <- Sys.time()
 list(ok = isTRUE(rc == 0L), hits = hits, expected = n_calls)
 #> $ok
 #> [1] TRUE
@@ -774,6 +777,8 @@ list(ok = isTRUE(rc == 0L), hits = hits, expected = n_calls)
 #> $expected
 #> [1] 200
 tcc_callback_close(cb_async)
+start-end
+#> Time difference of -0.2253602 secs
 ```
 
 ### SQLite: a complete example
@@ -927,7 +932,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x63a080689250>
+#> <pointer: 0x5720357c5220>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -980,11 +985,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x63a0715b2b30>
+#> <pointer: 0x572039870c60>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x63a072a19f80>
+#> <pointer: 0x5720372bf280>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1013,9 +1018,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x63a07fe89b20>
+#> <pointer: 0x57203e5aca30>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x63a07fe89b20>
+#> <pointer: 0x57203e5aca30>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

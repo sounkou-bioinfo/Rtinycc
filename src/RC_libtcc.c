@@ -75,6 +75,8 @@ static int RC_callback_find_free_slot();
 SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
+SEXP RC_callback_async_pending();
+SEXP RC_callback_async_is_drained();
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 static void RC_callback_finalizer(SEXP ext);
 static void RC_callback_ptr_finalizer(SEXP ext);
@@ -1300,6 +1302,28 @@ SEXP RC_callback_async_drain() {
     }
     RC_platform_async_drain();
     return R_NilValue;
+}
+
+/**
+ * Return number of pending async callbacks in queue.
+ * @return Integer scalar >= 0.
+ */
+SEXP RC_callback_async_pending() {
+    if (!RC_platform_async_is_supported()) {
+        Rf_error("Async callbacks are not supported on this platform");
+    }
+    return Rf_ScalarInteger(RC_platform_async_pending());
+}
+
+/**
+ * Return TRUE when no async callbacks are queued.
+ * @return Logical scalar.
+ */
+SEXP RC_callback_async_is_drained() {
+    if (!RC_platform_async_is_supported()) {
+        Rf_error("Async callbacks are not supported on this platform");
+    }
+    return Rf_ScalarLogical(RC_platform_async_pending() == 0);
 }
 
 /**

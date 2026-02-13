@@ -346,6 +346,28 @@ tcc_callback_async_drain <- function() {
   invisible(NULL)
 }
 
+#' Number of pending async callbacks
+#'
+#' Returns how many async callback invocations are currently queued and not yet
+#' executed on the main R thread.
+#'
+#' @return Integer scalar >= 0
+#' @export
+tcc_callback_async_pending <- function() {
+  .Call("RC_callback_async_pending")
+}
+
+#' Whether the async callback queue is drained
+#'
+#' Convenience helper that returns \\code{TRUE} when no async callback is
+#' currently queued.
+#'
+#' @return Logical scalar
+#' @export
+tcc_callback_async_is_drained <- function() {
+  .Call("RC_callback_async_is_drained")
+}
+
 #' Generate trampoline code for a callback argument
 #'
 #' @param trampoline_name Name of the trampoline function

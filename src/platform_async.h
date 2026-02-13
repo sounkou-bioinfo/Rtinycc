@@ -70,6 +70,14 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args);
  */
 void RC_platform_async_drain(void);
 
+/**
+ * Return number of callbacks currently queued (not yet drained).
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
+int RC_platform_async_pending(void);
+
 #ifdef __cplusplus
 }
 #endif
