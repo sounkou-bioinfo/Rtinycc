@@ -1,9 +1,22 @@
 library(Rtinycc)
-
 if (requireNamespace("tinytest", quietly = TRUE)) {
   if (.Platform$OS.type != "windows") {
     tinytest::test_package("Rtinycc")
   } else {
+    cleanup_subprocess_artifacts <- FALSE
+    artifact_dir <- file.path(getwd(), "tinytest-subprocess-artifacts")
+    dir.create(artifact_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(
+      {
+        if (isTRUE(cleanup_subprocess_artifacts)) {
+          unlink(artifact_dir, recursive = TRUE, force = TRUE)
+        } else {
+          message("Keeping tinytest subprocess artifacts in: ", artifact_dir)
+        }
+      },
+      add = TRUE
+    )
+
     test_dir <- system.file("tinytest", package = "Rtinycc")
     files <- sort(list.files(test_dir, pattern = "^test_.*\\.[Rr]$", full.names = TRUE))
 
@@ -12,7 +25,7 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       rscript <- file.path(R.home("bin"), "Rscript")
     }
 
-    runner_file <- file.path(getwd(), "tinytest-subprocess-runner.R")
+    runner_file <- file.path(artifact_dir, "tinytest-subprocess-runner.R")
     writeLines(
       c(
         "args <- commandArgs(trailingOnly = TRUE)",
@@ -36,11 +49,9 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       ),
       con = runner_file
     )
-    on.exit(unlink(runner_file), add = TRUE)
-
     n_fail <- 0L
     fail_info <- list()
-    log_dir <- file.path(getwd(), "tinytest-subprocess-logs")
+    log_dir <- file.path(artifact_dir, "logs")
     dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
     for (f in files) {
@@ -78,5 +89,7 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       }
       stop(sprintf("%d tinytest files failed or crashed (logs in %s)", n_fail, log_dir), call. = FALSE)
     }
+
+    cleanup_subprocess_artifacts <- TRUE
   }
 }
