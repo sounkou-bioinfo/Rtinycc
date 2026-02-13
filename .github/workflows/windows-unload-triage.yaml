@@ -1,0 +1,138 @@
+name: windows-unload-triage
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [windows_segfault]
+
+permissions: read-all
+
+jobs:
+  unload-triage:
+    runs-on: windows-latest
+    env:
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::tinytest any::jsonlite
+          needs: check
+
+      - name: Install package
+        shell: bash
+        run: |
+          set -euo pipefail
+          R CMD INSTALL --preclean --no-multiarch .
+
+      - name: Discover tinytest files
+        shell: bash
+        run: |
+          set -euo pipefail
+          Rscript - <<'RS'
+          files <- sort(list.files("inst/tinytest", pattern = "^test_.*\\.R$", full.names = TRUE))
+          dir.create("_triage", showWarnings = FALSE)
+          writeLines(files, "_triage/test-files.txt")
+          cat("Discovered", length(files), "test files\n")
+          writeLines(sprintf("%03d %s", seq_along(files), files), "_triage/test-files-numbered.txt")
+          RS
+          cat _triage/test-files-numbered.txt
+
+      - name: Baseline - full tinytest in one process
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p _triage
+          RC=0
+          Rscript -e 'tinytest::test_package("Rtinycc")' > _triage/full-one-process.log 2>&1 || RC=$?
+          echo "$RC" > _triage/full-one-process.exit
+          echo "full-one-process exit code: $RC"
+
+      - name: Isolation - one file per process
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p _triage
+          : > _triage/per-file-status.tsv
+          FAIL=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            log="_triage/per-file-$(basename "$f" .R).log"
+            rc=0
+            Rscript "$f" > "$log" 2>&1 || rc=$?
+            printf "%s\t%s\n" "$rc" "$f" >> _triage/per-file-status.tsv
+            if [ "$rc" -ne 0 ]; then
+              FAIL=1
+            fi
+          done < _triage/test-files.txt
+          echo "$FAIL" > _triage/per-file.any-fail
+          cat _triage/per-file-status.tsv
+
+      - name: Prefix accumulation - find first crashing prefix
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p _triage
+          mapfile -t FILES < _triage/test-files.txt
+          : > _triage/prefix-status.tsv
+          first_bad=0
+
+          for ((i=1; i<=${#FILES[@]}; i++)); do
+            script="_triage/prefix-${i}.R"
+            log="_triage/prefix-${i}.log"
+            {
+              echo 'options(error = function(e) { cat("ERROR:", conditionMessage(e), "\\n"); q(status = 101L) })'
+              echo 'library(tinytest)'
+              echo 'library(Rtinycc)'
+              for ((j=0; j<i; j++)); do
+                printf 'source("%s", chdir = TRUE)\n' "${FILES[$j]}"
+              done
+              echo 'invisible(gc())'
+            } > "$script"
+
+            rc=0
+            Rscript "$script" > "$log" 2>&1 || rc=$?
+            printf "%s\t%s\n" "$rc" "$i" >> _triage/prefix-status.tsv
+            if [ "$rc" -ne 0 ] && [ "$first_bad" -eq 0 ]; then
+              first_bad=$i
+              break
+            fi
+          done
+
+          echo "$first_bad" > _triage/first-bad-prefix.txt
+          echo "First bad prefix index: $first_bad"
+          cat _triage/prefix-status.tsv
+
+      - name: Summarize findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL_RC=$(cat _triage/full-one-process.exit 2>/dev/null || echo 999)
+          FIRST_BAD=$(cat _triage/first-bad-prefix.txt 2>/dev/null || echo 0)
+          ANY_FAIL=$(cat _triage/per-file.any-fail 2>/dev/null || echo 1)
+          {
+            echo "## Windows unload triage summary"
+            echo ""
+            echo "- Full suite in one process exit code: ${FULL_RC}"
+            echo "- Any single-file process failure: ${ANY_FAIL} (0 means none)"
+            echo "- First failing prefix index: ${FIRST_BAD} (0 means none)"
+            echo ""
+            echo "If full-suite fails but isolated files all pass, crash is cross-test state / unload-order dependent."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload triage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unload-triage-logs
+          path: _triage/
