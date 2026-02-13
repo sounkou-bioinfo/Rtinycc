@@ -359,7 +359,7 @@ tcc_callback_async_pending <- function() {
 
 #' Whether the async callback queue is drained
 #'
-#' Convenience helper that returns \\code{TRUE} when no async callback is
+#' Convenience helper that returns \code{TRUE} when no async callback is
 #' currently outstanding on the dispatcher.
 #'
 #' @return Logical scalar

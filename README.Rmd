@@ -730,7 +730,7 @@ str(sqlite_symbols$sqlite3_exec)
 
 For header-driven bindings, we use `treesitter.c` to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, `tcc_generate_bindings()` handles the code generation.
 
-The default mapper is conservative for pointers: `char*` is treated as `ptr` because C does not guarantee NUL-terminated strings. If you know a parameter is a C string, provide a custom mapper that returns `cstring` for that type.
+Both `tcc_treesitter_bindings()` and `tcc_generate_bindings()` accept a custom `mapper` function. The default mapper is conservative for pointers: `char*` is treated as `ptr` because C does not guarantee NUL-terminated strings. If you know a parameter is a C string, provide a custom mapper that returns `cstring` for that type. The same mapper hook can be used to map function-pointer parameters to explicit callback types (for example `callback:int(int, char **, char **)`).
 
 ```{r ffi-treesitter}
 header <- '
