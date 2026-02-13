@@ -7,6 +7,14 @@ close_if_valid <- function(cb) {
   }
 }
 
+wait_until <- function(done, timeout = 1, interval = 0.01) {
+  deadline <- Sys.time() + timeout
+  while (!isTRUE(done()) && Sys.time() < deadline) {
+    Sys.sleep(interval)
+  }
+  isTRUE(done())
+}
+
 # Test: register an R callback, compile C code that invokes it, and call it
 cb <- tcc_callback(function(x) 42, signature = "double (*)(double)")
 cb_ptr <- tcc_callback_ptr(cb)
@@ -129,7 +137,7 @@ expect_true(
 )
 close_if_valid(cb_closed)
 
-# Test: async scheduling + explicit drain (cross-platform)
+# Test: async scheduling auto-dispatches on main thread (cross-platform)
 tcc_callback_async_enable()
 
 hits_basic <- 0L
@@ -155,15 +163,11 @@ ffi_async_basic <- tcc_ffi() |>
   tcc_compile()
 
 rc_basic <- ffi_async_basic$call_async(cb_async_basic, cb_ptr_async_basic, 3L)
-expect_true(
-  isTRUE(rc_basic == 0L && hits_basic == 0L),
-  info = "Async callback is queued before drain"
-)
 
-tcc_callback_async_drain()
+ok_basic <- wait_until(function() hits_basic == 3L)
 expect_true(
-  isTRUE(hits_basic == 3L),
-  info = "Async callback runs when queue is drained"
+  isTRUE(rc_basic == 0L && ok_basic),
+  info = "Async callback auto-dispatches without explicit drain"
 )
 close_if_valid(cb_async_basic)
 
@@ -197,10 +201,10 @@ ffi_async <- ffi_async_builder |>
   tcc_compile()
 
 rc <- ffi_async$spawn_async(cb_async, cb_ptr_async, 2L)
-tcc_callback_async_drain()
+ok_worker <- wait_until(function() hits == 2L)
 
 expect_true(
-  isTRUE(rc == 0L && hits == 2L),
-  info = "Async callback scheduled from worker thread"
+  isTRUE(rc == 0L && ok_worker),
+  info = "Async callback from worker thread auto-dispatches"
 )
 close_if_valid(cb_async)

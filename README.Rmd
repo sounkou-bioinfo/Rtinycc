@@ -532,7 +532,7 @@ tcc_callback_close(cb_err)
 
 ### Async callbacks
 
-For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread when you call `tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once before use.
+For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread by the async dispatcher. Call `tcc_callback_async_enable()` once before use.
 
 
 
@@ -604,7 +604,10 @@ ffi_async <- ffi_async |>
   tcc_compile()
 
 ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
-tcc_callback_async_drain()
+deadline <- Sys.time() + 1
+while (hits < 2L && Sys.time() < deadline) {
+  Sys.sleep(0.01)
+}
 hits
 tcc_callback_close(cb_async)
 ```
