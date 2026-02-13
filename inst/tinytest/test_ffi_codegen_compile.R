@@ -2,6 +2,7 @@
 # Tests that generated code actually compiles and runs
 
 library(Rtinycc)
+library(tinytest)
 
 # Test 1: Generate and compile simple FFI code
 symbols <- list(

@@ -2,6 +2,7 @@
 # Real tests for the Bun-style FFI type mappings
 
 library(Rtinycc)
+library(tinytest)
 
 # Test 1: FFI type validation works
 type_info <- Rtinycc:::check_ffi_type("i32", "test")

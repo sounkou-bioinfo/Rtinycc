@@ -12,16 +12,27 @@ if (requireNamespace("tinytest", quietly = TRUE)) {
       rscript <- file.path(R.home("bin"), "Rscript")
     }
 
-    runner_file <- tempfile("tinytest-runner-", fileext = ".R")
+    runner_file <- file.path(getwd(), "tinytest-subprocess-runner.R")
     writeLines(
       c(
         "args <- commandArgs(trailingOnly = TRUE)",
         "f <- args[[1]]",
         "library(Rtinycc)",
         "library(tinytest)",
-        "res <- tinytest::run_test_file(f)",
-        "n_fail <- sum(vapply(res, isFALSE, logical(1)))",
-        "quit(status = if (n_fail > 0L) 1L else 0L)"
+        "oldwd <- getwd()",
+        "on.exit(setwd(oldwd), add = TRUE)",
+        "d <- dirname(f)",
+        "bn <- basename(f)",
+        "status <- tryCatch({",
+        "  res <- tinytest::run_test_dir(d, pattern = paste0('^', bn, '$'), at_home = FALSE, verbose = 1)",
+        "  n_fail <- sum(vapply(res, isFALSE, logical(1)))",
+        "  if (n_fail > 0L) 1L else 0L",
+        "}, error = function(e) {",
+        "  message(conditionMessage(e))",
+        "  traceback(2)",
+        "  2L",
+        "})",
+        "quit(status = status)"
       ),
       con = runner_file
     )

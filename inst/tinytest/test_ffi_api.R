@@ -2,6 +2,7 @@
 # Tests for tcc_ffi(), tcc_bind(), tcc_compile() with real compilation
 
 library(Rtinycc)
+library(tinytest)
 
 # Test 1: Create FFI context
 ffi <- tcc_ffi()
