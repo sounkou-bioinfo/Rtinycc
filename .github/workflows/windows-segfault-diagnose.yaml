@@ -24,6 +24,17 @@ jobs:
           r-version: release
           use-public-rspm: true
 
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          needs: check
+          extra-packages: any::lambda.r
+
+      - name: Ensure lambda.r is installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          Rscript -e "if (!requireNamespace('lambda.r', quietly = TRUE)) install.packages('lambda.r', repos = 'https://cloud.r-project.org')"
+
       - name: Install package (build TinyCC assets)
         shell: bash
         run: |
@@ -116,7 +127,7 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::tinytest
+          extra-packages: any::tinytest, any::lambda.r
           needs: check
 
       - name: Install package
