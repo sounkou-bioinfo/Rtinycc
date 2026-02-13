@@ -107,15 +107,20 @@ if [ -d "$TINYCC_SRC" ]; then
     # import resolution toward UCRT reduces cross-CRT allocation/free
     # hazards for symbols that are exported by ucrtbase.dll.
     #
-    # Scope note: this does not guarantee that every CRT-facing symbol
-    # used by JIT code resolves identically across toolchains.
-    UCRT_DLL=$(find /c/Windows/System32 -maxdepth 1 -iname "ucrtbase.dll" 2>/dev/null | head -n 1)
-    if [ -n "$UCRT_DLL" ]; then
-        echo "Generating ucrt.def from $UCRT_DLL ..."
-        ./tcc.exe -impdef "$UCRT_DLL" -o "$TINYCC_DEST/lib/msvcrt.def" \
-            || echo "WARNING: tcc -impdef ucrtbase.dll failed; keeping original msvcrt.def"
+    # Toggle for A/B testing:
+    #   RTINYCC_WIN_UCRT_DEF=1  -> generate msvcrt.def from ucrtbase.dll (default)
+    #   RTINYCC_WIN_UCRT_DEF=0  -> keep TinyCC's bundled msvcrt.def
+    if [ "${RTINYCC_WIN_UCRT_DEF:-1}" = "1" ]; then
+        UCRT_DLL=$(find /c/Windows/System32 -maxdepth 1 -iname "ucrtbase.dll" 2>/dev/null | head -n 1)
+        if [ -n "$UCRT_DLL" ]; then
+            echo "Generating ucrt.def from $UCRT_DLL ..."
+            ./tcc.exe -impdef "$UCRT_DLL" -o "$TINYCC_DEST/lib/msvcrt.def" \
+                || echo "WARNING: tcc -impdef ucrtbase.dll failed; keeping original msvcrt.def"
+        else
+            echo "WARNING: ucrtbase.dll not found; keeping original msvcrt.def"
+        fi
     else
-        echo "WARNING: ucrtbase.dll not found; keeping original msvcrt.def"
+        echo "RTINYCC_WIN_UCRT_DEF=0 -> keeping TinyCC bundled msvcrt.def"
     fi
 
     echo "TinyCC installed to $TINYCC_DEST"

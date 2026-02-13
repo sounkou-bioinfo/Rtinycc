@@ -2,12 +2,19 @@ name: windows-segfault-diagnose
 
 on:
   workflow_dispatch:
+    inputs:
+      ucrt_def:
+        description: "Use UCRT-generated msvcrt.def (1=yes, 0=no)"
+        required: true
+        default: "1"
 
 permissions: read-all
 
 jobs:
   windows-manual-smoke:
     runs-on: windows-latest
+    env:
+      RTINYCC_WIN_UCRT_DEF: ${{ github.event.inputs.ucrt_def }}
     steps:
       - uses: actions/checkout@v4
 
