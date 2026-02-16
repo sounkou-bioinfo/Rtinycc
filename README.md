@@ -177,7 +177,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5cdc34af3a60"
+#> [1] "0x57797d7de120"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -208,11 +208,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5cdc341fd250>
+#> <pointer: 0x57797f60a180>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5cdc33c5c3a0>
+#> <pointer: 0x57797cb876c0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5cdc341fd250>
+#> <pointer: 0x57797f60a180>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -275,8 +275,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       909ms    909ms      1.10   134.1MB    11.0 
-#> 2 Rbuiltin      538µs    569µs   1628.      9.05KB     8.00
+#> 1 Rtinycc       918ms    918ms      1.09   134.1MB    10.9 
+#> 2 Rbuiltin      537µs    577µs   1609.      9.05KB     8.00
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -305,8 +305,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    96.3µs  104.1µs     9372.    52.8KB     10.5
-#> 2 Rbuiltin_vec   16.9µs   18.3µs    52875.    78.2KB     63.5
+#> 1 Rtinycc_vec    97.4µs  107.2µs     9204.    52.8KB     10.6
+#> 2 Rbuiltin_vec   16.9µs   17.7µs    45722.    78.2KB     54.9
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -428,7 +428,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5cdc42140f38 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @57798b5f9df0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -444,7 +444,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5cdc42140f38 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @57798b5f9df0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -508,9 +508,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R          599.84ms 604.01ms      1.66     844KB    0.553
-#> 2 quickr       3.73ms   4.11ms    243.       782KB    3.09 
-#> 3 Rtinycc     55.47ms   57.1ms     17.6      796KB    0.503
+#> 1 R           602.3ms  602.9ms      1.66     844KB     0   
+#> 2 quickr       3.66ms    4.1ms    243.       782KB     3.62
+#> 3 Rtinycc     56.89ms   57.5ms     17.4      796KB     0
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -538,15 +538,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5cdc4db21cb0>
+#> <pointer: 0x577999555f40>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5cdc4db21cb0>
+#> <pointer: 0x577999555f40>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5cdc4d5f9bd0>
+#> <pointer: 0x577997cb8000>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5cdc4d5f9bd0>
+#> <pointer: 0x577997cb8000>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -591,9 +591,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5cdc39556980>
+#> <pointer: 0x57799a292440>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5cdc39556980>
+#> <pointer: 0x57799a292440>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -885,7 +885,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5cdc33847230>
+#> <pointer: 0x57799a5082e0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -933,17 +933,38 @@ if (Sys.info()[["sysname"]] == "Linux") {
   baseline <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
   c_tbl <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
   uring_tbl <- ffi$csv_table_io_uring(tmp_csv, block_size, n_cols)
+  vroom_tbl <- vroom::vroom(
+    tmp_csv,
+    delim = ",",
+    altrep = FALSE,
+    col_types = vroom::cols(.default = "d"),
+    progress = FALSE,
+    show_col_types = FALSE
+  )
 
   stopifnot(
     identical(dim(c_tbl), dim(baseline)),
     identical(dim(uring_tbl), dim(baseline)),
+    identical(dim(vroom_tbl), dim(baseline)),
     isTRUE(all.equal(c_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
-    isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
+    isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
+    isTRUE(all.equal(vroom_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
   )
 
-timings <- bench::mark(
+  timings <- bench::mark(
     read_table_df = {
       x <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
+      nrow(x)
+    },
+    vroom_df_altrep_false = {
+      x <- vroom::vroom(
+        tmp_csv,
+        delim = ",",
+        altrep = FALSE,
+        col_types = vroom::cols(.default = "d"),
+        progress = FALSE,
+        show_col_types = FALSE
+      )
       nrow(x)
     },
     c_read_df = {
@@ -957,13 +978,21 @@ timings <- bench::mark(
     iterations = 2,
     memory = TRUE
   )
+
+  timings[, c("expression", "min", "median", "itr/sec", "mem_alloc")]
+} else {
+  message("Skipping io_uring demo on non-Linux host.")
 }
 #> Warning: Some expressions had a GC in every iteration; so filtering is
 #> disabled.
-plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+#> # A tibble: 4 × 5
+#>   expression                 min   median `itr/sec` mem_alloc
+#>   <bch:expr>            <bch:tm> <bch:tm>     <dbl> <bch:byt>
+#> 1 read_table_df             7.6s   10.53s    0.0950     494MB
+#> 2 vroom_df_altrep_false 215.12ms  405.1ms    2.47       122MB
+#> 3 c_read_df                1.85s    2.41s    0.416      122MB
+#> 4 io_uring_df              1.85s    1.85s    0.539      122MB
 ```
-
-<img src="man/figures/README-io_uring-demo-1.png" width="100%" />
 
 ## Known limitations
 
@@ -1011,11 +1040,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5cdc4d5de650>
+#> <pointer: 0x57799baf21c0>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5cdc4d6736f0>
+#> <pointer: 0x577999160600>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1044,9 +1073,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5cdc4db05830>
+#> <pointer: 0x57798f1b9390>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5cdc4db05830>
+#> <pointer: 0x57798f1b9390>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

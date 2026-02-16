@@ -749,6 +749,8 @@ if (Sys.info()[["sysname"]] == "Linux") {
   df <- as.data.frame(mat)
   names(df) <- paste0("V", seq_len(n_cols))
   utils::write.table(df, file = tmp_csv, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  csv_size_mb <- as.double(file.info(tmp_csv)$size) / 1024^2
+  message(sprintf("CSV size: %.2f MB", csv_size_mb))
 
   io_uring_src <- paste(readLines(c_file, warn = FALSE), collapse = "\n")
 
@@ -769,17 +771,38 @@ if (Sys.info()[["sysname"]] == "Linux") {
   baseline <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
   c_tbl <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
   uring_tbl <- ffi$csv_table_io_uring(tmp_csv, block_size, n_cols)
+  vroom_tbl <- vroom::vroom(
+    tmp_csv,
+    delim = ",",
+    altrep = FALSE,
+    col_types = vroom::cols(.default = "d"),
+    progress = FALSE,
+    show_col_types = FALSE
+  )
 
   stopifnot(
     identical(dim(c_tbl), dim(baseline)),
     identical(dim(uring_tbl), dim(baseline)),
+    identical(dim(vroom_tbl), dim(baseline)),
     isTRUE(all.equal(c_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
-    isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
+    isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
+    isTRUE(all.equal(vroom_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
   )
 
-timings <- bench::mark(
+  timings <- bench::mark(
     read_table_df = {
       x <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
+      nrow(x)
+    },
+    vroom_df_altrep_false = {
+      x <- vroom::vroom(
+        tmp_csv,
+        delim = ",",
+        altrep = FALSE,
+        col_types = vroom::cols(.default = "d"),
+        progress = FALSE,
+        show_col_types = FALSE
+      )
       nrow(x)
     },
     c_read_df = {
@@ -793,8 +816,9 @@ timings <- bench::mark(
     iterations = 2,
     memory = TRUE
   )
+
+  timings[, c("expression", "min", "median", "itr/sec", "mem_alloc")]
 }
-plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ## Known limitations
