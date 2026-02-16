@@ -18,6 +18,12 @@
   are still reachable (`R_MakeExternalPtrFn(..., prot = state)` and
   closure environment retention) to prevent finalization-order crashes.
 
+- Generated struct/union constructors now attach a weak reference to the
+  underlying `tcc_state` in the external pointer `prot` field. The
+  weakref is initialized via an internal codegen helper
+  (`R_wrap_rtinycc_set_state_wref`) after relocation to reduce finalizer
+  sequencing crashes on Windows.
+
 ## Rtinycc 0.0.3.9000 (development version)
 
 - Refactor FFI codegen and callbacks to use lambda.r guard rules instead
