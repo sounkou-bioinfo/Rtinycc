@@ -363,7 +363,7 @@ y[1]
 
 This example benchmarks the classic convolution routine written in plain C (no manual
 `SEXP` code). Rtinycc generates the `.Call` wrappers automatically. We also compare
-against `quickr` which is expected to be faster due to compiler optimiztion.
+against `quickr` and `tcc_quick`.
 
 ```{r benchmark-convolve}
 library(quickr)
@@ -409,10 +409,17 @@ nb <- length(b)
 nab <- na + nb - 1L
 
 quick_convolve <- quick(slow_convolve)
+quick_tcc <- tcc_quick(slow_convolve, fallback = "never")
+
+stopifnot(
+  isTRUE(all.equal(slow_convolve(a, b), quick_tcc(a, b), tolerance = 1e-10))
+)
+
 timings <- bench::mark(
   R = slow_convolve(a, b),
   quickr = quick_convolve(a, b),
-  Rtinycc = ffi_conv$convolve(a, na, b, nb, nab),
+  Rtinycc_quick = quick_tcc(a, b),
+  Rtinycc_manual_c = ffi_conv$convolve(a, na, b, nb, nab),
   min_time = 2
 )
 timings
@@ -737,7 +744,7 @@ ffi$global_global_counter_get()
 if (Sys.info()[["sysname"]] == "Linux") {
   c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
 
-  n_rows <- 2000000L
+  n_rows <- 200000L
   n_cols <- 8L
   block_size <- 1024L * 1024L
 
