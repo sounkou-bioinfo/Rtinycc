@@ -26,13 +26,13 @@ struct csv_table_state {
   int token_len;
   char token[128];
   int n_cols;
+  size_t row_idx;
   size_t n_rows;
-  size_t cap_rows;
   double **cols;
 };
 
-static int csv_table_state_init(struct csv_table_state *st, int n_cols) {
-  if (n_cols <= 0) {
+static int csv_table_state_init(struct csv_table_state *st, int n_cols, size_t n_rows) {
+  if (n_cols <= 0 || n_rows > (size_t)INT_MAX) {
     return -EINVAL;
   }
 
@@ -40,24 +40,13 @@ static int csv_table_state_init(struct csv_table_state *st, int n_cols) {
   st->col_idx = 0;
   st->token_len = 0;
   st->n_cols = n_cols;
+  st->row_idx = 0;
   st->n_rows = 0;
-  st->cap_rows = 1024;
+  st->n_rows = n_rows;
 
   st->cols = (double **)calloc((size_t)n_cols, sizeof(double *));
   if (!st->cols) {
     return -ENOMEM;
-  }
-
-  for (int j = 0; j < n_cols; j++) {
-    st->cols[j] = (double *)malloc(st->cap_rows * sizeof(double));
-    if (!st->cols[j]) {
-      for (int k = 0; k < j; k++) {
-        free(st->cols[k]);
-      }
-      free(st->cols);
-      st->cols = NULL;
-      return -ENOMEM;
-    }
   }
 
   return 0;
@@ -68,31 +57,10 @@ static void csv_table_state_free(struct csv_table_state *st) {
     return;
   }
   for (int j = 0; j < st->n_cols; j++) {
-    free(st->cols[j]);
+    st->cols[j] = NULL;
   }
   free(st->cols);
   st->cols = NULL;
-}
-
-static int csv_ensure_capacity(struct csv_table_state *st, size_t row_idx) {
-  if (row_idx < st->cap_rows) {
-    return 0;
-  }
-
-  size_t new_cap = st->cap_rows;
-  while (new_cap <= row_idx) {
-    new_cap *= 2;
-  }
-
-  for (int j = 0; j < st->n_cols; j++) {
-    double *tmp = (double *)realloc(st->cols[j], new_cap * sizeof(double));
-    if (!tmp) {
-      return -ENOMEM;
-    }
-    st->cols[j] = tmp;
-  }
-  st->cap_rows = new_cap;
-  return 0;
 }
 
 static int csv_emit_token(struct csv_table_state *st) {
@@ -107,16 +75,15 @@ static int csv_emit_token(struct csv_table_state *st) {
     return -EINVAL;
   }
 
-  int rc = csv_ensure_capacity(st, st->n_rows);
-  if (rc < 0) {
-    return rc;
-  }
-
   if (st->col_idx < 0 || st->col_idx >= st->n_cols) {
     return -EINVAL;
   }
 
-  st->cols[st->col_idx][st->n_rows] = v;
+  if (st->row_idx >= st->n_rows) {
+    return -EOVERFLOW;
+  }
+
+  st->cols[st->col_idx][st->row_idx] = v;
   st->token_len = 0;
   return 0;
 }
@@ -152,7 +119,7 @@ static int csv_process_buffer(struct csv_table_state *st, const char *buf, int n
         if (st->col_idx != st->n_cols - 1) {
           return -EINVAL;
         }
-        st->n_rows += 1;
+        st->row_idx += 1;
         st->col_idx = 0;
       }
       continue;
@@ -180,21 +147,19 @@ static int csv_finish(struct csv_table_state *st) {
     if (st->col_idx != st->n_cols - 1) {
       return -EINVAL;
     }
-    st->n_rows += 1;
+    st->row_idx += 1;
     st->col_idx = 0;
   }
 
   return 0;
 }
 
-static SEXP csv_build_data_frame(struct csv_table_state *st) {
+static SEXP csv_alloc_data_frame(struct csv_table_state *st) {
   SEXP out = PROTECT(allocVector(VECSXP, st->n_cols));
 
   for (int j = 0; j < st->n_cols; j++) {
     SEXP col = PROTECT(allocVector(REALSXP, (R_xlen_t)st->n_rows));
-    for (size_t i = 0; i < st->n_rows; i++) {
-      REAL(col)[i] = st->cols[j][i];
-    }
+    st->cols[j] = REAL(col);
     SET_VECTOR_ELT(out, j, col);
     UNPROTECT(1);
   }
@@ -218,6 +183,64 @@ static SEXP csv_build_data_frame(struct csv_table_state *st) {
 
   UNPROTECT(4);
   return out;
+}
+
+static int csv_count_rows_read(const char *path, int block_size, size_t *out_rows) {
+  if (!path || block_size <= 0 || !out_rows) {
+    return -EINVAL;
+  }
+
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) {
+    return -errno;
+  }
+
+  char *buf = (char *)malloc((size_t)block_size);
+  if (!buf) {
+    int e = errno;
+    close(fd);
+    return -e;
+  }
+
+  size_t nl_count = 0;
+  int saw_any = 0;
+  int ended_newline = 0;
+
+  for (;;) {
+    ssize_t r = read(fd, buf, (size_t)block_size);
+    if (r == 0) {
+      break;
+    }
+    if (r < 0) {
+      int e = errno;
+      free(buf);
+      close(fd);
+      return -e;
+    }
+
+    saw_any = 1;
+    for (ssize_t i = 0; i < r; i++) {
+      if (buf[i] == '\n') {
+        nl_count += 1;
+      }
+    }
+    ended_newline = (buf[r - 1] == '\n');
+  }
+
+  free(buf);
+  close(fd);
+
+  if (!saw_any || nl_count == 0) {
+    *out_rows = 0;
+    return 0;
+  }
+
+  size_t rows = nl_count - 1;
+  if (!ended_newline) {
+    rows += 1;
+  }
+  *out_rows = rows;
+  return 0;
 }
 
 static int csv_parse_read(const char *path, int block_size, struct csv_table_state *st) {
@@ -299,6 +322,7 @@ struct rtinycc_uring {
 struct rtinycc_uring_slot {
   char *buf;
   off_t off;
+  int req_len;
   int res;
   int ready;
   int in_flight;
@@ -408,7 +432,7 @@ static int rtinycc_uring_submit_read(
   struct rtinycc_uring_slot *slot,
   int slot_idx,
   off_t off,
-  int block_size
+  int req_len
 ) {
   unsigned tail = *u->sq_tail;
   unsigned index = tail & *u->sq_ring_mask;
@@ -419,13 +443,14 @@ static int rtinycc_uring_submit_read(
   sqe->fd = fd;
   sqe->off = (unsigned long long)off;
   sqe->addr = (unsigned long long)slot->buf;
-  sqe->len = (unsigned)block_size;
+  sqe->len = (unsigned)req_len;
   sqe->user_data = (unsigned long long)slot_idx;
 
   u->sq_array[index] = index;
   *u->sq_tail = tail + 1;
 
   slot->off = off;
+  slot->req_len = req_len;
   slot->res = 0;
   slot->ready = 0;
   slot->in_flight = 1;
@@ -459,7 +484,13 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
   u.cq_ring_ptr = NULL;
   u.sqes = NULL;
 
-  unsigned depth = 16U;
+  unsigned depth = 32U;
+  int coalesce = 4;
+  int req_len = block_size * coalesce;
+  if (req_len <= 0 || req_len < block_size) {
+    req_len = block_size;
+  }
+
   int init_rc = rtinycc_uring_init(&u, depth);
   if (init_rc < 0) {
     close(fd);
@@ -483,7 +514,7 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
   }
 
   for (unsigned i = 0; i < depth; i++) {
-    slots[i].buf = (char *)malloc((size_t)block_size);
+    slots[i].buf = (char *)malloc((size_t)req_len);
     if (!slots[i].buf) {
       for (unsigned j = 0; j < i; j++) {
         free(slots[j].buf);
@@ -502,7 +533,7 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
   unsigned in_flight = 0;
 
   for (unsigned i = 0; i < depth; i++) {
-    int src = rtinycc_uring_submit_read(&u, fd, &slots[i], (int)i, next_submit_off, block_size);
+    int src = rtinycc_uring_submit_read(&u, fd, &slots[i], (int)i, next_submit_off, req_len);
     if (src < 0) {
       for (unsigned j = 0; j < depth; j++) {
         free(slots[j].buf);
@@ -512,7 +543,7 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
       close(fd);
       return src;
     }
-    next_submit_off += (off_t)block_size;
+    next_submit_off += (off_t)req_len;
     pending_submit += 1U;
     in_flight += 1U;
   }
@@ -600,14 +631,14 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
         }
       }
 
-      if (res < block_size) {
+      if (res < slot->req_len) {
         off_t this_eof = slot->off + (off_t)res;
         if (eof_off < 0 || this_eof < eof_off) {
           eof_off = this_eof;
         }
       }
 
-      next_parse_off += (off_t)block_size;
+      next_parse_off += (off_t)slot->req_len;
 
       if (eof_off < 0 || next_submit_off < eof_off) {
         int src = rtinycc_uring_submit_read(
@@ -616,7 +647,7 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
           slot,
           ready_idx,
           next_submit_off,
-          block_size
+          req_len
         );
         if (src < 0) {
           for (unsigned j = 0; j < depth; j++) {
@@ -627,7 +658,7 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
           close(fd);
           return src;
         }
-        next_submit_off += (off_t)block_size;
+        next_submit_off += (off_t)req_len;
         pending_submit += 1U;
         in_flight += 1U;
       }
@@ -656,42 +687,87 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
 
 #endif
 
+static int csv_count_rows_io_uring(const char *path, int block_size, size_t *out_rows) {
+#ifdef __linux__
+  struct csv_table_state dummy;
+  (void)dummy;
+  return csv_count_rows_read(path, block_size, out_rows);
+#else
+  (void)path;
+  (void)block_size;
+  (void)out_rows;
+  return -ENOSYS;
+#endif
+}
+
 SEXP csv_table_read(const char *path, int block_size, int n_cols) {
+  size_t n_rows = 0;
+  int crc = csv_count_rows_read(path, block_size, &n_rows);
+  if (crc < 0) {
+    Rf_error("csv_table_read row count failed (%d)", -crc);
+  }
+
   struct csv_table_state st;
-  int rc = csv_table_state_init(&st, n_cols);
+  int rc = csv_table_state_init(&st, n_cols, n_rows);
   if (rc < 0) {
     Rf_error("csv_table_read init failed (%d)", -rc);
   }
 
+  SEXP out = PROTECT(csv_alloc_data_frame(&st));
+
   rc = csv_parse_read(path, block_size, &st);
   if (rc < 0) {
     csv_table_state_free(&st);
+    UNPROTECT(1);
     Rf_error("csv_table_read failed (%d)", -rc);
   }
+  if (st.row_idx != st.n_rows) {
+    csv_table_state_free(&st);
+    UNPROTECT(1);
+    Rf_error("csv_table_read row count mismatch");
+  }
 
-  SEXP out = csv_build_data_frame(&st);
   csv_table_state_free(&st);
+  UNPROTECT(1);
   return out;
 }
 
 SEXP csv_table_io_uring(const char *path, int block_size, int n_cols) {
+  size_t n_rows = 0;
+  int crc = csv_count_rows_io_uring(path, block_size, &n_rows);
+  if (crc == -ENOSYS) {
+    Rf_error("csv_table_io_uring is Linux-only (io_uring unavailable)");
+  }
+  if (crc < 0) {
+    Rf_error("csv_table_io_uring row count failed (%d)", -crc);
+  }
+
   struct csv_table_state st;
-  int rc = csv_table_state_init(&st, n_cols);
+  int rc = csv_table_state_init(&st, n_cols, n_rows);
   if (rc < 0) {
     Rf_error("csv_table_io_uring init failed (%d)", -rc);
   }
 
+  SEXP out = PROTECT(csv_alloc_data_frame(&st));
+
   rc = csv_parse_io_uring(path, block_size, &st);
   if (rc == -ENOSYS) {
     csv_table_state_free(&st);
+    UNPROTECT(1);
     Rf_error("csv_table_io_uring is Linux-only (io_uring unavailable)");
   }
   if (rc < 0) {
     csv_table_state_free(&st);
+    UNPROTECT(1);
     Rf_error("csv_table_io_uring failed (%d)", -rc);
   }
+  if (st.row_idx != st.n_rows) {
+    csv_table_state_free(&st);
+    UNPROTECT(1);
+    Rf_error("csv_table_io_uring row count mismatch");
+  }
 
-  SEXP out = csv_build_data_frame(&st);
   csv_table_state_free(&st);
+  UNPROTECT(1);
   return out;
 }
