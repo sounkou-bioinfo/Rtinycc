@@ -66,6 +66,29 @@ R 4.2+ links against the UCRT (`ucrtbase.dll`). TCC, by default, links JIT code 
 
 The fix in `configure.win`: generate a `.def` file from `ucrtbase.dll` using `tcc -impdef`, but name the output `msvcrt.def`. This overwrites TCC's original `msvcrt.def`. Since TCC's PE linker loads "msvcrt" automatically, all CRT symbols (`calloc`, `free`, `printf`, etc.) now resolve from ucrtbase.dll — the same CRT that R and `Rtinycc.dll` use.
 
+### Externalptr ownership and finalizers (Windows crash class)
+
+We observed Windows-only segfaults after running `tinytest::test_package(...)`
+in a single R session, especially after `gc()` or during process exit. This
+was **not** caused by UCRT mismatches; it was caused by **multiple externalptr
+wrappers owning the same `TCCState*`**, leading to double-finalization when the
+GC runs. External pointers are not copied by R, but it is easy to accidentally
+*create multiple externalptrs around the same C pointer* in C/R helpers.
+
+Fix pattern:
+
+- Track ownership of `TCCState*` explicitly in C.
+- Only one externalptr is “owned” and gets `RC_tcc_finalizer`.
+- All other wrappers are “borrowed” and get a no-op finalizer.
+- Borrowed wrappers keep the owner alive via the externalptr `prot` field.
+
+Implementation lives in `src/RC_libtcc.c`:
+`tcc_state_entry_t` registry, `RC_tcc_state_is_owned()`, and ownership tags
+`rtinycc_tcc_state_owned` / `rtinycc_tcc_state_borrowed`.
+
+Do **not** reintroduce shutdown/unload hooks to “solve” this; the correct fix
+is ownership tracking and preventing double-finalization.
+
 ### R API symbol resolution — R.def
 
 TCC JIT code calls R API functions (`Rf_ScalarInteger`, `Rf_error`, `R_NilValue`, etc.). On Windows these live in `R.dll`. `configure.win` generates `R.def` from `R.dll` via `tcc -impdef` and places it in `inst/tinycc/lib/`. At compile time, `R/ffi.R` calls `tcc_add_library(state, "R")` on Windows, which makes TCC load `R.def` and resolve R API symbols through `R.dll`.
