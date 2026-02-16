@@ -3,8 +3,7 @@
 
 # Rtinycc
 
-Builds `TinyCC` `Cli` and Library For `C` Scripting in
-`R`
+Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
 
 <!-- badges: start -->
 
@@ -62,14 +61,9 @@ the dynamic linker. Rtinycc works around this with
 functions via `tcc_add_symbol()` before relocation. Any new C function
 referenced by generated TCC code must be added there.
 
-On Windows, the build still generates a UCRT-backed `msvcrt.def` so
-TinyCC resolves CRT symbols against `ucrtbase.dll` (R 4.2+ uses UCRT).
-That avoids cross-CRT heap mismatches, but it is **not** the root cause
-of the segfaults we investigated. The crashes were due to lifetime
-management of external pointers and finalizers: multiple externalptr
-wrappers owning the same `TCCState*` led to double finalization when the
-garbage collector ran. The fix is to track ownership explicitly and
-ensure only one externalptr owns a given state.
+On Windows, the `configure.win` script generates a UCRT-backed
+`msvcrt.def` so TinyCC resolves CRT symbols against `ucrtbase.dll` (R
+4.2+ uses UCRT).
 
 Ownership semantics are explicit. Pointers from `tcc_malloc()` are
 tagged `rtinycc_owned` and can be released with `tcc_free()` (or by
@@ -183,7 +177,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5612bb025090"
+#> [1] "0x610d7e933f00"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -214,11 +208,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5612b9c566b0>
+#> <pointer: 0x610d7dff7090>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5612b86c3c40>
+#> <pointer: 0x610d80e421d0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5612b9c566b0>
+#> <pointer: 0x610d7dff7090>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -249,11 +243,11 @@ Pointer types include `ptr` (opaque external pointer), `sexp` (pass a
 `SEXP` directly), and callback signatures like
 `callback:double(double)`.
 
-Array returns use `returns = list(type = "integer_array", length_arg
-= 2, free = TRUE)` to copy the result into a new R vector. The
-`length_arg` is the 1-based index of the C argument that carries the
-array length. Set `free = TRUE` when the C function returns a
-`malloc`-owned buffer.
+Array returns use
+`returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to
+copy the result into a new R vector. The `length_arg` is the 1-based
+index of the C argument that carries the array length. Set `free = TRUE`
+when the C function returns a `malloc`-owned buffer.
 
 ### Simple functions
 
@@ -281,8 +275,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc    193.03ms 197.98ms      5.06   53.98KB     6.75
-#> 2 Rbuiltin     3.46ms   4.34ms    235.      9.05KB     1.99
+#> 1 Rtinycc      30.8ms   39.2ms      21.1   53.98KB     26.9
+#> 2 Rbuiltin    547.4µs  580.5µs    1620.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -311,8 +305,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    67.1µs   94.8µs     9587.    39.1KB     6.57
-#> 2 Rbuiltin_vec   39.7µs   42.3µs    20517.    78.2KB    30.0
+#> 1 Rtinycc_vec    20.2µs   28.2µs    38722.    39.1KB     27.1
+#> 2 Rbuiltin_vec   17.1µs   17.6µs    56172.    78.2KB     84.4
 ```
 
 ### Linking external libraries
@@ -375,7 +369,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5612bce2f0a8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -391,7 +385,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5612bce2f0a8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -455,13 +449,13 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R             2.11s    2.11s     0.474     847KB     0   
-#> 2 quickr       9.96ms  10.53ms    95.2       782KB     1.55
-#> 3 Rtinycc    172.72ms 180.83ms     5.32      782KB     0
+#> 1 R          618.01ms 618.01ms      1.62     847KB    4.85 
+#> 2 quickr       3.77ms   4.14ms    241.       782KB    4.10 
+#> 3 Rtinycc     54.44ms   57.1ms     17.6      782KB    0.503
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
-<img src="man/figures/README-benchmark-convolve-1.png" alt="" width="100%" />
+<img src="man/figures/README-benchmark-convolve-1.png" width="100%" />
 
 ### Structs and unions
 
@@ -485,15 +479,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5612bb9abee0>
+#> <pointer: 0x610d8e69a320>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5612bb9abee0>
+#> <pointer: 0x610d8e69a320>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5612be470c60>
+#> <pointer: 0x610d8324abf0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5612be470c60>
+#> <pointer: 0x610d8324abf0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -538,9 +532,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5612bfc6f8f0>
+#> <pointer: 0x610d7e50b370>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5612bfc6f8f0>
+#> <pointer: 0x610d7e50b370>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -764,7 +758,7 @@ sqlite <- tcc_ffi() |>
   tcc_compile()
 
 sqlite$sqlite3_libversion()
-#> [1] "3.26.0"
+#> [1] "3.45.1"
 
 db <- sqlite$open_db()
 sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callback_ptr(cb), tcc_null_ptr())
@@ -832,7 +826,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5612b89c43e0>
+#> <pointer: 0x610d803c8b80>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -851,9 +845,7 @@ complex types.
 ### 64-bit integer precision
 
 R represents `i64` and `u64` values as `double`, which loses precision
-beyond
-![2^{53}](https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&space;%5Cbg_white&space;2%5E%7B53%7D
-"2^{53}"). Values that differ only past that threshold become
+beyond $2^{53}$. Values that differ only past that threshold become
 indistinguishable.
 
 ``` r
@@ -887,11 +879,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5612c5b56330>
+#> <pointer: 0x610d8de462e0>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5612c4e62850>
+#> <pointer: 0x610d82ad5290>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -920,9 +912,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5612be363c40>
+#> <pointer: 0x610d8db557a0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5612be363c40>
+#> <pointer: 0x610d8db557a0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
@@ -972,8 +964,8 @@ GPL-3
 
 ## References
 
-  - [TinyCC](https://github.com/TinyCC/tinycc)
-  - [Bun’s FFI](https://bun.com/docs/runtime/ffi)
-  - [CFFI](https://cffi.readthedocs.io/)
-  - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
-  - [CSlug](https://cslug.readthedocs.io/en/latest/)
+- [TinyCC](https://github.com/TinyCC/tinycc)
+- [Bun’s FFI](https://bun.com/docs/runtime/ffi)
+- [CFFI](https://cffi.readthedocs.io/)
+- [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
+- [CSlug](https://cslug.readthedocs.io/en/latest/)

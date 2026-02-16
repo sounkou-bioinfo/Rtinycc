@@ -72,6 +72,48 @@ callback_trampoline_name <- function(wrapper_name, arg_index) {
   paste0("trampoline_", wrapper_name, "_arg", arg_index)
 }
 
+variadic_wrapper_name <- function(wrapper_name, n_varargs) {
+  paste0(wrapper_name, "__v", as.integer(n_varargs))
+}
+
+variadic_type_token <- function(x) {
+  gsub("[^A-Za-z0-9_]", "_", x)
+}
+
+variadic_signature_key <- function(vararg_types) {
+  if (length(vararg_types) == 0) {
+    return("__none__")
+  }
+  paste(vararg_types, collapse = "|")
+}
+
+variadic_wrapper_name_types <- function(wrapper_name, vararg_types) {
+  suffix <- if (length(vararg_types) == 0) {
+    "none"
+  } else {
+    paste(vapply(vararg_types, variadic_type_token, character(1)), collapse = "__")
+  }
+  paste0(wrapper_name, "__v", length(vararg_types), "__", suffix)
+}
+
+generate_variadic_type_sequences <- function(allowed_types, n_varargs) {
+  if (n_varargs == 0) {
+    return(list(list()))
+  }
+  if (length(allowed_types) == 0) {
+    return(list())
+  }
+
+  idx_grid <- expand.grid(
+    rep(list(seq_along(allowed_types)), n_varargs),
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  lapply(seq_len(nrow(idx_grid)), function(i) {
+    as.list(unname(unlist(allowed_types[as.integer(idx_grid[i, ])])))
+  })
+}
+
 # Callback helper: declare a function pointer bound to a trampoline
 callback_funptr_decl <- function(arg_name, sig, trampoline_name) {
   arg_types <- sig$arg_types
@@ -94,11 +136,12 @@ generate_c_wrapper <- function(
   symbol_name,
   wrapper_name,
   arg_types,
+  vararg_types = list(),
   return_type,
   c_code = NULL,
   is_external = FALSE
 ) {
-  n_args <- length(arg_types)
+  n_args <- length(arg_types) + length(vararg_types)
   return_info <- check_ffi_type(
     if (is.list(return_type)) return_type$type else return_type,
     "return value"
@@ -107,13 +150,23 @@ generate_c_wrapper <- function(
   # Always use R API mode: SEXP arguments and return
   # Build argument list
   if (n_args > 0) {
-    arg_names <- names(arg_types) %||% paste0("arg", seq_len(n_args))
+    fixed_arg_names <- names(arg_types)
+    if (is.null(fixed_arg_names) || all(fixed_arg_names == "")) {
+      fixed_arg_names <- paste0("arg", seq_along(arg_types))
+    }
+    vararg_names <- if (length(vararg_types) > 0) {
+      paste0("vararg", seq_along(vararg_types))
+    } else {
+      character(0)
+    }
+    arg_names <- c(fixed_arg_names, vararg_names)
+    all_arg_types <- c(arg_types, vararg_types)
     r_arg_names <- paste0("arg", seq_len(n_args), "_")
 
     # Input conversions from SEXP to C types
     input_lines <- character(0)
     for (i in seq_len(n_args)) {
-      ffi_type <- arg_types[[i]]
+      ffi_type <- all_arg_types[[i]]
       arg_name <- arg_names[[i]]
       r_name <- r_arg_names[[i]]
 
@@ -125,7 +178,10 @@ generate_c_wrapper <- function(
             call. = FALSE
           )
         }
-        tramp_name <- callback_trampoline_name(wrapper_name, i)
+        tramp_name <- callback_trampoline_name(
+          paste0("R_wrap_", symbol_name),
+          i
+        )
         input_lines <- c(
           input_lines,
           sprintf(
@@ -191,7 +247,7 @@ generate_external_declarations <- function(symbols) {
       paste0("symbol '", sym_name, "' return")
     )
 
-    arg_types <- sym$args
+    arg_types <- sym$args %||% list()
     if (length(arg_types) > 0) {
       arg_info <- lapply(
         arg_types,
@@ -206,12 +262,21 @@ generate_external_declarations <- function(symbols) {
       arg_decls <- "void"
     }
 
-    decl <- sprintf(
-      "extern %s %s(%s);",
-      return_info$c_type,
-      sym_name,
-      arg_decls
-    )
+    if (isTRUE(sym$variadic)) {
+      decl <- sprintf(
+        "extern %s %s(%s, ...);",
+        return_info$c_type,
+        sym_name,
+        arg_decls
+      )
+    } else {
+      decl <- sprintf(
+        "extern %s %s(%s);",
+        return_info$c_type,
+        sym_name,
+        arg_decls
+      )
+    }
     decls <- c(decls, decl)
   }
 
@@ -228,17 +293,68 @@ generate_wrappers <- function(
 
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
-    wrapper_name <- paste0(prefix, sym_name)
+    base_wrapper_name <- paste0(prefix, sym_name)
 
-    wrapper <- generate_c_wrapper(
-      symbol_name = sym_name,
-      wrapper_name = wrapper_name,
-      arg_types = sym$args,
-      return_type = sym$returns,
-      is_external = is_external
-    )
+    if (isTRUE(sym$variadic)) {
+      vararg_mode <- sym$varargs_mode %||% "prefix"
 
-    wrappers <- c(wrappers, wrapper, "", "")
+      if (identical(vararg_mode, "types")) {
+        allowed_types <- sym$varargs_types %||% list()
+        min_varargs <- sym$varargs_min %||% 0L
+        max_varargs <- sym$varargs_max %||% min_varargs
+
+        for (n_varargs in seq.int(min_varargs, max_varargs)) {
+          type_sequences <- generate_variadic_type_sequences(allowed_types, n_varargs)
+
+          for (this_varargs in type_sequences) {
+            wrapper <- generate_c_wrapper(
+              symbol_name = sym_name,
+              wrapper_name = variadic_wrapper_name_types(base_wrapper_name, this_varargs),
+              arg_types = sym$args,
+              vararg_types = this_varargs,
+              return_type = sym$returns,
+              is_external = is_external
+            )
+
+            wrappers <- c(wrappers, wrapper, "", "")
+          }
+        }
+      } else {
+        all_varargs <- sym$varargs %||% list()
+        max_varargs <- length(all_varargs)
+        min_varargs <- sym$varargs_min %||% max_varargs
+
+        for (n_varargs in seq.int(min_varargs, max_varargs)) {
+          this_varargs <- if (n_varargs > 0) {
+            all_varargs[seq_len(n_varargs)]
+          } else {
+            list()
+          }
+
+          wrapper <- generate_c_wrapper(
+            symbol_name = sym_name,
+            wrapper_name = variadic_wrapper_name(base_wrapper_name, n_varargs),
+            arg_types = sym$args,
+            vararg_types = this_varargs,
+            return_type = sym$returns,
+            is_external = is_external
+          )
+
+          wrappers <- c(wrappers, wrapper, "", "")
+        }
+      }
+    } else {
+      wrapper <- generate_c_wrapper(
+        symbol_name = sym_name,
+        wrapper_name = base_wrapper_name,
+        arg_types = sym$args,
+        vararg_types = sym$varargs %||% list(),
+        return_type = sym$returns,
+        is_external = is_external
+      )
+
+      wrappers <- c(wrappers, wrapper, "", "")
+    }
   }
 
   paste(wrappers, collapse = "\n")
