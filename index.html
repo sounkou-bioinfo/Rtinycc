@@ -64,7 +64,7 @@
 <p>After <code><a href="reference/tcc_relocate.html">tcc_relocate()</a></code>, wrapper pointers are retrieved via <code><a href="reference/tcc_get_symbol.html">tcc_get_symbol()</a></code>, which internally calls <code>RC_libtcc_get_symbol()</code>. That function converts TCC’s raw <code>void*</code> into a <code>DL_FUNC</code> wrapped with <code>R_MakeExternalPtrFn</code> (tagged <code>"native symbol"</code>). On the R side, <a href="R/ffi.R"><code>make_callable()</code></a> creates a closure that passes this external pointer to <code>.Call</code> (aliased as <code>.RtinyccCall</code> to keep <code>R CMD check</code> happy).</p>
 <p>The design follows <a href="https://cffi.readthedocs.io/" class="external-link">CFFI’s</a> API-mode pattern: instead of computing struct layouts and calling conventions in R (ABI-mode, like Python’s ctypes), the generated C code lets TCC handle <code>sizeof</code>, <code>offsetof</code>, and argument passing. Rtinycc never replicates platform-specific layout rules. The wrappers can also link against external shared libraries whose symbols TCC resolves at relocation time. For background on how this compares to a libffi approach, see the <a href="https://github.com/sounkou-bioinfo/RSimpleFFI#readme" class="external-link"><code>RSimpleFFI</code> README</a>.</p>
 <p>On macOS the configure script strips <code>-flat_namespace</code> from TCC’s build to avoid <a href="https://genomic.social/@bioinfhotep/115765645745231377" class="external-link">BUS ERROR issues</a>. Without it, TCC cannot resolve host symbols (e.g. <code>RC_free_finalizer</code>) through the dynamic linker. Rtinycc works around this with <code>RC_libtcc_add_host_symbols()</code>, which registers package-internal C functions via <code><a href="reference/tcc_add_symbol.html">tcc_add_symbol()</a></code> before relocation. Any new C function referenced by generated TCC code must be added there.</p>
-<p>On Windows, the build still generates a UCRT-backed <code>msvcrt.def</code> so TinyCC resolves CRT symbols against <code>ucrtbase.dll</code> (R 4.2+ uses UCRT). That avoids cross-CRT heap mismatches, but it is <strong>not</strong> the root cause of the segfaults we investigated. The crashes were due to lifetime management of external pointers and finalizers: multiple externalptr wrappers owning the same <code>TCCState*</code> led to double finalization when the garbage collector ran. The fix is to track ownership explicitly and ensure only one externalptr owns a given state.</p>
+<p>On Windows, the <code>configure.win</code> script generates a UCRT-backed <code>msvcrt.def</code> so TinyCC resolves CRT symbols against <code>ucrtbase.dll</code> (R 4.2+ uses UCRT).</p>
 <p>Ownership semantics are explicit. Pointers from <code><a href="reference/tcc_malloc.html">tcc_malloc()</a></code> are tagged <code>rtinycc_owned</code> and can be released with <code><a href="reference/tcc_free.html">tcc_free()</a></code> (or by their R finalizer). Generated struct constructors use a struct-specific tag (<code>struct_&lt;name&gt;</code>) with an <code>RC_free_finalizer</code>; free them with <code>struct_&lt;name&gt;_free()</code>, not <code><a href="reference/tcc_free.html">tcc_free()</a></code>. Pointers from <code><a href="reference/tcc_data_ptr.html">tcc_data_ptr()</a></code> are tagged <code>rtinycc_borrowed</code> and are never freed by Rtinycc. Array returns are copied into a fresh R vector; set <code>free = TRUE</code> only when the C function returns a <code>malloc</code>-owned buffer.</p>
 </div>
 <div class="section level2">
@@ -154,7 +154,7 @@
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5612bb025090"</span></span>
+<span><span class="co">#&gt; [1] "0x610d7e933f00"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -175,11 +175,11 @@
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612b9c566b0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d7dff7090&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612b86c3c40&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d80e421d0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612b9c566b0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d7dff7090&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -226,8 +226,8 @@
 <span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc    193.03ms 197.98ms      5.06   53.98KB     6.75</span></span>
-<span><span class="co">#&gt; 2 Rbuiltin     3.46ms   4.34ms    235.      9.05KB     1.99</span></span>
+<span><span class="co">#&gt; 1 Rtinycc      30.8ms   39.2ms      21.1   53.98KB     26.9</span></span>
+<span><span class="co">#&gt; 2 Rbuiltin    547.4µs  580.5µs    1620.     9.05KB     28.0</span></span>
 <span></span>
 <span><span class="co"># For performance-sensitive code, move the loop into C and operate on arrays.</span></span>
 <span><span class="va">ffi_vec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -256,8 +256,8 @@
 <span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
 <span><span class="co">#&gt;   expression        min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt;   &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc_vec    67.1µs   94.8µs     9587.    39.1KB     6.57</span></span>
-<span><span class="co">#&gt; 2 Rbuiltin_vec   39.7µs   42.3µs    20517.    78.2KB    30.0</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 Rtinycc_vec    20.2µs   28.2µs    38722.    39.1KB     27.1</span></span>
+<span><span class="co">#&gt; 2 Rbuiltin_vec   17.1µs   17.6µs    56172.    78.2KB     84.4</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
@@ -316,7 +316,7 @@
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @5612bce2f0a8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -332,7 +332,7 @@
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @5612bce2f0a8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="benchmark">Benchmark<a class="anchor" aria-label="anchor" href="#benchmark"></a>
@@ -392,11 +392,11 @@
 <span><span class="co">#&gt; # A tibble: 3 × 6</span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 R             2.11s    2.11s     0.474     847KB     0   </span></span>
-<span><span class="co">#&gt; 2 quickr       9.96ms  10.53ms    95.2       782KB     1.55</span></span>
-<span><span class="co">#&gt; 3 Rtinycc    172.72ms 180.83ms     5.32      782KB     0</span></span>
+<span><span class="co">#&gt; 1 R          618.01ms 618.01ms      1.62     847KB    4.85 </span></span>
+<span><span class="co">#&gt; 2 quickr       3.77ms   4.14ms    241.       782KB    4.10 </span></span>
+<span><span class="co">#&gt; 3 Rtinycc     54.44ms   57.1ms     17.6      782KB    0.503</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">timings</span>, type <span class="op">=</span> <span class="st">"boxplot"</span><span class="op">)</span> <span class="op">+</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu">scale_x_bench_time</span><span class="op">(</span>base <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
-<p><img src="reference/figures/README-benchmark-convolve-1.png" alt="" width="100%"></p>
+<p><img src="reference/figures/README-benchmark-convolve-1.png" width="100%"></p>
 </div>
 <div class="section level3">
 <h3 id="structs-and-unions">Structs and unions<a class="anchor" aria-label="anchor" href="#structs-and-unions"></a>
@@ -419,15 +419,15 @@
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612bb9abee0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8e69a320&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612bb9abee0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8e69a320&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612be470c60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8324abf0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612be470c60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8324abf0&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -469,9 +469,9 @@
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612bfc6f8f0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d7e50b370&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612bfc6f8f0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d7e50b370&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -677,7 +677,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">sqlite</span><span class="op">$</span><span class="fu">sqlite3_libversion</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "3.26.0"</span></span>
+<span><span class="co">#&gt; [1] "3.45.1"</span></span>
 <span></span>
 <span><span class="va">db</span> <span class="op">&lt;-</span> <span class="va">sqlite</span><span class="op">$</span><span class="fu">open_db</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">sqlite</span><span class="op">$</span><span class="fu">sqlite3_exec</span><span class="op">(</span><span class="va">db</span>, <span class="st">"CREATE TABLE t (id INTEGER, name TEXT);"</span>, <span class="va">cb</span>, <span class="fu"><a href="reference/tcc_callback_ptr.html">tcc_callback_ptr</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
@@ -738,7 +738,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612b89c43e0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d803c8b80&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -756,7 +756,7 @@
 <div class="section level3">
 <h3 id="id_64-bit-integer-precision">64-bit integer precision<a class="anchor" aria-label="anchor" href="#id_64-bit-integer-precision"></a>
 </h3>
-<p>R represents <code>i64</code> and <code>u64</code> values as <code>double</code>, which loses precision beyond <img src="https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&amp;space;%5Cbg_white&amp;space;2%5E%7B53%7D%20%222%5E%7B53%7D%22" alt="2^{53}">. Values that differ only past that threshold become indistinguishable.</p>
+<p>R represents <code>i64</code> and <code>u64</code> values as <code>double</code>, which loses precision beyond <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mn>53</mn></msup><annotation encoding="application/x-tex">2^{53}</annotation></semantics></math>. Values that differ only past that threshold become indistinguishable.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53:     %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "2^53:     9007199254740992"</span></span>
@@ -784,11 +784,11 @@
 <span><span class="va">o</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">i</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_set_a</span><span class="op">(</span><span class="va">i</span>, <span class="fl">42L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612c5b56330&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8de462e0&gt;</span></span>
 <span></span>
 <span><span class="co"># Write the inner pointer into the outer struct</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">i</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612c4e62850&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d82ad5290&gt;</span></span>
 <span></span>
 <span><span class="co"># Read it back through indirection</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -815,9 +815,9 @@
 <span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">0xCAL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612be363c40&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8db557a0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span>, <span class="fl">0xFEL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5612be363c40&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x610d8db557a0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 202</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span><span class="op">)</span></span>
