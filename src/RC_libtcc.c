@@ -33,7 +33,7 @@ SEXP RC_unload_libtcc(void);
 
 typedef struct tcc_state_entry {
     TCCState *ptr;
-    SEXP weakref; // weakref to owner externalptr
+    SEXP owner_ext; // owning externalptr (preserved)
     struct tcc_state_entry *next;
 } tcc_state_entry_t;
 
@@ -45,21 +45,14 @@ static void RC_tcc_registry_remove(tcc_state_entry_t *entry) {
     while (*cur) {
         if (*cur == entry) {
             *cur = entry->next;
-            if (entry->weakref != R_NilValue) {
-                R_ReleaseObject(entry->weakref);
+            if (entry->owner_ext != R_NilValue) {
+                R_ReleaseObject(entry->owner_ext);
             }
             free(entry);
             return;
         }
         cur = &(*cur)->next;
     }
-}
-
-static void RC_tcc_registry_weakref_finalizer(SEXP wref) {
-    SEXP val = R_WeakRefValue(wref);
-    tcc_state_entry_t *entry = (tcc_state_entry_t *)R_ExternalPtrAddr(val);
-    RC_tcc_registry_remove(entry);
-    R_ClearExternalPtr(val);
 }
 
 static tcc_state_entry_t *RC_tcc_registry_find(TCCState *ptr) {
@@ -79,13 +72,10 @@ static void RC_tcc_registry_add(TCCState *ptr, SEXP owner_ext) {
         Rf_error("Out of memory (tcc registry)");
     }
     entry->ptr = ptr;
-    SEXP entry_ext = PROTECT(R_MakeExternalPtr(entry, R_NilValue, R_NilValue));
-    entry->weakref = R_MakeWeakRefC(owner_ext, entry_ext,
-                                    RC_tcc_registry_weakref_finalizer, FALSE);
-    R_PreserveObject(entry->weakref);
+    entry->owner_ext = owner_ext;
+    R_PreserveObject(entry->owner_ext);
     entry->next = g_tcc_state_registry;
     g_tcc_state_registry = entry;
-    UNPROTECT(1);
 }
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
