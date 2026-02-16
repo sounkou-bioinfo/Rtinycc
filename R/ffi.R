@@ -238,8 +238,10 @@ tcc_source <- function(ffi, code) {
 #' @param ffi A tcc_ffi object
 #' @param ... Named list of symbol definitions. Each definition is a list with:
 #'   \itemize{
-#'     \item args: List of FFI types for arguments (e.g., list("i32", "f64"))
+#'     \item args: List of fixed FFI argument types (e.g., list("i32", "f64"))
 #'     \item returns: FFI type for return value (e.g., "f64", "cstring")
+#'     \item variadic: Set TRUE for C varargs functions
+#'     \item varargs: Typed variadic tail (required when \code{variadic = TRUE})
 #'     \item code: Optional C code for the symbol (for embedded functions)
 #'   }
 #'   Callback arguments should use the form \code{callback:<signature>} (e.g.,
@@ -266,6 +268,75 @@ tcc_bind <- function(ffi, ...) {
   # Validate each symbol definition
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
+
+    if (is.null(sym$args)) {
+      sym$args <- list()
+    }
+
+    variadic <- isTRUE(sym$variadic)
+    has_varargs <- !is.null(sym$varargs)
+
+    if (!is.null(sym$variadic) && (!is.logical(sym$variadic) || length(sym$variadic) != 1)) {
+      stop(
+        "Symbol '",
+        sym_name,
+        "' variadic must be TRUE/FALSE",
+        call. = FALSE
+      )
+    }
+
+    if (variadic) {
+      if (length(sym$args) == 0) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' variadic functions need at least one fixed argument",
+          call. = FALSE
+        )
+      }
+      if (!has_varargs || length(sym$varargs) == 0) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' variadic functions require non-empty 'varargs' type list",
+          call. = FALSE
+        )
+      }
+      for (i in seq_along(sym$varargs)) {
+        vtype <- sym$varargs[[i]]
+        vinfo <- check_ffi_type(
+          vtype,
+          paste0("symbol '", sym_name, "' vararg ", i)
+        )
+        if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
+          stop(
+            "Symbol '",
+            sym_name,
+            "' vararg ",
+            i,
+            " must be a scalar FFI type",
+            call. = FALSE
+          )
+        }
+        if (startsWith(vtype, "callback") || identical(vtype, "sexp")) {
+          stop(
+            "Symbol '",
+            sym_name,
+            "' vararg ",
+            i,
+            " cannot be callback/sexp",
+            call. = FALSE
+          )
+        }
+      }
+    } else if (has_varargs) {
+      stop(
+        "Symbol '",
+        sym_name,
+        "' has 'varargs' but variadic is not TRUE",
+        call. = FALSE
+      )
+    }
 
     # Check required fields
     if (!"returns" %in% names(sym)) {
@@ -328,6 +399,17 @@ tcc_bind <- function(ffi, ...) {
         )
       }
     }
+
+    if (variadic) {
+      for (i in seq_along(sym$varargs)) {
+        check_ffi_type(
+          sym$varargs[[i]],
+          paste0("symbol '", sym_name, "' vararg ", i)
+        )
+      }
+    }
+
+    sym$variadic <- variadic
 
     # Store the symbol
     ffi$symbols[[sym_name]] <- sym
@@ -804,6 +886,8 @@ make_callable <- function(fn_ptr, sym, state) {
   force(sym)
 
   arg_types <- sym$args %||% list()
+  vararg_types <- sym$varargs %||% list()
+  variadic <- isTRUE(sym$variadic)
   sym_name <- sym$name
 
   # Create function that calls the wrapper via .Call()
@@ -811,11 +895,13 @@ make_callable <- function(fn_ptr, sym, state) {
     args <- list(...)
     n_args <- length(args)
 
+    expected_n <- length(arg_types) + if (variadic) length(vararg_types) else 0
+
     # Validate argument count
-    if (n_args != length(arg_types)) {
+    if (n_args != expected_n) {
       stop(
         "Expected ",
-        length(arg_types),
+        expected_n,
         " arguments, got ",
         n_args,
         call. = FALSE
@@ -833,30 +919,8 @@ make_callable <- function(fn_ptr, sym, state) {
     }
 
     # Call the wrapper function pointer directly using .Call()
-    # R's .Call() can invoke external pointers as functions!
-    if (n_args == 0) {
-      .RtinyccCall(fn_ptr)
-    } else if (n_args == 1) {
-      .RtinyccCall(fn_ptr, args[[1]])
-    } else if (n_args == 2) {
-      .RtinyccCall(fn_ptr, args[[1]], args[[2]])
-    } else if (n_args == 3) {
-      .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]])
-    } else if (n_args == 4) {
-      .RtinyccCall(fn_ptr, args[[1]], args[[2]], args[[3]], args[[4]])
-    } else if (n_args == 5) {
-      .RtinyccCall(
-        fn_ptr,
-        args[[1]],
-        args[[2]],
-        args[[3]],
-        args[[4]],
-        args[[5]]
-      )
-    } else {
-      # For more than 5 arguments, use do.call
-      do.call(.Call, c(list(fn_ptr), args))
-    }
+    # R's .Call() can invoke external pointers as functions.
+    do.call(.RtinyccCall, c(list(fn_ptr), args))
   }
 
   # Store the pointer in the function's environment to prevent GC

@@ -192,6 +192,7 @@ Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `i
 
 Pointer types include `ptr` (opaque external pointer), `sexp` (pass a `SEXP` directly), and callback signatures like `callback:double(double)`.
 
+Variadic C functions can be declared with `variadic = TRUE` and a typed `varargs = list(...)` tail in `tcc_bind()`. In the current implementation, the variadic tail arity and types are explicit at bind-time (for example `varargs = list("i32", "f64")`), and calls must provide that full typed tail.
 
 Array returns use `returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to copy the result into a new R vector. The `length_arg` is the 1-based index of the C argument that carries the array length. Set `free = TRUE` when the C function returns a `malloc`-owned buffer.
 

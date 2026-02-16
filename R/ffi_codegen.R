@@ -94,11 +94,12 @@ generate_c_wrapper <- function(
   symbol_name,
   wrapper_name,
   arg_types,
+  vararg_types = list(),
   return_type,
   c_code = NULL,
   is_external = FALSE
 ) {
-  n_args <- length(arg_types)
+  n_args <- length(arg_types) + length(vararg_types)
   return_info <- check_ffi_type(
     if (is.list(return_type)) return_type$type else return_type,
     "return value"
@@ -107,13 +108,23 @@ generate_c_wrapper <- function(
   # Always use R API mode: SEXP arguments and return
   # Build argument list
   if (n_args > 0) {
-    arg_names <- names(arg_types) %||% paste0("arg", seq_len(n_args))
+    fixed_arg_names <- names(arg_types)
+    if (is.null(fixed_arg_names) || all(fixed_arg_names == "")) {
+      fixed_arg_names <- paste0("arg", seq_along(arg_types))
+    }
+    vararg_names <- if (length(vararg_types) > 0) {
+      paste0("vararg", seq_along(vararg_types))
+    } else {
+      character(0)
+    }
+    arg_names <- c(fixed_arg_names, vararg_names)
+    all_arg_types <- c(arg_types, vararg_types)
     r_arg_names <- paste0("arg", seq_len(n_args), "_")
 
     # Input conversions from SEXP to C types
     input_lines <- character(0)
     for (i in seq_len(n_args)) {
-      ffi_type <- arg_types[[i]]
+      ffi_type <- all_arg_types[[i]]
       arg_name <- arg_names[[i]]
       r_name <- r_arg_names[[i]]
 
@@ -191,7 +202,7 @@ generate_external_declarations <- function(symbols) {
       paste0("symbol '", sym_name, "' return")
     )
 
-    arg_types <- sym$args
+    arg_types <- sym$args %||% list()
     if (length(arg_types) > 0) {
       arg_info <- lapply(
         arg_types,
@@ -206,12 +217,21 @@ generate_external_declarations <- function(symbols) {
       arg_decls <- "void"
     }
 
-    decl <- sprintf(
-      "extern %s %s(%s);",
-      return_info$c_type,
-      sym_name,
-      arg_decls
-    )
+    if (isTRUE(sym$variadic)) {
+      decl <- sprintf(
+        "extern %s %s(%s, ...);",
+        return_info$c_type,
+        sym_name,
+        arg_decls
+      )
+    } else {
+      decl <- sprintf(
+        "extern %s %s(%s);",
+        return_info$c_type,
+        sym_name,
+        arg_decls
+      )
+    }
     decls <- c(decls, decl)
   }
 
@@ -234,6 +254,7 @@ generate_wrappers <- function(
       symbol_name = sym_name,
       wrapper_name = wrapper_name,
       arg_types = sym$args,
+      vararg_types = sym$varargs %||% list(),
       return_type = sym$returns,
       is_external = is_external
     )
