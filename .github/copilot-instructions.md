@@ -89,6 +89,11 @@ Implementation lives in `src/RC_libtcc.c`:
 Do **not** reintroduce shutdown/unload hooks to “solve” this; the correct fix
 is ownership tracking and preventing double-finalization.
 
+Current checkout note: we do **not** rely on a weakref-based `tcc_state`
+ownership model in the active code path. Lifetime safety is provided by
+owned/borrowed externalptr tracking in C and by retaining `state` in callable
+closure environments in R.
+
 ### R API symbol resolution — R.def
 
 TCC JIT code calls R API functions (`Rf_ScalarInteger`, `Rf_error`, `R_NilValue`, etc.). On Windows these live in `R.dll`. `configure.win` generates `R.def` from `R.dll` via `tcc -impdef` and places it in `inst/tinycc/lib/`. At compile time, `R/ffi.R` calls `tcc_add_library(state, "R")` on Windows, which makes TCC load `R.def` and resolve R API symbols through `R.dll`.
