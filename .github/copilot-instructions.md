@@ -302,6 +302,55 @@ Generated C should:
 5. Add caching and invalidation.
 6. Add docs/demo in README and tinytests for parity vs source R.
 
+### Current implementation progress (rjit branch snapshot)
+
+Status as of this branch:
+
+- `tcc_quick()` public API exists and is exported.
+- Declaration parsing is implemented in `R/tcc_quick_declare.R`.
+- Scalar lowering/codegen is implemented for arithmetic, comparisons, logical ops, `if`/`ifelse`, and selected unary math calls.
+- Boundary detection for `.Call`, `.C`, `.External`, `.Internal`, `.Primitive` is implemented.
+- Fallback policy is implemented for out-of-subset expressions, with `fallback = auto|always|never` behavior.
+- A generic nested-loop kernel path exists in `R/tcc_quick_lower.R` + `R/tcc_quick_codegen.R` and now supports dynamic loop depth (non-hardcoded loop nesting).
+- tinytests exist in `inst/tinytest/test_tcc_quick_basic.R`, including convolution parity.
+- README benchmark includes baseline R, `quickr`, `tcc_quick`, and manual C FFI convolution path.
+
+Remaining gaps vs long-term target:
+
+- Lowering is still partly pattern-driven for kernel forms; it is not yet a full statement-level compiler for arbitrary loop/branch combinations.
+- IR is still ad-hoc lists; no dedicated `tcc_quick_ir.R` typed node constructors/validators yet.
+- No bytecode-assisted debug lowering yet.
+- No centralized allowlist enforcement step for emitted R API symbols yet.
+
+### Codetools-style structural improvements (next refactor target)
+
+Use `.sync/codetools/R/codetools.R` and `.sync/codetools/noweb/codetools.nw` as architectural inspiration.
+
+Recommended refactor pattern:
+
+1. Build a generic walker factory (handler dispatch + call fallback + leaf handler), similar in spirit to codetools `walkCode`/`makeCodeWalker`.
+2. Split lowering into independent passes instead of monolithic pattern checks:
+	- declaration/scope collection,
+	- control-flow normalization,
+	- type+shape inference,
+	- boundary annotation,
+	- IR construction.
+3. Replace kernel-specific matching with statement handlers (`{`, `<-`, `for`, `while`, `repeat`, `if`, `ifelse`, `[`, `[<-`, calls).
+4. Represent loops in uniform IR (`for` with iterator metadata and body list), allowing arbitrary nesting depth without special cases.
+5. Add pass-local context objects (environment, loop stack, symbol table) instead of free-form recursion state.
+6. Add verifier pass before codegen (required fields, types, ownership, known symbol classes).
+7. Keep fallback edges explicit in IR (e.g. `tag = "fallback_eval"`) so codegen is straightforward and auditable.
+
+Suggested near-term file split:
+
+- `R/tcc_quick_walk.R` (generic walker + dispatcher)
+- `R/tcc_quick_normalize.R` (surface AST normalization)
+- `R/tcc_quick_typecheck.R` (typed annotations)
+- `R/tcc_quick_ir.R` (constructors/validators)
+- `R/tcc_quick_lower_stmt.R` (statement-level lowering)
+- `R/tcc_quick_lower_expr.R` (expression-level lowering)
+- `R/tcc_quick_codegen_*.R` split by IR families (scalar, loops, fallback)
+
 ### Test requirements
 
 Add tinytests for:

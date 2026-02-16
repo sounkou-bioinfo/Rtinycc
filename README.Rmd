@@ -422,7 +422,7 @@ timings <- bench::mark(
   Rtinycc_manual_c = ffi_conv$convolve(a, na, b, nb, nab),
   min_time = 2
 )
-timings
+print(timings)
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -744,7 +744,7 @@ ffi$global_global_counter_get()
 if (Sys.info()[["sysname"]] == "Linux") {
   c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
 
-  n_rows <- 200000L
+  n_rows <- 20000L
   n_cols <- 8L
   block_size <- 1024L * 1024L
 
