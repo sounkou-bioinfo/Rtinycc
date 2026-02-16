@@ -2,15 +2,11 @@
 # configure.win — build TinyCC on Windows via Rtools (MSYS2/mingw)
 set -ex
 
-# R's build configuration - use UCRT toolchain
+# R's build configuration
 MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
 CC=`"${R_HOME}/bin/R" CMD config CC`
 CC=$(echo "${CC}" | awk '{print $1}')
 AR=`"${R_HOME}/bin/R" CMD config AR`
-
-# Force UCRT build - same as R 4.2+
-export CFLAGS="-D_UCRT -D__USE_MINGW_ANSI_STDIO=1"
-export LDFLAGS="-lucrt"
 
 THISDir=$(dirname "$0")
 THISDir=$(cd "$THISDir" && pwd)
@@ -34,12 +30,11 @@ if [ -d "$TINYCC_SRC" ]; then
     cd "$TINYCC_SRC"
     echo "Configuring and building tinycc ..."
 
-    # Build TinyCC with UCRT compatibility like R itself
-    CFLAGS="-D_UCRT -D__USE_MINGW_ANSI_STDIO=1" LDFLAGS="-lucrt" ./configure \
-        --prefix="$TINYCC_DEST" \
+    # TCC's configure detects WIN32 from the compiler target and
+    # defaults to building libtcc.dll (CONFIG_static=no).
+    ./configure --prefix="$TINYCC_DEST" \
         --cc="$CC" \
-        --ar="$AR" \
-        --extra-cflags="-D_UCRT"
+        --ar="$AR"
 
     mkdir -p "$TINYCC_DEST/lib"
     mkdir -p "$TINYCC_DEST/include"
@@ -67,16 +62,10 @@ if [ -d "$TINYCC_SRC" ]; then
     cp -f libtcc.h "$TINYCC_DEST/libtcc/" 2>/dev/null || true
 
     # --- install TCC system headers (for TCC runtime use only) ---
-    # On Windows UCRT, avoid header conflicts by not installing MinGW headers
     cp -f include/*.h "$TINYCC_DEST/include/" 2>/dev/null || true
     cp -f tcclib.h "$TINYCC_DEST/include/" 2>/dev/null || true
-    # Do NOT copy win32 headers on UCRT - they conflict with Rtools
-    if [ "$MSYSTEM" = "UCRT64" ]; then
-        echo "Skipping MinGW headers on UCRT build to avoid conflicts"
-    else
-        mkdir -p "$TINYCC_DEST/include/winapi"
-        cp -rf win32/include/* "$TINYCC_DEST/include/" 2>/dev/null || true
-    fi
+    mkdir -p "$TINYCC_DEST/include/winapi"
+    cp -rf win32/include/* "$TINYCC_DEST/include/" 2>/dev/null || true
 
     # --- install libraries ---
     # Both DLL and static archive; Makevars.win links against the DLL
@@ -118,16 +107,20 @@ if [ -d "$TINYCC_SRC" ]; then
         ./tcc.exe -impdef "$UCRT_DLL" -o "$TINYCC_DEST/lib/ucrtbase.def" \
             || echo "WARNING: tcc -impdef ucrtbase.dll failed"
         
-        # Patch TCC to use UCRT instead of MSVCRT
-        if [ -f "$TINYCC_DEST/lib/msvcrt.def" ]; then
-            mv "$TINYCC_DEST/lib/msvcrt.def" "$TINYCC_DEST/lib/msvcrt.def.bak"
-            cp "$TINYCC_DEST/lib/ucrtbase.def" "$TINYCC_DEST/lib/msvcrt.def"
-            echo "Replaced msvcrt.def with ucrtbase.def for UCRT compatibility"
-        fi
-        
-        # Patch tccpe.c to use UCRT instead of MSVCRT in library list
-        sed -i 's/"msvcrt", "kernel32"/"ucrt", "kernel32"/' tccpe.c
-        echo "Patched tccpe.c to use UCRT instead of MSVCRT"
+    # Generate ucrt.def to replace msvcrt.def.
+    # R 4.2+ uses UCRT; TCC defaults to msvcrt.  If JIT code calls
+    # calloc() from msvcrt and the host frees with UCRT's free(),
+    # the heap mismatch causes a crash.  Replacing msvcrt.def with
+    # ucrt.def (named msvcrt.def so TCC picks it up automatically)
+    # ensures JIT code uses the same CRT as R.
+    UCRT_DLL=$(find /c/Windows/System32 -maxdepth 1 -iname "ucrtbase.dll" 2>/dev/null | head -n 1)
+    if [ -n "$UCRT_DLL" ]; then
+        echo "Generating ucrt.def from $UCRT_DLL ..."
+        ./tcc.exe -impdef "$UCRT_DLL" -o "$TINYCC_DEST/lib/msvcrt.def" \
+            || echo "WARNING: tcc -impdef ucrtbase.dll failed; keeping original msvcrt.def"
+    else
+        echo "WARNING: ucrtbase.dll not found; keeping original msvcrt.def"
+    fi
     else
         echo "WARNING: ucrtbase.dll not found; keeping original msvcrt.def"
     fi
