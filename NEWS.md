@@ -1,5 +1,7 @@
 # Rtinycc 0.0.3.9000 (development version)
 
+- Add variadic FFI support in `tcc_bind()` with both legacy typed-tail mode (`variadic = TRUE`, `varargs`) and true variadic mode (`variadic = TRUE`, `varargs_types`, `varargs_min`, `varargs_max`).
+
 - Refactor FFI codegen and callbacks to use lambda.r guard rules instead of long `if`/`else` or `switch` chains. This keeps type-mapping logic centralized in `R/aaa_ffi_codegen_rules.R`, makes behavior easier to extend, and reduces duplication across codegen sites.
 
 - Fix exit-time segfaults on Windows (and potential issues on other platforms) by setting `onexit = FALSE` on all `R_RegisterCFinalizerEx()` calls. External pointer finalizers for TCC states, owned pointers, callbacks, and JIT-generated struct/union constructors now only run during normal garbage collection, not during R shutdown. At process exit the OS reclaims all memory; running teardown code while the runtime is shutting down caused crashes on Windows due to DLL unload ordering and CRT heap teardown races.
