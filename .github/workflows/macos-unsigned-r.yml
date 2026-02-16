@@ -1,0 +1,79 @@
+name: macOS (unsigned R) CI
+
+on:
+  workflow_dispatch:
+  #push:
+  #  branches: [main, master]
+  #pull_request:
+
+jobs:
+  test-macos-unsigned:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download unsigned R binary
+        run: |
+          curl -LO https://mac.r-project.org/big-sur/R-4.5-branch/arm64/R-4.5-branch.tar.gz
+          sudo tar -xzf R-4.5-branch.tar.gz -C /
+          # echo "/Library/Frameworks/R.framework/Resources/bin" >> $GITHUB_PATH
+          echo "R_HOME=/Library/Frameworks/R.framework/Resources" >> $GITHUB_ENV
+          
+      - name: Create /opt/R/arm64 symlinks
+        run: |
+          sudo mkdir -p /opt/R/arm64
+          sudo ln -sf /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/include /opt/R/arm64/include
+          sudo ln -sf /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib /opt/R/arm64/lib
+
+      - name: Check R version
+        run: |
+          "/Library/Frameworks/R.framework/Resources/bin/R" --version
+
+      - name: Install dependencies
+        run: |
+          "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'install.packages(c("devtools", "tinytest"), repos="https://cloud.r-project.org")'
+
+      - name: Install package
+        run: |
+          "/Library/Frameworks/R.framework/Resources/bin/R" CMD BUILD --preclean .
+          "/Library/Frameworks/R.framework/Resources/bin/R" CMD INSTALL Rtinycc_*.tar.gz
+
+      - name: Install lldb
+        run: |
+          brew install llvm
+
+      - name: Run tests with detailed lldb capture
+        run: |
+          # Create an lldb script that stops on SIGBUS and dumps backtraces, disassembly and registers
+          cat > lldb_cmds.txt <<'LLDB'
+          # stop/notify on SIGBUS
+          process handle SIGBUS -p true -s true -n true
+          settings set target.run-args "./inst/tinytest/test_libtcc.R"
+          run
+          # initial exec stop can occur; continue until SIGBUS occurs
+          process continue
+          # print all thread backtraces (after SIGBUS stop)
+          thread backtrace all
+          # list threads so we can pick the crashing one interactively if needed
+          thread list
+          # select the thread that shows libtcc frames (replace N with the thread id if necessary)
+          # e.g. "thread select 2"
+          # select the frame you want to inspect (use the frame index from the backtrace)
+          # e.g. "frame select 2"
+          # disassemble the selected frame (plain disassemble works across LLDB versions)
+          disassemble
+          # dump registers
+          register read
+          # full backtrace of all threads for context
+          bt all
+          quit
+          LLDB
+
+          # Run lldb in batch mode with the command script against Rscript test entry
+          lldb --batch -s lldb_cmds.txt -- /Library/Frameworks/R.framework/Resources/bin/Rscript ./inst/tinytest/test_libtcc.R || true
+      - name: Run tests
+        run: |
+          # run test directly
+          "/Library/Frameworks/R.framework/Resources/bin/Rscript" ./inst/tinytest/test_libtcc.R
+          "/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'tinytest::test_package("Rtinycc")'

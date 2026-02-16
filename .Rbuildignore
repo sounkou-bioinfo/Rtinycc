@@ -1,0 +1,16 @@
+^README\.Rmd$
+^\.github$
+^README\.html$
+src/*so$
+src/*.o
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^LICENSE\.md$
+^Rtinycc*tar\.gz$
+^tinycc/*$
+^\.vscode$
+^Makefile$
+^AGENTS.md$
+^\.sync/.*$
+^treesiter\.c/.*$

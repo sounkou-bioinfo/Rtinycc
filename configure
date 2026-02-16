@@ -1,0 +1,109 @@
+
+#!/bin/sh
+# configure script to build and install libffi to inst/libffi for Unix
+THISDir=`dirname $0`
+THISDir=`realpath ${THISDir}`
+MAKE=`"${R_HOME}/bin/R" CMD config MAKE`
+CC=`"${R_HOME}/bin/R" CMD config CC`
+CC=$(echo "${CC}" | awk '{print $1}')
+AR=`"${R_HOME}/bin/R" CMD config AR`
+AR=$(echo "${AR}" | awk '{print $1}')
+RANLIB=`"${R_HOME}/bin/R" CMD config RANLIB`
+TINYCC_SRC="${THISDir}/src/tinycc"
+> "$THISDir/config.log"
+
+# Always show config.log on exit
+CONFIG_LOG="$THISDir/config.log"
+trap "cat '$CONFIG_LOG'" EXIT
+
+echo "Unpacking tinycc tarball to ${TINYCC_SRC} ..." >> "$THISDir/config.log"
+"${R_HOME}/bin/Rscript" "${THISDir}/tools/vendortinycc.R" unpack
+
+TINYCC_DEST="${THISDir}/inst/tinycc"
+if [ -d "$TINYCC_DEST" ]; then
+    echo "Removing existing tinycc installation at $TINYCC_DEST ..." >> "$THISDir/config.log"
+    rm -rf "$TINYCC_DEST"
+else 
+    mkdir -p "$TINYCC_DEST"
+    echo "Created tinycc installation directory at $TINYCC_DEST" >> "$THISDir/config.log"
+fi
+# Build TinyCC
+if [ -d "$TINYCC_SRC" ]; then
+    cd "$TINYCC_SRC"
+    echo "$PWD"
+    echo "Configuring and building tinycc ..."
+    echo "Configuring and building tinycc ..." >> "$THISDir/config.log"
+    # Remove '-flat_namespace' from tinycc/Makefile on macOS
+    if [ "$(uname)" = "Darwin" ]; then
+        sed -i 's/-flat_namespace//g' "$TINYCC_SRC/Makefile"
+        sed -i '' -e 's/-flat_namespace//g' "$TINYCC_SRC/Makefile"
+    fi
+    grep "flat_namespace" "$TINYCC_SRC/Makefile" >> "$THISDir/config.log" || echo "No -flat_namespace found in Makefile" >> "$THISDir/config.log"
+    # Configure TinyCC
+    ./configure --prefix="$TINYCC_DEST" \
+        --cc="$CC" \
+        --ar="$AR" \
+        --extra-cflags="-fPIC" \
+        --debug
+    
+    mkdir -p "$TINYCC_DEST/lib"
+    mkdir -p "$TINYCC_DEST/include"
+    
+    echo "Running make (shared + static libtcc) ..." >> "$THISDir/config.log"
+    # Detect platform for shared library extension
+    SHLIB=libtcc.so
+    if [ "$(uname)" = "Darwin" ]; then
+        SHLIB=libtcc.dylib
+        echo "Detected macOS platform, using $SHLIB for shared library" >> "$THISDir/config.log"
+    else
+        echo "Detected non-macOS platform, using $SHLIB for shared library" >> "$THISDir/config.log"
+    fi
+    # Build both shared and static libraries
+
+    $MAKE CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc >> "$THISDir/config.log" 2>&1 || { echo "tinycc make failed" >> "$THISDir/config.log"; exit 1; }
+    
+    echo "Running make install ..." >> "$THISDir/config.log"
+    $MAKE install >> "$THISDir/config.log" 2>&1
+
+    # Ensure runtime library is installed (needed by CLI and libtcc)
+    LIBTCC1_SRC=$(find "$TINYCC_SRC" -name 'libtcc1.a' | head -n 1)
+    if [ -n "$LIBTCC1_SRC" ]; then
+        mkdir -p "$TINYCC_DEST/lib/tcc"
+        cp "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" >> "$THISDir/config.log" 2>&1 || true
+    else
+        echo "WARNING: libtcc1.a not found during build; CLI may fail" >> config.log
+    fi
+    # Copy shared library if built
+    for so in "$TINYCC_SRC/libtcc.so" "$TINYCC_SRC/libtcc.dylib"; do
+        if [ -f "$so" ]; then
+            mkdir -p "$TINYCC_DEST/lib"
+            cp "$so" "$TINYCC_DEST/lib/" >> "$THISDir/config.log" 2>&1 || true
+        fi
+    done
+    
+    echo "tinycc built and installed to $TINYCC_DEST" >> "$THISDir/config.log"
+    
+    # Always remove TCC source after build for R CMD check complains
+    rm -rf "$TINYCC_SRC" || true
+else
+    echo "Error: tinycc source directory $TINYCC_SRC does not exist."
+    exit 1
+fi
+
+# Run minimal TCC JIT test (no R involved)
+echo "" >> "$THISDir/config.log"
+echo "=== Running minimal TCC JIT test (tools/tcc_minimal_test.c) ===" >> "$THISDir/config.log"
+if [ -x "${THISDir}/tools/run_tcc_minimal_test.sh" ]; then
+    (cd "${THISDir}/tools" && ./run_tcc_minimal_test.sh >> "$THISDir/config.log" 2>&1)
+    TCC_MINIMAL_EXIT=$?
+    echo "Minimal TCC JIT test exit code: $TCC_MINIMAL_EXIT" >> "$THISDir/config.log"
+    if [ "$TCC_MINIMAL_EXIT" -ne 0 ]; then
+        echo "ERROR: Minimal TCC JIT test failed (see above for output)" >> "$THISDir/config.log"
+    else
+        echo "Minimal TCC JIT test succeeded" >> "$THISDir/config.log"
+    fi
+    rm -f  ${THISDir}/tools/tcc_minimal_test || true
+else
+    echo "Minimal TCC JIT test script not found or not executable" >> "$THISDir/config.log"
+fi
+echo "=== End minimal TCC JIT test ===" >> "$THISDir/config.log"
