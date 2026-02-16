@@ -77,7 +77,7 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const void *args);
 
-void R_unload_Rtinycc(DllInfo *info) {
+R_DLLEXPORT void R_unload_Rtinycc(DllInfo *info) {
     (void)info;
     Rprintf("[RTINYCC_DIAG] R_unload_Rtinycc called (DLL unload)\n");
     RC_set_shutting_down(Rf_ScalarLogical(1));
@@ -158,7 +158,7 @@ static const R_CallMethodDef CallEntries[] = {
 };
 
 // Initialization function
-void R_init_Rtinycc(DllInfo *dll) {
+R_DLLEXPORT void R_init_Rtinycc(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }
