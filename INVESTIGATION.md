@@ -29,7 +29,8 @@
   - Marks externalptrs as owned (`rtinycc_tcc_state_owned`) or borrowed (`rtinycc_tcc_state_borrowed`).
   - Registers `RC_tcc_finalizer` only for owned pointers.
   - Registers `RC_null_finalizer` for borrowed pointers.
-  - Adds owned pointers to a registry, removed on finalization via a weakref finalizer.
+  - Stores the owning externalptr in the registry and **preserves** it.
+  - Borrowed wrappers store the owner in the `prot` field to keep the owner alive.
 - `RC_tcc_finalizer()` now:
   - No-ops if the externalptr is marked borrowed.
   - Removes the state from the registry before deleting.

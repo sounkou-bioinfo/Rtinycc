@@ -9,11 +9,6 @@
 #include <R_ext/Print.h>
 #include <stdint.h>
 
-#ifdef _WIN32
-#define RTINYCC_DLLEXPORT __declspec(dllexport)
-#else
-#define RTINYCC_DLLEXPORT
-#endif
 
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_set_shutting_down(SEXP flag);
@@ -159,16 +154,7 @@ static const R_CallMethodDef CallEntries[] = {
 };
 
 // Initialization function
-RTINYCC_DLLEXPORT void R_init_Rtinycc(DllInfo *dll) {
+void R_init_Rtinycc(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }
-
-
-// diagnostic 
-
-//RTINYCC_DLLEXPORT void R_unload_Rtinycc(DllInfo *info) {
- //   (void)info;
-  //  Rprintf("[RTINYCC_DIAG] R_unload_Rtinycc called (DLL unload)\n");
-  //  RC_set_shutting_down(Rf_ScalarLogical(1));
-//}
