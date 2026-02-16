@@ -101,6 +101,7 @@
 <li>Borrowed wrappers keep the owner alive via the externalptr <code>prot</code> field.</li>
 </ul><p>Implementation lives in <code>src/RC_libtcc.c</code>: <code>tcc_state_entry_t</code> registry, <code>RC_tcc_state_is_owned()</code>, and ownership tags <code>rtinycc_tcc_state_owned</code> / <code>rtinycc_tcc_state_borrowed</code>.</p>
 <p>Do <strong>not</strong> reintroduce shutdown/unload hooks to “solve” this; the correct fix is ownership tracking and preventing double-finalization.</p>
+<p>Current checkout note: we do <strong>not</strong> rely on a weakref-based <code>tcc_state</code> ownership model in the active code path. Lifetime safety is provided by owned/borrowed externalptr tracking in C and by retaining <code>state</code> in callable closure environments in R.</p>
 </div>
 <div class="section level3">
 <h3 id="r-api-symbol-resolution--rdef">R API symbol resolution — R.def<a class="anchor" aria-label="anchor" href="#r-api-symbol-resolution--rdef"></a></h3>

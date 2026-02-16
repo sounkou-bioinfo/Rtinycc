@@ -160,6 +160,11 @@ Implementation lives in `src/RC_libtcc.c`: `tcc_state_entry_t` registry,
 Do **not** reintroduce shutdown/unload hooks to “solve” this; the
 correct fix is ownership tracking and preventing double-finalization.
 
+Current checkout note: we do **not** rely on a weakref-based `tcc_state`
+ownership model in the active code path. Lifetime safety is provided by
+owned/borrowed externalptr tracking in C and by retaining `state` in
+callable closure environments in R.
+
 ### R API symbol resolution — R.def
 
 TCC JIT code calls R API functions (`Rf_ScalarInteger`, `Rf_error`,
