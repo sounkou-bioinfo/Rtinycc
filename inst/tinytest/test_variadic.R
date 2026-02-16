@@ -90,7 +90,7 @@ expect_error(
 expect_error(
   tcc_ffi() |>
     tcc_bind(bad = list(args = list("i32"), variadic = TRUE, returns = "i32")),
-  info = "variadic requires varargs list"
+  info = "variadic requires varargs or varargs_types"
 )
 
 expect_error(
@@ -104,6 +104,77 @@ expect_error(
       )
     ),
   info = "variadic varargs must be scalar types"
+)
+
+# True variadic mode with allowed types + min/max arity
+ffi_var_types <- tcc_ffi() |>
+  tcc_source("\
+    #include <stdarg.h>\
+\
+    double probe_types(int tag, ...) {\
+      va_list ap;\
+      va_start(ap, tag);\
+      double out = 0.0;\
+      if (tag == 1) out = (double)va_arg(ap, int);\
+      else if (tag == 2) out = va_arg(ap, double);\
+      else if (tag == 3) out = (double)va_arg(ap, int) + va_arg(ap, double);\
+      va_end(ap);\
+      return out;\
+    }\
+  ") |>
+  tcc_bind(
+    probe_types = list(
+      args = list("i32"),
+      variadic = TRUE,
+      varargs_types = list("f64", "i32"),
+      varargs_min = 1L,
+      varargs_max = 2L,
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+expect_equal(ffi_var_types$probe_types(1L, 2L), 2)
+expect_equal(ffi_var_types$probe_types(2L, 2.5), 2.5)
+expect_equal(ffi_var_types$probe_types(3L, 1L, 2.5), 3.5)
+
+expect_error(
+  ffi_var_types$probe_types(0L),
+  info = "true variadic mode enforces varargs_min"
+)
+
+expect_error(
+  ffi_var_types$probe_types(4L, 1L, 2L, 3L),
+  info = "true variadic mode enforces varargs_max"
+)
+
+expect_error(
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs = list("i32"),
+        varargs_types = list("i32"),
+        returns = "i32"
+      )
+    ),
+  info = "cannot set both varargs and varargs_types"
+)
+
+expect_error(
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs_types = list("i32"),
+        varargs_min = 2L,
+        varargs_max = 1L,
+        returns = "i32"
+      )
+    ),
+  info = "varargs_min <= varargs_max"
 )
 
 expect_error(

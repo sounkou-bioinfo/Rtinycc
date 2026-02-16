@@ -76,6 +76,44 @@ variadic_wrapper_name <- function(wrapper_name, n_varargs) {
   paste0(wrapper_name, "__v", as.integer(n_varargs))
 }
 
+variadic_type_token <- function(x) {
+  gsub("[^A-Za-z0-9_]", "_", x)
+}
+
+variadic_signature_key <- function(vararg_types) {
+  if (length(vararg_types) == 0) {
+    return("__none__")
+  }
+  paste(vararg_types, collapse = "|")
+}
+
+variadic_wrapper_name_types <- function(wrapper_name, vararg_types) {
+  suffix <- if (length(vararg_types) == 0) {
+    "none"
+  } else {
+    paste(vapply(vararg_types, variadic_type_token, character(1)), collapse = "__")
+  }
+  paste0(wrapper_name, "__v", length(vararg_types), "__", suffix)
+}
+
+generate_variadic_type_sequences <- function(allowed_types, n_varargs) {
+  if (n_varargs == 0) {
+    return(list(list()))
+  }
+  if (length(allowed_types) == 0) {
+    return(list())
+  }
+
+  idx_grid <- expand.grid(
+    rep(list(seq_along(allowed_types)), n_varargs),
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  lapply(seq_len(nrow(idx_grid)), function(i) {
+    as.list(unname(unlist(allowed_types[as.integer(idx_grid[i, ])])))
+  })
+}
+
 # Callback helper: declare a function pointer bound to a trampoline
 callback_funptr_decl <- function(arg_name, sig, trampoline_name) {
   arg_types <- sig$arg_types
@@ -258,27 +296,52 @@ generate_wrappers <- function(
     base_wrapper_name <- paste0(prefix, sym_name)
 
     if (isTRUE(sym$variadic)) {
-      all_varargs <- sym$varargs %||% list()
-      max_varargs <- length(all_varargs)
-      min_varargs <- sym$varargs_min %||% max_varargs
+      vararg_mode <- sym$varargs_mode %||% "prefix"
 
-      for (n_varargs in seq.int(min_varargs, max_varargs)) {
-        this_varargs <- if (n_varargs > 0) {
-          all_varargs[seq_len(n_varargs)]
-        } else {
-          list()
+      if (identical(vararg_mode, "types")) {
+        allowed_types <- sym$varargs_types %||% list()
+        min_varargs <- sym$varargs_min %||% 0L
+        max_varargs <- sym$varargs_max %||% min_varargs
+
+        for (n_varargs in seq.int(min_varargs, max_varargs)) {
+          type_sequences <- generate_variadic_type_sequences(allowed_types, n_varargs)
+
+          for (this_varargs in type_sequences) {
+            wrapper <- generate_c_wrapper(
+              symbol_name = sym_name,
+              wrapper_name = variadic_wrapper_name_types(base_wrapper_name, this_varargs),
+              arg_types = sym$args,
+              vararg_types = this_varargs,
+              return_type = sym$returns,
+              is_external = is_external
+            )
+
+            wrappers <- c(wrappers, wrapper, "", "")
+          }
         }
+      } else {
+        all_varargs <- sym$varargs %||% list()
+        max_varargs <- length(all_varargs)
+        min_varargs <- sym$varargs_min %||% max_varargs
 
-        wrapper <- generate_c_wrapper(
-          symbol_name = sym_name,
-          wrapper_name = variadic_wrapper_name(base_wrapper_name, n_varargs),
-          arg_types = sym$args,
-          vararg_types = this_varargs,
-          return_type = sym$returns,
-          is_external = is_external
-        )
+        for (n_varargs in seq.int(min_varargs, max_varargs)) {
+          this_varargs <- if (n_varargs > 0) {
+            all_varargs[seq_len(n_varargs)]
+          } else {
+            list()
+          }
 
-        wrappers <- c(wrappers, wrapper, "", "")
+          wrapper <- generate_c_wrapper(
+            symbol_name = sym_name,
+            wrapper_name = variadic_wrapper_name(base_wrapper_name, n_varargs),
+            arg_types = sym$args,
+            vararg_types = this_varargs,
+            return_type = sym$returns,
+            is_external = is_external
+          )
+
+          wrappers <- c(wrappers, wrapper, "", "")
+        }
       }
     } else {
       wrapper <- generate_c_wrapper(
