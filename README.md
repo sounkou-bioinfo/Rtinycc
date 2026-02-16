@@ -3,7 +3,8 @@
 
 # Rtinycc
 
-Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
+Builds `TinyCC` `Cli` and Library For `C` Scripting in
+`R`
 
 <!-- badges: start -->
 
@@ -59,27 +60,23 @@ it, TCC cannot resolve host symbols (e.g. `RC_free_finalizer`) through
 the dynamic linker. Rtinycc works around this with
 `RC_libtcc_add_host_symbols()`, which registers package-internal C
 functions via `tcc_add_symbol()` before relocation. Any new C function
-referenced by generated TCC code must be added there. <!--
-Windows support (experimental) required solving several interacting
-problems. R 4.2+ links against the Universal CRT (`ucrtbase.dll`) while
-TCC defaults to `msvcrt.dll`; mixing heaps across the two CRTs crashes on
-`free()`. The build system works around this by generating a `.def` file
-from `ucrtbase.dll` and naming it `msvcrt.def`, so all CRT symbols resolve
-from the same runtime. Several CRT functions commonly used in C code
-(`printf`, `snprintf`, `sprintf`) are inline functions in UCRT headers
-rather than direct DLL exports, so TCC's JIT linker cannot resolve them.
-The package's own codegen avoids these functions; user code that needs
-formatted output should use R API functions instead (e.g.
-`Rf_warning()`, `Rprintf()`). Async callbacks and `fork()`-based
-parallelism are not available on Windows.
---> Ownership semantics are explicit. Pointers from `tcc_malloc()` are
-tagged `rtinycc_owned` and can be released with `tcc_free()` (or by
-their R finalizer). Generated struct constructors use a struct-specific
-tag (`struct_<name>`) with an `RC_free_finalizer`; free them with
-`struct_<name>_free()`, not `tcc_free()`. Pointers from `tcc_data_ptr()`
-are tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array
-returns are copied into a fresh R vector; set `free = TRUE` only when
-the C function returns a `malloc`-owned buffer.
+referenced by generated TCC code must be added there. On Windows, the
+build still generates a UCRT-backed `msvcrt.def` so TinyCC resolves CRT
+symbols against `ucrtbase.dll` (R 4.2+ uses UCRT). That avoids cross-CRT
+heap mismatches, but it is **not** the root cause of the segfaults we
+investigated. The crashes were due to lifetime management of external
+pointers and finalizers: multiple externalptr wrappers owning the same
+`TCCState*` led to double finalization when the garbage collector ran.
+The fix is to track ownership explicitly and ensure only one externalptr
+owns a given state. Ownership semantics are explicit. Pointers from
+`tcc_malloc()` are tagged `rtinycc_owned` and can be released with
+`tcc_free()` (or by their R finalizer). Generated struct constructors
+use a struct-specific tag (`struct_<name>`) with an `RC_free_finalizer`;
+free them with `struct_<name>_free()`, not `tcc_free()`. Pointers from
+`tcc_data_ptr()` are tagged `rtinycc_borrowed` and are never freed by
+Rtinycc. Array returns are copied into a fresh R vector; set `free =
+TRUE` only when the C function returns a `malloc`-owned
+buffer.
 
 ## Installation
 
@@ -180,7 +177,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x61155dfbadf0"
+#> [1] "0x558b07a55810"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -211,11 +208,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x61155e6f8770>
+#> <pointer: 0x558b07a8e2c0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x61155bfe4830>
+#> <pointer: 0x558b085be750>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x61155e6f8770>
+#> <pointer: 0x558b07a8e2c0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -246,11 +243,11 @@ Pointer types include `ptr` (opaque external pointer), `sexp` (pass a
 `SEXP` directly), and callback signatures like
 `callback:double(double)`.
 
-Array returns use
-`returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to
-copy the result into a new R vector. The `length_arg` is the 1-based
-index of the C argument that carries the array length. Set `free = TRUE`
-when the C function returns a `malloc`-owned buffer.
+Array returns use `returns = list(type = "integer_array", length_arg
+= 2, free = TRUE)` to copy the result into a new R vector. The
+`length_arg` is the 1-based index of the C argument that carries the
+array length. Set `free = TRUE` when the C function returns a
+`malloc`-owned buffer.
 
 ### Simple functions
 
@@ -278,8 +275,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      29.2ms   31.2ms      27.0   53.98KB     34.8
-#> 2 Rbuiltin    541.3µs    585µs    1625.     9.05KB     28.0
+#> 1 Rtinycc    196.57ms 220.24ms      4.56   53.98KB     6.08
+#> 2 Rbuiltin     2.54ms   3.65ms    258.      9.05KB     3.98
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -308,8 +305,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.2µs   28.7µs    37718.    39.1KB     26.4
-#> 2 Rbuiltin_vec   17.4µs   18.3µs    54230.    78.2KB     81.5
+#> 1 Rtinycc_vec   122.1µs  155.4µs     6344.    39.1KB     4.42
+#> 2 Rbuiltin_vec   57.5µs   78.8µs    11532.    78.2KB    15.5
 ```
 
 ### Linking external libraries
@@ -372,7 +369,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @611560385230 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @558b0a596da8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -388,7 +385,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @611560385230 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @558b0a596da8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -452,13 +449,13 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R           605.2ms  605.2ms      1.65     847KB    4.96 
-#> 2 quickr       3.74ms   4.11ms    244.       782KB    4.10 
-#> 3 Rtinycc     55.29ms   57.2ms     17.6      782KB    0.504
+#> 1 R             3.37s    3.37s     0.297     847KB     0   
+#> 2 quickr      10.51ms  17.97ms    60.3       782KB     1.02
+#> 3 Rtinycc    329.04ms 330.06ms     3.02      782KB     0
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
-<img src="man/figures/README-benchmark-convolve-1.png" width="100%" />
+<img src="man/figures/README-benchmark-convolve-1.png" alt="" width="100%" />
 
 ### Structs and unions
 
@@ -482,15 +479,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x61156296a2f0>
+#> <pointer: 0x558b0ef88980>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x61156296a2f0>
+#> <pointer: 0x558b0ef88980>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x611562fe4e40>
+#> <pointer: 0x558b0841ea60>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x611562fe4e40>
+#> <pointer: 0x558b0841ea60>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -535,9 +532,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x611561cfe7e0>
+#> <pointer: 0x558b0ba8f2b0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x611561cfe7e0>
+#> <pointer: 0x558b0ba8f2b0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -761,7 +758,7 @@ sqlite <- tcc_ffi() |>
   tcc_compile()
 
 sqlite$sqlite3_libversion()
-#> [1] "3.45.1"
+#> [1] "3.26.0"
 
 db <- sqlite$open_db()
 sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callback_ptr(cb), tcc_null_ptr())
@@ -783,6 +780,11 @@ For header-driven bindings, we use `treesitter.c` to parse function
 signatures and generate binding specifications automatically. For
 struct, enum, and global helpers, `tcc_generate_bindings()` handles the
 code generation.
+
+The default mapper is conservative for pointers: `char*` is treated as
+`ptr` because C does not guarantee NUL-terminated strings. If you know a
+parameter is a C string, provide a custom mapper that returns `cstring`
+for that type.
 
 ``` r
 header <- '
@@ -824,7 +826,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x61155c66bd20>
+#> <pointer: 0x558b1104e680>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -843,7 +845,9 @@ complex types.
 ### 64-bit integer precision
 
 R represents `i64` and `u64` values as `double`, which loses precision
-beyond $2^{53}$. Values that differ only past that threshold become
+beyond
+![2^{53}](https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&space;%5Cbg_white&space;2%5E%7B53%7D
+"2^{53}"). Values that differ only past that threshold become
 indistinguishable.
 
 ``` r
@@ -877,11 +881,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x611560114da0>
+#> <pointer: 0x558b0b8c1390>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x61155c807cf0>
+#> <pointer: 0x558b07961210>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -910,9 +914,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x611561c080a0>
+#> <pointer: 0x558b0b8c6620>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x611561c080a0>
+#> <pointer: 0x558b0b8c6620>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
@@ -962,8 +966,8 @@ GPL-3
 
 ## References
 
-- [TinyCC](https://github.com/TinyCC/tinycc)
-- [Bun’s FFI](https://bun.com/docs/runtime/ffi)
-- [CFFI](https://cffi.readthedocs.io/)
-- [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
-- [CSlug](https://cslug.readthedocs.io/en/latest/)
+  - [TinyCC](https://github.com/TinyCC/tinycc)
+  - [Bun’s FFI](https://bun.com/docs/runtime/ffi)
+  - [CFFI](https://cffi.readthedocs.io/)
+  - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
+  - [CSlug](https://cslug.readthedocs.io/en/latest/)
