@@ -165,8 +165,8 @@ RTINYCC_DLLEXPORT void R_init_Rtinycc(DllInfo *dll) {
 
 // diagnostic 
 
-RTINYCC_DLLEXPORT void R_unload_Rtinycc(DllInfo *info) {
-    (void)info;
-    Rprintf("[RTINYCC_DIAG] R_unload_Rtinycc called (DLL unload)\n");
-    RC_set_shutting_down(Rf_ScalarLogical(1));
-}
+//RTINYCC_DLLEXPORT void R_unload_Rtinycc(DllInfo *info) {
+ //   (void)info;
+  //  Rprintf("[RTINYCC_DIAG] R_unload_Rtinycc called (DLL unload)\n");
+  //  RC_set_shutting_down(Rf_ScalarLogical(1));
+//}
