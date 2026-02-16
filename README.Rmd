@@ -185,7 +185,7 @@ Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `i
 
 Pointer types include `ptr` (opaque external pointer), `sexp` (pass a `SEXP` directly), and callback signatures like `callback:double(double)`.
 
-Variadic C functions can be declared with `variadic = TRUE` and a typed `varargs = list(...)` tail in `tcc_bind()`. In the current implementation, the variadic tail arity and types are explicit at bind-time (for example `varargs = list("i32", "f64")`), and calls must provide that full typed tail.
+Variadic C functions can be declared with `variadic = TRUE` and a typed `varargs = list(...)` tail in `tcc_bind()`. By default, calls are exact-tail (`varargs_min = length(varargs)`). To allow prefix calls up to a maximum typed tail, set `varargs_min` (for example `varargs_min = 0L` allows from zero up to all declared varargs).
 
 Array returns use `returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to copy the result into a new R vector. The `length_arg` is the 1-based index of the C argument that carries the array length. Set `free = TRUE` when the C function returns a `malloc`-owned buffer.
 
@@ -241,7 +241,8 @@ bench::mark(
 
 ### Variadic calls with `Rprintf`
 
-We declare the fixed argument (`cstring` format) plus an explicit typed variadic tail
+We declare the fixed argument (`cstring` format) plus an explicit typed variadic tail.
+With `varargs_min = 0L`, the binding accepts from 0 up to 2 extra typed arguments.
 
 ```{r ffi-variadic-rprintf}
 ffi_var <- tcc_ffi() |>
@@ -250,11 +251,13 @@ ffi_var <- tcc_ffi() |>
       args = list("cstring"),
       variadic = TRUE,
       varargs = list("i32", "f64"),
+      varargs_min = 0L,
       returns = "void"
     )
   ) |>
   tcc_compile()
 
+ffi_var$Rprintf("Rprintf with no tail\\n")
 ffi_var$Rprintf("Rprintf from variadic FFI: i=%d, x=%.2f\\n", 42L, pi)
 ```
 

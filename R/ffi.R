@@ -242,6 +242,8 @@ tcc_source <- function(ffi, code) {
 #'     \item returns: FFI type for return value (e.g., "f64", "cstring")
 #'     \item variadic: Set TRUE for C varargs functions
 #'     \item varargs: Typed variadic tail (required when \code{variadic = TRUE})
+#'     \item varargs_min: Minimum number of trailing varargs required; defaults to
+#'       \code{length(varargs)} (exact-tail behavior)
 #'     \item code: Optional C code for the symbol (for embedded functions)
 #'   }
 #'   Callback arguments should use the form \code{callback:<signature>} (e.g.,
@@ -302,6 +304,28 @@ tcc_bind <- function(ffi, ...) {
           call. = FALSE
         )
       }
+
+      max_varargs <- length(sym$varargs)
+      if (is.null(sym$varargs_min)) {
+        sym$varargs_min <- max_varargs
+      }
+      if (
+        !is.numeric(sym$varargs_min) ||
+          length(sym$varargs_min) != 1 ||
+          is.na(sym$varargs_min) ||
+          sym$varargs_min < 0 ||
+          sym$varargs_min > max_varargs ||
+          sym$varargs_min != as.integer(sym$varargs_min)
+      ) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' varargs_min must be a single integer between 0 and length(varargs)",
+          call. = FALSE
+        )
+      }
+      sym$varargs_min <- as.integer(sym$varargs_min)
+
       for (i in seq_along(sym$varargs)) {
         vtype <- sym$varargs[[i]]
         vinfo <- check_ffi_type(
@@ -336,6 +360,8 @@ tcc_bind <- function(ffi, ...) {
         "' has 'varargs' but variadic is not TRUE",
         call. = FALSE
       )
+    } else {
+      sym$varargs_min <- NULL
     }
 
     # Check required fields
@@ -553,13 +579,6 @@ tcc_compiled_object <- function(
   struct_raw_access = NULL,
   introspect = NULL
 ) {
-  # Build wrapper names for bound symbols
-  if (length(symbols) > 0) {
-    wrapper_names <- paste0("R_wrap_", names(symbols))
-  } else {
-    wrapper_names <- character(0)
-  }
-
   # Build helper names for struct/union/enum helpers
   helper_names <- character()
   helper_specs <- list()
@@ -815,34 +834,63 @@ tcc_compiled_object <- function(
     }
   }
 
-  all_wrapper_names <- c(wrapper_names, paste0("R_wrap_", helper_names))
-  all_sym_names <- c(names(symbols), helper_names)
-
   # Create environment with callable functions
   env <- new.env(parent = emptyenv())
 
-  for (i in seq_along(all_sym_names)) {
-    sym_name <- all_sym_names[i]
-    wrapper_name <- all_wrapper_names[i]
+  for (sym_name in names(symbols)) {
+    sym <- symbols[[sym_name]]
+    sym$name <- sym_name
 
-    if (i <= length(symbols)) {
-      sym <- symbols[[i]]
-      sym$name <- sym_name
-    } else {
-      sym <- helper_specs[[sym_name]]
-      if (is.null(sym)) {
-        warning("Unknown helper symbol '", sym_name, "'")
+    if (isTRUE(sym$variadic)) {
+      max_varargs <- length(sym$varargs %||% list())
+      min_varargs <- sym$varargs_min %||% max_varargs
+      fn_ptrs <- list()
+
+      for (n_varargs in seq.int(min_varargs, max_varargs)) {
+        wrapper_name <- paste0("R_wrap_", sym_name, "__v", n_varargs)
+
+        tryCatch(
+          {
+            fn_ptr <- tcc_get_symbol(state, wrapper_name)
+            if (!tcc_symbol_is_valid(fn_ptr)) {
+              warning(
+                "Symbol '",
+                sym_name,
+                "' returned invalid pointer for '",
+                wrapper_name,
+                "'"
+              )
+              next
+            }
+            fn_ptrs[[as.character(n_varargs)]] <- fn_ptr
+          },
+          error = function(e) {
+            warning(
+              "Could not bind symbol '",
+              sym_name,
+              "' wrapper '",
+              wrapper_name,
+              "': ",
+              conditionMessage(e)
+            )
+          }
+        )
+      }
+
+      if (length(fn_ptrs) == 0) {
+        warning("Could not bind any variadic wrappers for symbol '", sym_name, "'")
         next
       }
-      sym$name <- sym_name
+
+      env[[sym_name]] <- make_callable(fn_ptrs, sym, state)
+      next
     }
 
-    # Get the wrapper symbol pointer
+    wrapper_name <- paste0("R_wrap_", sym_name)
     tryCatch(
       {
         fn_ptr <- tcc_get_symbol(state, wrapper_name)
 
-        # Validate the pointer before creating callable
         if (!tcc_symbol_is_valid(fn_ptr)) {
           warning(
             "Symbol '",
@@ -854,7 +902,38 @@ tcc_compiled_object <- function(
           next
         }
 
-        # Create callable function
+        env[[sym_name]] <- make_callable(fn_ptr, sym, state)
+      },
+      error = function(e) {
+        warning("Could not bind symbol '", sym_name, "': ", conditionMessage(e))
+      }
+    )
+  }
+
+  for (sym_name in helper_names) {
+    wrapper_name <- paste0("R_wrap_", sym_name)
+    sym <- helper_specs[[sym_name]]
+    if (is.null(sym)) {
+      warning("Unknown helper symbol '", sym_name, "'")
+      next
+    }
+    sym$name <- sym_name
+
+    tryCatch(
+      {
+        fn_ptr <- tcc_get_symbol(state, wrapper_name)
+
+        if (!tcc_symbol_is_valid(fn_ptr)) {
+          warning(
+            "Symbol '",
+            sym_name,
+            "' returned invalid pointer for '",
+            wrapper_name,
+            "'"
+          )
+          next
+        }
+
         env[[sym_name]] <- make_callable(fn_ptr, sym, state)
       },
       error = function(e) {
@@ -888,6 +967,11 @@ make_callable <- function(fn_ptr, sym, state) {
   arg_types <- sym$args %||% list()
   vararg_types <- sym$varargs %||% list()
   variadic <- isTRUE(sym$variadic)
+  varargs_min <- if (variadic) {
+    sym$varargs_min %||% length(vararg_types)
+  } else {
+    0L
+  }
   sym_name <- sym$name
 
   # Create function that calls the wrapper via .Call()
@@ -895,21 +979,48 @@ make_callable <- function(fn_ptr, sym, state) {
     args <- list(...)
     n_args <- length(args)
 
-    expected_n <- length(arg_types) + if (variadic) length(vararg_types) else 0
-
-    # Validate argument count
-    if (n_args != expected_n) {
-      stop(
-        "Expected ",
-        expected_n,
-        " arguments, got ",
-        n_args,
-        call. = FALSE
-      )
+    if (variadic) {
+      min_n <- length(arg_types) + varargs_min
+      max_n <- length(arg_types) + length(vararg_types)
+      if (n_args < min_n || n_args > max_n) {
+        stop(
+          "Expected between ",
+          min_n,
+          " and ",
+          max_n,
+          " arguments, got ",
+          n_args,
+          call. = FALSE
+        )
+      }
+      n_tail <- n_args - length(arg_types)
+      call_ptr <- if (is.list(fn_ptr)) fn_ptr[[as.character(n_tail)]] else fn_ptr
+      if (is.null(call_ptr)) {
+        stop(
+          "No compiled variadic wrapper for ",
+          n_args,
+          " arguments in symbol '",
+          sym_name,
+          "'",
+          call. = FALSE
+        )
+      }
+    } else {
+      expected_n <- length(arg_types)
+      if (n_args != expected_n) {
+        stop(
+          "Expected ",
+          expected_n,
+          " arguments, got ",
+          n_args,
+          call. = FALSE
+        )
+      }
+      call_ptr <- fn_ptr
     }
 
     # Validate pointer is still valid before calling
-    if (!tcc_symbol_is_valid(fn_ptr)) {
+    if (!tcc_symbol_is_valid(call_ptr)) {
       stop(
         "Function pointer for '",
         sym_name,
@@ -920,7 +1031,7 @@ make_callable <- function(fn_ptr, sym, state) {
 
     # Call the wrapper function pointer directly using .Call()
     # R's .Call() can invoke external pointers as functions.
-    do.call(.RtinyccCall, c(list(fn_ptr), args))
+    do.call(.RtinyccCall, c(list(call_ptr), args))
   }
 
   # Store the pointer in the function's environment to prevent GC
@@ -1053,8 +1164,7 @@ tcc_platform_lib_paths <- function() {
   # this is a R package, so
   # we can assume 64 bit archs and wsl2, macos
   #  and Rtools
-  switch(
-    sysname,
+  switch(sysname,
     Linux = c(
       "/usr/lib",
       "/usr/lib64",
@@ -1123,8 +1233,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(
-      sysname,
+    lib_name <- switch(sysname,
       Linux = paste0("lib", name, ".so"),
       Darwin = paste0("lib", name, ".dylib"),
       Windows = paste0(name, ".dll"),

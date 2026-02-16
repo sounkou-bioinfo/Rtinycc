@@ -47,6 +47,40 @@ expect_error(
   info = "variadic binding enforces declared total argument count"
 )
 
+# Opt-in prefix arity: allow up to N typed varargs via varargs_min = 0
+ffi_var_prefix <- tcc_ffi() |>
+  tcc_source("\
+    #include <stdarg.h>\
+\
+    int sum_n(int n, ...) {\
+      va_list ap;\
+      va_start(ap, n);\
+      int s = 0;\
+      for (int i = 0; i < n; i++) s += va_arg(ap, int);\
+      va_end(ap);\
+      return s;\
+    }\
+  ") |>
+  tcc_bind(
+    sum_n = list(
+      args = list("i32"),
+      variadic = TRUE,
+      varargs = list("i32", "i32", "i32"),
+      varargs_min = 0L,
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+expect_equal(ffi_var_prefix$sum_n(0L), 0L)
+expect_equal(ffi_var_prefix$sum_n(2L, 10L, 20L), 30L)
+expect_equal(ffi_var_prefix$sum_n(3L, 1L, 2L, 3L), 6L)
+
+expect_error(
+  ffi_var_prefix$sum_n(4L, 1L, 2L, 3L, 4L),
+  info = "variadic prefix mode enforces max declared tail"
+)
+
 expect_error(
   tcc_ffi() |>
     tcc_bind(bad = list(args = list("i32"), varargs = list("i32"), returns = "i32")),
@@ -70,4 +104,18 @@ expect_error(
       )
     ),
   info = "variadic varargs must be scalar types"
+)
+
+expect_error(
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs = list("i32", "i32"),
+        varargs_min = 3L,
+        returns = "i32"
+      )
+    ),
+  info = "varargs_min must be between 0 and length(varargs)"
 )

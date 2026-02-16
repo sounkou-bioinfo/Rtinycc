@@ -15,6 +15,8 @@ tcc_bind(ffi, ...)
 \item returns: FFI type for return value (e.g., "f64", "cstring")
 \item variadic: Set TRUE for C varargs functions
 \item varargs: Typed variadic tail (required when \code{variadic = TRUE})
+\item varargs_min: Minimum number of trailing varargs required; defaults to
+\code{length(varargs)} (exact-tail behavior)
 \item code: Optional C code for the symbol (for embedded functions)
 }
 Callback arguments should use the form \code{callback:<signature>} (e.g.,

@@ -1817,6 +1817,42 @@ SEXP RC_cleanup_callbacks() {
 // Host symbol registration
 // ============================================================================
 
+static int RC_tcc_add_symbol_fn_free_finalizer(TCCState *s) {
+    void (*fn)(SEXP) = RC_free_finalizer;
+    const void *addr = NULL;
+    _Static_assert(sizeof(addr) == sizeof(fn),
+                   "Function pointer size differs from object pointer size");
+    memcpy((void *)&addr, (const void *)&fn, sizeof(addr));
+    return tcc_add_symbol(s, "RC_free_finalizer", addr);
+}
+
+static int RC_tcc_add_symbol_fn_invoke_callback(TCCState *s) {
+    SEXP (*fn)(SEXP, SEXP) = RC_invoke_callback;
+    const void *addr = NULL;
+    _Static_assert(sizeof(addr) == sizeof(fn),
+                   "Function pointer size differs from object pointer size");
+    memcpy((void *)&addr, (const void *)&fn, sizeof(addr));
+    return tcc_add_symbol(s, "RC_invoke_callback", addr);
+}
+
+static int RC_tcc_add_symbol_fn_invoke_callback_id(TCCState *s) {
+    SEXP (*fn)(int, SEXP) = RC_invoke_callback_id;
+    const void *addr = NULL;
+    _Static_assert(sizeof(addr) == sizeof(fn),
+                   "Function pointer size differs from object pointer size");
+    memcpy((void *)&addr, (const void *)&fn, sizeof(addr));
+    return tcc_add_symbol(s, "RC_invoke_callback_id", addr);
+}
+
+static int RC_tcc_add_symbol_fn_async_schedule(TCCState *s) {
+    int (*fn)(int, int, const cb_arg_t *) = RC_callback_async_schedule_c;
+    const void *addr = NULL;
+    _Static_assert(sizeof(addr) == sizeof(fn),
+                   "Function pointer size differs from object pointer size");
+    memcpy((void *)&addr, (const void *)&fn, sizeof(addr));
+    return tcc_add_symbol(s, "RC_callback_async_schedule_c", addr);
+}
+
 /**
  * @section Host symbol registration
  * @param ext External pointer to a TCC state.
@@ -1835,10 +1871,11 @@ SEXP RC_cleanup_callbacks() {
     through the dynamic linker, so we must add them explicitly. */
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
-    tcc_add_symbol(s, "RC_free_finalizer", RC_free_finalizer);
-    tcc_add_symbol(s, "RC_invoke_callback", RC_invoke_callback);
-    tcc_add_symbol(s, "RC_invoke_callback_id", RC_invoke_callback_id);
-    tcc_add_symbol(s, "RC_callback_async_schedule_c",
-                   RC_callback_async_schedule_c);
+    if (RC_tcc_add_symbol_fn_free_finalizer(s) != 0 ||
+        RC_tcc_add_symbol_fn_invoke_callback(s) != 0 ||
+        RC_tcc_add_symbol_fn_invoke_callback_id(s) != 0 ||
+        RC_tcc_add_symbol_fn_async_schedule(s) != 0) {
+        Rf_error("Failed to register host symbols in TinyCC state");
+    }
     return R_NilValue;
 }
