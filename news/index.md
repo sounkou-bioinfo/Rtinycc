@@ -2,6 +2,12 @@
 
 ## Rtinycc 0.0.3.9000 (development version)
 
+- Add variadic FFI support in
+  [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
+  with both legacy typed-tail mode (`variadic = TRUE`, `varargs`) and
+  true variadic mode (`variadic = TRUE`, `varargs_types`, `varargs_min`,
+  `varargs_max`).
+
 - Refactor FFI codegen and callbacks to use lambda.r guard rules instead
   of long `if`/`else` or `switch` chains. This keeps type-mapping logic
   centralized in `R/aaa_ffi_codegen_rules.R`, makes behavior easier to

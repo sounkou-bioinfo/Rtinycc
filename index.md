@@ -179,7 +179,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x610d7e933f00"
+#> [1] "0x5c106311a850"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -210,11 +210,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x610d7dff7090>
+#> <pointer: 0x5c1065d1d020>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x610d80e421d0>
+#> <pointer: 0x5c10632c0350>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x610d7dff7090>
+#> <pointer: 0x5c1065d1d020>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -277,8 +277,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      30.8ms   39.2ms      21.1   53.98KB     26.9
-#> 2 Rbuiltin    547.4µs  580.5µs    1620.     9.05KB     28.0
+#> 1 Rtinycc      36.2ms   37.9ms      21.9  213.99KB     35.8
+#> 2 Rbuiltin    552.5µs  592.4µs    1583.     9.05KB     28.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -307,8 +307,67 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    20.2µs   28.2µs    38722.    39.1KB     27.1
-#> 2 Rbuiltin_vec   17.1µs   17.6µs    56172.    78.2KB     84.4
+#> 1 Rtinycc_vec    20.7µs   21.3µs    44185.    39.1KB     31.0
+#> 2 Rbuiltin_vec   16.9µs   18.4µs    44899.    78.2KB     67.5
+```
+
+### Variadic calls (e.g. `Rprintf` style)
+
+Rtinycc supports two ways to bind variadic tails. The legacy approach
+uses `varargs` as a typed prefix tail, while the bounded dynamic
+approach uses `varargs_types` together with `varargs_min` and
+`varargs_max`. In the bounded mode, wrappers are generated across the
+allowed arity and type combinations, and runtime dispatch selects the
+matching wrapper from the scalar tail values provided at call time.
+
+``` r
+ffi_var <- tcc_ffi() |>
+  tcc_header("#include <R_ext/Print.h>") |>
+  tcc_source('
+    #include <stdarg.h>
+
+    int sum_fmt(int n, ...) {
+      va_list ap;
+      va_start(ap, n);
+      int s = 0;
+      for (int i = 0; i < n; i++) s += va_arg(ap, int);
+      va_end(ap);
+      Rprintf("sum_fmt(%d) = %d\\n", n, s);
+      return s;
+    }
+  ') |>
+  tcc_bind(
+    Rprintf = list(
+      args = list("cstring"),
+      variadic = TRUE,
+      varargs_types = list("i32"),
+      varargs_min = 0L,
+      varargs_max = 4L,
+      returns = "void"
+    ),
+    sum_fmt = list(
+      args = list("i32"),
+      variadic = TRUE,
+      varargs_types = list("i32"),
+      varargs_min = 0L,
+      varargs_max = 4L,
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+ffi_var$Rprintf("Rprintf via bind: %d + %d = %d\n", 2L, 3L, 5L)
+#> Rprintf via bind: 2 + 3 = 5
+#> NULL
+ffi_var$sum_fmt(0L)
+#> sum_fmt(0) = 0
+#> [1] 0
+ffi_var$sum_fmt(2L, 10L, 20L)
+#> sum_fmt(2) = 30
+#> [1] 30
+ffi_var$sum_fmt(4L, 1L, 2L, 3L, 4L)
+#> sum_fmt(4) = 10
+#> [1] 10
 ```
 
 ### Linking external libraries
@@ -371,7 +430,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5c1067fba8e8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -387,7 +446,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5c1067fba8e8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -451,9 +510,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R          618.01ms 618.01ms      1.62     847KB    4.85 
-#> 2 quickr       3.77ms   4.14ms    241.       782KB    4.10 
-#> 3 Rtinycc     54.44ms   57.1ms     17.6      782KB    0.503
+#> 1 R          602.01ms 602.01ms      1.66     844KB    4.98 
+#> 2 quickr       3.65ms   4.16ms    241.       782KB    4.10 
+#> 3 Rtinycc     55.41ms  57.46ms     17.5      782KB    0.515
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -482,15 +541,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x610d8e69a320>
+#> <pointer: 0x5c10697992a0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x610d8e69a320>
+#> <pointer: 0x5c10697992a0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x610d8324abf0>
+#> <pointer: 0x5c10627fb2a0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x610d8324abf0>
+#> <pointer: 0x5c10627fb2a0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -535,9 +594,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x610d7e50b370>
+#> <pointer: 0x5c1066456280>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x610d7e50b370>
+#> <pointer: 0x5c1066456280>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -837,7 +896,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x610d803c8b80>
+#> <pointer: 0x5c10687a1ed0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -892,11 +951,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x610d8de462e0>
+#> <pointer: 0x5c10733557e0>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x610d82ad5290>
+#> <pointer: 0x5c10630c2220>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -927,9 +986,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x610d8db557a0>
+#> <pointer: 0x5c10685d68b0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x610d8db557a0>
+#> <pointer: 0x5c10685d68b0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

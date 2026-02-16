@@ -154,7 +154,7 @@
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x610d7e933f00"</span></span>
+<span><span class="co">#&gt; [1] "0x5c106311a850"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -175,11 +175,11 @@
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d7dff7090&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c1065d1d020&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d80e421d0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10632c0350&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d7dff7090&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c1065d1d020&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -226,8 +226,8 @@
 <span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc      30.8ms   39.2ms      21.1   53.98KB     26.9</span></span>
-<span><span class="co">#&gt; 2 Rbuiltin    547.4µs  580.5µs    1620.     9.05KB     28.0</span></span>
+<span><span class="co">#&gt; 1 Rtinycc      36.2ms   37.9ms      21.9  213.99KB     35.8</span></span>
+<span><span class="co">#&gt; 2 Rbuiltin    552.5µs  592.4µs    1583.     9.05KB     28.0</span></span>
 <span></span>
 <span><span class="co"># For performance-sensitive code, move the loop into C and operate on arrays.</span></span>
 <span><span class="va">ffi_vec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -256,14 +256,67 @@
 <span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
 <span><span class="co">#&gt;   expression        min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt;   &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc_vec    20.2µs   28.2µs    38722.    39.1KB     27.1</span></span>
-<span><span class="co">#&gt; 2 Rbuiltin_vec   17.1µs   17.6µs    56172.    78.2KB     84.4</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 Rtinycc_vec    20.7µs   21.3µs    44185.    39.1KB     31.0</span></span>
+<span><span class="co">#&gt; 2 Rbuiltin_vec   16.9µs   18.4µs    44899.    78.2KB     67.5</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="variadic-calls-eg-rprintf-style">Variadic calls (e.g. <code>Rprintf</code> style)<a class="anchor" aria-label="anchor" href="#variadic-calls-eg-rprintf-style"></a>
+</h3>
+<p>Rtinycc supports two ways to bind variadic tails. The legacy approach uses <code>varargs</code> as a typed prefix tail, while the bounded dynamic approach uses <code>varargs_types</code> together with <code>varargs_min</code> and <code>varargs_max</code>. In the bounded mode, wrappers are generated across the allowed arity and type combinations, and runtime dispatch selects the matching wrapper from the scalar tail values provided at call time.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ffi_var</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">"#include &lt;R_ext/Print.h&gt;"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
+<span><span class="st">    #include &lt;stdarg.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    int sum_fmt(int n, ...) {</span></span>
+<span><span class="st">      va_list ap;</span></span>
+<span><span class="st">      va_start(ap, n);</span></span>
+<span><span class="st">      int s = 0;</span></span>
+<span><span class="st">      for (int i = 0; i &lt; n; i++) s += va_arg(ap, int);</span></span>
+<span><span class="st">      va_end(ap);</span></span>
+<span><span class="st">      Rprintf("sum_fmt(%d) = %d\\n", n, s);</span></span>
+<span><span class="st">      return s;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">  '</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    Rprintf <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"cstring"</span><span class="op">)</span>,</span>
+<span>      variadic <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>      varargs_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>      varargs_min <span class="op">=</span> <span class="fl">0L</span>,</span>
+<span>      varargs_max <span class="op">=</span> <span class="fl">4L</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"void"</span></span>
+<span>    <span class="op">)</span>,</span>
+<span>    sum_fmt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>      variadic <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>      varargs_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>      varargs_min <span class="op">=</span> <span class="fl">0L</span>,</span>
+<span>      varargs_max <span class="op">=</span> <span class="fl">4L</span>,</span>
+<span>      returns <span class="op">=</span> <span class="st">"i32"</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi_var</span><span class="op">$</span><span class="fu">Rprintf</span><span class="op">(</span><span class="st">"Rprintf via bind: %d + %d = %d\n"</span>, <span class="fl">2L</span>, <span class="fl">3L</span>, <span class="fl">5L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Rprintf via bind: 2 + 3 = 5</span></span>
+<span><span class="co">#&gt; NULL</span></span>
+<span><span class="va">ffi_var</span><span class="op">$</span><span class="fu">sum_fmt</span><span class="op">(</span><span class="fl">0L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; sum_fmt(0) = 0</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="va">ffi_var</span><span class="op">$</span><span class="fu">sum_fmt</span><span class="op">(</span><span class="fl">2L</span>, <span class="fl">10L</span>, <span class="fl">20L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; sum_fmt(2) = 30</span></span>
+<span><span class="co">#&gt; [1] 30</span></span>
+<span><span class="va">ffi_var</span><span class="op">$</span><span class="fu">sum_fmt</span><span class="op">(</span><span class="fl">4L</span>, <span class="fl">1L</span>, <span class="fl">2L</span>, <span class="fl">3L</span>, <span class="fl">4L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; sum_fmt(4) = 10</span></span>
+<span><span class="co">#&gt; [1] 10</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
 </h3>
 <p>We can bind directly to symbols in shared libraries. Here we link against <code>libm</code>.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">math</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"m"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
@@ -284,7 +337,7 @@
 <h3 id="working-with-arrays">Working with arrays<a class="anchor" aria-label="anchor" href="#working-with-arrays"></a>
 </h3>
 <p>R vectors are passed to C with zero copy. Mutations in C are visible in R.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    #include &lt;stdlib.h&gt;</span></span>
@@ -316,7 +369,7 @@
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @5c1067fba8e8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -332,13 +385,13 @@
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @610d83a88af0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @5c1067fba8e8 13 INTSXP g0c0 [MARK,REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="benchmark">Benchmark<a class="anchor" aria-label="anchor" href="#benchmark"></a>
 </h3>
 <p>This example benchmarks the classic convolution routine written in plain C (no manual <code>SEXP</code> code). Rtinycc generates the <code>.Call</code> wrappers automatically. We also compare against <code>quickr</code> which is expected to be faster due to compiler optimiztion.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/t-kalinowski/quickr" class="external-link">quickr</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">slow_convolve</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">a</span>, <span class="va">b</span><span class="op">)</span> <span class="op">{</span></span>
@@ -392,9 +445,9 @@
 <span><span class="co">#&gt; # A tibble: 3 × 6</span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 R          618.01ms 618.01ms      1.62     847KB    4.85 </span></span>
-<span><span class="co">#&gt; 2 quickr       3.77ms   4.14ms    241.       782KB    4.10 </span></span>
-<span><span class="co">#&gt; 3 Rtinycc     54.44ms   57.1ms     17.6      782KB    0.503</span></span>
+<span><span class="co">#&gt; 1 R          602.01ms 602.01ms      1.66     844KB    4.98 </span></span>
+<span><span class="co">#&gt; 2 quickr       3.65ms   4.16ms    241.       782KB    4.10 </span></span>
+<span><span class="co">#&gt; 3 Rtinycc     55.41ms  57.46ms     17.5      782KB    0.515</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">timings</span>, type <span class="op">=</span> <span class="st">"boxplot"</span><span class="op">)</span> <span class="op">+</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu">scale_x_bench_time</span><span class="op">(</span>base <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
 <p><img src="reference/figures/README-benchmark-convolve-1.png" width="100%"></p>
 </div>
@@ -402,7 +455,7 @@
 <h3 id="structs-and-unions">Structs and unions<a class="anchor" aria-label="anchor" href="#structs-and-unions"></a>
 </h3>
 <p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> to generate allocation and accessor helpers. Free instances when done.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    #include &lt;math.h&gt;</span></span>
@@ -419,15 +472,15 @@
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8e69a320&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10697992a0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8e69a320&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10697992a0&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8324abf0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10627fb2a0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8324abf0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10627fb2a0&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -441,7 +494,7 @@
 <h3 id="enums">Enums<a class="anchor" aria-label="anchor" href="#enums"></a>
 </h3>
 <p>Enums are exposed as helper functions that return integer constants.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"enum color { RED = 0, GREEN = 1, BLUE = 2 };"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_enum.html">tcc_enum</a></span><span class="op">(</span><span class="st">"color"</span>, constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"RED"</span>, <span class="st">"GREEN"</span>, <span class="st">"BLUE"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -456,7 +509,7 @@
 <h3 id="bitfields">Bitfields<a class="anchor" aria-label="anchor" href="#bitfields"></a>
 </h3>
 <p>Bitfields are handled by TCC. Accessors read and write them like normal fields.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    struct flags {</span></span>
@@ -469,9 +522,9 @@
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d7e50b370&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c1066456280&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d7e50b370&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c1066456280&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -483,7 +536,7 @@
 <h3 id="global-getters-and-setters">Global getters and setters<a class="anchor" aria-label="anchor" href="#global-getters-and-setters"></a>
 </h3>
 <p>C globals can be exposed with explicit getter/setter helpers.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    int counter = 7;</span></span>
@@ -506,7 +559,7 @@
 <h3 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
 </h3>
 <p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Specify a <code>callback:&lt;signature&gt;</code> argument in <code><a href="reference/tcc_bind.html">tcc_bind()</a></code> so the trampoline is generated automatically. Always close callbacks when done.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="va">x</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
@@ -533,7 +586,7 @@
 <h3 id="callback-errors">Callback errors<a class="anchor" aria-label="anchor" href="#callback-errors"></a>
 </h3>
 <p>If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate default (0 for numeric, <code>FALSE</code> for logical, <code>NULL</code> for pointer). This prevents C code from seeing an unwound stack.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"boom"</span><span class="op">)</span>,</span>
 <span>  signature <span class="op">=</span> <span class="st">"double (*)(double)"</span></span>
@@ -573,7 +626,7 @@
 <h3 id="async-callbacks">Async callbacks<a class="anchor" aria-label="anchor" href="#async-callbacks"></a>
 </h3>
 <p>For thread-safe scheduling from worker threads, use <code>callback_async:&lt;signature&gt;</code> in <code><a href="reference/tcc_bind.html">tcc_bind()</a></code>. The callback is enqueued from any thread and executed on the main R thread when you call <code><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain()</a></code>. Call <code><a href="reference/tcc_callback_async_enable.html">tcc_callback_async_enable()</a></code> once before use.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/tcc_callback_async_enable.html">tcc_callback_async_enable</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
@@ -633,7 +686,7 @@
 <h3 id="sqlite-a-complete-example">SQLite: a complete example<a class="anchor" aria-label="anchor" href="#sqlite-a-complete-example"></a>
 </h3>
 <p>This example ties together external library linking, callbacks, and pointer dereferencing. We open an in-memory SQLite database, execute queries, and collect rows through an R callback that reads <code>char**</code> arrays using <code>tcc_read_ptr</code> and <code>tcc_read_cstring</code>.</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ptr_size</span> <span class="op">&lt;-</span> <span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span></span>
 <span></span>
 <span><span class="va">read_string_array</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">ptr</span>, <span class="va">n</span><span class="op">)</span> <span class="op">{</span></span>
@@ -698,7 +751,7 @@
 </h2>
 <p>For header-driven bindings, we use <code>treesitter.c</code> to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, <code><a href="reference/tcc_generate_bindings.html">tcc_generate_bindings()</a></code> handles the code generation.</p>
 <p>The default mapper is conservative for pointers: <code>char*</code> is treated as <code>ptr</code> because C does not guarantee NUL-terminated strings. If you know a parameter is a C string, provide a custom mapper that returns <code>cstring</code> for that type.</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">header</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">double sqrt(double x);</span></span>
 <span><span class="st">double sin(double x);</span></span>
@@ -738,7 +791,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d803c8b80&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10687a1ed0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -757,7 +810,7 @@
 <h3 id="id_64-bit-integer-precision">64-bit integer precision<a class="anchor" aria-label="anchor" href="#id_64-bit-integer-precision"></a>
 </h3>
 <p>R represents <code>i64</code> and <code>u64</code> values as <code>double</code>, which loses precision beyond <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mn>53</mn></msup><annotation encoding="application/x-tex">2^{53}</annotation></semantics></math>. Values that differ only past that threshold become indistinguishable.</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53:     %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "2^53:     9007199254740992"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53 + 1: %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span></span>
@@ -770,7 +823,7 @@
 <h3 id="nested-structs">Nested structs<a class="anchor" aria-label="anchor" href="#nested-structs"></a>
 </h3>
 <p>The accessor generator does not handle nested structs by value. Use pointer fields instead and reach inner structs with <code><a href="reference/tcc_field_addr.html">tcc_field_addr()</a></code>.</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    struct inner { int a; };</span></span>
@@ -784,11 +837,11 @@
 <span><span class="va">o</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">i</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_inner_set_a</span><span class="op">(</span><span class="va">i</span>, <span class="fl">42L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8de462e0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10733557e0&gt;</span></span>
 <span></span>
 <span><span class="co"># Write the inner pointer into the outer struct</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">i</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d82ad5290&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10630c2220&gt;</span></span>
 <span></span>
 <span><span class="co"># Read it back through indirection</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_in_addr</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -805,7 +858,7 @@
 <h3 id="array-fields-in-structs">Array fields in structs<a class="anchor" aria-label="anchor" href="#array-fields-in-structs"></a>
 </h3>
 <p>Array fields require the <code>list(type = ..., size = N, array = TRUE)</code> syntax in <code><a href="reference/tcc_struct.html">tcc_struct()</a></code>, which generates element-wise accessors.</p>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct buf { unsigned char data[16]; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"buf"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -815,9 +868,9 @@
 <span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">0xCAL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8db557a0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10685d68b0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span>, <span class="fl">0xFEL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x610d8db557a0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x5c10685d68b0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 202</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span><span class="op">)</span></span>
@@ -831,7 +884,7 @@
 </h2>
 <p>Compiled FFI objects are fork-safe: <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> and other <code>fork()</code>-based parallelism work out of the box because TCC’s compiled code lives in memory mappings that survive <code>fork()</code> via copy-on-write.</p>
 <p>Serialization is also supported. Each <code>tcc_compiled</code> object stores its FFI recipe internally, so after <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> / <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> (or <code><a href="https://rdrr.io/r/base/serialize.html" class="external-link">serialize()</a></code> / <code><a href="https://rdrr.io/r/base/serialize.html" class="external-link">unserialize()</a></code>), the first <code>$</code> access detects the dead TCC state pointer and recompiles transparently.</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"int square(int x) { return x * x; }"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>square <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
