@@ -1935,6 +1935,12 @@ r_to_c_key_rule(type_name, is_ptr) %as%
     "ptr"
   }
 
+## ------------------------------------------------------------------
+## Default type key mapping
+##
+## A general-purpose fallback mapping used when no more specific key
+## mapping is appropriate. This helps many rule lookups remain simple.
+## ------------------------------------------------------------------
 default_key_rule("void", FALSE) %as%
   {
     "void"
@@ -2008,6 +2014,13 @@ default_key_rule(type_name, is_ptr) %as%
     "int"
   }
 
+## ------------------------------------------------------------------
+## SEXP type key mapping
+##
+## Determine which SEXP type (int/real/longlong/ptr/cstring/etc.) should
+## be used for a C type when generating wrappers that will box/unbox
+## values to/from R.
+## ------------------------------------------------------------------
 sexp_type_key_rule(type_name, TRUE) %as%
   {
     "ptr"
@@ -2145,6 +2158,12 @@ sexp_type_key_rule(type_name, is_ptr) %as%
     "ptr"
   }
 
+## ------------------------------------------------------------------
+## Return type key mapping
+##
+## Map C return types to the compact keys used by the ffi_return_rule
+## lookup (e.g. "i8", "i32", "double", "cstring", "ptr").
+## ------------------------------------------------------------------
 return_key_rule("void", FALSE) %as%
   {
     "void"
@@ -2298,6 +2317,13 @@ return_key_rule(type_name, is_ptr) %as%
     "ptr"
   }
 
+## ------------------------------------------------------------------
+## FFI C type canonicalization
+##
+## Map many C type spellings into the canonical internal FFI type keys
+## used throughout this file (i8/i16/i32/i64/u8/u16/u32/u64/f32/f64/ptr
+## etc.). This central lookup keeps downstream rule selection uniform.
+## ------------------------------------------------------------------
 ffi_c_type_map_rule(type_name, TRUE, is_ptr) %as%
   {
     "ptr"
@@ -2518,3 +2544,25 @@ ffi_c_type_map_rule(type_name, is_char_ptr, is_ptr) %as%
   {
     "ptr"
   }
+
+## ------------------------------------------------------------------
+## Notes / TODO: opportunities to consolidate with lambda.r helpers
+##
+## Many parts of this file are highly repetitive (for example the
+## `ffi_input_rule` / `ffi_return_rule` blocks for each integer/fp type
+## and the many `r_to_c_return_lines_rule` variants). We can keep the
+## explicit rules for clarity, but if you want to reduce boilerplate
+## consider writing small generator helpers (in R) that emit these
+## rules programmatically from a compact type table. Example ideas:
+##
+## - Generate identical input rules for i8/i16/i32 by templating a
+##   single pattern and only varying bounds/casts.
+## - Produce r_to_c_return_lines_rule variants for integer types by a
+##   loop that fills in INT8_MIN/INT8_MAX etc.
+## - Create a small map-driven factory to register `struct_field_getter`
+##   and `struct_field_setter` variants instead of copy/paste.
+##
+## These consolidations would reduce maintenance burden and the risk
+## of inconsistent behavior across types. If you'd like, I can
+## implement such a generator and replace repetitive blocks with it.
+## ------------------------------------------------------------------
