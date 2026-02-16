@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
+#if RTINYCC_OS_WINDOWS
+#include <windows.h>
+#endif
 
 // ============================================================================
 // Forward declarations
@@ -22,6 +25,7 @@ SEXP RC_set_shutting_down(SEXP flag);
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
 void RC_free_finalizer(SEXP ext);
+SEXP RC_unload_libtcc(void);
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
@@ -52,6 +56,25 @@ static const char *RC_extptr_tag_name(SEXP ext) {
         return CHAR(PRINTNAME(tag));
     }
     return Rf_type2char(TYPEOF(tag));
+}
+
+// Explicitly unload libtcc.dll early on Windows to avoid teardown crashes.
+SEXP RC_unload_libtcc(void) {
+#if RTINYCC_OS_WINDOWS
+    HMODULE h = GetModuleHandleA("libtcc.dll");
+    if (!h) {
+        Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: libtcc.dll not loaded\n");
+        return R_NilValue;
+    }
+    if (FreeLibrary(h)) {
+        Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: FreeLibrary succeeded\n");
+    } else {
+        Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: FreeLibrary failed\n");
+    }
+#else
+    Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: non-Windows no-op\n");
+#endif
+    return R_NilValue;
 }
 SEXP RC_malloc(SEXP size);
 SEXP RC_free(SEXP ptr);
