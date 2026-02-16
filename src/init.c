@@ -6,6 +6,7 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
+#include <R_ext/Print.h>
 #include <stdint.h>
 
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
@@ -75,6 +76,12 @@ SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const void *args);
+
+void R_unload_Rtinycc(DllInfo *info) {
+    (void)info;
+    Rprintf("[RTINYCC_DIAG] R_unload_Rtinycc called (DLL unload)\n");
+    RC_set_shutting_down(Rf_ScalarLogical(1));
+}
 
 
 
