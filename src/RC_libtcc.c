@@ -13,19 +13,14 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 // ============================================================================
 // Forward declarations
 // ============================================================================
 
-SEXP RC_set_shutting_down(SEXP flag);
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
 void RC_free_finalizer(SEXP ext);
-SEXP RC_unload_libtcc(void);
 
 // ============================================================================
 // TCC state registry (ownership tracking)
@@ -121,24 +116,7 @@ static int RC_tcc_state_is_owned(SEXP ext) {
     return 1;
 }
 
-// Explicitly unload libtcc.dll early on Windows to avoid teardown crashes.
-SEXP RC_unload_libtcc(void) {
-#ifdef _WIN32
-    HMODULE h = GetModuleHandleA("libtcc.dll");
-    if (!h) {
-        Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: libtcc.dll not loaded\n");
-        return R_NilValue;
-    }
-    if (FreeLibrary(h)) {
-        Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: FreeLibrary succeeded\n");
-    } else {
-        Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: FreeLibrary failed\n");
-    }
-#else
-    Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: non-Windows no-op\n");
-#endif
-    return R_NilValue;
-}
+ 
 SEXP RC_malloc(SEXP size);
 SEXP RC_free(SEXP ptr);
 SEXP RC_data_ptr(SEXP ptr_ref);
@@ -220,38 +198,14 @@ typedef struct {
 // ============================================================================
 
 /**
- * @section Shutdown and finalizers
- * @param flag Logical scalar from R indicating shutdown state.
- * @example
- *  .Call("RC_set_shutting_down", TRUE)
- */
-
-/* Set during package unload to avoid teardown crashes on some platforms. */
-static volatile int g_rtinycc_shutting_down = 0;
-
-/**
- * Set shutdown flag from R (.onUnload).
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_set_shutting_down(SEXP flag) {
-    g_rtinycc_shutting_down = Rf_asLogical(flag) ? 1 : 0;
-    return R_NilValue;
-}
-
-/**
  * Releases a TCCState when its R external pointer is garbage collected.
  * Ownership: frees owned TCCState.
  * Allocation: none.
  * Protection: none.
  */
 static void RC_tcc_finalizer(SEXP ext) {
-    Rprintf("[RTINYCC_DIAG] RC_tcc_finalizer ext=%p ptr=%p tag=%s shutting_down=%d\n",
-            (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext), g_rtinycc_shutting_down);
-    if (g_rtinycc_shutting_down) {
-        return;
-    }
+    Rprintf("[RTINYCC_DIAG] RC_tcc_finalizer ext=%p ptr=%p tag=%s\n",
+            (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext));
     if (!RC_tcc_state_is_owned(ext)) {
         R_ClearExternalPtr(ext);
         return;
@@ -291,19 +245,10 @@ static void RC_null_finalizer(SEXP ext) {
 void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
-#ifdef _WIN32
-        // On Windows, skip free() to avoid CRT heap mismatches
-        // Memory was allocated by JIT code using UCRT malloc(), but Rtinycc DLL
-        // might be linked against different CRT. OS will reclaim memory on exit.
-        Rprintf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s (WINDOWS skip free)\n",
-                (void*)ext, ptr, RC_extptr_tag_name(ext));
-        R_ClearExternalPtr(ext);
-#else
         Rprintf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s\n",
                 (void*)ext, ptr, RC_extptr_tag_name(ext));
         free(ptr);
         R_ClearExternalPtr(ext);
-#endif
     }
 }
 

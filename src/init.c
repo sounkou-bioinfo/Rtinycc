@@ -11,7 +11,6 @@
 
 
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
-SEXP RC_set_shutting_down(SEXP flag);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path);
@@ -77,13 +76,11 @@ SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const void *args);
-SEXP RC_unload_libtcc(void);
 
 
 // .Call entries
 static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_state_new",   (DL_FUNC) &RC_libtcc_state_new,   3},
-    {"RC_set_shutting_down",  (DL_FUNC) &RC_set_shutting_down,  1},
     {"RC_libtcc_add_file",    (DL_FUNC) &RC_libtcc_add_file,    2},
     {"RC_libtcc_add_include_path",    (DL_FUNC) &RC_libtcc_add_include_path,    2},
     {"RC_libtcc_add_sysinclude_path", (DL_FUNC) &RC_libtcc_add_sysinclude_path, 2},
@@ -148,7 +145,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_callback_async_init", (DL_FUNC) &RC_callback_async_init, 0},
     {"RC_callback_async_schedule", (DL_FUNC) &RC_callback_async_schedule, 2},
     {"RC_callback_async_drain", (DL_FUNC) &RC_callback_async_drain, 0},
-    {"RC_unload_libtcc",       (DL_FUNC) &RC_unload_libtcc,      0},
     
     {NULL, NULL, 0}
 };
