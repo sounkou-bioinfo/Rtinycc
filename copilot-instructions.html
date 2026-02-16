@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.3.9001</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.3.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,13 +51,7 @@
 <p>Array returns: <code>returns = list(type = "*_array", length_arg = &lt;index&gt;, free = TRUE)</code> copies into a new R vector and optionally frees the C buffer.</p>
 <p>Struct array fields: <code>list(type = "u8", size = N, array = TRUE)</code> generates element accessors <code>struct_&lt;name&gt;_get_&lt;field&gt;_elt()</code> / <code>struct_&lt;name&gt;_set_&lt;field&gt;_elt()</code>.</p>
 <p>Pointers: <code>ptr</code> and <code>sexp</code> are exposed as external pointers; ownership is tracked and enforced in <code>RC_free</code> and <code><a href="reference/tcc_ptr_is_owned.html">tcc_ptr_is_owned()</a></code>.</p>
-<p>Variadics (current API):</p>
-<ul><li>Legacy typed-tail mode: <code>variadic = TRUE</code>, <code>varargs = list(...)</code>, optional <code>varargs_min</code> (defaults to exact tail).</li>
-<li>True variadic mode: <code>variadic = TRUE</code>, <code>varargs_types = list(...)</code>, <code>varargs_min</code>, <code>varargs_max</code>.</li>
-<li>In true variadic mode, generated wrappers cover allowed arities/signatures and runtime dispatch infers scalar tail types.</li>
-<li>
-<code>varargs</code> and <code>varargs_types</code> are mutually exclusive in one symbol spec.</li>
-</ul></div>
+</div>
 <div class="section level2">
 <h2 id="build-and-test">Build and test<a class="anchor" aria-label="anchor" href="#build-and-test"></a></h2>
 <ul><li>
@@ -74,11 +68,6 @@
 <li>Prefer early returns and explicit error messages with <code>stop(..., call. = FALSE)</code>.</li>
 <li>Update README examples when you change user-facing behavior.</li>
 </ul></div>
-<div class="section level2">
-<h2 id="lambdar-guard-patterns-codegen-and-callbacks">Lambda.r guard patterns (codegen and callbacks)<a class="anchor" aria-label="anchor" href="#lambdar-guard-patterns-codegen-and-callbacks"></a></h2>
-<p>We prefer lambda.r guard rules over long <code>if</code>/<code>else</code> or <code>switch</code> chains for type mapping and codegen decisions. Put guards in <code>R/aaa_ffi_codegen_rules.R</code> and route normalization helpers to rule dispatch. This keeps behavior discoverable, testable, and easy to extend without touching multiple call sites.</p>
-<p>Motivation: codegen logic changes frequently, and rule dispatch makes it possible to add or override behavior without editing large control blocks.</p>
-</div>
 <div class="section level2">
 <h2 id="macos-host-symbol-visibility">macOS host symbol visibility<a class="anchor" aria-label="anchor" href="#macos-host-symbol-visibility"></a></h2>
 <p>On macOS the configure script strips <code>-flat_namespace</code> from TCC’s Makefile to avoid SIGEV-related issues. Without flat namespace, TCC cannot resolve symbols exported by the R package (<code>RC_free_finalizer</code>, <code>RC_invoke_callback</code>, <code>RC_invoke_callback_id</code>, <code>RC_callback_async_schedule_c</code>) through the dynamic linker at relocation time, causing “undefined symbol” errors.</p>
@@ -112,7 +101,6 @@
 <li>Borrowed wrappers keep the owner alive via the externalptr <code>prot</code> field.</li>
 </ul><p>Implementation lives in <code>src/RC_libtcc.c</code>: <code>tcc_state_entry_t</code> registry, <code>RC_tcc_state_is_owned()</code>, and ownership tags <code>rtinycc_tcc_state_owned</code> / <code>rtinycc_tcc_state_borrowed</code>.</p>
 <p>Do <strong>not</strong> reintroduce shutdown/unload hooks to “solve” this; the correct fix is ownership tracking and preventing double-finalization.</p>
-<p>For debugging GC/finalizer ordering issues, weak references were used to track externalptr reachability and confirm duplicate ownership/double-finalization paths during Windows segfault investigations.</p>
 </div>
 <div class="section level3">
 <h3 id="r-api-symbol-resolution--rdef">R API symbol resolution — R.def<a class="anchor" aria-label="anchor" href="#r-api-symbol-resolution--rdef"></a></h3>
@@ -128,9 +116,8 @@
 <p>The fix: <code>RC_invoke_callback_id(int id, SEXP args)</code> in <code>RC_libtcc.c</code> takes the int directly. The trampoline codegen in <code>R/callbacks.R</code> now calls <code>RC_invoke_callback_id(tok-&gt;id, args)</code> instead, eliminating the <code>snprintf</code>, <code>mkString</code>, and <code>atoi</code> round-trip entirely. The forward declaration in <code>R/ffi_codegen.R</code> was updated to match.</p>
 </div>
 <div class="section level3">
-<h3 id="async-callbacks-on-windows">Async callbacks on Windows<a class="anchor" aria-label="anchor" href="#async-callbacks-on-windows"></a></h3>
-<p>Async callbacks are supported on Windows via a thread-safe queue in <code>src/platform_async.c</code>. Scheduling from worker threads is supported, and queued callbacks execute on the main R thread when <code><a href="reference/tcc_callback_async_drain.html">tcc_callback_async_drain()</a></code> is called. Unlike Unix builds, Windows does not use <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code> + <code>addInputHandler()</code> for dispatch.</p>
-<p>Tests in <code>test_callback_invoke_runtime.R</code> are cross-platform; worker-thread callback tests use Win32 threads on Windows and <code>pthread</code> on Unix-like systems.</p>
+<h3 id="async-callbacks-windows-stubs">Async callbacks: Windows stubs<a class="anchor" aria-label="anchor" href="#async-callbacks-windows-stubs"></a></h3>
+<p>Async callbacks rely on <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code>, <code>pthread_create</code>, and R’s <code>addInputHandler()</code> — none of which exist on Windows. <code>RC_libtcc.c</code> has <code>#ifdef _WIN32</code> stubs that call <code>Rf_error("Async callbacks are not supported on Windows")</code> for the R-facing functions, and return <code>-1</code> for the C-facing <code>RC_callback_async_schedule_c</code>. The async callback tests in <code>test_callback_invoke_runtime.R</code> are guarded with <code>if (.Platform$OS.type != "windows")</code>.</p>
 </div>
 <div class="section level3">
 <h3 id="no-libm-on-windows">No libm on Windows<a class="anchor" aria-label="anchor" href="#no-libm-on-windows"></a></h3>
@@ -163,19 +150,6 @@
 <li>Docs: <code>README.Rmd</code>, <code>NEWS.md</code>
 </li>
 </ul></div>
-<div class="section level2">
-<h2 id="tinytest-workflow">tinytest workflow<a class="anchor" aria-label="anchor" href="#tinytest-workflow"></a></h2>
-<p>Use tinytest as the source of truth for behavior checks. When changing runtime behavior, add or update targeted tests under <code>inst/tinytest/</code> in the same commit. Prefer focused tests that assert one behavior each and include Windows guards when features are OS-specific.</p>
-<p>Typical commands:</p>
-<ul><li>
-<code>make test</code> for the full tinytest suite.</li>
-<li>
-<code>R -e "tinytest::run_test_file('inst/tinytest/&lt;file&gt;.R')"</code> for a single test file while iterating.</li>
-</ul></div>
-<div class="section level2">
-<h2 id="readmermd-workflow">README.Rmd workflow<a class="anchor" aria-label="anchor" href="#readmermd-workflow"></a></h2>
-<p><code>README.Rmd</code> is the canonical source for the generated README. Any user-facing API or behavior change should update the relevant examples/text in <code>README.Rmd</code> first, then regenerate derived docs with <code>make rdm</code>. Do not edit generated README output without also updating <code>README.Rmd</code>.</p>
-</div>
 <div class="section level2">
 <h2 id="readme-and-docs-style">README and DOCS Style<a class="anchor" aria-label="anchor" href="#readme-and-docs-style"></a></h2>
 <ul><li>We use a sober style, make paragraphs and avoid ridiculous list/bullet points when uncessary.</li>

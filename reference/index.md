@@ -62,12 +62,6 @@
 - [`tcc_callback_async_enable()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_enable.md)
   : Enable async callback dispatcher (main-thread queue)
 
-- [`tcc_callback_async_is_drained()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_is_drained.md)
-  : Whether the async callback queue is drained
-
-- [`tcc_callback_async_pending()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_pending.md)
-  : Number of pending async callbacks
-
 - [`tcc_callback_async_schedule()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_schedule.md)
   : Schedule a callback to run on the main thread
 

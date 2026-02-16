@@ -48,17 +48,6 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership
 is tracked and enforced in `RC_free` and
 [`tcc_ptr_is_owned()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_owned.md).
 
-Variadics (current API):
-
-- Legacy typed-tail mode: `variadic = TRUE`, `varargs = list(...)`,
-  optional `varargs_min` (defaults to exact tail).
-- True variadic mode: `variadic = TRUE`, `varargs_types = list(...)`,
-  `varargs_min`, `varargs_max`.
-- In true variadic mode, generated wrappers cover allowed
-  arities/signatures and runtime dispatch infers scalar tail types.
-- `varargs` and `varargs_types` are mutually exclusive in one symbol
-  spec.
-
 ## Build and test
 
 - `make rd` regenerates roxygen output.
@@ -79,18 +68,6 @@ Variadics (current API):
 - Prefer early returns and explicit error messages with
   `stop(..., call. = FALSE)`.
 - Update README examples when you change user-facing behavior.
-
-## Lambda.r guard patterns (codegen and callbacks)
-
-We prefer lambda.r guard rules over long `if`/`else` or `switch` chains
-for type mapping and codegen decisions. Put guards in
-`R/aaa_ffi_codegen_rules.R` and route normalization helpers to rule
-dispatch. This keeps behavior discoverable, testable, and easy to extend
-without touching multiple call sites.
-
-Motivation: codegen logic changes frequently, and rule dispatch makes it
-possible to add or override behavior without editing large control
-blocks.
 
 ## macOS host symbol visibility
 
@@ -183,11 +160,6 @@ Implementation lives in `src/RC_libtcc.c`: `tcc_state_entry_t` registry,
 Do **not** reintroduce shutdown/unload hooks to “solve” this; the
 correct fix is ownership tracking and preventing double-finalization.
 
-For debugging GC/finalizer ordering issues, weak references were used to
-track externalptr reachability and confirm duplicate
-ownership/double-finalization paths during Windows segfault
-investigations.
-
 ### R API symbol resolution — R.def
 
 TCC JIT code calls R API functions (`Rf_ScalarInteger`, `Rf_error`,
@@ -224,19 +196,17 @@ calls `RC_invoke_callback_id(tok->id, args)` instead, eliminating the
 `snprintf`, `mkString`, and `atoi` round-trip entirely. The forward
 declaration in `R/ffi_codegen.R` was updated to match.
 
-### Async callbacks on Windows
+### Async callbacks: Windows stubs
 
-Async callbacks are supported on Windows via a thread-safe queue in
-`src/platform_async.c`. Scheduling from worker threads is supported, and
-queued callbacks execute on the main R thread when
-[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
-is called. Unlike Unix builds, Windows does not use
-[`pipe()`](https://rdrr.io/r/base/connections.html) +
-`addInputHandler()` for dispatch.
-
-Tests in `test_callback_invoke_runtime.R` are cross-platform;
-worker-thread callback tests use Win32 threads on Windows and `pthread`
-on Unix-like systems.
+Async callbacks rely on
+[`pipe()`](https://rdrr.io/r/base/connections.html), `pthread_create`,
+and R’s `addInputHandler()` — none of which exist on Windows.
+`RC_libtcc.c` has `#ifdef _WIN32` stubs that call
+`Rf_error("Async callbacks are not supported on Windows")` for the
+R-facing functions, and return `-1` for the C-facing
+`RC_callback_async_schedule_c`. The async callback tests in
+`test_callback_invoke_runtime.R` are guarded with
+`if (.Platform$OS.type != "windows")`.
 
 ### No libm on Windows
 
@@ -265,27 +235,6 @@ uses `fork()` which does not exist on Windows. Fork-related tests in
 - C API: `src/RC_libtcc.c`, `src/init.c`
 - Tests: `inst/tinytest/`
 - Docs: `README.Rmd`, `NEWS.md`
-
-## tinytest workflow
-
-Use tinytest as the source of truth for behavior checks. When changing
-runtime behavior, add or update targeted tests under `inst/tinytest/` in
-the same commit. Prefer focused tests that assert one behavior each and
-include Windows guards when features are OS-specific.
-
-Typical commands:
-
-- `make test` for the full tinytest suite.
-- `R -e "tinytest::run_test_file('inst/tinytest/<file>.R')"` for a
-  single test file while iterating.
-
-## README.Rmd workflow
-
-`README.Rmd` is the canonical source for the generated README. Any
-user-facing API or behavior change should update the relevant
-examples/text in `README.Rmd` first, then regenerate derived docs with
-`make rdm`. Do not edit generated README output without also updating
-`README.Rmd`.
 
 ## README and DOCS Style
 

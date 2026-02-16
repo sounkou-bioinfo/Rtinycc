@@ -1,29 +1,5 @@
 # Changelog
 
-## Rtinycc 0.0.3.9001 (development version)
-
-- Add true variadic FFI mode with `varargs_types`, `varargs_min`, and
-  `varargs_max` in
-  [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md),
-  while keeping legacy typed-tail `varargs` mode for compatibility.
-
-- Improve variadic README/docs examples to describe bounded variadic
-  tails and type-inferred dispatch behavior.
-
-- Use weak references to track `tcc_state` owners in the C registry and
-  avoid duplicate-owner finalization paths observed during Windows
-  segfault investigation.
-
-- Keep `tcc_state` objects alive while exported symbol pointers/closures
-  are still reachable (`R_MakeExternalPtrFn(..., prot = state)` and
-  closure environment retention) to prevent finalization-order crashes.
-
-- Generated struct/union constructors now attach a weak reference to the
-  underlying `tcc_state` in the external pointer `prot` field. The
-  weakref is initialized via an internal codegen helper
-  (`R_wrap_rtinycc_set_state_wref`) after relocation to reduce finalizer
-  sequencing crashes on Windows.
-
 ## Rtinycc 0.0.3.9000 (development version)
 
 - Refactor FFI codegen and callbacks to use lambda.r guard rules instead
@@ -40,13 +16,16 @@
   teardown code while the runtime is shutting down caused crashes on
   Windows due to DLL unload ordering and CRT heap teardown races.
 
+- Treesitter helper examples are now wrapped in `\dontrun{}` and the
+  treesitter helper tests are skipped on Windows to avoid process-exit
+  crashes related to `treesitter.c` cleanup.
+
 - Experimental Windows support. The package now builds and passes R CMD
   check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC
   from source via `configure.win`, dynamically links `libtcc.dll`, and
   generates `.def` files for R API symbol resolution. CRT heap
   consistency is ensured by redirecting TCC’s default msvcrt linkage to
-  `ucrtbase.dll`. Async callbacks are supported on Windows via a queued
-  main-thread drain model, while `fork()`-based parallelism remains
+  `ucrtbase.dll`. Async callbacks and `fork()`-based parallelism remain
   Unix-only. See `AGENTS.md` for implementation details.
 
 - `RC_invoke_callback_id()` replaces the `snprintf`-based callback

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.3.9001</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.3.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,18 +33,11 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.0.3.9001" id="rtinycc-0039001-development-version">Rtinycc 0.0.3.9001 (development version)<a class="anchor" aria-label="anchor" href="#rtinycc-0039001-development-version"></a></h2>
-<ul><li><p>Add true variadic FFI mode with <code>varargs_types</code>, <code>varargs_min</code>, and <code>varargs_max</code> in <code><a href="../reference/tcc_bind.html">tcc_bind()</a></code>, while keeping legacy typed-tail <code>varargs</code> mode for compatibility.</p></li>
-<li><p>Improve variadic README/docs examples to describe bounded variadic tails and type-inferred dispatch behavior.</p></li>
-<li><p>Use weak references to track <code>tcc_state</code> owners in the C registry and avoid duplicate-owner finalization paths observed during Windows segfault investigation.</p></li>
-<li><p>Keep <code>tcc_state</code> objects alive while exported symbol pointers/closures are still reachable (<code>R_MakeExternalPtrFn(..., prot = state)</code> and closure environment retention) to prevent finalization-order crashes.</p></li>
-<li><p>Generated struct/union constructors now attach a weak reference to the underlying <code>tcc_state</code> in the external pointer <code>prot</code> field. The weakref is initialized via an internal codegen helper (<code>R_wrap_rtinycc_set_state_wref</code>) after relocation to reduce finalizer sequencing crashes on Windows.</p></li>
-</ul></div>
-    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.3.9000" id="rtinycc-0039000-development-version">Rtinycc 0.0.3.9000 (development version)<a class="anchor" aria-label="anchor" href="#rtinycc-0039000-development-version"></a></h2>
 <ul><li><p>Refactor FFI codegen and callbacks to use lambda.r guard rules instead of long <code>if</code>/<code>else</code> or <code>switch</code> chains. This keeps type-mapping logic centralized in <code>R/aaa_ffi_codegen_rules.R</code>, makes behavior easier to extend, and reduces duplication across codegen sites.</p></li>
 <li><p>Fix exit-time segfaults on Windows (and potential issues on other platforms) by setting <code>onexit = FALSE</code> on all <code>R_RegisterCFinalizerEx()</code> calls. External pointer finalizers for TCC states, owned pointers, callbacks, and JIT-generated struct/union constructors now only run during normal garbage collection, not during R shutdown. At process exit the OS reclaims all memory; running teardown code while the runtime is shutting down caused crashes on Windows due to DLL unload ordering and CRT heap teardown races.</p></li>
-<li><p>Experimental Windows support. The package now builds and passes R CMD check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC from source via <code>configure.win</code>, dynamically links <code>libtcc.dll</code>, and generates <code>.def</code> files for R API symbol resolution. CRT heap consistency is ensured by redirecting TCC’s default msvcrt linkage to <code>ucrtbase.dll</code>. Async callbacks are supported on Windows via a queued main-thread drain model, while <code>fork()</code>-based parallelism remains Unix-only. See <code>AGENTS.md</code> for implementation details.</p></li>
+<li><p>Treesitter helper examples are now wrapped in <code>\dontrun{}</code> and the treesitter helper tests are skipped on Windows to avoid process-exit crashes related to <code>treesitter.c</code> cleanup.</p></li>
+<li><p>Experimental Windows support. The package now builds and passes R CMD check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC from source via <code>configure.win</code>, dynamically links <code>libtcc.dll</code>, and generates <code>.def</code> files for R API symbol resolution. CRT heap consistency is ensured by redirecting TCC’s default msvcrt linkage to <code>ucrtbase.dll</code>. Async callbacks and <code>fork()</code>-based parallelism remain Unix-only. See <code>AGENTS.md</code> for implementation details.</p></li>
 <li><p><code>RC_invoke_callback_id()</code> replaces the <code>snprintf</code>-based callback dispatch. The trampoline now passes the callback token as an integer directly, eliminating a round-trip through string conversion that relied on <code>snprintf</code> (unavailable as a direct symbol on Windows/UCRT).</p></li>
 </ul></div>
     <div class="section level2">
