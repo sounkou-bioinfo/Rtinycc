@@ -828,7 +828,9 @@ if (Sys.info()[["sysname"]] == "Linux") {
     memory = TRUE
   )
 
-  timings[, c("expression", "min", "median", "itr/sec", "mem_alloc")]
+  
+  print(timings)
+  
   plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 }
 ```
