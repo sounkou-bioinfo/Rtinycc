@@ -1,0 +1,1115 @@
+# Rtinycc
+
+Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
+
+## Abstract
+
+Rtinycc is an R interface to
+[`TinyCC`](https://github.com/TinyCC/tinycc), providing both CLI access
+and a libtcc-backed in-memory compiler. It includes an experimental FFI
+inspired by [Bun’s FFI](https://bun.com/docs/runtime/ffi) for binding C
+symbols with predictable type conversions and pointer utilities. The
+package runs on Unix-like systems and on Windows (experimental), and
+focuses on embedding `TinyCC` and enabling JIT-compiled bindings
+directly from R. Combined with
+[`treesitter.c`](https://github.com/sounkou-bioinfo/treesitter.c), which
+provides `C` header parsers, it can be used to rapidly generate
+declarative bindings.
+
+## How it works
+
+When you call
+[`tcc_compile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.md),
+Rtinycc generates C wrapper functions whose signature follows the
+`.Call` convention (`SEXP` in, `SEXP` out). These wrappers convert R
+types to C, call the target function, and convert the result back. TCC
+compiles them in-memory – no shared library is written to disk and no
+`R_init_*` registration is needed.
+
+After
+[`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md),
+wrapper pointers are retrieved via
+[`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md),
+which internally calls `RC_libtcc_get_symbol()`. That function converts
+TCC’s raw `void*` into a `DL_FUNC` wrapped with `R_MakeExternalPtrFn`
+(tagged `"native symbol"`). On the R side,
+[`make_callable()`](https://sounkou-bioinfo.github.io/Rtinycc/R/ffi.R)
+creates a closure that passes this external pointer to `.Call` (aliased
+as `.RtinyccCall` to keep `R CMD check` happy).
+
+The design follows [CFFI’s](https://cffi.readthedocs.io/) API-mode
+pattern: instead of computing struct layouts and calling conventions in
+R (ABI-mode, like Python’s ctypes), the generated C code lets TCC handle
+`sizeof`, `offsetof`, and argument passing. Rtinycc never replicates
+platform-specific layout rules. The wrappers can also link against
+external shared libraries whose symbols TCC resolves at relocation time.
+For background on how this compares to a libffi approach, see the
+[`RSimpleFFI`
+README](https://github.com/sounkou-bioinfo/RSimpleFFI#readme).
+
+On macOS the configure script strips `-flat_namespace` from TCC’s build
+to avoid [BUS ERROR
+issues](https://genomic.social/@bioinfhotep/115765645745231377). Without
+it, TCC cannot resolve host symbols (e.g. `RC_free_finalizer`) through
+the dynamic linker. Rtinycc works around this with
+`RC_libtcc_add_host_symbols()`, which registers package-internal C
+functions via
+[`tcc_add_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_symbol.md)
+before relocation. Any new C function referenced by generated TCC code
+must be added there.
+
+Ownership semantics are explicit. Pointers from
+[`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
+are tagged `rtinycc_owned` and can be released with
+[`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md)
+(or by their R finalizer). Generated struct constructors use a
+struct-specific tag (`struct_<name>`) with an `RC_free_finalizer`; free
+them with `struct_<name>_free()`, not
+[`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md).
+Pointers from
+[`tcc_data_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_data_ptr.md)
+are tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array
+returns are copied into a fresh R vector; set `free = TRUE` only when
+the C function returns a `malloc`-owned buffer.
+
+Asynchronous callbacks into `R` from `C` code in Rtinycc is adapted from
+Simon Urbanek’s [`background`](https://github.com/s-u/background)
+package implementation.
+
+Windows support (experimental) required solving several interacting
+problems (so using WSL2 is prefered). R 4.2+ on Windows uses the
+Universal CRT (`ucrtbase.dll`) while TinyCC’s default import-definition
+set is centered on `msvcrt`. The build system mitigates this by
+generating an import-definition file from `ucrtbase.dll` and storing it
+as `msvcrt.def`, so TinyCC’s `-lmsvcrt` lookup is redirected toward UCRT
+exports. This mitigation reduces cross-CRT allocation/free hazards, but
+it is not a universal guarantee for every CRT-facing symbol across all
+toolchains. In practice, we also avoid `printf`-family and prefer R API
+output (`Rf_warning()`, `Rprintf()`) for diagnostics. `fork()`-based
+parallelism is not available on winowds. We also observed intermittent
+crashes when running
+[`tinytest::test_package()`](https://rdrr.io/pkg/tinytest/man/test_package.html)
+in a single long-lived R process on Windows; the same tests run
+one-by-one in fresh R processes do not reproduce the crash, which points
+to process-lifetime teardown/state interactions rather than a single
+isolated test failure.
+
+## Installation
+
+``` r
+install.packages('Rtinycc', repos = c('https://sounkou-bioinfo.r-universe.dev', 'https://cloud.r-project.org'))
+```
+
+## Usage
+
+### CLI
+
+The CLI interface compiles C source files to standalone executables
+using the bundled TinyCC toolchain.
+
+``` r
+library(Rtinycc)
+
+src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
+exe <- tempfile()
+tcc_run_cli(c(
+  "-B", tcc_prefix(),
+  paste0("-I", tcc_include_paths()),
+  paste0("-L", tcc_lib_paths()),
+  src, "-o", exe
+))
+#> [1] 0
+Sys.chmod(exe, mode = "0755")
+system2(exe, stdout = TRUE)
+#> [1] "42"
+```
+
+For in-memory workflows, prefer libtcc instead.
+
+### In-memory compilation with libtcc
+
+We can compile and call C functions entirely in memory. This is the
+simplest path for quick JIT compilation.
+
+``` r
+state <- tcc_state(output = "memory")
+tcc_compile_string(state, "int forty_two(){ return 42; }")
+#> [1] 0
+tcc_relocate(state)
+#> [1] 0
+tcc_call_symbol(state, "forty_two", return = "int")
+#> [1] 42
+```
+
+The lower-level API gives full control over include paths, libraries,
+and the R C API. Using `#define _Complex` as a workaround for TCC’s lack
+of [complex type
+support](https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
+we can link against R’s headers and call into `libR`.
+
+``` r
+state <- tcc_state(output = "memory")
+tcc_add_include_path(state, R.home("include"))
+#> [1] 0
+tcc_add_library_path(state, R.home("lib"))
+#> [1] 0
+
+code <- '
+#define _Complex
+#include <R.h>
+#include <Rinternals.h>
+
+double call_r_sqrt(void) {
+  SEXP fn   = PROTECT(Rf_findFun(Rf_install("sqrt"), R_BaseEnv));
+  SEXP val  = PROTECT(Rf_ScalarReal(16.0));
+  SEXP call = PROTECT(Rf_lang2(fn, val));
+  SEXP out  = PROTECT(Rf_eval(call, R_GlobalEnv));
+  double res = REAL(out)[0];
+  UNPROTECT(4);
+  return res;
+}
+'
+tcc_compile_string(state, code)
+#> [1] 0
+tcc_relocate(state)
+#> [1] 0
+tcc_call_symbol(state, "call_r_sqrt", return = "double")
+#> [1] 4
+```
+
+### Pointer utilities
+
+Rtinycc ships a set of typed memory access functions similar to what the
+[ctypesio](https://cran.r-project.org/package=ctypesio) package offers,
+but designed around our FFI pointer model. Every scalar C type has a
+corresponding `tcc_read_*` / `tcc_write_*` pair that operates at a byte
+offset into any external pointer, so you can walk structs, arrays, and
+output parameters without writing C helpers.
+
+``` r
+ptr <- tcc_cstring("hello")
+tcc_read_cstring(ptr)
+#> [1] "hello"
+tcc_read_bytes(ptr, 5)
+#> [1] 68 65 6c 6c 6f
+tcc_ptr_addr(ptr, hex = TRUE)
+#> [1] "0x59f2d57b9060"
+tcc_ptr_is_null(ptr)
+#> [1] FALSE
+tcc_free(ptr)
+#> NULL
+```
+
+Typed reads and writes cover the full scalar range (`i8`/`u8`,
+`i16`/`u16`, `i32`/`u32`, `i64`/`u64`, `f32`/`f64`) plus pointer
+dereferencing via `tcc_read_ptr` / `tcc_write_ptr`. All operations use a
+byte offset and `memcpy` internally for alignment safety.
+
+``` r
+buf <- tcc_malloc(32)
+tcc_write_i32(buf, 0L, 42L)
+tcc_write_f64(buf, 8L, pi)
+tcc_read_i32(buf, offset = 0L)
+#> [1] 42
+tcc_read_f64(buf, offset = 8L)
+#> [1] 3.141593
+tcc_free(buf)
+#> NULL
+```
+
+Pointer-to-pointer workflows are supported for C APIs that return values
+through output parameters.
+
+``` r
+ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
+target <- tcc_malloc(8)
+tcc_ptr_set(ptr_ref, target)
+#> <pointer: 0x59f2d3bc2e40>
+tcc_data_ptr(ptr_ref)
+#> <pointer: 0x59f2d5d58420>
+tcc_ptr_set(ptr_ref, tcc_null_ptr())
+#> <pointer: 0x59f2d3bc2e40>
+tcc_free(target)
+#> NULL
+tcc_free(ptr_ref)
+#> NULL
+```
+
+## Declarative FFI
+
+A declarative interface inspired by [Bun’s
+FFI](https://bun.com/docs/runtime/ffi) sits on top of the lower-level
+API. We define types explicitly and Rtinycc generates the binding code,
+compiling it in memory with TCC.
+
+### Type system
+
+The FFI exposes a small set of type mappings between R and C.
+Conversions are explicit and predictable so callers know when data is
+shared versus copied.
+
+Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`,
+`u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical);
+`cstring` (NUL-terminated string).
+
+Array arguments pass R vectors to C with zero copy: `raw` maps to
+`uint8_t*`, `integer_array` to `int32_t*`, `numeric_array` to `double*`.
+
+Pointer types include `ptr` (opaque external pointer), `sexp` (pass a
+`SEXP` directly), and callback signatures like
+`callback:double(double)`.
+
+Array returns use
+`returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to
+copy the result into a new R vector. The `length_arg` is the 1-based
+index of the C argument that carries the array length. Set `free = TRUE`
+when the C function returns a `malloc`-owned buffer.
+
+### Simple functions
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source("
+    int add(int a, int b) { return a + b; }
+  ") |>
+  tcc_bind(add = list(args = list("i32", "i32"), returns = "i32")) |>
+  tcc_compile()
+
+ffi$add(5L, 3L)
+#> [1] 8
+
+# Compare to the R builtin `+` in a tight loop.
+# Each FFI call allocates a return SEXP, so GC pressure is expected.
+r_p <- sample(10000)
+bench::mark(
+  Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
+  Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
+
+)
+#> Warning: Some expressions had a GC in every iteration; so filtering is
+#> disabled.
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc      34.5ms   57.8ms      16.9  213.99KB     26.3
+#> 2 Rbuiltin    554.2µs  595.1µs    1578.     9.05KB     28.0
+
+# For performance-sensitive code, move the loop into C and operate on arrays.
+ffi_vec <- tcc_ffi() |>
+  tcc_source(" \
+    void add_vec(int32_t* x, int32_t n) {\
+      for (int32_t i = 0; i < n; i++) x[i] = x[i] + 1;\
+    }\
+  ") |>
+  tcc_bind(add_vec = list(args = list("integer_array", "i32"), returns = "void")) |>
+  tcc_compile()
+
+x <- sample(10000)
+bench::mark(
+  Rtinycc_vec = {
+    y <- as.integer(x)
+    y <- y + 0L
+    ffi_vec$add_vec(y, length(y))
+    y
+  },
+  Rbuiltin_vec = {
+    y <- as.integer(x)
+    y <- y + 0L
+    y + 1L
+  }
+)
+#> # A tibble: 2 × 6
+#>   expression        min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc_vec    20.7µs   29.2µs    35755.    39.1KB     25.0
+#> 2 Rbuiltin_vec   16.9µs   32.7µs    37074.    78.2KB     55.7
+```
+
+### Linking external libraries
+
+We can bind directly to symbols in shared libraries. Here we link
+against `libm`.
+
+``` r
+math <- tcc_ffi() |>
+  tcc_library("m") |>
+  tcc_bind(
+    sqrt  = list(args = list("f64"), returns = "f64"),
+    sin   = list(args = list("f64"), returns = "f64"),
+    floor = list(args = list("f64"), returns = "f64")
+  ) |>
+  tcc_compile()
+
+math$sqrt(16.0)
+#> [1] 4
+math$sin(pi / 2)
+#> [1] 1
+math$floor(3.7)
+#> [1] 3
+```
+
+### Working with arrays
+
+R vectors are passed to C with zero copy. Mutations in C are visible in
+R.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source("
+    #include <stdlib.h>
+    #include <string.h>
+
+    int64_t sum_array(int32_t* arr, int32_t n) {
+      int64_t s = 0;
+      for (int i = 0; i < n; i++) s += arr[i];
+      return s;
+    }
+
+    void bump_first(int32_t* arr) { arr[0] += 10; }
+
+    int32_t* dup_array(int32_t* arr, int32_t n) {
+      int32_t* out = malloc(sizeof(int32_t) * n);
+      memcpy(out, arr, sizeof(int32_t) * n);
+      return out;
+    }
+  ") |>
+  tcc_bind(
+    sum_array  = list(args = list("integer_array", "i32"), returns = "i64"),
+    bump_first = list(args = list("integer_array"), returns = "void"),
+    dup_array  = list(
+      args = list("integer_array", "i32"),
+      returns = list(type = "integer_array", length_arg = 2, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+
+x <- as.integer(1:100) # to avoid ALTREP
+.Internal(inspect(x))
+#> @59f2d9804ab0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+ffi$sum_array(x, length(x))
+#> [1] 5050
+
+# Zero-copy: C mutation reflects in R
+ffi$bump_first(x)
+#> NULL
+x[1]
+#> [1] 11
+
+# Array return: copied into a new R vector, C buffer freed
+y <- ffi$dup_array(x, length(x))
+y[1]
+#> [1] 11
+
+.Internal(inspect(x))
+#> @59f2d9804ab0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+```
+
+### Benchmark
+
+This example benchmarks the classic convolution routine written in plain
+C (no manual `SEXP` code). Rtinycc generates the `.Call` wrappers
+automatically. We also compare against `quickr` which is expected to be
+faster due to compiler optimiztion.
+
+``` r
+library(quickr)
+
+slow_convolve <- function(a, b) {
+  declare(type(a = double(NA)), type(b = double(NA)))
+  ab <- double(length(a) + length(b) - 1)
+  for (i in seq_along(a)) {
+    for (j in seq_along(b)) {
+      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
+    }
+  }
+  ab
+}
+
+ffi_conv <- tcc_ffi() |>
+  tcc_source(" \
+    #include <stdlib.h>\
+    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
+      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
+      if (!ab) return NULL;\
+      for (int i = 0; i < na; i++) {\
+        for (int j = 0; j < nb; j++) {\
+          ab[i + j] += a[i] * b[j];\
+        }\
+      }\
+      return ab;\
+    }\
+  ") |>
+  tcc_bind(
+    convolve = list(
+      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
+      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+
+set.seed(1)
+a <- runif(100000)
+b <- runif(100)
+na <- length(a)
+nb <- length(b)
+nab <- na + nb - 1L
+
+quick_convolve <- quick(slow_convolve)
+timings <- bench::mark(
+  R = slow_convolve(a, b),
+  quickr = quick_convolve(a, b),
+  Rtinycc = ffi_conv$convolve(a, na, b, nb, nab),
+  min_time = 2
+)
+timings
+#> # A tibble: 3 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 R          618.43ms 618.43ms      1.62     844KB    4.85 
+#> 2 quickr       3.81ms   4.29ms    233.       782KB    4.11 
+#> 3 Rtinycc     55.34ms   57.5ms     17.2      782KB    0.506
+plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+![](reference/figures/README-benchmark-convolve-1.png)
+
+### Structs and unions
+
+Complex C types are supported declaratively. Use
+[`tcc_struct()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.md)
+to generate allocation and accessor helpers. Free instances when done.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    #include <math.h>
+    struct point { double x; double y; };
+    double distance(struct point* a, struct point* b) {
+      double dx = a->x - b->x, dy = a->y - b->y;
+      return sqrt(dx * dx + dy * dy);
+    }
+  ') |>
+  tcc_library("m") |>
+  tcc_struct("point", accessors = c(x = "f64", y = "f64")) |>
+  tcc_bind(distance = list(args = list("ptr", "ptr"), returns = "f64")) |>
+  tcc_compile()
+
+p1 <- ffi$struct_point_new()
+ffi$struct_point_set_x(p1, 0.0)
+#> <pointer: 0x59f2d9019750>
+ffi$struct_point_set_y(p1, 0.0)
+#> <pointer: 0x59f2d9019750>
+
+p2 <- ffi$struct_point_new()
+ffi$struct_point_set_x(p2, 3.0)
+#> <pointer: 0x59f2e2c9dff0>
+ffi$struct_point_set_y(p2, 4.0)
+#> <pointer: 0x59f2e2c9dff0>
+
+ffi$distance(p1, p2)
+#> [1] 5
+
+ffi$struct_point_free(p1)
+#> NULL
+ffi$struct_point_free(p2)
+#> NULL
+```
+
+### Enums
+
+Enums are exposed as helper functions that return integer constants.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source("enum color { RED = 0, GREEN = 1, BLUE = 2 };") |>
+  tcc_enum("color", constants = c("RED", "GREEN", "BLUE")) |>
+  tcc_compile()
+
+ffi$enum_color_RED()
+#> [1] 0
+ffi$enum_color_BLUE()
+#> [1] 2
+```
+
+### Bitfields
+
+Bitfields are handled by TCC. Accessors read and write them like normal
+fields.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source("
+    struct flags {
+      unsigned int active : 1;
+      unsigned int level  : 4;
+    };
+  ") |>
+  tcc_struct("flags", accessors = c(active = "u8", level = "u8")) |>
+  tcc_compile()
+
+s <- ffi$struct_flags_new()
+ffi$struct_flags_set_active(s, 1L)
+#> <pointer: 0x59f2d5d36c90>
+ffi$struct_flags_set_level(s, 9L)
+#> <pointer: 0x59f2d5d36c90>
+ffi$struct_flags_get_active(s)
+#> [1] 1
+ffi$struct_flags_get_level(s)
+#> [1] 9
+ffi$struct_flags_free(s)
+#> NULL
+```
+
+### Global getters and setters
+
+C globals can be exposed with explicit getter/setter helpers.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source("
+    int counter = 7;
+    double pi_approx = 3.14159;
+  ") |>
+  tcc_global("counter", "i32") |>
+  tcc_global("pi_approx", "f64") |>
+  tcc_compile()
+
+ffi$global_counter_get()
+#> [1] 7
+ffi$global_pi_approx_get()
+#> [1] 3.14159
+ffi$global_counter_set(42L)
+#> [1] 42
+ffi$global_counter_get()
+#> [1] 42
+```
+
+### Callbacks
+
+R functions can be registered as C function pointers via
+[`tcc_callback()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback.md)
+and passed to compiled code. Specify a `callback:<signature>` argument
+in
+[`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
+so the trampoline is generated automatically. Always close callbacks
+when done.
+
+``` r
+cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
+
+code <- '
+double apply_fn(double (*fn)(void* ctx, double), void* ctx, double x) {
+  return fn(ctx, x);
+}
+'
+
+ffi <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_bind(
+    apply_fn = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+ffi$apply_fn(cb, tcc_callback_ptr(cb), 7.0)
+#> [1] 49
+tcc_callback_close(cb)
+```
+
+### Callback errors
+
+If a callback throws an R error, the trampoline catches it, emits a
+warning, and returns a type-appropriate default (0 for numeric, `FALSE`
+for logical, `NULL` for pointer). This prevents C code from seeing an
+unwound stack.
+
+``` r
+cb_err <- tcc_callback(
+  function(x) stop("boom"),
+  signature = "double (*)(double)"
+)
+
+ffi_err <- tcc_ffi() |>
+  tcc_source('
+    double call_cb_err(double (*cb)(void* ctx, double), void* ctx, double x) {
+      return cb(ctx, x);
+    }
+  ') |>
+  tcc_bind(
+    call_cb_err = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+warned <- FALSE
+res <- withCallingHandlers(
+  ffi_err$call_cb_err(cb_err, tcc_callback_ptr(cb_err), 1.0),
+  warning = function(w) {
+    warned <<- TRUE
+    invokeRestart("muffleWarning")
+  }
+)
+list(warned = warned, result = res)
+#> $warned
+#> [1] TRUE
+#> 
+#> $result
+#> [1] NA
+tcc_callback_close(cb_err)
+```
+
+### Async callbacks
+
+For thread-safe scheduling from worker threads, use
+`callback_async:<signature>` in
+[`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md).
+The callback is enqueued from any thread and executed on the main R
+thread by the async dispatcher. Call
+[`tcc_callback_async_enable()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_enable.md)
+once before use. In this example we spawn 200 threads in C that
+increment an R global variable.
+
+``` r
+tcc_callback_async_enable()
+
+hits <- 0L
+cb_async <- tcc_callback(
+  function(x) { Sys.sleep(0.001) ; hits <<- hits + x; NULL },
+  signature = "void (*)(int)"
+)
+
+code_async <- '
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
+#include <stdlib.h>
+
+struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
+
+#ifdef _WIN32
+static DWORD WINAPI worker(LPVOID data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  free(t);
+  return 0;
+}
+#else
+static void* worker(void* data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  free(t);
+  return NULL;
+}
+#endif
+
+int spawn_async_many(void (*cb)(void* ctx, int), void* ctx, int value, int n) {
+  if (!cb || !ctx || n < 0) return -1;
+#ifdef _WIN32
+  HANDLE* th = (HANDLE*) calloc((size_t)n, sizeof(HANDLE));
+  if (!th) return -3;
+  for (int i = 0; i < n; i++) {
+    struct task* t = (struct task*) malloc(sizeof(struct task));
+    if (!t) { free(th); return -3; }
+    t->cb = cb;
+    t->ctx = ctx;
+    t->value = value;
+    th[i] = CreateThread(NULL, 0, worker, t, 0, NULL);
+    if (!th[i]) { free(t); free(th); return -2; }
+  }
+  for (int i = 0; i < n; i++) {
+    WaitForSingleObject(th[i], INFINITE);
+    CloseHandle(th[i]);
+  }
+  free(th);
+#else
+  pthread_t* th = (pthread_t*) calloc((size_t)n, sizeof(pthread_t));
+  if (!th) return -3;
+  for (int i = 0; i < n; i++) {
+    struct task* t = (struct task*) malloc(sizeof(struct task));
+    if (!t) { free(th); return -3; }
+    t->cb = cb;
+    t->ctx = ctx;
+    t->value = value;
+    if (pthread_create(&th[i], NULL, worker, t) != 0) {
+      free(t);
+      free(th);
+      return -2;
+    }
+  }
+  for (int i = 0; i < n; i++) {
+    pthread_join(th[i], NULL);
+  }
+  free(th);
+#endif
+  return 0;
+}
+'
+
+ffi_async <- tcc_ffi() |>
+  tcc_source(code_async)
+if (.Platform$OS.type != "windows") {
+  ffi_async <- ffi_async |>
+    tcc_library("pthread")
+}
+ffi_async <- ffi_async |>
+  tcc_bind(
+    spawn_async_many = list(
+      args = list("callback_async:void(int)", "ptr", "i32", "i32"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+n_calls <- 200L
+start <- Sys.time()
+cb_ptr_async <- tcc_callback_ptr(cb_async)
+rc <- ffi_async$spawn_async_many(cb_async, cb_ptr_async, 1L, n_calls)
+
+deadline <- Sys.time() + 3
+while (!tcc_callback_async_is_drained() && Sys.time() < deadline) {
+  tcc_callback_async_drain()
+}
+end <- Sys.time()
+list(ok = isTRUE(rc == 0L), hits = hits, expected = n_calls)
+#> $ok
+#> [1] TRUE
+#> 
+#> $hits
+#> [1] 200
+#> 
+#> $expected
+#> [1] 200
+tcc_callback_close(cb_async)
+end - start
+#> Time difference of 0.2283649 secs
+```
+
+### SQLite: a complete example
+
+This example ties together external library linking, callbacks, and
+pointer dereferencing. We open an in-memory SQLite database, execute
+queries, and collect rows through an R callback that reads `char**`
+arrays using `tcc_read_ptr` and `tcc_read_cstring`.
+
+``` r
+ptr_size <- .Machine$sizeof.pointer
+
+read_string_array <- function(ptr, n) {
+  vapply(seq_len(n), function(i) {
+    tcc_read_cstring(tcc_read_ptr(ptr, (i - 1L) * ptr_size))
+  }, "")
+}
+
+cb <- tcc_callback(
+  function(argc, argv, cols) {
+    values <- read_string_array(argv, argc)
+    names  <- read_string_array(cols, argc)
+    cat(paste(names, values, sep = " = ", collapse = ", "), "\n")
+    0L
+  },
+  signature = "int (*)(int, char **, char **)"
+)
+
+sqlite <- tcc_ffi() |>
+  tcc_header("#include <sqlite3.h>") |>
+  tcc_library("sqlite3") |>
+  tcc_source('
+    void* open_db() {
+      sqlite3* db = NULL;
+      sqlite3_open(":memory:", &db);
+      return db;
+    }
+    int close_db(void* db) {
+      return sqlite3_close((sqlite3*)db);
+    }
+  ') |>
+  tcc_bind(
+    open_db  = list(args = list(), returns = "ptr"),
+    close_db = list(args = list("ptr"), returns = "i32"),
+    sqlite3_libversion = list(args = list(), returns = "cstring"),
+    sqlite3_exec = list(
+      args = list("ptr", "cstring", "callback:int(int, char **, char **)", "ptr", "ptr"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+#> Warning in tcc_compile_string(state, c_code): <string>:93: warning: assignment
+#> from incompatible pointer type
+
+sqlite$sqlite3_libversion()
+#> [1] "3.45.1"
+
+db <- sqlite$open_db()
+sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callback_ptr(cb), tcc_null_ptr())
+#> [1] 0
+sqlite$sqlite3_exec(db, "INSERT INTO t VALUES (1, 'hello'), (2, 'world');", cb, tcc_callback_ptr(cb), tcc_null_ptr())
+#> [1] 0
+sqlite$sqlite3_exec(db, "SELECT * FROM t;", cb, tcc_callback_ptr(cb), tcc_null_ptr())
+#> id = 1, name = hello 
+#> id = 2, name = world
+#> [1] 0
+sqlite$close_db(db)
+#> [1] 0
+tcc_callback_close(cb)
+```
+
+To check whether a callback mismatch comes from manual
+[`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
+specs or from header mapping/codegen, you can generate the same binding
+from a header fragment and inspect the inferred signature. For callback
+signatures in
+[`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md),
+the first `void*` user-data parameter is passed through
+`tcc_callback_ptr(cb)` and should not be repeated inside `callback:...`.
+
+``` r
+sqlite_header <- '
+int sqlite3_exec(
+  void *db,
+  const char *sql,
+  int (*callback)(void *, int, char **, char **),
+  void *ctx,
+  char **errmsg
+);
+'
+
+sqlite_mapper <- function(c_type) {
+  x <- trimws(c_type)
+  if (grepl("\\(\\s*\\*", x)) {
+    return("callback:int(int, char **, char **)")
+  }
+  tcc_map_c_type_to_ffi(x)
+}
+
+sqlite_symbols <- tcc_treesitter_bindings(sqlite_header, mapper = sqlite_mapper)
+str(sqlite_symbols$sqlite3_exec)
+#> List of 2
+#>  $ args   :List of 5
+#>   ..$ : chr "ptr"
+#>   ..$ : chr "ptr"
+#>   ..$ : chr "callback:int(int, char **, char **)"
+#>   ..$ : chr "ptr"
+#>   ..$ : chr "ptr"
+#>  $ returns: chr "i32"
+```
+
+## Header parsing with treesitter.c
+
+For header-driven bindings, we use `treesitter.c` to parse function
+signatures and generate binding specifications automatically. For
+struct, enum, and global helpers,
+[`tcc_generate_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_generate_bindings.md)
+handles the code generation.
+
+Both
+[`tcc_treesitter_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_treesitter_bindings.md)
+and
+[`tcc_generate_bindings()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_generate_bindings.md)
+accept a custom `mapper` function. The default mapper is conservative
+for pointers: `char*` is treated as `ptr` because C does not guarantee
+NUL-terminated strings. If you know a parameter is a C string, provide a
+custom mapper that returns `cstring` for that type. The same mapper hook
+can be used to map function-pointer parameters to explicit callback
+types (for example `callback:int(int, char **, char **)`).
+
+``` r
+header <- '
+double sqrt(double x);
+double sin(double x);
+struct point { double x; double y; };
+enum status { OK = 0, ERROR = 1 };
+int global_counter;
+'
+
+tcc_treesitter_functions(header)
+#>   capture_name text start_line start_col params return_type
+#> 1    decl_name sqrt          2         8 double      double
+#> 2    decl_name  sin          3         8 double      double
+tcc_treesitter_structs(header)
+#>   capture_name  text start_line
+#> 1  struct_name point          4
+tcc_treesitter_enums(header)
+#>   capture_name   text start_line
+#> 1    enum_name status          5
+tcc_treesitter_globals(header)
+#>   capture_name           text start_line
+#> 1  global_name global_counter          6
+
+# Bind parsed functions to libm
+symbols <- tcc_treesitter_bindings(header)
+math <- tcc_link("m", symbols = symbols)
+math$sqrt(16.0)
+#> [1] 4
+
+# Generate struct/enum/global helpers
+ffi <- tcc_ffi() |>
+  tcc_source(header) |>
+  tcc_generate_bindings(
+    header,
+    functions = FALSE, structs = TRUE,
+    enums = TRUE, globals = TRUE
+  ) |>
+  tcc_compile()
+
+ffi$struct_point_new()
+#> <pointer: 0x59f2d90d75d0>
+ffi$enum_status_OK()
+#> [1] 0
+ffi$global_global_counter_get()
+#> [1] 0
+```
+
+## Known limitations
+
+### `_Complex` types
+
+TCC does not support C99 `_Complex` types. Generated code works around
+this with `#define _Complex`, which suppresses the keyword. Apply the
+same workaround in your own
+[`tcc_source()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_source.md)
+code when headers pull in complex types.
+
+### 64-bit integer precision
+
+R represents `i64` and `u64` values as `double`, which loses precision
+beyond $2^{53}$. Values that differ only past that threshold become
+indistinguishable.
+
+``` r
+sprintf("2^53:     %.0f", 2^53)
+#> [1] "2^53:     9007199254740992"
+sprintf("2^53 + 1: %.0f", 2^53 + 1)
+#> [1] "2^53 + 1: 9007199254740992"
+identical(2^53, 2^53 + 1)
+#> [1] TRUE
+```
+
+For exact 64-bit arithmetic, keep values in C-allocated storage and
+manipulate them through pointers.
+
+### Nested structs
+
+The accessor generator does not handle nested structs by value. Use
+pointer fields instead and reach inner structs with
+[`tcc_field_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_field_addr.md).
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('
+    struct inner { int a; };
+    struct outer { struct inner* in; };
+  ') |>
+  tcc_struct("inner", accessors = c(a = "i32")) |>
+  tcc_struct("outer", accessors = c(`in` = "ptr")) |>
+  tcc_field_addr("outer", "in") |>
+  tcc_compile()
+
+o <- ffi$struct_outer_new()
+i <- ffi$struct_inner_new()
+ffi$struct_inner_set_a(i, 42L)
+#> <pointer: 0x59f2e2843b80>
+
+# Write the inner pointer into the outer struct
+ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
+#> <pointer: 0x59f2d5d36c10>
+
+# Read it back through indirection
+ffi$struct_outer_in_addr(o) |>
+  tcc_data_ptr() |>
+  ffi$struct_inner_get_a()
+#> [1] 42
+
+ffi$struct_inner_free(i)
+#> NULL
+ffi$struct_outer_free(o)
+#> NULL
+```
+
+### Array fields in structs
+
+Array fields require the `list(type = ..., size = N, array = TRUE)`
+syntax in
+[`tcc_struct()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.md),
+which generates element-wise accessors.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('struct buf { unsigned char data[16]; };') |>
+  tcc_struct("buf", accessors = list(
+    data = list(type = "u8", size = 16, array = TRUE)
+  )) |>
+  tcc_compile()
+
+b <- ffi$struct_buf_new()
+ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
+#> <pointer: 0x59f2e3b84dc0>
+ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
+#> <pointer: 0x59f2e3b84dc0>
+ffi$struct_buf_get_data_elt(b, 0L)
+#> [1] 202
+ffi$struct_buf_get_data_elt(b, 1L)
+#> [1] 254
+ffi$struct_buf_free(b)
+#> NULL
+```
+
+## Serialization and fork safety
+
+Compiled FFI objects are fork-safe:
+[`parallel::mclapply()`](https://rdrr.io/r/parallel/mclapply.html) and
+other `fork()`-based parallelism work out of the box because TCC’s
+compiled code lives in memory mappings that survive `fork()` via
+copy-on-write.
+
+Serialization is also supported. Each `tcc_compiled` object stores its
+FFI recipe internally, so after
+[`saveRDS()`](https://rdrr.io/r/base/readRDS.html) /
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) (or
+[`serialize()`](https://rdrr.io/r/base/serialize.html) /
+[`unserialize()`](https://rdrr.io/r/base/serialize.html)), the first `$`
+access detects the dead TCC state pointer and recompiles transparently.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source("int square(int x) { return x * x; }") |>
+  tcc_bind(square = list(args = list("i32"), returns = "i32")) |>
+  tcc_compile()
+
+ffi$square(7L)
+#> [1] 49
+
+tmp <- tempfile(fileext = ".rds")
+saveRDS(ffi, tmp)
+ffi2 <- readRDS(tmp)
+unlink(tmp)
+
+# Auto-recompiles on first access
+ffi2$square(7L)
+#> [Rtinycc] Recompiling FFI bindings after deserialization
+#> [1] 49
+```
+
+For explicit control, use
+[`tcc_recompile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_recompile.md).
+Note that raw `tcc_state` objects and bare pointers from
+[`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
+do not carry a recipe and remain dead after deserialization.
+
+## License
+
+GPL-3
+
+## References
+
+- [TinyCC](https://github.com/TinyCC/tinycc)
+- [Bun’s FFI](https://bun.com/docs/runtime/ffi)
+- [CFFI](https://cffi.readthedocs.io/)
+- [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
+- [CSlug](https://cslug.readthedocs.io/en/latest/)
+- [background (Simon Urbanek)](https://github.com/s-u/background)
