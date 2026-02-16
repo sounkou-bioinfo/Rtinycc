@@ -391,6 +391,10 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
     if (existing) {
         R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_borrowed"));
+        // Keep the owner alive while this borrowed wrapper exists.
+        if (existing->owner_ext != R_NilValue) {
+            R_SetExternalPtrProtected(ext, existing->owner_ext);
+        }
         R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
     } else {
         R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
