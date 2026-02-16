@@ -161,8 +161,8 @@ SEXP RC_set_shutting_down(SEXP flag) {
  * Protection: none.
  */
 static void RC_tcc_finalizer(SEXP ext) {
-    Rf_printf("[RTINYCC_DIAG] RC_tcc_finalizer ext=%p ptr=%p tag=%s shutting_down=%d\n",
-              (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext), g_rtinycc_shutting_down);
+    Rprintf("[RTINYCC_DIAG] RC_tcc_finalizer ext=%p ptr=%p tag=%s shutting_down=%d\n",
+            (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext), g_rtinycc_shutting_down);
     if (g_rtinycc_shutting_down) {
         return;
     }
@@ -182,8 +182,8 @@ static void RC_tcc_finalizer(SEXP ext) {
  */
 static void RC_null_finalizer(SEXP ext) {
     // NULL pointer doesn't need cleanup
-    Rf_printf("[RTINYCC_DIAG] RC_null_finalizer ext=%p ptr=%p tag=%s\n",
-              (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext));
+    Rprintf("[RTINYCC_DIAG] RC_null_finalizer ext=%p ptr=%p tag=%s\n",
+            (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext));
     R_ClearExternalPtr(ext);
 }
 
@@ -200,12 +200,12 @@ void RC_free_finalizer(SEXP ext) {
         // On Windows, skip free() to avoid CRT heap mismatches
         // Memory was allocated by JIT code using UCRT malloc(), but Rtinycc DLL
         // might be linked against different CRT. OS will reclaim memory on exit.
-        Rf_printf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s (WINDOWS skip free)\n",
-                  (void*)ext, ptr, RC_extptr_tag_name(ext));
+        Rprintf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s (WINDOWS skip free)\n",
+                (void*)ext, ptr, RC_extptr_tag_name(ext));
         R_ClearExternalPtr(ext);
 #else
-        Rf_printf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s\n",
-                  (void*)ext, ptr, RC_extptr_tag_name(ext));
+        Rprintf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s\n",
+                (void*)ext, ptr, RC_extptr_tag_name(ext));
         free(ptr);
         R_ClearExternalPtr(ext);
 #endif
@@ -1338,8 +1338,8 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
 static void RC_callback_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
-        Rf_printf("[RTINYCC_DIAG] RC_callback_finalizer ext=%p token=%p id=%d refs=%d\n",
-                  (void*)ext, (void*)token, token->id, token->refs);
+        Rprintf("[RTINYCC_DIAG] RC_callback_finalizer ext=%p token=%p id=%d refs=%d\n",
+                (void*)ext, (void*)token, token->id, token->refs);
         // Release the preserved R function
         if (token->id >= 0 && token->id < MAX_CALLBACKS) {
             callback_entry_t *entry = &callback_registry[token->id];
@@ -1381,8 +1381,8 @@ static void RC_callback_finalizer(SEXP ext) {
 static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
-        Rf_printf("[RTINYCC_DIAG] RC_callback_ptr_finalizer ext=%p token=%p id=%d refs=%d\n",
-                  (void*)ext, (void*)token, token->id, token->refs);
+        Rprintf("[RTINYCC_DIAG] RC_callback_ptr_finalizer ext=%p token=%p id=%d refs=%d\n",
+                (void*)ext, (void*)token, token->id, token->refs);
         token->refs -= 1;
         if (token->refs <= 0) {
             free(token);
