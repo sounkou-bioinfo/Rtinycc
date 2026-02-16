@@ -11,8 +11,10 @@ tcc_bind(ffi, ...)
 
 \item{...}{Named list of symbol definitions. Each definition is a list with:
 \itemize{
-\item args: List of FFI types for arguments (e.g., list("i32", "f64"))
+\item args: List of fixed FFI argument types (e.g., list("i32", "f64"))
 \item returns: FFI type for return value (e.g., "f64", "cstring")
+\item variadic: Set TRUE for C varargs functions
+\item varargs: Typed variadic tail (required when \code{variadic = TRUE})
 \item code: Optional C code for the symbol (for embedded functions)
 }
 Callback arguments should use the form \code{callback:<signature>} (e.g.,
