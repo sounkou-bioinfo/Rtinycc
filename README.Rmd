@@ -729,6 +729,73 @@ ffi$enum_status_OK()
 ffi$global_global_counter_get()
 ```
 
+## io_uring Demo
+
+`CSV` parser using [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) on linux
+
+```{r io_uring-demo}
+if (Sys.info()[["sysname"]] == "Linux") {
+  c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
+
+  n_rows <- 2000000L
+  n_cols <- 8L
+  block_size <- 1024L * 1024L
+
+  set.seed(42)
+  tmp_csv <- tempfile("rtinycc_io_uring_readme_", fileext = ".csv")
+  on.exit(unlink(tmp_csv), add = TRUE)
+
+  mat <- matrix(runif(n_rows * n_cols), ncol = n_cols)
+  df <- as.data.frame(mat)
+  names(df) <- paste0("V", seq_len(n_cols))
+  utils::write.table(df, file = tmp_csv, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+  io_uring_src <- paste(readLines(c_file, warn = FALSE), collapse = "\n")
+
+  ffi <- tcc_ffi() |>
+    tcc_source(io_uring_src) |>
+    tcc_bind(
+      csv_table_read = list(
+        args = list("cstring", "i32", "i32"),
+        returns = "sexp"
+      ),
+      csv_table_io_uring = list(
+        args = list("cstring", "i32", "i32"),
+        returns = "sexp"
+      )
+    ) |>
+    tcc_compile()
+
+  baseline <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
+  c_tbl <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
+  uring_tbl <- ffi$csv_table_io_uring(tmp_csv, block_size, n_cols)
+
+  stopifnot(
+    identical(dim(c_tbl), dim(baseline)),
+    identical(dim(uring_tbl), dim(baseline)),
+    isTRUE(all.equal(c_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
+    isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
+  )
+
+  bench::mark(
+    read_table_df = {
+      x <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
+      nrow(x)
+    },
+    c_read_df = {
+      x <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
+      nrow(x)
+    },
+    io_uring_df = {
+      x <- ffi$csv_table_io_uring(tmp_csv, block_size, n_cols)
+      nrow(x)
+    },
+    iterations = 2,
+    memory = TRUE
+  )
+}
+```
+
 ## Known limitations
 
 ### `_Complex` types
