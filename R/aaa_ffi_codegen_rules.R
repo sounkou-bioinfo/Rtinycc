@@ -3,7 +3,27 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Internal lambda.r rules for codegen dispatch
+#
+# This file defines many small "rules" used by the code generator. Each
+# rule is registered with a tiny DSL (the lambda.r style rules such as
+# `ffi_input_rule`, `ffi_return_rule`, `r_to_c_return_lines_rule`, etc.)
+# and returns either a string or a character vector containing C source
+# lines to be injected into generated bindings. The sections below are
+# grouped by purpose (input conversion, return conversion, array helpers,
+# struct/union accessors, callback helpers, type mapping keys, etc.).
+#
+# NOTE: many groups include nearly-identical rules for multiple integer
+# and floating types; these were written out explicitly for clarity.  See
+# TODOs later in this file for suggestions where a small generator could
+# reduce repetition by producing similar rules programmatically.
 
+## ------------------------------------------------------------------
+## FFI input conversion rules
+##
+## Produce C lines that convert an incoming R `SEXP` (named by `r_name`)
+## into a C variable (named by `arg_name`) of the requested FFI type.
+## These rules are used when generating the C thunk that bridges R -> C.
+## ------------------------------------------------------------------
 ffi_input_rule("i8", arg_name, r_name) %as%
   {
     sprintf(
@@ -310,6 +330,12 @@ ffi_input_rule(type, arg_name, r_name) %as%
     stop("Unsupported FFI type: ", type, call. = FALSE)
   }
 
+## ------------------------------------------------------------------
+## FFI return conversion rules
+##
+## Produce C code that converts a C expression (`value_expr`) into an
+## R `SEXP` return value. Used when generating the C -> R return thunk.
+## ------------------------------------------------------------------
 ffi_return_rule("i8", value_expr) %as%
   {
     sprintf("return ScalarInteger((int)%s);", value_expr)
@@ -424,6 +450,12 @@ ffi_return_rule(type, value_expr) %as%
     stop("Unsupported FFI return type: ", type, call. = FALSE)
   }
 
+## ------------------------------------------------------------------
+## Array return helpers
+##
+## Helper rules for allocating an R vector to hold array returns and for
+## copying C buffers into the newly allocated R vector (`out`).
+## ------------------------------------------------------------------
 array_return_alloc_line_rule("raw", len_name) %as%
   {
     sprintf("SEXP out = PROTECT(allocVector(RAWSXP, %s));", len_name)
@@ -494,6 +526,13 @@ array_return_copy_line_rule(type, len_name, value_expr) %as%
     stop("Unsupported array return type: ", type, call. = FALSE)
   }
 
+## ------------------------------------------------------------------
+## Struct field getter rules
+##
+## Produce code that reads a field from a C struct (pointer `p`) and
+## converts it into an R `SEXP` for consumer code. Rules are repeated
+## for multiple primitive types for clarity and explicit handling.
+## ------------------------------------------------------------------
 struct_field_getter_rule("i8", field_name) %as%
   {
     sprintf("return ScalarInteger((int)p->%s);", field_name)
@@ -572,6 +611,12 @@ struct_field_getter_rule(type_name, field_name) %as%
     sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", field_name)
   }
 
+## ------------------------------------------------------------------
+## Struct array field getter rules
+##
+## Like the struct field getters, but for array fields inside structs
+## (access element `idx`). Returns an R scalar for the selected element.
+## ------------------------------------------------------------------
 struct_array_field_getter_rule("i8", field_name) %as%
   {
     sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
@@ -632,6 +677,12 @@ struct_array_field_getter_rule(type_name, field_name) %as%
     sprintf("return ScalarInteger((int)p->%s[idx]);", field_name)
   }
 
+## ------------------------------------------------------------------
+## Struct array field setter rules
+##
+## Generate code to set an element of an array field inside a struct
+## from an R `SEXP` value (named `val`).
+## ------------------------------------------------------------------
 struct_array_field_setter_rule("i8", field_name) %as%
   {
     sprintf("p->%s[idx] = (int8_t)asInteger(val);", field_name)
@@ -692,6 +743,13 @@ struct_array_field_setter_rule(type_name, field_name) %as%
     sprintf("p->%s[idx] = (uint8_t)asInteger(val);", field_name)
   }
 
+## ------------------------------------------------------------------
+## Struct field setter rules
+##
+## Produce code that assigns an R value (`val`) into a struct field
+## (handles scalar fields and fixed-size char arrays). These are the
+## counterparts to the getter rules above.
+## ------------------------------------------------------------------
 struct_field_setter_rule("i8", field_name, size) %as%
   {
     sprintf("p->%s = (int8_t)asInteger(val);", field_name)
@@ -769,6 +827,13 @@ struct_field_setter_rule(type_name, field_name, size) %as%
     sprintf("// Cannot set field of type %s", type_name)
   }
 
+## ------------------------------------------------------------------
+## Union field helper rules
+##
+## Unions are represented by mapping to the corresponding struct rules
+## wherever possible; setting array members in unions is unsupported and
+## emits placeholder comments. These rules delegate to struct helpers.
+## ------------------------------------------------------------------
 union_field_getter_rule(type_name, mem_name) %as%
   {
     struct_field_getter_rule(type_name, mem_name)
@@ -809,6 +874,14 @@ union_field_setter_rule(type_name, mem_name, size) %as%
     struct_field_setter_rule(type_name, mem_name, size)
   }
 
+## ------------------------------------------------------------------
+## Callback argument kind/value helpers
+##
+## Map a callback argument type to an internal CB_ARG_* kind and to the
+## field name that holds the value inside the generic callback value
+## union struct used by the runtime. These are small lookup rules used
+## when generating callback trampoline code.
+## ------------------------------------------------------------------
 cb_arg_kind_rule("ptr") %as%
   {
     "CB_ARG_PTR"
@@ -859,6 +932,13 @@ cb_arg_value_rule("int", arg_expr) %as%
     list(field = "i", expr = arg_expr)
   }
 
+## ------------------------------------------------------------------
+## C default return helpers
+##
+## When a callback or conversion fails we need a sensible C-level default
+## return statement for a given C type. These helpers emit appropriately
+## indented return lines (used by many `r_to_c_return_lines_rule` cases).
+## ------------------------------------------------------------------
 c_default_return_rule("void", indent) %as%
   {
     pad <- paste(rep(" ", indent), collapse = "")
@@ -901,6 +981,12 @@ c_default_return_rule("int", indent) %as%
     paste0(pad, "return NA_INTEGER;")
   }
 
+## ------------------------------------------------------------------
+## C <-> SEXP type name helpers
+##
+## Map between C types used in generated stubs and the canonical names
+## used for selecting conversion rules and SEXP constructors.
+## ------------------------------------------------------------------
 c_sexp_type_rule("ptr") %as%
   {
     "void*"
@@ -931,6 +1017,12 @@ c_sexp_type_rule("bool") %as%
     "int"
   }
 
+## ------------------------------------------------------------------
+## Canonical R-facing type keys
+##
+## Map C types into the compact R-facing type keys (e.g. "i32", "f64",
+## "ptr") used across many rule lookups.
+## ------------------------------------------------------------------
 c_r_type_rule("ptr") %as%
   {
     "ptr"
@@ -966,6 +1058,12 @@ c_r_type_rule("sexp") %as%
     "sexp"
   }
 
+## ------------------------------------------------------------------
+## SEXP constructor helpers
+##
+## Provide the name of the constructor (or the full call form) used to
+## create a SEXP from a native C value during return conversion.
+## ------------------------------------------------------------------
 sexp_constructor_rule("ptr") %as%
   {
     "R_MakeExternalPtr"
@@ -991,6 +1089,12 @@ sexp_constructor_rule("bool") %as%
     "ScalarLogical"
   }
 
+## ------------------------------------------------------------------
+## SEXP constructor call forms
+##
+## Produce the string of C code to call the SEXP constructor for a given
+## expression (used when building return expressions inline).
+## ------------------------------------------------------------------
 sexp_constructor_call_rule("ptr", arg_expr) %as%
   {
     sprintf("R_MakeExternalPtr(%s, R_NilValue, R_NilValue)", arg_expr)
@@ -1016,6 +1120,12 @@ sexp_constructor_call_rule("bool", arg_expr) %as%
     sprintf("ScalarLogical(%s)", arg_expr)
   }
 
+## ------------------------------------------------------------------
+## R -> C converter helpers
+##
+## Provide the simple converter function name used to extract C values
+## from R `SEXP` objects (e.g. `asInteger`, `asReal`, `R_ExternalPtrAddr`).
+## ------------------------------------------------------------------
 r_to_c_converter_rule("ptr") %as%
   {
     "R_ExternalPtrAddr"
@@ -1041,6 +1151,14 @@ r_to_c_converter_rule("bool") %as%
     "asLogical"
   }
 
+## ------------------------------------------------------------------
+## R -> C return conversion lines
+##
+## These rules emit one or more lines of C that validate and convert
+## a returned R `SEXP` (from a callback) into the expected C return
+## value. They handle NA/NA_REAL checks, range checks, and emit warnings
+## and default returns on error.
+## ------------------------------------------------------------------
 r_to_c_return_lines_rule("void", c_type, result_var, indent) %as%
   {
     pad <- paste(rep(" ", indent), collapse = "")
@@ -1307,6 +1425,12 @@ r_to_c_return_lines_rule("float", c_type, result_var, indent) %as%
     )
   }
 
+## ------------------------------------------------------------------
+## Callback kind key mapping
+##
+## Map C types (and pointer-ness) to the compact kinds used by the
+## callback trampoline generator (ptr, cstring, real, logical, int).
+## ------------------------------------------------------------------
 cb_kind_key_rule(type_name, TRUE) %as%
   {
     "ptr"
@@ -1368,6 +1492,13 @@ cb_kind_key_rule(type_name, is_ptr) %as%
     "int"
   }
 
+## ------------------------------------------------------------------
+## C-to-R type key map for arguments
+##
+## These rules map C type spellings (and pointer-ness) to the canonical
+## R-facing type key used across code generation (e.g. "i32", "f64",
+## "ptr"). This centralizes many small spelling variants in one place.
+## ------------------------------------------------------------------
 c_r_key_rule(type_name, TRUE) %as%
   {
     "ptr"
@@ -1517,6 +1648,12 @@ c_r_key_rule(type_name, is_ptr) %as%
     "ptr"
   }
 
+## ------------------------------------------------------------------
+## SEXP constructor key mapping
+##
+## Map C type names to the key used to select a SEXP constructor (e.g.
+## mkString, ScalarReal). Handles pointer cases specially.
+## ------------------------------------------------------------------
 sexp_ctor_key_rule(type_name, TRUE) %as%
   {
     "ptr"
@@ -1654,6 +1791,13 @@ sexp_ctor_key_rule(type_name, is_ptr) %as%
     "ptr"
   }
 
+## ------------------------------------------------------------------
+## R -> C key map
+##
+## Map C type spellings to the key that selects the appropriate R -> C
+## converter (e.g. asInteger, asReal, R_ExternalPtrAddr). Pointer types
+## map to "ptr".
+## ------------------------------------------------------------------
 r_to_c_key_rule(type_name, TRUE) %as%
   {
     "ptr"
