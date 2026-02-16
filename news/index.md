@@ -10,8 +10,9 @@
 - Improve variadic README/docs examples to describe bounded variadic
   tails and type-inferred dispatch behavior.
 
-- Uses weak references to register tcc stats after Windows segfault
-  investigation
+- Use weak references to track `tcc_state` owners in the C registry and
+  avoid duplicate-owner finalization paths observed during Windows
+  segfault investigation.
 
 ## Rtinycc 0.0.3.9000 (development version)
 
