@@ -805,6 +805,17 @@ if (Sys.info()[["sysname"]] == "Linux") {
       )
       nrow(x)
     },
+     vroom_df_altrep_false_mat = {
+      vroom::vroom(
+        tmp_csv,
+        delim = ",",
+        altrep = FALSE,
+        col_types = vroom::cols(.default = "d"),
+        progress = FALSE,
+        show_col_types = FALSE
+      )
+      nrow(x)
+    },
     c_read_df = {
       x <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
       nrow(x)
@@ -818,6 +829,7 @@ if (Sys.info()[["sysname"]] == "Linux") {
   )
 
   timings[, c("expression", "min", "median", "itr/sec", "mem_alloc")]
+  plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 }
 ```
 
