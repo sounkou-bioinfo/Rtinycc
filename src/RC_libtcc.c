@@ -89,21 +89,6 @@ SEXP RC_get_external_ptr_addr(SEXP ext);
 SEXP RC_get_external_ptr_hex(SEXP ext);
 SEXP RC_null_pointer();
 
-// ============================================================================
-// Diagnostics (stderr logging for shutdown issues)
-// ============================================================================
-
-static const char *RC_extptr_tag_name(SEXP ext) {
-    SEXP tag = R_ExternalPtrTag(ext);
-    if (tag == R_NilValue) {
-        return "NULL";
-    }
-    if (TYPEOF(tag) == SYMSXP) {
-        return CHAR(PRINTNAME(tag));
-    }
-    return Rf_type2char(TYPEOF(tag));
-}
-
 static int RC_tcc_state_is_owned(SEXP ext) {
     SEXP tag = R_ExternalPtrTag(ext);
     if (tag == R_NilValue) {
@@ -204,8 +189,6 @@ typedef struct {
  * Protection: none.
  */
 static void RC_tcc_finalizer(SEXP ext) {
-    Rprintf("[RTINYCC_DIAG] RC_tcc_finalizer ext=%p ptr=%p tag=%s\n",
-            (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext));
     if (!RC_tcc_state_is_owned(ext)) {
         R_ClearExternalPtr(ext);
         return;
@@ -231,8 +214,6 @@ static void RC_tcc_finalizer(SEXP ext) {
  */
 static void RC_null_finalizer(SEXP ext) {
     // NULL pointer doesn't need cleanup
-    Rprintf("[RTINYCC_DIAG] RC_null_finalizer ext=%p ptr=%p tag=%s\n",
-            (void*)ext, R_ExternalPtrAddr(ext), RC_extptr_tag_name(ext));
     R_ClearExternalPtr(ext);
 }
 
@@ -245,8 +226,6 @@ static void RC_null_finalizer(SEXP ext) {
 void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
-        Rprintf("[RTINYCC_DIAG] RC_free_finalizer ext=%p ptr=%p tag=%s\n",
-                (void*)ext, ptr, RC_extptr_tag_name(ext));
         free(ptr);
         R_ClearExternalPtr(ext);
     }
@@ -1390,8 +1369,6 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
 static void RC_callback_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
-        Rprintf("[RTINYCC_DIAG] RC_callback_finalizer ext=%p token=%p id=%d refs=%d\n",
-                (void*)ext, (void*)token, token->id, token->refs);
         // Release the preserved R function
         if (token->id >= 0 && token->id < MAX_CALLBACKS) {
             callback_entry_t *entry = &callback_registry[token->id];
@@ -1433,8 +1410,6 @@ static void RC_callback_finalizer(SEXP ext) {
 static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
-        Rprintf("[RTINYCC_DIAG] RC_callback_ptr_finalizer ext=%p token=%p id=%d refs=%d\n",
-                (void*)ext, (void*)token, token->id, token->refs);
         token->refs -= 1;
         if (token->refs <= 0) {
             free(token);

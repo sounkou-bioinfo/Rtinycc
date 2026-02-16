@@ -56,11 +56,13 @@ avoid [BUS ERROR issues](https://genomic.social/@bioinfhotep/115765645745231377)
 with `RC_libtcc_add_host_symbols()`, which registers package-internal C
 functions via `tcc_add_symbol()` before relocation. Any new C function
 referenced by generated TCC code must be added there.
-Windows behavior is dominated by lifetime management of external
-pointers and finalizers, not by CRT mismatches. In practice the
-segfaults we observed were due to multiple externalptr wrappers
-owning the same `TCCState*`, leading to double finalization when the
-garbage collector runs. The fix is to track ownership explicitly and
+On Windows, the build still generates a UCRT-backed `msvcrt.def` so
+TinyCC resolves CRT symbols against `ucrtbase.dll` (R 4.2+ uses UCRT).
+That avoids cross-CRT heap mismatches, but it is **not** the root cause
+of the segfaults we investigated. The crashes were due to lifetime
+management of external pointers and finalizers: multiple externalptr
+wrappers owning the same `TCCState*` led to double finalization when the
+garbage collector ran. The fix is to track ownership explicitly and
 ensure only one externalptr owns a given state.
 Ownership semantics are explicit. Pointers from `tcc_malloc()` are tagged `rtinycc_owned` and can be released with `tcc_free()` (or by their R
 finalizer). Generated struct constructors use a struct-specific tag
