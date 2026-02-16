@@ -1288,7 +1288,7 @@ make_callable <- function(fn_ptr, sym, state) {
     }
 
     # R's .Call() can invoke external pointers as functions.
-    rtinycc_call(n_args, call_ptr, args)
+    rtinycc_call(as.integer(n_args), call_ptr, args)
   }
 
   # Store the pointer in the function's environment to prevent GC
