@@ -20,13 +20,20 @@ fallback is used.
 \description{
 \code{tcc_quick()} is an experimental C-first path for compiling a strict subset
 of R functions annotated with \code{declare(type(...))}. In this MVP, supported
-bodies are single scalar binary expressions (\code{+}, \code{-}, \code{*}, \code{/}) over
-declared scalar \code{double}/\code{integer} arguments.
+bodies are recursive scalar expressions (arithmetic, comparisons, logical
+operators, unary operators, selected scalar math functions, and scalar
+\code{if (cond) a else b}/\code{ifelse(cond, a, b)}) over declared scalar
+\code{double}/\code{integer}/\code{logical} arguments. Simple statement blocks with
+scalar \verb{<-} assignments before the final expression are supported.
 }
 \details{
 For non-arithmetic two-argument calls (e.g. \code{max(x, y)}), \code{tcc_quick()}
 emits a wrapper that constructs the call via \code{Rf_lang3()} and evaluates it
 in base, so R's primitive/internal implementation is used.
+
+Lowering descends recursively through expressions and stops at boundary calls
+(\code{.Call}, \code{.C}, \code{.External}, \code{.Internal}, \code{.Primitive}), where it currently
+falls back according to \code{fallback}.
 
 Unsupported functions can either fallback to the original R function or
 error, depending on \code{fallback}.

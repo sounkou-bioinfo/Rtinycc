@@ -48,12 +48,19 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 #'
 #' `tcc_quick()` is an experimental C-first path for compiling a strict subset
 #' of R functions annotated with `declare(type(...))`. In this MVP, supported
-#' bodies are single scalar binary expressions (`+`, `-`, `*`, `/`) over
-#' declared scalar `double`/`integer` arguments.
+#' bodies are recursive scalar expressions (arithmetic, comparisons, logical
+#' operators, unary operators, selected scalar math functions, and scalar
+#' `if (cond) a else b`/`ifelse(cond, a, b)`) over declared scalar
+#' `double`/`integer`/`logical` arguments. Simple statement blocks with
+#' scalar `<-` assignments before the final expression are supported.
 #'
 #' For non-arithmetic two-argument calls (e.g. `max(x, y)`), `tcc_quick()`
 #' emits a wrapper that constructs the call via `Rf_lang3()` and evaluates it
 #' in base, so R's primitive/internal implementation is used.
+#'
+#' Lowering descends recursively through expressions and stops at boundary calls
+#' (`.Call`, `.C`, `.External`, `.Internal`, `.Primitive`), where it currently
+#' falls back according to `fallback`.
 #'
 #' Unsupported functions can either fallback to the original R function or
 #' error, depending on `fallback`.
