@@ -26,14 +26,15 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership is tracke
 
 ## Build and test
 
-- `make rd` regenerates roxygen output.
+- Always run `make rd` after edits (not only when docs appear to change).
 - `make test` runs tinytest.
 - For a single file: `R -e "tinytest::run_test_file('inst/tinytest/<file>.R')"`.
+- If the package is not installed locally, load it for interactive/dev checks with `devtools::load_all()`.
 - Development plumbing: run `air format` after edits, use `make install` for local installs, `make check` for CRAN-style checks, and `make rdm` to regenerate README. Always add or update tinytests for behavior changes.
 
 ## Editing rules
 
-- Use roxygen2 for exported functions and run `make rd` when docs change.
+- Use roxygen2 for exported functions and always run `make rd` after edits.
 - Keep tidyverse-style formatting (2-space indent, spaces around operators).
 - Prefer early returns and explicit error messages with `stop(..., call. = FALSE)`.
 - Update README examples when you change user-facing behavior.
@@ -133,6 +134,194 @@ R's `parallel::mclapply` uses `fork()` which does not exist on Windows. Fork-rel
 - C API: `src/RC_libtcc.c`, `src/init.c`
 - Tests: `inst/tinytest/`
 - Docs: `README.Rmd`, `NEWS.md`
+
+## Roadmap: declare-based R->C JIT (quickr-like)
+
+This is a planned extension: compile a strict subset of R functions to C via TinyCC, with optional fallback to R C API calls when an operation is not yet lowered directly.
+
+### Goal and positioning
+
+We do not target full R semantics. We target a high-value subset for numeric code with explicit `declare(type(...))` contracts, then JIT to `.Call` wrappers through existing Rtinycc infrastructure.
+
+Primary advantage over prior art in `.sync/quickr` and `.sync/r2c`: we already own the JIT + host-symbol pipeline (`tcc_compile_string()`, `tcc_relocate()`, `tcc_get_symbol()`, `make_callable()`), so we can interleave:
+
+1. direct lowered C for hot arithmetic/loops,
+2. selective fallback to C API calls (`Rf_install`, `Rf_lang*`, `Rf_eval`) for unsupported nodes,
+3. transparent caching/recompile behavior already used by `tcc_compiled`.
+
+### MVP subset (phase 1)
+
+Only compile functions that satisfy all constraints below:
+
+- starts with `declare(type(...))` for all arguments;
+- scalar/vector `integer`, `double`, `logical` only;
+- ops: `+ - * /`, comparisons, simple `if`, `for (i in seq_len(n))`, `length()`;
+- indexing: `x[i]` and assignment `x[i] <- expr`;
+- return atomic vector or scalar;
+- no promises, NSE, S3/S4 dispatch, environments, or ALTREP-sensitive behavior.
+
+If any AST node is outside subset, emit a fallback stub in generated C that evaluates the original call via `Rf_lang*` + `Rf_eval`.
+
+### Compiler pipeline
+
+Implement a staged pipeline in R:
+
+1. `capture`: obtain function AST and declaration metadata.
+2. `normalize`: canonicalize loops and indexing forms.
+3. `typecheck`: infer/check static type + shape against `declare()`.
+4. `lower`: convert AST to a compact typed IR.
+5. `codegen`: emit C from IR, plus fallback branches.
+6. `compile`: compile with current `tcc_ffi()` path.
+7. `cache`: hash body + decls + platform and reuse compiled callable.
+
+### Bytecode-assisted lowering (optional)
+
+Using R bytecode as an intermediate can help, but should remain optional in phase 1.
+
+Why it is attractive:
+
+- normalizes many surface-level AST forms;
+- gives stable control-flow structure (`GOTO`, `BRIFNOT`, etc.);
+- mirrors prior compiler work in `r-svn` and PRL-PRG projects.
+
+Why we should not make it mandatory initially:
+
+- R bytecode instructions are numerous and some dispatch back to the AST interpreter;
+- bytecode has stack-machine semantics and constant-pool indirection, which is harder to map directly to typed C loops than a small custom IR;
+- reproducing exact bytecode behavior is a separate goal from fast subset lowering.
+
+Recommended hybrid strategy:
+
+1. Keep AST + `declare()` as the primary lowering input for MVP.
+2. Add a debug mode that emits/disassembles bytecode (`compiler`/`rbytecode`) for diagnostics and parity checks.
+3. Optionally lower a restricted bytecode opcode subset (`LDCONST`, `GETVAR`, arithmetic ops, simple branches/loops) into `tcc_quick_ir` when it is cleaner than AST lowering.
+4. For unknown opcodes, fallback to generated `Rf_lang*` + `Rf_eval` calls rather than failing hard.
+
+This gives the maintainability benefits of a small typed IR while still leveraging bytecode information where useful.
+
+Suggested new files:
+
+- `R/tcc_quick.R` (public user API, e.g. `tcc_quick()`)
+- `R/tcc_quick_declare.R` (parse `declare(type(...))`)
+- `R/tcc_quick_ir.R` (IR node constructors and validators)
+- `R/tcc_quick_lower.R` (AST -> IR)
+- `R/tcc_quick_codegen.R` (IR -> C source)
+- `R/tcc_quick_cache.R` (digest key + memo table)
+- `inst/tinytest/test_tcc_quick_basic.R`
+
+### API shape
+
+Expose a narrow API first:
+
+```r
+tcc_quick <- function(fn, fallback = c("auto", "always", "never"), debug = FALSE) {
+	fallback <- match.arg(fallback)
+	# parse declare(), lower subset, generate C, compile to callable
+	# return R closure with same formal args as fn
+}
+```
+
+and internal compile entrypoint:
+
+```r
+tcc_quick_compile <- function(fn, decl, fallback, debug = FALSE) {
+	ir <- tcc_quick_lower(fn, decl)
+	c_src <- tcc_quick_codegen(ir, fallback = fallback)
+	# compile via existing tcc_ffi/tcc_source/tcc_bind/tcc_compile
+}
+```
+
+### Fallback strategy (critical)
+
+Fallback must happen inside generated C, not by bouncing back to R wrappers repeatedly.
+
+Policy: when lowering encounters `.Internal`, `.External`, or `.Primitive`-style nodes, prefer emitting `Rf_lang*` + `Rf_eval` calls (e.g. `Rf_lang3`) so R's own primitive/internal implementation executes, rather than re-implementing those semantics in generated C.
+
+Pattern:
+
+```c
+SEXP tcc_quick_fallback_call(SEXP rho, SEXP sym, SEXP a, SEXP b) {
+	SEXP call = PROTECT(Rf_lang3(sym, a, b));
+	SEXP out  = Rf_eval(call, rho);
+	UNPROTECT(1);
+	return out;
+}
+```
+
+Use this only for unsupported subexpressions. Keep hot loops in direct C.
+
+When new C helper functions are emitted and referenced by TCC-generated code, add host symbol registration in `RC_libtcc_add_host_symbols()` (macOS/Windows requirement).
+
+### R API symbol policy using `.sync/API.csv`
+
+Use `.sync/API.csv` as an allowlist source for C API symbols used by codegen.
+
+- Build a small parser in `tools/` that extracts permitted function names.
+- Reject codegen that emits non-allowlisted API symbols unless explicitly approved.
+- Prefer stable wrappers (`Rf_*`) in emitted code where available.
+
+This reduces accidental dependency on internal/unstable entry points.
+
+### IR sketch
+
+Keep IR minimal and typed:
+
+```r
+list(
+	tag = "for",
+	var = "i",
+	start = list(tag = "const_i32", value = 1L),
+	stop = list(tag = "len", x = "a"),
+	body = list(
+		list(tag = "assign_index",
+				 target = "ab",
+				 index = list(tag = "sub", a = "i", b = 1L),
+				 value = list(tag = "add", a = list(tag = "index", x = "ab", i = "i"), b = "tmp"))
+	)
+)
+```
+
+IR must carry `ctype`, `r_sexp_type`, and length metadata where known.
+
+### Generated C style
+
+Generated C should:
+
+- be explicit with `PROTECT`/`UNPROTECT` counts;
+- coerce once at function boundary when needed;
+- hoist `LENGTH()` outside loops;
+- use raw pointers (`REAL()`, `INTEGER()`, `LOGICAL()`) in hot loops;
+- emit informative `Rf_error` messages for shape/type mismatch.
+
+### Milestones
+
+1. Parse declarations + validate AST eligibility.
+2. Lower arithmetic/index loops to IR.
+3. Emit C for scalar + double vector kernels.
+4. Add selective fallback nodes with `Rf_lang*`/`Rf_eval`.
+5. Add caching and invalidation.
+6. Add docs/demo in README and tinytests for parity vs source R.
+
+### Test requirements
+
+Add tinytests for:
+
+- parity on representative kernels (sum/product/convolution-like loop);
+- fallback activation on unsupported calls;
+- error messages for missing or inconsistent `declare()`;
+- serialization/recompile behavior of compiled quick functions;
+- OS guards for platform-specific library behavior.
+
+### Benchmark requirements
+
+Use `bench::mark()` with warmup and report:
+
+- baseline R function,
+- `tcc_quick()` compiled function,
+- existing `quickr::quick()` when available (optional comparison),
+- optional hand-written `.Call` reference.
+
+Keep benchmark scripts under `tools/` and avoid heavy runtime in CRAN checks.
 
 ## README and DOCS Style
 
