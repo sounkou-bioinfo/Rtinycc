@@ -777,7 +777,7 @@ if (Sys.info()[["sysname"]] == "Linux") {
     isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
   )
 
-  bench::mark(
+timings <- bench::mark(
     read_table_df = {
       x <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
       nrow(x)
@@ -794,6 +794,7 @@ if (Sys.info()[["sysname"]] == "Linux") {
     memory = TRUE
   )
 }
+plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ## Known limitations
