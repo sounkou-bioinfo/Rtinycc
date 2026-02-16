@@ -37,6 +37,7 @@
 <ul><li><p>Add true variadic FFI mode with <code>varargs_types</code>, <code>varargs_min</code>, and <code>varargs_max</code> in <code><a href="../reference/tcc_bind.html">tcc_bind()</a></code>, while keeping legacy typed-tail <code>varargs</code> mode for compatibility.</p></li>
 <li><p>Improve variadic README/docs examples to describe bounded variadic tails and type-inferred dispatch behavior.</p></li>
 <li><p>Use weak references to track <code>tcc_state</code> owners in the C registry and avoid duplicate-owner finalization paths observed during Windows segfault investigation.</p></li>
+<li><p>Keep <code>tcc_state</code> objects alive while exported symbol pointers/closures are still reachable (<code>R_MakeExternalPtrFn(..., prot = state)</code> and closure environment retention) to prevent finalization-order crashes.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.3.9000" id="rtinycc-0039000-development-version">Rtinycc 0.0.3.9000 (development version)<a class="anchor" aria-label="anchor" href="#rtinycc-0039000-development-version"></a></h2>

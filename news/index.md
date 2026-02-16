@@ -14,6 +14,10 @@
   avoid duplicate-owner finalization paths observed during Windows
   segfault investigation.
 
+- Keep `tcc_state` objects alive while exported symbol pointers/closures
+  are still reachable (`R_MakeExternalPtrFn(..., prot = state)` and
+  closure environment retention) to prevent finalization-order crashes.
+
 ## Rtinycc 0.0.3.9000 (development version)
 
 - Refactor FFI codegen and callbacks to use lambda.r guard rules instead
