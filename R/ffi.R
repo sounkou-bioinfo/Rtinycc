@@ -1288,7 +1288,7 @@ make_callable <- function(fn_ptr, sym, state) {
     }
 
     # R's .Call() can invoke external pointers as functions.
-    rtinycc_call(as.integer(n_args), call_ptr, args)
+    get("rtinycc_call", mode = "function")(as.integer(n_args), call_ptr, args)
   }
 
   # Store the pointer in the function's environment to prevent GC
@@ -1416,62 +1416,6 @@ recompile_into <- function(target) {
 # Helper for %||%
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
-# Platform-dependent library search paths
-tcc_platform_lib_paths <- function() {
-  sysname <- Sys.info()["sysname"]
-  # this is a R package, so
-  # we can assume 64 bit archs and wsl2, macos
-  #  and Rtools
-  switch(sysname,
-    Linux = c(
-      "/usr/lib",
-      "/usr/lib64",
-      "/usr/local/lib",
-      "/lib",
-      "/lib64",
-      "/lib32",
-      "/usr/local/lib64",
-      "/usr/lib/x86_64-linux-gnu",
-      "/usr/lib/i386-linux-gnu",
-      "/lib/x86_64-linux-gnu",
-      "/lib32/x86_64-linux-gnu",
-      "/lib/x86_64-linux-gnu/",
-      # linux-unknown-gnu is for Alpine Linux with musl
-      # which uses different library paths
-      "/usr/lib/x86_64-linux-gnu",
-      "/usr/lib/i386-linux-gnu",
-      "/lib/x86_64-linux-gnu",
-      "/lib32/x86_64-linux-gnu",
-      "/usr/lib/x86_64-linux-musl",
-      "/usr/lib/i386-linux-musl",
-      "/lib/x86_64-linux-musl",
-      "/lib32/x86_64-linux-musl",
-      # amd/aarch64 multiarch paths
-      "/usr/lib/amd64-linux-gnu",
-      "/usr/lib/aarch64-linux-gnu"
-      # manylinux paths
-    ),
-    Darwin = c(
-      "/usr/lib",
-      "/usr/local/lib",
-      "/opt/homebrew/lib", # Apple Silicon Homebrew
-      "/opt/local/lib", # MacPorts
-      "/System/Library/Frameworks", # Apple system libs
-      "/Library/Frameworks"
-    ),
-    Windows = c(
-      "C:/msys64/mingw64/lib", # MSYS2
-      "C:/msys64/mingw32/lib",
-      "C:/Rtools45/mingw_64/lib", # Rtools
-      "C:/Rtools45/mingw_32/lib",
-      "C:/Rtools44/mingw_64/lib", # Rtools
-      "C:/Rtools44/mingw_32/lib"
-    ),
-    # Default fallback
-    c("/usr/lib", "/usr/local/lib")
-  )
-}
-
 # Search for library in platform-dependent paths
 tcc_find_library <- function(name) {
   if (file.exists(name)) {
@@ -1479,8 +1423,8 @@ tcc_find_library <- function(name) {
   }
 
   # Try platform-specific paths
-  paths <- tcc_platform_lib_paths()
-  sysname <- Sys.info()["sysname"]
+  sysname <- as.character(unname(Sys.info()[["sysname"]]))
+  paths <- tcc_platform_lib_paths(sysname)
 
   # Platform-specific library naming
   # check if name already has ddl subix (including version numbers)
@@ -1491,12 +1435,7 @@ tcc_find_library <- function(name) {
   } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
     lib_name <- name
   } else {
-    lib_name <- switch(sysname,
-      Linux = paste0("lib", name, ".so"),
-      Darwin = paste0("lib", name, ".dylib"),
-      Windows = paste0(name, ".dll"),
-      paste0("lib", name, ".so") # Default
-    )
+    lib_name <- get("tcc_short_lib_filename", mode = "function")(sysname, name)
   }
 
   for (path in paths) {

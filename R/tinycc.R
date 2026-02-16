@@ -91,14 +91,7 @@ tcc_sysinclude_paths <- tcc_include_paths
 
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
-  switch(
-    output,
-    memory = 1L, # TCC_OUTPUT_MEMORY
-    obj = 3L, # TCC_OUTPUT_OBJ
-    dll = 4L, # TCC_OUTPUT_DLL
-    exe = 2L, # TCC_OUTPUT_EXE
-    preprocess = 5L
-  ) # TCC_OUTPUT_PREPROCESS
+  get("tcc_output_type_rule", mode = "function")(output)
 }
 
 check_cli_exists <- function() {
@@ -258,22 +251,14 @@ tcc_run_cli <- function(args = character(), tcc_path = check_cli_exists()) {
   lib_paths <- normalizePath(tcc_lib_paths(), winslash = "/", mustWork = FALSE)
   env <- character()
   if (length(lib_paths)) {
-    if (.Platform$OS.type == "windows") {
-      env <- sprintf(
-        "PATH=%s",
-        paste(c(lib_paths, Sys.getenv("PATH")), collapse = .Platform$path.sep)
-      )
-    } else if (Sys.info()[["sysname"]] == "Darwin") {
-      env <- sprintf(
-        "DYLD_LIBRARY_PATH=%s",
-        paste(c(lib_paths, Sys.getenv("DYLD_LIBRARY_PATH")), collapse = ":")
-      )
-    } else {
-      env <- sprintf(
-        "LD_LIBRARY_PATH=%s",
-        paste(c(lib_paths, Sys.getenv("LD_LIBRARY_PATH")), collapse = ":")
-      )
-    }
+    sysname <- Sys.info()[["sysname"]]
+    env_key <- get("tcc_loader_env_key", mode = "function")(sysname)
+    env_sep <- get("tcc_loader_env_sep", mode = "function")(sysname)
+    env <- sprintf(
+      "%s=%s",
+      env_key,
+      paste(c(lib_paths, Sys.getenv(env_key)), collapse = env_sep)
+    )
   }
   res <- system2(tcc_path, args, env = env)
   as.integer(res)

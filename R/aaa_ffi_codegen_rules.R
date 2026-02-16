@@ -348,6 +348,110 @@ rtinycc_call(n_args, call_ptr, args) %as% {
 }
 
 ## ------------------------------------------------------------------
+## Runtime platform dispatch rules
+##
+## Keep platform-specific path/name/env branching declarative using
+## lambda.r dispatch instead of large switch/if chains.
+## ------------------------------------------------------------------
+tcc_platform_lib_paths("Linux") %as% {
+  c(
+    "/usr/lib",
+    "/usr/lib64",
+    "/usr/local/lib",
+    "/lib",
+    "/lib64",
+    "/lib32",
+    "/usr/local/lib64",
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib/i386-linux-gnu",
+    "/lib/x86_64-linux-gnu",
+    "/lib32/x86_64-linux-gnu",
+    "/lib/x86_64-linux-gnu/",
+    # linux-unknown-gnu is for Alpine Linux with musl
+    # which uses different library paths
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib/i386-linux-gnu",
+    "/lib/x86_64-linux-gnu",
+    "/lib32/x86_64-linux-gnu",
+    "/usr/lib/x86_64-linux-musl",
+    "/usr/lib/i386-linux-musl",
+    "/lib/x86_64-linux-musl",
+    "/lib32/x86_64-linux-musl",
+    # amd/aarch64 multiarch paths
+    "/usr/lib/amd64-linux-gnu",
+    "/usr/lib/aarch64-linux-gnu"
+    # manylinux paths
+  )
+}
+
+tcc_platform_lib_paths("Darwin") %as% {
+  c(
+    "/usr/lib",
+    "/usr/local/lib",
+    "/opt/homebrew/lib", # Apple Silicon Homebrew
+    "/opt/local/lib", # MacPorts
+    "/System/Library/Frameworks", # Apple system libs
+    "/Library/Frameworks"
+  )
+}
+
+tcc_platform_lib_paths("Windows") %as% {
+  sysroot <- Sys.getenv("SystemRoot", unset = "C:/Windows")
+  r_bin <- file.path(R.home(), "bin")
+  r_arch_bin <- file.path(R.home(), "bin", .Platform$r_arch)
+  path_dirs <- strsplit(Sys.getenv("PATH", ""), .Platform$path.sep, fixed = TRUE)[[1]]
+
+  unique(c(
+    "C:/msys64/mingw64/lib", # MSYS2
+    "C:/msys64/mingw32/lib",
+    "C:/Rtools45/mingw_64/lib", # Rtools
+    "C:/Rtools45/mingw_32/lib",
+    "C:/Rtools44/mingw_64/lib", # Rtools
+    "C:/Rtools44/mingw_32/lib",
+    # Native Windows loader locations / common runtime dirs
+    file.path(sysroot, "System32"),
+    file.path(sysroot, "SysWOW64"),
+    r_bin,
+    r_arch_bin,
+    # User/runtime PATH entries (non-Rtools setups)
+    path_dirs
+  ))
+}
+
+tcc_platform_lib_paths(sysname) %as% {
+  c("/usr/lib", "/usr/local/lib")
+}
+
+tcc_short_lib_filename("Linux", name) %as% {
+  paste0("lib", name, ".so")
+}
+
+tcc_short_lib_filename("Darwin", name) %as% {
+  paste0("lib", name, ".dylib")
+}
+
+tcc_short_lib_filename("Windows", name) %as% {
+  paste0(name, ".dll")
+}
+
+tcc_short_lib_filename(sysname, name) %as% {
+  paste0("lib", name, ".so")
+}
+
+tcc_output_type_rule("memory") %as% 1L
+tcc_output_type_rule("obj") %as% 3L
+tcc_output_type_rule("dll") %as% 4L
+tcc_output_type_rule("exe") %as% 2L
+tcc_output_type_rule("preprocess") %as% 5L
+
+tcc_loader_env_key("Windows") %as% "PATH"
+tcc_loader_env_key("Darwin") %as% "DYLD_LIBRARY_PATH"
+tcc_loader_env_key(sysname) %as% "LD_LIBRARY_PATH"
+
+tcc_loader_env_sep("Windows") %as% .Platform$path.sep
+tcc_loader_env_sep(sysname) %as% ":"
+
+## ------------------------------------------------------------------
 ## FFI return conversion rules
 ##
 ## Produce C code that converts a C expression (`value_expr`) into an
