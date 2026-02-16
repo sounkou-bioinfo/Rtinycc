@@ -307,6 +307,51 @@ ffi_input_rule(type, arg_name, r_name) %as% {
 }
 
 ## ------------------------------------------------------------------
+## Runtime `.RtinyccCall` dispatch rules
+##
+## Dispatch small arities directly and fall back to do.call for larger
+## signatures.
+## ------------------------------------------------------------------
+rtinycc_call_rule(0L, call_ptr, args) %as% {
+  .RtinyccCall(call_ptr)
+}
+
+rtinycc_call_rule(1L, call_ptr, args) %as% {
+  .RtinyccCall(call_ptr, args[[1]])
+}
+
+rtinycc_call_rule(2L, call_ptr, args) %as% {
+  .RtinyccCall(call_ptr, args[[1]], args[[2]])
+}
+
+rtinycc_call_rule(3L, call_ptr, args) %as% {
+  .RtinyccCall(call_ptr, args[[1]], args[[2]], args[[3]])
+}
+
+rtinycc_call_rule(4L, call_ptr, args) %as% {
+  .RtinyccCall(call_ptr, args[[1]], args[[2]], args[[3]], args[[4]])
+}
+
+rtinycc_call_rule(5L, call_ptr, args) %as% {
+  .RtinyccCall(
+    call_ptr,
+    args[[1]],
+    args[[2]],
+    args[[3]],
+    args[[4]],
+    args[[5]]
+  )
+}
+
+rtinycc_call_rule(n_args, call_ptr, args) %as% {
+  do.call(.RtinyccCall, c(list(call_ptr), args))
+}
+
+rtinycc_call <- function(n_args, call_ptr, args) {
+  rtinycc_call_rule(as.integer(n_args), call_ptr, args)
+}
+
+## ------------------------------------------------------------------
 ## FFI return conversion rules
 ##
 ## Produce C code that converts a C expression (`value_expr`) into an
