@@ -91,7 +91,7 @@ tcc_sysinclude_paths <- tcc_include_paths
 
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
-  get("tcc_output_type_rule", mode = "function")(output)
+  tcc_output_type_rule(output)
 }
 
 check_cli_exists <- function() {
@@ -252,8 +252,8 @@ tcc_run_cli <- function(args = character(), tcc_path = check_cli_exists()) {
   env <- character()
   if (length(lib_paths)) {
     sysname <- Sys.info()[["sysname"]]
-    env_key <- get("tcc_loader_env_key", mode = "function")(sysname)
-    env_sep <- get("tcc_loader_env_sep", mode = "function")(sysname)
+    env_key <- tcc_loader_env_key(sysname)
+    env_sep <- tcc_loader_env_sep(sysname)
     env <- sprintf(
       "%s=%s",
       env_key,

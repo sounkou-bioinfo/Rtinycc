@@ -1288,7 +1288,7 @@ make_callable <- function(fn_ptr, sym, state) {
     }
 
     # R's .Call() can invoke external pointers as functions.
-    get("rtinycc_call", mode = "function")(as.integer(n_args), call_ptr, args)
+    rtinycc_call(as.integer(n_args), call_ptr, args)
   }
 
   # Store the pointer in the function's environment to prevent GC
@@ -1426,16 +1426,17 @@ tcc_find_library <- function(name) {
   sysname <- as.character(unname(Sys.info()[["sysname"]]))
   paths <- tcc_platform_lib_paths(sysname)
 
-  # Platform-specific library naming
-  # check if name already has ddl subix (including version numbers)
-  if (sysname == "Windows" && grepl("\\.dll$", name, ignore.case = TRUE)) {
-    lib_name <- name
-  } else if (sysname == "Linux" && grepl("\\.so(\\..*)?$", name)) {
-    lib_name <- name
-  } else if (sysname == "Darwin" && grepl("\\.dylib(\\..*)?$", name)) {
-    lib_name <- name
+  suffix_pattern <- c(
+    Windows = "\\.dll$",
+    Linux = "\\.so(\\..*)?$",
+    Darwin = "\\.dylib(\\..*)?$"
+  )[[sysname]]
+  has_platform_suffix <- !is.null(suffix_pattern) &&
+    grepl(suffix_pattern, name, ignore.case = identical(sysname, "Windows"))
+  lib_name <- if (has_platform_suffix) {
+    name
   } else {
-    lib_name <- get("tcc_short_lib_filename", mode = "function")(sysname, name)
+    tcc_short_lib_filename(sysname, name)
   }
 
   for (path in paths) {
