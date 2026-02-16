@@ -1407,9 +1407,9 @@ recompile_into <- function(target) {
     fresh <- tcc_compile(ffi)
   }
   for (nm in ls(fresh, all.names = TRUE)) {
-    assign(nm, get(nm, envir = fresh, inherits = FALSE), envir = target)
+    target[[nm]] <- fresh[[nm]]
   }
-  assign(".valid", TRUE, envir = target)
+  target[[".valid"]] <- TRUE
   invisible(target)
 }
 
