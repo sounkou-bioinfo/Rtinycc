@@ -296,6 +296,14 @@ struct rtinycc_uring {
   size_t sqes_sz;
 };
 
+struct rtinycc_uring_slot {
+  char *buf;
+  off_t off;
+  int res;
+  int ready;
+  int in_flight;
+};
+
 static int uring_setup(unsigned entries, struct io_uring_params *p) {
   return (int)syscall(__NR_io_uring_setup, entries, p);
 }
@@ -394,6 +402,46 @@ static void rtinycc_uring_close(struct rtinycc_uring *u) {
   }
 }
 
+static int rtinycc_uring_submit_read(
+  struct rtinycc_uring *u,
+  int fd,
+  struct rtinycc_uring_slot *slot,
+  int slot_idx,
+  off_t off,
+  int block_size
+) {
+  unsigned tail = *u->sq_tail;
+  unsigned index = tail & *u->sq_ring_mask;
+  struct io_uring_sqe *sqe = &u->sqes[index];
+
+  memset(sqe, 0, sizeof(*sqe));
+  sqe->opcode = IORING_OP_READ;
+  sqe->fd = fd;
+  sqe->off = (unsigned long long)off;
+  sqe->addr = (unsigned long long)slot->buf;
+  sqe->len = (unsigned)block_size;
+  sqe->user_data = (unsigned long long)slot_idx;
+
+  u->sq_array[index] = index;
+  *u->sq_tail = tail + 1;
+
+  slot->off = off;
+  slot->res = 0;
+  slot->ready = 0;
+  slot->in_flight = 1;
+
+  return 0;
+}
+
+static int rtinycc_find_ready_slot(struct rtinycc_uring_slot *slots, unsigned depth, off_t off) {
+  for (unsigned i = 0; i < depth; i++) {
+    if (slots[i].ready && slots[i].off == off) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
 static int csv_parse_io_uring(const char *path, int block_size, struct csv_table_state *st) {
   if (!path || block_size <= 0 || !st) {
     return -EINVAL;
@@ -411,82 +459,187 @@ static int csv_parse_io_uring(const char *path, int block_size, struct csv_table
   u.cq_ring_ptr = NULL;
   u.sqes = NULL;
 
-  int init_rc = rtinycc_uring_init(&u, 1);
+  unsigned depth = 16U;
+  int init_rc = rtinycc_uring_init(&u, depth);
   if (init_rc < 0) {
     close(fd);
     return init_rc;
   }
 
-  char *buf = (char *)malloc((size_t)block_size);
-  if (!buf) {
+  if (depth > *u.sq_ring_entries) {
+    depth = *u.sq_ring_entries;
+  }
+  if (depth == 0U) {
+    rtinycc_uring_close(&u);
+    close(fd);
+    return -EINVAL;
+  }
+
+  struct rtinycc_uring_slot *slots = (struct rtinycc_uring_slot *)calloc(depth, sizeof(*slots));
+  if (!slots) {
     rtinycc_uring_close(&u);
     close(fd);
     return -ENOMEM;
   }
 
-  off_t off = 0;
+  for (unsigned i = 0; i < depth; i++) {
+    slots[i].buf = (char *)malloc((size_t)block_size);
+    if (!slots[i].buf) {
+      for (unsigned j = 0; j < i; j++) {
+        free(slots[j].buf);
+      }
+      free(slots);
+      rtinycc_uring_close(&u);
+      close(fd);
+      return -ENOMEM;
+    }
+  }
 
-  for (;;) {
-    unsigned tail = *u.sq_tail;
-    unsigned index = tail & *u.sq_ring_mask;
-    struct io_uring_sqe *sqe = &u.sqes[index];
+  off_t next_submit_off = 0;
+  off_t next_parse_off = 0;
+  off_t eof_off = -1;
+  unsigned pending_submit = 0;
+  unsigned in_flight = 0;
 
-    memset(sqe, 0, sizeof(*sqe));
-    sqe->opcode = IORING_OP_READ;
-    sqe->fd = fd;
-    sqe->off = (unsigned long long)off;
-    sqe->addr = (unsigned long long)buf;
-    sqe->len = (unsigned)block_size;
-    sqe->user_data = 1;
+  for (unsigned i = 0; i < depth; i++) {
+    int src = rtinycc_uring_submit_read(&u, fd, &slots[i], (int)i, next_submit_off, block_size);
+    if (src < 0) {
+      for (unsigned j = 0; j < depth; j++) {
+        free(slots[j].buf);
+      }
+      free(slots);
+      rtinycc_uring_close(&u);
+      close(fd);
+      return src;
+    }
+    next_submit_off += (off_t)block_size;
+    pending_submit += 1U;
+    in_flight += 1U;
+  }
 
-    u.sq_array[index] = index;
-    *u.sq_tail = tail + 1;
-
-    int rc = uring_enter(u.ring_fd, 1, 1, IORING_ENTER_GETEVENTS);
+  while (in_flight > 0U) {
+    int rc = uring_enter(u.ring_fd, pending_submit, 1, IORING_ENTER_GETEVENTS);
+    pending_submit = 0U;
     if (rc < 0) {
       int err = -errno;
-      free(buf);
+      for (unsigned j = 0; j < depth; j++) {
+        free(slots[j].buf);
+      }
+      free(slots);
       rtinycc_uring_close(&u);
       close(fd);
       return err;
     }
 
     unsigned head = *u.cq_head;
-    if (head == *u.cq_tail) {
-      free(buf);
-      rtinycc_uring_close(&u);
-      close(fd);
-      return -EIO;
-    }
+    unsigned tail = *u.cq_tail;
 
-    struct io_uring_cqe *cqe = &u.cqes[head & *u.cq_ring_mask];
-    int res = cqe->res;
-    *u.cq_head = head + 1;
+    while (head != tail) {
+      struct io_uring_cqe *cqe = &u.cqes[head & *u.cq_ring_mask];
+      int slot_idx = (int)cqe->user_data;
+      if (slot_idx < 0 || (unsigned)slot_idx >= depth) {
+        for (unsigned j = 0; j < depth; j++) {
+          free(slots[j].buf);
+        }
+        free(slots);
+        rtinycc_uring_close(&u);
+        close(fd);
+        return -EINVAL;
+      }
 
-    if (res == 0) {
-      break;
-    }
-    if (res < 0) {
-      free(buf);
-      rtinycc_uring_close(&u);
-      close(fd);
-      return res;
-    }
+      struct rtinycc_uring_slot *slot = &slots[slot_idx];
+      if (!slot->in_flight) {
+        for (unsigned j = 0; j < depth; j++) {
+          free(slots[j].buf);
+        }
+        free(slots);
+        rtinycc_uring_close(&u);
+        close(fd);
+        return -EINVAL;
+      }
 
-    int prc = csv_process_buffer(st, buf, res);
-    if (prc < 0) {
-      free(buf);
-      rtinycc_uring_close(&u);
-      close(fd);
-      return prc;
-    }
+      slot->res = cqe->res;
+      slot->ready = 1;
+      slot->in_flight = 0;
+      in_flight -= 1U;
 
-    off += (off_t)res;
+      head += 1U;
+    }
+    *u.cq_head = head;
+
+    for (;;) {
+      int ready_idx = rtinycc_find_ready_slot(slots, depth, next_parse_off);
+      if (ready_idx < 0) {
+        break;
+      }
+
+      struct rtinycc_uring_slot *slot = &slots[ready_idx];
+      int res = slot->res;
+      slot->ready = 0;
+
+      if (res < 0) {
+        for (unsigned j = 0; j < depth; j++) {
+          free(slots[j].buf);
+        }
+        free(slots);
+        rtinycc_uring_close(&u);
+        close(fd);
+        return res;
+      }
+
+      if (res > 0) {
+        int prc = csv_process_buffer(st, slot->buf, res);
+        if (prc < 0) {
+          for (unsigned j = 0; j < depth; j++) {
+            free(slots[j].buf);
+          }
+          free(slots);
+          rtinycc_uring_close(&u);
+          close(fd);
+          return prc;
+        }
+      }
+
+      if (res < block_size) {
+        off_t this_eof = slot->off + (off_t)res;
+        if (eof_off < 0 || this_eof < eof_off) {
+          eof_off = this_eof;
+        }
+      }
+
+      next_parse_off += (off_t)block_size;
+
+      if (eof_off < 0 || next_submit_off < eof_off) {
+        int src = rtinycc_uring_submit_read(
+          &u,
+          fd,
+          slot,
+          ready_idx,
+          next_submit_off,
+          block_size
+        );
+        if (src < 0) {
+          for (unsigned j = 0; j < depth; j++) {
+            free(slots[j].buf);
+          }
+          free(slots);
+          rtinycc_uring_close(&u);
+          close(fd);
+          return src;
+        }
+        next_submit_off += (off_t)block_size;
+        pending_submit += 1U;
+        in_flight += 1U;
+      }
+    }
   }
 
   int frc = csv_finish(st);
 
-  free(buf);
+  for (unsigned j = 0; j < depth; j++) {
+    free(slots[j].buf);
+  }
+  free(slots);
   rtinycc_uring_close(&u);
   close(fd);
   return frc;
