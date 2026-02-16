@@ -239,10 +239,11 @@ bench::mark(
 
 ```
 
-### Variadic calls with `Rprintf`
+### Variadic calls e.g `Rprintf`
 
-We declare the fixed argument (`cstring` format) and allow up to two trailing
-arguments drawn from an allowed type set (`i32`, `f64`).
+This pattern uses a fixed argument prefix plus a bounded variadic tail
+(`0..2` args). Each trailing argument must infer to one of the allowed
+scalar types (`i32` or `f64`).
 
 ```{r ffi-variadic-rprintf}
 ffi_var <- tcc_ffi() |>
@@ -259,6 +260,7 @@ ffi_var <- tcc_ffi() |>
   tcc_compile()
 
 ffi_var$Rprintf("Rprintf with no tail\\n")
+ffi_var$Rprintf("Rprintf int only: %d\\n", 42L)
 ffi_var$Rprintf("Rprintf from variadic FFI: i=%d, x=%.2f\\n", 42L, pi)
 ```
 
