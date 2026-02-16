@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
-#if RTINYCC_OS_WINDOWS
+#ifdef _WIN32
 #include <windows.h>
 #endif
 
@@ -60,7 +60,7 @@ static const char *RC_extptr_tag_name(SEXP ext) {
 
 // Explicitly unload libtcc.dll early on Windows to avoid teardown crashes.
 SEXP RC_unload_libtcc(void) {
-#if RTINYCC_OS_WINDOWS
+#ifdef _WIN32
     HMODULE h = GetModuleHandleA("libtcc.dll");
     if (!h) {
         Rprintf("[RTINYCC_DIAG] RC_unload_libtcc: libtcc.dll not loaded\n");
@@ -219,7 +219,7 @@ static void RC_null_finalizer(SEXP ext) {
 void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
-#if RTINYCC_OS_WINDOWS
+#ifdef _WIN32
         // On Windows, skip free() to avoid CRT heap mismatches
         // Memory was allocated by JIT code using UCRT malloc(), but Rtinycc DLL
         // might be linked against different CRT. OS will reclaim memory on exit.
