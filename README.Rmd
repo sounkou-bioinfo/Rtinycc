@@ -359,72 +359,7 @@ y[1]
 
 .Internal(inspect(x))
 ```
-### Benchmark
-
-This example benchmarks the classic convolution routine written in plain C (no manual
-`SEXP` code). Rtinycc generates the `.Call` wrappers automatically. We also compare
-against `quickr` and `tcc_quick`.
-
-```{r benchmark-convolve}
-library(quickr)
-
-slow_convolve <- function(a, b) {
-  declare(type(a = double(NA)), type(b = double(NA)))
-  ab <- double(length(a) + length(b) - 1)
-  for (i in seq_along(a)) {
-    for (j in seq_along(b)) {
-      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
-    }
-  }
-  ab
-}
-
-ffi_conv <- tcc_ffi() |>
-  tcc_source(" \
-    #include <stdlib.h>\
-    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
-      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
-      if (!ab) return NULL;\
-      for (int i = 0; i < na; i++) {\
-        for (int j = 0; j < nb; j++) {\
-          ab[i + j] += a[i] * b[j];\
-        }\
-      }\
-      return ab;\
-    }\
-  ") |>
-  tcc_bind(
-    convolve = list(
-      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
-      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
-    )
-  ) |>
-  tcc_compile()
-
-set.seed(1)
-a <- runif(100000)
-b <- runif(100)
-na <- length(a)
-nb <- length(b)
-nab <- na + nb - 1L
-
-quick_convolve <- quick(slow_convolve)
-quick_tcc <- tcc_quick(slow_convolve, fallback = "never")
-
-stopifnot(
-  isTRUE(all.equal(slow_convolve(a, b), quick_tcc(a, b), tolerance = 1e-10))
-)
-
-timings <- bench::mark(
-  R = slow_convolve(a, b),
-  quickr = quick_convolve(a, b),
-  Rtinycc_quick = quick_tcc(a, b),
-  Rtinycc_manual_c = ffi_conv$convolve(a, na, b, nb, nab),
-  min_time = 2
-)
-print(timings)
-plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
-```
+## Advanced FFI features
 
 ### Structs and unions
 
@@ -842,6 +777,151 @@ if (Sys.info()[["sysname"]] == "Linux") {
 }
 ```
 
+## tcc_quick
+
+`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc. It compiles a
+declared subset of R code into C and executes it via TinyCC, while preserving a
+safe fallback route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
+
+### Convolution benchmark
+
+This example benchmarks the classic convolution routine written in plain C (no manual
+`SEXP` code). Rtinycc generates the `.Call` wrappers automatically. We compare base R,
+`quickr`, `tcc_quick`, and a hand-written C FFI baseline.
+
+```{r benchmark-tcc-quick-convolve}
+library(quickr)
+
+slow_convolve <- function(a, b) {
+  declare(type(a = double(NA)), type(b = double(NA)))
+  ab <- double(length(a) + length(b) - 1)
+  for (i in seq_along(a)) {
+    for (j in seq_along(b)) {
+      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
+    }
+  }
+  ab
+}
+
+ffi_conv <- tcc_ffi() |>
+  tcc_source(" \
+    #include <stdlib.h>\
+    double* convolve(const double* a, int na, const double* b, int nb, int nab) {\
+      double* ab = (double*)calloc((size_t)nab, sizeof(double));\
+      if (!ab) return NULL;\
+      for (int i = 0; i < na; i++) {\
+        for (int j = 0; j < nb; j++) {\
+          ab[i + j] += a[i] * b[j];\
+        }\
+      }\
+      return ab;\
+    }\
+  ") |>
+  tcc_bind(
+    convolve = list(
+      args = list("numeric_array", "i32", "numeric_array", "i32", "i32"),
+      returns = list(type = "numeric_array", length_arg = 5, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+
+set.seed(1)
+a <- runif(100000)
+b <- runif(100)
+na <- length(a)
+nb <- length(b)
+nab <- na + nb - 1L
+
+quick_convolve <- quick(slow_convolve)
+quick_tcc <- tcc_quick(slow_convolve, fallback = "never")
+
+stopifnot(
+  isTRUE(all.equal(slow_convolve(a, b), quick_tcc(a, b), tolerance = 1e-10))
+)
+
+timings <- bench::mark(
+  R = slow_convolve(a, b),
+  quickr = quick_convolve(a, b),
+  Rtinycc_quick = quick_tcc(a, b),
+  Rtinycc_manual_c = ffi_conv$convolve(a, na, b, nb, nab),
+  min_time = 2
+)
+print(timings)
+plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+### Scalar/control-flow benchmark
+
+This example benchmarks a scalar-heavy function with arithmetic, comparisons,
+`ifelse()`, and `switch()`, showing the non-kernel transpilation path.
+Because `quickr::quick()` currently does not support `switch()`, the quickr
+path below uses an equivalent branch form.
+
+```{r benchmark-tcc-quick-scalar}
+slow_scalar <- function(x, y, k) {
+  declare(type(x = double(1)), type(y = double(1)), type(k = integer(1)))
+  z <- ifelse(x > y, x * y + sqrt(x), x - y / 2)
+  switch(k,
+         z + 1,
+         z - 1,
+         z * 2)
+}
+
+slow_scalar_quickr <- function(x, y, k) {
+  declare(type(x = double(1)), type(y = double(1)), type(k = integer(1)))
+  z <- ifelse(x > y, x * y + sqrt(x), x - y / 2)
+  if (k == 1L) {
+    z + 1
+  } else if (k == 2L) {
+    z - 1
+  } else {
+    z * 2
+  }
+}
+
+quick_scalar <- tcc_quick(slow_scalar, fallback = "never")
+quickr_scalar <- tryCatch(
+  quick(slow_scalar_quickr),
+  error = function(e) NULL
+)
+
+set.seed(7)
+n <- 100000
+x <- runif(n)
+y <- runif(n)
+k <- sample.int(3, n, replace = TRUE)
+
+scalar_exprs <- list(
+  R = {
+    out <- numeric(n)
+    for (i in seq_len(n)) out[i] <- slow_scalar(x[i], y[i], k[i])
+    out
+  },
+  Rtinycc_quick = {
+    out <- numeric(n)
+    for (i in seq_len(n)) out[i] <- quick_scalar(x[i], y[i], k[i])
+    out
+  }
+)
+
+if (!is.null(quickr_scalar)) {
+  scalar_exprs$quickr <- {
+    out <- numeric(n)
+    for (i in seq_len(n)) out[i] <- quickr_scalar(x[i], y[i], k[i])
+    out
+  }
+}
+
+timings_scalar <- do.call(bench::mark, c(scalar_exprs, list(min_time = 1)))
+
+if (is.null(quickr_scalar)) {
+  message("quickr scalar example skipped in this run (unsupported construct)")
+}
+
+print(timings_scalar)
+plot(timings_scalar, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
 ## Known limitations
 
 ### `_Complex` types
@@ -947,3 +1027,5 @@ GPL-3
 - [CFFI](https://cffi.readthedocs.io/)
 - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
 - [CSlug](https://cslug.readthedocs.io/en/latest/)
+- [quickr](https://github.com/t-kalinowski/quickr)
+
