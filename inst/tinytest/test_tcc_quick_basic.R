@@ -165,3 +165,38 @@ expect_equal(
 code_only <- tcc_quick(slow_convolve, mode = "code")
 expect_true(is.character(code_only))
 expect_true(grepl("SEXP tcc_quick_entry", code_only, fixed = TRUE))
+
+# Exact quickr README rolling mean example (construct tracking)
+slow_roll_mean <- function(x, weights, normalize = TRUE) {
+    declare(
+        type(x = double(NA)),
+        type(weights = double(NA)),
+        type(normalize = logical(1))
+    )
+    out <- double(length(x) - length(weights) + 1)
+    n <- length(weights)
+    if (normalize) {
+        weights <- weights / sum(weights) * length(weights)
+    }
+
+    for (i in seq_along(out)) {
+        out[i] <- sum(x[i:(i + n - 1)] * weights) / length(weights)
+    }
+    out
+}
+
+quick_roll_mean <- tcc_quick(slow_roll_mean, fallback = "never")
+
+x <- dnorm(seq(-3, 3, len = 2000))
+weights <- dnorm(seq(-1, 1, len = 31))
+
+expect_equal(
+    quick_roll_mean(x, weights),
+    slow_roll_mean(x, weights),
+    tolerance = 1e-10
+)
+expect_equal(
+    quick_roll_mean(x, weights, FALSE),
+    slow_roll_mean(x, weights, FALSE),
+    tolerance = 1e-10
+)

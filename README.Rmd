@@ -850,76 +850,45 @@ print(timings)
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
-### Scalar/control-flow benchmark
+### Rolling mean benchmark (exact quickr README example)
 
-This example benchmarks a scalar-heavy function with arithmetic, comparisons,
-`ifelse()`, and `switch()`, showing the non-kernel transpilation path.
-Because `quickr::quick()` currently does not support `switch()`, the quickr
-path below uses an equivalent branch form.
+This example is copied from the quickr README, then compiled with both
+`quickr::quick()` and `tcc_quick()` to track progress on the same constructs.
 
-```{r benchmark-tcc-quick-scalar}
-slow_scalar <- function(x, y, k) {
-  declare(type(x = double(1)), type(y = double(1)), type(k = integer(1)))
-  z <- ifelse(x > y, x * y + sqrt(x), x - y / 2)
-  switch(k,
-         z + 1,
-         z - 1,
-         z * 2)
-}
+```{r benchmark-tcc-quick-roll-mean}
+slow_roll_mean <- function(x, weights, normalize = TRUE) {
+  declare(
+    type(x = double(NA)),
+    type(weights = double(NA)),
+    type(normalize = logical(1))
+  )
+  out <- double(length(x) - length(weights) + 1)
+  n <- length(weights)
+  if (normalize)
+    weights <- weights/sum(weights)*length(weights)
 
-slow_scalar_quickr <- function(x, y, k) {
-  declare(type(x = double(1)), type(y = double(1)), type(k = integer(1)))
-  z <- ifelse(x > y, x * y + sqrt(x), x - y / 2)
-  if (k == 1L) {
-    z + 1
-  } else if (k == 2L) {
-    z - 1
-  } else {
-    z * 2
+  for(i in seq_along(out)) {
+    out[i] <- sum(x[i:(i+n-1)] * weights) / length(weights)
   }
+  out
 }
 
-quick_scalar <- tcc_quick(slow_scalar, fallback = "never")
-quickr_scalar <- tryCatch(
-  quick(slow_scalar_quickr),
-  error = function(e) NULL
+quickr_roll_mean <- quick(slow_roll_mean)
+quick_tcc_roll_mean <- tcc_quick(slow_roll_mean, fallback = "never")
+
+x <- dnorm(seq(-3, 3, len = 100000))
+weights <- dnorm(seq(-1, 1, len = 100))
+
+timings_roll_mean <- bench::mark(
+  r = slow_roll_mean(x, weights),
+  quickr = quickr_roll_mean(x, weights = weights),
+  Rtinycc_quick = quick_tcc_roll_mean(x, weights = weights),
+  min_time = 1
 )
+timings_roll_mean
 
-set.seed(7)
-n <- 100000
-x <- runif(n)
-y <- runif(n)
-k <- sample.int(3, n, replace = TRUE)
-
-scalar_exprs <- list(
-  R = {
-    out <- numeric(n)
-    for (i in seq_len(n)) out[i] <- slow_scalar(x[i], y[i], k[i])
-    out
-  },
-  Rtinycc_quick = {
-    out <- numeric(n)
-    for (i in seq_len(n)) out[i] <- quick_scalar(x[i], y[i], k[i])
-    out
-  }
-)
-
-if (!is.null(quickr_scalar)) {
-  scalar_exprs$quickr <- {
-    out <- numeric(n)
-    for (i in seq_len(n)) out[i] <- quickr_scalar(x[i], y[i], k[i])
-    out
-  }
-}
-
-timings_scalar <- do.call(bench::mark, c(scalar_exprs, list(min_time = 1)))
-
-if (is.null(quickr_scalar)) {
-  message("quickr scalar example skipped in this run (unsupported construct)")
-}
-
-print(timings_scalar)
-plot(timings_scalar, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
+plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ## Known limitations

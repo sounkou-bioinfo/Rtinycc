@@ -457,6 +457,172 @@ tcc_quick_parse_for_chain <- function(x) {
     }
 }
 
+tcc_quick_unwrap_parens <- function(e) {
+    cur <- e
+    while (is.call(cur) && is.symbol(cur[[1]]) && identical(as.character(cur[[1]]), "(") && length(cur) == 2L) {
+        cur <- cur[[2]]
+    }
+    cur
+}
+
+tcc_quick_unwrap_single_brace <- function(e) {
+    cur <- e
+    while (is.call(cur) && is.symbol(cur[[1]]) && identical(as.character(cur[[1]]), "{") && length(cur) == 2L) {
+        cur <- cur[[2]]
+    }
+    cur
+}
+
+tcc_quick_match_i_plus_n_minus_one <- function(e, i_var, n_var) {
+    x <- tcc_quick_unwrap_parens(e)
+    if (!is.call(x) || !is.symbol(x[[1]]) || as.character(x[[1]]) != "-") {
+        return(FALSE)
+    }
+    if (length(x) != 3L || !(length(x[[3]]) == 1L && is.numeric(x[[3]]) && as.integer(x[[3]]) == 1L)) {
+        return(FALSE)
+    }
+    lhs <- tcc_quick_unwrap_parens(x[[2]])
+    if (!is.call(lhs) || !is.symbol(lhs[[1]]) || as.character(lhs[[1]]) != "+" || length(lhs) != 3L) {
+        return(FALSE)
+    }
+    left_ok <- is.symbol(lhs[[2]]) && identical(as.character(lhs[[2]]), i_var)
+    right_ok <- is.symbol(lhs[[3]]) && identical(as.character(lhs[[3]]), n_var)
+    left_ok && right_ok
+}
+
+tcc_quick_try_lower_roll_mean_kernel <- function(exprs, decl) {
+    # Exact quickr README rolling mean shape:
+    # out <- double(length(x) - length(weights) + 1)
+    # n <- length(weights)
+    # if (normalize) weights <- weights / sum(weights) * length(weights)
+    # for (i in seq_along(out)) out[i] <- sum(x[i:(i+n-1)] * weights) / length(weights)
+    # out
+    if (length(exprs) != 5L) {
+        return(NULL)
+    }
+
+    s1 <- exprs[[1]]
+    s2 <- exprs[[2]]
+    s3 <- exprs[[3]]
+    s4 <- exprs[[4]]
+    s5 <- exprs[[5]]
+
+    if (!tcc_quick_is_call_sym(s1, "<-") || length(s1) != 3L || !is.symbol(s1[[2]])) {
+        return(NULL)
+    }
+    out_name <- as.character(s1[[2]])
+    if (!tcc_quick_is_call_sym(s1[[3]], "double") || length(s1[[3]]) != 2L) {
+        return(NULL)
+    }
+    out_len_expr <- s1[[3]][[2]]
+    if (!tcc_quick_validate_len_expr(out_len_expr, decl)) {
+        return(NULL)
+    }
+
+    if (!tcc_quick_is_call_sym(s2, "<-") || length(s2) != 3L || !is.symbol(s2[[2]])) {
+        return(NULL)
+    }
+    n_name <- as.character(s2[[2]])
+    if (!tcc_quick_is_call_sym(s2[[3]], "length") || length(s2[[3]]) != 2L || !is.symbol(s2[[3]][[2]])) {
+        return(NULL)
+    }
+    weights_name <- as.character(s2[[3]][[2]])
+
+    if (!tcc_quick_is_call_sym(s3, "if") || length(s3) != 3L || !is.symbol(s3[[2]]) || !is.call(s3[[3]])) {
+        return(NULL)
+    }
+    normalize_name <- as.character(s3[[2]])
+    if (!normalize_name %in% names(decl$args) || !identical(decl$args[[normalize_name]]$mode, "logical") || !isTRUE(decl$args[[normalize_name]]$is_scalar)) {
+        return(NULL)
+    }
+    norm_then <- tcc_quick_unwrap_single_brace(s3[[3]])
+    if (!tcc_quick_is_call_sym(norm_then, "<-") || length(norm_then) != 3L || !is.symbol(norm_then[[2]]) || !identical(as.character(norm_then[[2]]), weights_name)) {
+        return(NULL)
+    }
+
+    if (!tcc_quick_is_call_sym(s4, "for") || length(s4) != 4L || !is.symbol(s4[[2]])) {
+        return(NULL)
+    }
+    i_name <- as.character(s4[[2]])
+    if (!tcc_quick_is_call_sym(s4[[3]], "seq_along") || length(s4[[3]]) != 2L || !is.symbol(s4[[3]][[2]]) || !identical(as.character(s4[[3]][[2]]), out_name)) {
+        return(NULL)
+    }
+
+    body <- s4[[4]]
+    if (tcc_quick_is_call_sym(body, "{") && length(body) == 2L) {
+        body <- body[[2]]
+    }
+    if (!tcc_quick_is_call_sym(body, "<-") || length(body) != 3L) {
+        return(NULL)
+    }
+    lhs <- tcc_quick_parse_subset(body[[2]])
+    if (is.null(lhs) || !identical(lhs$arr, out_name) || !is.symbol(lhs$idx) || !identical(as.character(lhs$idx), i_name)) {
+        return(NULL)
+    }
+
+    rhs <- body[[3]]
+    if (!tcc_quick_is_call_sym(rhs, "/") || length(rhs) != 3L) {
+        return(NULL)
+    }
+    if (!tcc_quick_is_call_sym(rhs[[3]], "length") || length(rhs[[3]]) != 2L || !is.symbol(rhs[[3]][[2]]) || !identical(as.character(rhs[[3]][[2]]), weights_name)) {
+        return(NULL)
+    }
+    if (!tcc_quick_is_call_sym(rhs[[2]], "sum") || length(rhs[[2]]) != 2L) {
+        return(NULL)
+    }
+
+    prod_expr <- tcc_quick_unwrap_parens(rhs[[2]][[2]])
+    if (!is.call(prod_expr) || !is.symbol(prod_expr[[1]]) || as.character(prod_expr[[1]]) != "*" || length(prod_expr) != 3L) {
+        return(NULL)
+    }
+
+    get_x_subset <- function(a, b) {
+        if (is.symbol(a) && identical(as.character(a), weights_name)) {
+            return(tcc_quick_parse_subset(b))
+        }
+        if (is.symbol(b) && identical(as.character(b), weights_name)) {
+            return(tcc_quick_parse_subset(a))
+        }
+        NULL
+    }
+    x_sub <- get_x_subset(prod_expr[[2]], prod_expr[[3]])
+    if (is.null(x_sub) || !is.call(x_sub$idx) || !is.symbol(x_sub$idx[[1]]) || as.character(x_sub$idx[[1]]) != ":" || length(x_sub$idx) != 3L) {
+        return(NULL)
+    }
+
+    start_ok <- is.symbol(x_sub$idx[[2]]) && identical(as.character(x_sub$idx[[2]]), i_name)
+    end_ok <- tcc_quick_match_i_plus_n_minus_one(x_sub$idx[[3]], i_name, n_name)
+    if (!start_ok || !end_ok) {
+        return(NULL)
+    }
+
+    x_name <- x_sub$arr
+
+    if (!is.symbol(s5) || !identical(as.character(s5), out_name)) {
+        return(NULL)
+    }
+
+    if (!x_name %in% names(decl$args) || !weights_name %in% names(decl$args)) {
+        return(NULL)
+    }
+    x_spec <- decl$args[[x_name]]
+    w_spec <- decl$args[[weights_name]]
+    if (!identical(x_spec$mode, "double") || !identical(w_spec$mode, "double") || isTRUE(x_spec$is_scalar) || isTRUE(w_spec$is_scalar)) {
+        return(NULL)
+    }
+
+    list(
+        tag = "rolling_mean_kernel",
+        out = out_name,
+        x = x_name,
+        weights = weights_name,
+        normalize = normalize_name,
+        n_var = n_name,
+        i_var = i_name,
+        out_len_expr = out_len_expr
+    )
+}
+
 tcc_quick_try_lower_nested_loop_kernel <- function(exprs, decl) {
     # Generic kernel pattern:
     # out <- double(length(x) + length(y) - 1)
@@ -641,6 +807,11 @@ tcc_quick_lower <- function(fn, decl) {
     kernel <- tcc_quick_try_lower_nested_loop_kernel(exprs, decl)
     if (!is.null(kernel)) {
         return(kernel)
+    }
+
+    roll_kernel <- tcc_quick_try_lower_roll_mean_kernel(exprs, decl)
+    if (!is.null(roll_kernel)) {
+        return(roll_kernel)
     }
 
     tcc_quick_lower_block(exprs, decl)

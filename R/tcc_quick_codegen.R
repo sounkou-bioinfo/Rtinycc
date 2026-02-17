@@ -318,6 +318,55 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
         ))
     }
 
+    if (identical(ir$tag, "rolling_mean_kernel")) {
+        arg_list <- decl$formal_names
+        c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
+
+        x <- ir$x
+        w <- ir$weights
+        nrm <- ir$normalize
+
+        return(paste(
+            "#include <R.h>",
+            "#include <Rinternals.h>",
+            "",
+            sprintf("SEXP %s(%s) {", fn_name, c_args),
+            sprintf("  SEXP %s_ = PROTECT(Rf_coerceVector(%s, REALSXP));", x, x),
+            sprintf("  SEXP %s_ = PROTECT(Rf_coerceVector(%s, REALSXP));", w, w),
+            sprintf("  int %s_ = Rf_asLogical(%s);", nrm, nrm),
+            sprintf("  R_xlen_t n_%s = XLENGTH(%s_);", x, x),
+            sprintf("  R_xlen_t n_%s = XLENGTH(%s_);", w, w),
+            sprintf("  R_xlen_t n_out = n_%s - n_%s + 1;", x, w),
+            "  if (n_out < 0) {",
+            "    UNPROTECT(2);",
+            "    Rf_error(\"rolling mean output length is negative\");",
+            "  }",
+            "  SEXP out = PROTECT(Rf_allocVector(REALSXP, n_out));",
+            sprintf("  double *x_%s = REAL(%s_);", x, x),
+            sprintf("  double *x_%s = REAL(%s_);", w, w),
+            "  double *xo = REAL(out);",
+            "  double w_scale = 1.0;",
+            sprintf("  if (%s_) {", nrm),
+            "    double w_sum = 0.0;",
+            sprintf("    for (R_xlen_t j = 0; j < n_%s; ++j) {", w),
+            sprintf("      w_sum += x_%s[j];", w),
+            "    }",
+            sprintf("    w_scale = ((double)n_%s) / w_sum;", w),
+            "  }",
+            "  for (R_xlen_t i = 0; i < n_out; ++i) {",
+            "    double acc = 0.0;",
+            sprintf("    for (R_xlen_t j = 0; j < n_%s; ++j) {", w),
+            sprintf("      acc += x_%s[i + j] * (x_%s[j] * w_scale);", x, w),
+            "    }",
+            sprintf("    xo[i] = acc / (double)n_%s;", w),
+            "  }",
+            "  UNPROTECT(3);",
+            "  return out;",
+            "}",
+            sep = "\n"
+        ))
+    }
+
     if (identical(ir$tag, "rf_lang_call")) {
         arg_list <- decl$formal_names
         c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
@@ -408,7 +457,7 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
     }
 
     if (!identical(ir$tag, "scalar_expr")) {
-        stop("Codegen only supports nested_loop_kernel/scalar_expr/rf_lang_call/internal_call2/switch_num_expr IR in current subset", call. = FALSE)
+        stop("Codegen only supports nested_loop_kernel/rolling_mean_kernel/scalar_expr/rf_lang_call/internal_call2/switch_num_expr IR in current subset", call. = FALSE)
     }
 
     arg_list <- decl$formal_names
