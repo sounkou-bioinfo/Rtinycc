@@ -2,125 +2,133 @@
 # Copyright (C) 2025-2026 Sounkou Mahamane Toure
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-new_tccq_walker <- function(
-  class = character(0),
-  state = new.env(parent = emptyenv())
-) {
-  structure(
-    list(state = state),
-    class = unique(c(class, "tccq_walker"))
-  )
-}
+# Generic code walker following codetools walkCode/makeCodeWalker pattern.
+# A walker is a list with $handler, $call, and $leaf functions plus arbitrary
+# extra state. Handlers are keyed by call-head symbol name and return a
+# handler function or NULL for default dispatch.
 
-tccq_visit <- function(walker, node) {
-  if (inherits(walker, "tccq_boundary_walker")) {
-    return(tccq_visit_boundary(walker, node))
-  }
-  if (inherits(walker, "tccq_subset_walker")) {
-    return(tccq_visit_subset(walker, node))
-  }
-  if (inherits(walker, "tccq_construct_walker")) {
-    return(tccq_visit_construct(walker, node))
-  }
-  tccq_visit_base(walker, node)
-}
-
-tccq_visit_base <- function(walker, node) {
-  if (!is.call(node)) {
-    return(invisible(NULL))
-  }
-  for (i in seq_along(node)[-1]) {
-    tccq_visit(walker, node[[i]])
-  }
-  invisible(NULL)
-}
-
-tccq_make_boundary_walker <- function(boundary_calls) {
-  w <- new_tccq_walker(class = "tccq_boundary_walker")
-  w$state$boundary_calls <- boundary_calls
-  w$state$found <- FALSE
-  w
-}
-
-tccq_visit_boundary <- function(walker, node) {
-  if (isTRUE(walker$state$found)) {
-    return(invisible(NULL))
-  }
-  if (is.call(node) && is.symbol(node[[1]])) {
-    fn <- as.character(node[[1]])
-    if (fn %in% walker$state$boundary_calls) {
-      walker$state$found <- TRUE
-      return(invisible(NULL))
+tccq_walk <- function(e, w) {
+  if (typeof(e) == "language") {
+    if (typeof(e[[1]]) %in% c("symbol", "character")) {
+      h <- w$handler(as.character(e[[1]]), w)
+      if (!is.null(h)) {
+        return(h(e, w))
+      }
     }
+    w$call(e, w)
+  } else {
+    w$leaf(e, w)
   }
-  tccq_visit_base(walker, node)
 }
 
-tccq_boundary_found <- function(walker) {
-  isTRUE(walker$state$found)
+tccq_make_walker <- function(
+  ...,
+  handler = function(v, w) NULL,
+  call = function(e, w) {
+    for (ee in as.list(e)[-1]) {
+      if (!missing(ee)) tccq_walk(ee, w)
+    }
+    invisible(NULL)
+  },
+  leaf = function(e, w) invisible(NULL)
+) {
+  list(handler = handler, call = call, leaf = leaf, ...)
 }
 
-tccq_make_subset_walker <- function() {
-  w <- new_tccq_walker(class = "tccq_subset_walker")
-  w$state$arrays <- character(0)
-  w
+# --- Boundary detection walker ---
+# Checks whether an expression tree contains any boundary calls
+# (.Call, .C, .External, .Internal, .Primitive).
+
+tccq_boundary_calls <- function() {
+  c(".Call", ".C", ".External", ".Internal", ".Primitive")
 }
 
-tccq_visit_subset <- function(walker, node) {
-  if (
-    is.call(node) &&
-      length(node) == 3L &&
-      is.symbol(node[[1]]) &&
-      identical(as.character(node[[1]]), "[") &&
-      is.symbol(node[[2]])
-  ) {
-    walker$state$arrays <- unique(c(
-      walker$state$arrays,
-      as.character(node[[2]])
-    ))
+tccq_has_boundary <- function(e, boundary = tccq_boundary_calls()) {
+  found <- FALSE
+  w <- tccq_make_walker(
+    handler = function(v, w) {
+      if (v %in% boundary) {
+        function(e, w) {
+          found <<- TRUE
+        }
+      }
+    },
+    call = function(e, w) {
+      if (!found) {
+        for (ee in as.list(e)[-1]) {
+          if (!missing(ee)) {
+            tccq_walk(ee, w)
+          }
+          if (found) break
+        }
+      }
+    }
+  )
+  tccq_walk(e, w)
+  found
+}
+
+# --- Subset array collector ---
+# Collects all symbol names used as `x[...]` targets.
+
+tccq_collect_subset_arrays <- function(e) {
+  arrays <- character(0)
+  w <- tccq_make_walker(
+    handler = function(v, w) {
+      if (identical(v, "[")) {
+        function(e, w) {
+          if (length(e) == 3L && is.symbol(e[[2]])) {
+            arrays <<- unique(c(arrays, as.character(e[[2]])))
+          }
+          for (ee in as.list(e)[-1]) {
+            if (!missing(ee)) tccq_walk(ee, w)
+          }
+        }
+      }
+    }
+  )
+  tccq_walk(e, w)
+  arrays
+}
+
+# --- Construct scanner ---
+# Scans for call heads and loop nesting depth.
+
+tccq_scan_constructs <- function(exprs) {
+  calls <- character(0)
+  max_depth <- 0L
+  cur_depth <- 0L
+
+  w <- tccq_make_walker(
+    handler = function(v, w) {
+      if (identical(v, "for")) {
+        function(e, w) {
+          calls <<- unique(c(calls, "for"))
+          cur_depth <<- cur_depth + 1L
+          max_depth <<- max(max_depth, cur_depth)
+          for (ee in as.list(e)[-1]) {
+            if (!missing(ee)) tccq_walk(ee, w)
+          }
+          cur_depth <<- cur_depth - 1L
+        }
+      }
+    },
+    call = function(e, w) {
+      if (is.symbol(e[[1]])) {
+        calls <<- unique(c(calls, as.character(e[[1]])))
+      }
+      for (ee in as.list(e)[-1]) {
+        if (!missing(ee)) tccq_walk(ee, w)
+      }
+    }
+  )
+
+  for (e in exprs) {
+    tccq_walk(e, w)
   }
-  tccq_visit_base(walker, node)
-}
-
-tccq_subset_arrays <- function(walker) {
-  unique(walker$state$arrays)
-}
-
-tccq_make_construct_walker <- function() {
-  w <- new_tccq_walker(class = "tccq_construct_walker")
-  w$state$calls <- character(0)
-  w$state$max_depth <- 0L
-  w$state$cur_depth <- 0L
-  w
-}
-
-tccq_visit_construct <- function(walker, node) {
-  if (!is.call(node)) {
-    return(invisible(NULL))
-  }
-
-  if (is.symbol(node[[1]])) {
-    walker$state$calls <- unique(c(walker$state$calls, as.character(node[[1]])))
-  }
-
-  if (is.symbol(node[[1]]) && identical(as.character(node[[1]]), "for")) {
-    walker$state$cur_depth <- walker$state$cur_depth + 1L
-    walker$state$max_depth <- max(
-      walker$state$max_depth,
-      walker$state$cur_depth
-    )
-    tccq_visit_base(walker, node)
-    walker$state$cur_depth <- walker$state$cur_depth - 1L
-    return(invisible(NULL))
-  }
-
-  tccq_visit_base(walker, node)
-}
-
-tccq_constructs <- function(walker) {
   list(
-    calls = sort(unique(walker$state$calls)),
-    has_for = "for" %in% walker$state$calls,
-    max_loop_depth = as.integer(walker$state$max_depth)
+    calls = sort(unique(calls)),
+    has_for = "for" %in% calls,
+    max_loop_depth = as.integer(max_depth)
   )
 }
