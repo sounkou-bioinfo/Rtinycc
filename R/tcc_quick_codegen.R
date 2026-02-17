@@ -12,7 +12,9 @@
 
 tccq_cg_ident <- function(x) {
   y <- gsub("[^A-Za-z0-9_]", "_", x)
-  if (grepl("^[0-9]", y)) y <- paste0("v_", y)
+  if (grepl("^[0-9]", y)) {
+    y <- paste0("v_", y)
+  }
   y
 }
 
@@ -57,8 +59,12 @@ tccq_cg_expr <- function(node) {
     if (op == "^") {
       return(sprintf("(pow((double)(%s), (double)(%s)))", lhs, rhs))
     }
-    if (op == "&") op <- "&&"
-    if (op == "|") op <- "||"
+    if (op == "&") {
+      op <- "&&"
+    }
+    if (op == "|") {
+      op <- "||"
+    }
     return(sprintf("((%s) %s (%s))", lhs, op, rhs))
   }
 
@@ -71,11 +77,7 @@ tccq_cg_expr <- function(node) {
 
   if (tag == "call1") {
     x <- tccq_cg_expr(node$x)
-    fun <- switch(node$fun,
-      abs = "fabs",
-      ceiling = "ceil",
-      node$fun
-    )
+    fun <- switch(node$fun, abs = "fabs", ceiling = "ceil", node$fun)
     return(sprintf("(%s((double)(%s)))", fun, x))
   }
 
@@ -95,13 +97,31 @@ tccq_cg_expr <- function(node) {
     return(sprintf("p_%s[(R_xlen_t)((%s) - 1)]", arr, idx))
   }
 
+  if (tag == "vec_slice") {
+    # vec_slice as a scalar expression should not normally appear;
+    # it's accessed element-wise via tccq_cg_vec_elem.
+    # If it does appear here, return the first element.
+    arr <- tccq_cg_ident(node$arr)
+    from <- tccq_cg_expr(node$from)
+    return(sprintf("p_%s[(R_xlen_t)((%s) - 1)]", arr, from))
+  }
+
+  if (tag == "reduce_expr") {
+    # When appearing as an expression, emit the precomputed variable name.
+    # The actual loop is emitted as a statement via tccq_cg_reduce_expr_stmt.
+    return(node$var_name)
+  }
+
   if (tag == "mat_get") {
     arr <- tccq_cg_ident(node$arr)
     row <- tccq_cg_expr(node$row)
     col <- tccq_cg_expr(node$col)
     return(sprintf(
       "p_%s[(R_xlen_t)((%s) - 1) + (R_xlen_t)((%s) - 1) * nrow_%s]",
-      arr, row, col, arr
+      arr,
+      row,
+      col,
+      arr
     ))
   }
 
@@ -114,7 +134,8 @@ tccq_cg_expr <- function(node) {
   if (tag == "which_reduce") {
     return(sprintf(
       "which_%s_%s",
-      gsub("\\.", "_", node$op), tccq_cg_ident(node$arr)
+      gsub("\\.", "_", node$op),
+      tccq_cg_ident(node$arr)
     ))
   }
 
@@ -141,7 +162,11 @@ tccq_cg_stmt <- function(node, indent) {
   pad <- strrep("  ", indent)
 
   if (tag == "block") {
-    lines <- vapply(node$stmts, function(s) tccq_cg_stmt(s, indent), character(1))
+    lines <- vapply(
+      node$stmts,
+      function(s) tccq_cg_stmt(s, indent),
+      character(1)
+    )
     return(paste(lines, collapse = "\n"))
   }
 
@@ -149,65 +174,198 @@ tccq_cg_stmt <- function(node, indent) {
     nm <- tccq_cg_ident(node$name)
 
     # --- vector allocation ---
-    if (identical(node$shape, "vector") &&
-      identical(node$expr$tag, "vec_alloc")) {
+    if (
+      identical(node$shape, "vector") &&
+        identical(node$expr$tag, "vec_alloc")
+    ) {
       alloc_mode <- node$expr$alloc_mode
-      sxp_type <- switch(alloc_mode,
+      sxp_type <- switch(
+        alloc_mode,
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
       len <- tccq_cg_expr(node$expr$len_expr)
-      ptr_fun <- switch(alloc_mode,
+      ptr_fun <- switch(
+        alloc_mode,
         double = "REAL",
         integer = "INTEGER",
         logical = "LOGICAL",
         "REAL"
       )
       return(paste0(
-        pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type,
-        ", (R_xlen_t)(", len, ")));\n",
-        pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
-        pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
-        pad, "nprotect_++;\n",
-        pad, "for (R_xlen_t zz_ = 0; zz_ < n_", nm,
-        "; ++zz_) p_", nm, "[zz_] = 0;"
+        pad,
+        "s_",
+        nm,
+        " = PROTECT(Rf_allocVector(",
+        sxp_type,
+        ", (R_xlen_t)(",
+        len,
+        ")));\n",
+        pad,
+        "n_",
+        nm,
+        " = XLENGTH(s_",
+        nm,
+        ");\n",
+        pad,
+        "p_",
+        nm,
+        " = ",
+        ptr_fun,
+        "(s_",
+        nm,
+        ");\n",
+        pad,
+        "nprotect_++;\n",
+        pad,
+        "for (R_xlen_t zz_ = 0; zz_ < n_",
+        nm,
+        "; ++zz_) p_",
+        nm,
+        "[zz_] = 0;"
       ))
     }
 
     # --- matrix allocation ---
-    if (identical(node$shape, "matrix") &&
-      identical(node$expr$tag, "mat_alloc")) {
+    if (
+      identical(node$shape, "matrix") &&
+        identical(node$expr$tag, "mat_alloc")
+    ) {
       nr <- tccq_cg_expr(node$expr$nrow)
       nc <- tccq_cg_expr(node$expr$ncol)
       fill <- format(node$expr$fill, scientific = FALSE)
       return(paste0(
-        pad, "s_", nm, " = PROTECT(Rf_allocMatrix(REALSXP, (int)(",
-        nr, "), (int)(", nc, ")));\n",
-        pad, "nrow_", nm, " = (int)(", nr, ");\n",
-        pad, "ncol_", nm, " = (int)(", nc, ");\n",
-        pad, "n_", nm, " = (R_xlen_t)nrow_", nm,
-        " * (R_xlen_t)ncol_", nm, ";\n",
-        pad, "p_", nm, " = REAL(s_", nm, ");\n",
-        pad, "nprotect_++;\n",
-        pad, "for (R_xlen_t zz_ = 0; zz_ < n_", nm,
-        "; ++zz_) p_", nm, "[zz_] = ", fill, ";"
+        pad,
+        "s_",
+        nm,
+        " = PROTECT(Rf_allocMatrix(REALSXP, (int)(",
+        nr,
+        "), (int)(",
+        nc,
+        ")));\n",
+        pad,
+        "nrow_",
+        nm,
+        " = (int)(",
+        nr,
+        ");\n",
+        pad,
+        "ncol_",
+        nm,
+        " = (int)(",
+        nc,
+        ");\n",
+        pad,
+        "n_",
+        nm,
+        " = (R_xlen_t)nrow_",
+        nm,
+        " * (R_xlen_t)ncol_",
+        nm,
+        ";\n",
+        pad,
+        "p_",
+        nm,
+        " = REAL(s_",
+        nm,
+        ");\n",
+        pad,
+        "nprotect_++;\n",
+        pad,
+        "for (R_xlen_t zz_ = 0; zz_ < n_",
+        nm,
+        "; ++zz_) p_",
+        nm,
+        "[zz_] = ",
+        fill,
+        ";"
       ))
     }
 
     # --- scalar assignment ---
+    parts <- c()
+    reds <- tccq_collect_reductions(node$expr)
+    for (rd in reds) {
+      if (rd$tag == "reduce") {
+        parts <- c(parts, tccq_cg_reduce_stmt(rd, indent))
+      }
+      if (rd$tag == "reduce_expr") {
+        parts <- c(parts, tccq_cg_reduce_expr_stmt(rd, indent))
+      }
+    }
     expr <- tccq_cg_expr(node$expr)
-    return(paste0(pad, nm, "_ = ", expr, ";"))
+    parts <- c(parts, paste0(pad, nm, "_ = ", expr, ";"))
+    return(paste(parts, collapse = "\n"))
+  }
+
+  if (tag == "vec_rewrite") {
+    nm <- tccq_cg_ident(node$name)
+    parts <- c()
+    # Hoist any reductions in the RHS expression
+    reds <- tccq_collect_reductions(node$expr)
+    for (rd in reds) {
+      if (rd$tag == "reduce") {
+        parts <- c(parts, tccq_cg_reduce_stmt(rd, indent))
+      }
+      if (rd$tag == "reduce_expr") {
+        parts <- c(parts, tccq_cg_reduce_expr_stmt(rd, indent))
+      }
+    }
+    elem <- tccq_cg_vec_elem(node$expr, "vr_")
+    parts <- c(
+      parts,
+      paste0(
+        pad,
+        "for (R_xlen_t vr_ = 0; vr_ < n_",
+        nm,
+        "; ++vr_) {\n",
+        pad,
+        "  p_",
+        nm,
+        "[vr_] = ",
+        elem,
+        ";\n",
+        pad,
+        "}"
+      )
+    )
+    return(paste(parts, collapse = "\n"))
   }
 
   if (tag == "vec_set") {
     arr <- tccq_cg_ident(node$arr)
     idx <- tccq_cg_expr(node$idx)
+    parts <- c()
+    # Hoist any reductions in the value expression
+    reds <- tccq_collect_reductions(node$value)
+    for (rd in reds) {
+      if (rd$tag == "reduce") {
+        parts <- c(parts, tccq_cg_reduce_stmt(rd, indent))
+      }
+      if (rd$tag == "reduce_expr") {
+        parts <- c(parts, tccq_cg_reduce_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "which_reduce") {
+        parts <- c(parts, tccq_cg_which_reduce_stmt(rd, indent))
+      }
+    }
     val <- tccq_cg_expr(node$value)
-    return(paste0(
-      pad, "p_", arr, "[(R_xlen_t)((", idx, ") - 1)] = ", val, ";"
-    ))
+    parts <- c(
+      parts,
+      paste0(
+        pad,
+        "p_",
+        arr,
+        "[(R_xlen_t)((",
+        idx,
+        ") - 1)] = ",
+        val,
+        ";"
+      )
+    )
+    return(paste(parts, collapse = "\n"))
   }
 
   if (tag == "mat_set") {
@@ -216,8 +374,18 @@ tccq_cg_stmt <- function(node, indent) {
     col <- tccq_cg_expr(node$col)
     val <- tccq_cg_expr(node$value)
     return(paste0(
-      pad, "p_", arr, "[(R_xlen_t)((", row, ") - 1) + (R_xlen_t)((",
-      col, ") - 1) * nrow_", arr, "] = ", val, ";"
+      pad,
+      "p_",
+      arr,
+      "[(R_xlen_t)((",
+      row,
+      ") - 1) + (R_xlen_t)((",
+      col,
+      ") - 1) * nrow_",
+      arr,
+      "] = ",
+      val,
+      ";"
     ))
   }
 
@@ -229,26 +397,61 @@ tccq_cg_stmt <- function(node, indent) {
     if (iter$tag == "seq_along") {
       lim <- sprintf("n_%s", tccq_cg_ident(iter$target))
       return(paste0(
-        pad, "for (R_xlen_t ", var, "_ = 1; ", var, "_ <= ",
-        lim, "; ++", var, "_) {\n",
-        body_c, "\n", pad, "}"
+        pad,
+        "for (R_xlen_t ",
+        var,
+        "_ = 1; ",
+        var,
+        "_ <= ",
+        lim,
+        "; ++",
+        var,
+        "_) {\n",
+        body_c,
+        "\n",
+        pad,
+        "}"
       ))
     }
     if (iter$tag == "seq_len") {
       lim <- tccq_cg_expr(iter$n)
       return(paste0(
-        pad, "for (R_xlen_t ", var, "_ = 1; ", var,
-        "_ <= (R_xlen_t)(", lim, "); ++", var, "_) {\n",
-        body_c, "\n", pad, "}"
+        pad,
+        "for (R_xlen_t ",
+        var,
+        "_ = 1; ",
+        var,
+        "_ <= (R_xlen_t)(",
+        lim,
+        "); ++",
+        var,
+        "_) {\n",
+        body_c,
+        "\n",
+        pad,
+        "}"
       ))
     }
     if (iter$tag == "seq_range") {
       from <- tccq_cg_expr(iter$from)
       to <- tccq_cg_expr(iter$to)
       return(paste0(
-        pad, "for (R_xlen_t ", var, "_ = (R_xlen_t)(", from, "); ",
-        var, "_ <= (R_xlen_t)(", to, "); ++", var, "_) {\n",
-        body_c, "\n", pad, "}"
+        pad,
+        "for (R_xlen_t ",
+        var,
+        "_ = (R_xlen_t)(",
+        from,
+        "); ",
+        var,
+        "_ <= (R_xlen_t)(",
+        to,
+        "); ++",
+        var,
+        "_) {\n",
+        body_c,
+        "\n",
+        pad,
+        "}"
       ))
     }
     stop("Unsupported for-loop iterator tag", call. = FALSE)
@@ -258,7 +461,14 @@ tccq_cg_stmt <- function(node, indent) {
     cond <- tccq_cg_expr(node$cond)
     body_c <- tccq_cg_stmt(node$body, indent + 1)
     return(paste0(
-      pad, "while (", cond, ") {\n", body_c, "\n", pad, "}"
+      pad,
+      "while (",
+      cond,
+      ") {\n",
+      body_c,
+      "\n",
+      pad,
+      "}"
     ))
   }
 
@@ -285,13 +495,27 @@ tccq_cg_stmt <- function(node, indent) {
     yes <- tccq_cg_stmt(node$yes, indent + 1)
     no <- tccq_cg_stmt(node$no, indent + 1)
     return(paste0(
-      pad, "if (", cond, ") {\n", yes, "\n",
-      pad, "} else {\n", no, "\n", pad, "}"
+      pad,
+      "if (",
+      cond,
+      ") {\n",
+      yes,
+      "\n",
+      pad,
+      "} else {\n",
+      no,
+      "\n",
+      pad,
+      "}"
     ))
   }
 
   if (tag == "reduce") {
     return(tccq_cg_reduce_stmt(node, indent))
+  }
+
+  if (tag == "reduce_expr") {
+    return(tccq_cg_reduce_expr_stmt(node, indent))
   }
 
   # Fallback: bare expression statement
@@ -308,14 +532,16 @@ tccq_cg_reduce_stmt <- function(node, indent) {
   op <- node$op
   var <- sprintf("red_%s_%s", op, arr)
 
-  init <- switch(op,
+  init <- switch(
+    op,
     sum = "0.0",
     prod = "1.0",
     max = sprintf("p_%s[0]", arr),
     min = sprintf("p_%s[0]", arr),
     "0.0"
   )
-  update <- switch(op,
+  update <- switch(
+    op,
     sum = sprintf("%s += p_%s[ri_];", var, arr),
     prod = sprintf("%s *= p_%s[ri_];", var, arr),
     max = sprintf("if (p_%s[ri_] > %s) %s = p_%s[ri_];", arr, var, var, arr),
@@ -324,10 +550,24 @@ tccq_cg_reduce_stmt <- function(node, indent) {
   )
   start <- if (op %in% c("max", "min")) "1" else "0"
   paste0(
-    pad, "double ", var, " = ", init, ";\n",
-    pad, "for (R_xlen_t ri_ = ", start, "; ri_ < n_", arr, "; ++ri_) {\n",
-    pad, "  ", update, "\n",
-    pad, "}"
+    pad,
+    "double ",
+    var,
+    " = ",
+    init,
+    ";\n",
+    pad,
+    "for (R_xlen_t ri_ = ",
+    start,
+    "; ri_ < n_",
+    arr,
+    "; ++ri_) {\n",
+    pad,
+    "  ",
+    update,
+    "\n",
+    pad,
+    "}"
   )
 }
 
@@ -339,20 +579,117 @@ tccq_cg_which_reduce_stmt <- function(node, indent) {
   cmp <- if (op == "which.max") ">" else "<"
 
   paste0(
-    pad, "int ", var, " = 1;\n",
-    pad, "double ", var, "_best = p_", arr, "[0];\n",
-    pad, "for (R_xlen_t ri_ = 1; ri_ < n_", arr, "; ++ri_) {\n",
-    pad, "  if (p_", arr, "[ri_] ", cmp, " ", var, "_best) {\n",
-    pad, "    ", var, "_best = p_", arr, "[ri_];\n",
-    pad, "    ", var, " = (int)(ri_ + 1);\n",
-    pad, "  }\n",
-    pad, "}"
+    pad,
+    "int ",
+    var,
+    " = 1;\n",
+    pad,
+    "double ",
+    var,
+    "_best = p_",
+    arr,
+    "[0];\n",
+    pad,
+    "for (R_xlen_t ri_ = 1; ri_ < n_",
+    arr,
+    "; ++ri_) {\n",
+    pad,
+    "  if (p_",
+    arr,
+    "[ri_] ",
+    cmp,
+    " ",
+    var,
+    "_best) {\n",
+    pad,
+    "    ",
+    var,
+    "_best = p_",
+    arr,
+    "[ri_];\n",
+    pad,
+    "    ",
+    var,
+    " = (int)(ri_ + 1);\n",
+    pad,
+    "  }\n",
+    pad,
+    "}"
   )
 }
 
-# ---------------------------------------------------------------------------
-# Collect all reduce/which_reduce nodes from an IR tree
-# ---------------------------------------------------------------------------
+# reduce_expr counter for unique variable names
+tccq_reduce_expr_counter_ <- new.env(parent = emptyenv())
+tccq_reduce_expr_counter_$n <- 0L
+
+tccq_reduce_expr_next_id <- function() {
+  tccq_reduce_expr_counter_$n <- tccq_reduce_expr_counter_$n + 1L
+  tccq_reduce_expr_counter_$n
+}
+
+tccq_cg_reduce_expr_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  op <- node$op
+
+  # Assign a unique variable name if not already set
+  if (is.null(node$var_name)) {
+    node$var_name <- sprintf("redx_%s_%d", op, tccq_reduce_expr_next_id())
+  }
+  var <- node$var_name
+
+  len_c <- tccq_cg_vec_len(node$expr)
+  if (is.null(len_c)) {
+    stop("Cannot determine length for reduce_expr", call. = FALSE)
+  }
+
+  # Use a unique index variable to avoid collisions with nested loops
+  idx <- sprintf("rx%d_", tccq_reduce_expr_counter_$n)
+  elem <- tccq_cg_vec_elem(node$expr, idx)
+
+  init <- switch(
+    op,
+    sum = "0.0",
+    prod = "1.0",
+    max = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
+    min = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
+    "0.0"
+  )
+  update <- switch(
+    op,
+    sum = sprintf("%s += %s;", var, elem),
+    prod = sprintf("%s *= %s;", var, elem),
+    max = sprintf("{ double v_ = %s; if (v_ > %s) %s = v_; }", elem, var, var),
+    min = sprintf("{ double v_ = %s; if (v_ < %s) %s = v_; }", elem, var, var),
+    ""
+  )
+  start <- if (op %in% c("max", "min")) "1" else "0"
+  paste0(
+    pad,
+    "double ",
+    var,
+    " = ",
+    init,
+    ";\n",
+    pad,
+    "for (R_xlen_t ",
+    idx,
+    " = ",
+    start,
+    "; ",
+    idx,
+    " < (R_xlen_t)(",
+    len_c,
+    "); ++",
+    idx,
+    ") {\n",
+    pad,
+    "  ",
+    update,
+    "\n",
+    pad,
+    "}"
+  )
+}
 
 tccq_collect_reductions <- function(node) {
   if (is.null(node) || is.null(node$tag)) {
@@ -360,7 +697,9 @@ tccq_collect_reductions <- function(node) {
   }
 
   out <- list()
-  if (node$tag %in% c("reduce", "which_reduce")) out <- list(node)
+  if (node$tag %in% c("reduce", "which_reduce", "reduce_expr")) {
+    out <- list(node)
+  }
 
   for (nm in names(node)) {
     child <- node[[nm]]
@@ -390,19 +729,22 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
   }
   elem_expr <- tccq_cg_vec_elem(ir$ret, "ei_")
 
-  sxp_type <- switch(ir$ret_mode,
+  sxp_type <- switch(
+    ir$ret_mode,
     double = "REALSXP",
     integer = "INTSXP",
     logical = "LGLSXP",
     "REALSXP"
   )
-  ptr_fun <- switch(ir$ret_mode,
+  ptr_fun <- switch(
+    ir$ret_mode,
     double = "REAL",
     integer = "INTEGER",
     logical = "LOGICAL",
     "REAL"
   )
-  c_type <- switch(ir$ret_mode,
+  c_type <- switch(
+    ir$ret_mode,
     double = "double",
     integer = "int",
     logical = "int",
@@ -410,15 +752,35 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
   )
 
   paste0(
-    pad, "R_xlen_t ret_len_ = (R_xlen_t)(", len_c, ");\n",
-    pad, "SEXP ret_ = PROTECT(Rf_allocVector(", sxp_type, ", ret_len_));\n",
-    pad, "nprotect_++;\n",
-    pad, c_type, " *p_ret_ = ", ptr_fun, "(ret_);\n",
-    pad, "for (R_xlen_t ei_ = 0; ei_ < ret_len_; ++ei_) {\n",
-    pad, "  p_ret_[ei_] = (", c_type, ")(", elem_expr, ");\n",
-    pad, "}\n",
-    pad, "UNPROTECT(nprotect_);\n",
-    pad, "return ret_;"
+    pad,
+    "R_xlen_t ret_len_ = (R_xlen_t)(",
+    len_c,
+    ");\n",
+    pad,
+    "SEXP ret_ = PROTECT(Rf_allocVector(",
+    sxp_type,
+    ", ret_len_));\n",
+    pad,
+    "nprotect_++;\n",
+    pad,
+    c_type,
+    " *p_ret_ = ",
+    ptr_fun,
+    "(ret_);\n",
+    pad,
+    "for (R_xlen_t ei_ = 0; ei_ < ret_len_; ++ei_) {\n",
+    pad,
+    "  p_ret_[ei_] = (",
+    c_type,
+    ")(",
+    elem_expr,
+    ");\n",
+    pad,
+    "}\n",
+    pad,
+    "UNPROTECT(nprotect_);\n",
+    pad,
+    "return ret_;"
   )
 }
 
@@ -427,6 +789,11 @@ tccq_cg_vec_len <- function(node) {
   tag <- node$tag
   if (tag == "var") {
     return(sprintf("n_%s", tccq_cg_ident(node$name)))
+  }
+  if (tag == "vec_slice") {
+    from <- tccq_cg_expr(node$from)
+    to <- tccq_cg_expr(node$to)
+    return(sprintf("((R_xlen_t)(%s) - (R_xlen_t)(%s) + 1)", to, from))
   }
   if (tag == "binary") {
     return(tccq_cg_vec_len(node$lhs) %||% tccq_cg_vec_len(node$rhs))
@@ -449,6 +816,12 @@ tccq_cg_vec_elem <- function(node, idx_var) {
 
   if (tag == "var") {
     return(sprintf("p_%s[%s]", tccq_cg_ident(node$name), idx_var))
+  }
+
+  if (tag == "vec_slice") {
+    arr <- tccq_cg_ident(node$arr)
+    from <- tccq_cg_expr(node$from)
+    return(sprintf("p_%s[((R_xlen_t)(%s) - 1) + %s]", arr, from, idx_var))
   }
 
   if (tag == "const") {
@@ -484,18 +857,18 @@ tccq_cg_vec_elem <- function(node, idx_var) {
     if (op == "^") {
       return(sprintf("(pow((double)(%s), (double)(%s)))", lhs, rhs))
     }
-    if (op == "&") op <- "&&"
-    if (op == "|") op <- "||"
+    if (op == "&") {
+      op <- "&&"
+    }
+    if (op == "|") {
+      op <- "||"
+    }
     return(sprintf("((%s) %s (%s))", lhs, op, rhs))
   }
 
   if (tag == "call1") {
     x <- tccq_cg_vec_elem(node$x, idx_var)
-    fun <- switch(node$fun,
-      abs = "fabs",
-      ceiling = "ceil",
-      node$fun
-    )
+    fun <- switch(node$fun, abs = "fabs", ceiling = "ceil", node$fun)
     return(sprintf("(%s((double)(%s)))", fun, x))
   }
 
@@ -511,6 +884,38 @@ tccq_cg_vec_elem <- function(node, idx_var) {
 }
 
 # ---------------------------------------------------------------------------
+# Pre-pass: assign var_name to all reduce_expr nodes in the IR tree.
+# Since R lists are copy-on-modify, we rebuild the tree.
+# ---------------------------------------------------------------------------
+
+tccq_assign_reduce_expr_names <- function(node, counter_env = NULL) {
+  if (is.null(counter_env)) {
+    counter_env <- new.env(parent = emptyenv())
+    counter_env$n <- 0L
+  }
+  if (is.null(node) || !is.list(node)) {
+    return(node)
+  }
+  if (is.null(node$tag)) {
+    # Plain list of nodes (e.g. stmts)
+    return(lapply(node, tccq_assign_reduce_expr_names, counter_env))
+  }
+
+  if (node$tag == "reduce_expr" && is.null(node$var_name)) {
+    counter_env$n <- counter_env$n + 1L
+    node$var_name <- sprintf("redx_%s_%d", node$op, counter_env$n)
+  }
+
+  for (nm in names(node)) {
+    child <- node[[nm]]
+    if (is.list(child)) {
+      node[[nm]] <- tccq_assign_reduce_expr_names(child, counter_env)
+    }
+  }
+  node
+}
+
+# ---------------------------------------------------------------------------
 # Top-level fn_body codegen → complete C source
 # ---------------------------------------------------------------------------
 
@@ -518,6 +923,8 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
   if (!identical(ir$tag, "fn_body")) {
     stop("Codegen requires fn_body IR, got: ", ir$tag, call. = FALSE)
   }
+  # Pre-pass: assign stable variable names to reduce_expr nodes
+  ir <- tccq_assign_reduce_expr_names(ir)
   tccq_cg_fn_body(ir, fn_name)
 }
 
@@ -539,26 +946,30 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     spec <- ir$params[[nm]]
     cnm <- tccq_cg_ident(nm)
     if (isTRUE(spec$is_scalar)) {
-      extract <- switch(spec$mode,
-        double  = sprintf("  double %s_ = Rf_asReal(%s);", cnm, nm),
+      extract <- switch(
+        spec$mode,
+        double = sprintf("  double %s_ = Rf_asReal(%s);", cnm, nm),
         integer = sprintf("  int %s_ = Rf_asInteger(%s);", cnm, nm),
         logical = sprintf("  int %s_ = Rf_asLogical(%s);", cnm, nm)
       )
       lines <- c(lines, extract)
     } else {
-      sxp_type <- switch(spec$mode,
+      sxp_type <- switch(
+        spec$mode,
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
-      ptr_fun <- switch(spec$mode,
+      ptr_fun <- switch(
+        spec$mode,
         double = "REAL",
         integer = "INTEGER",
         logical = "LOGICAL",
         "REAL"
       )
-      c_type <- switch(spec$mode,
+      c_type <- switch(
+        spec$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -568,7 +979,9 @@ tccq_cg_fn_body <- function(ir, fn_name) {
         lines,
         sprintf(
           "  SEXP s_%s = PROTECT(Rf_coerceVector(%s, %s));",
-          cnm, nm, sxp_type
+          cnm,
+          nm,
+          sxp_type
         ),
         "  nprotect_++;",
         sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
@@ -589,7 +1002,8 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     info <- ir$locals[[nm]]
     cnm <- tccq_cg_ident(nm)
     if (info$shape == "scalar") {
-      c_type <- switch(info$mode,
+      c_type <- switch(
+        info$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -597,7 +1011,8 @@ tccq_cg_fn_body <- function(ir, fn_name) {
       )
       lines <- c(lines, sprintf("  %s %s_ = 0;", c_type, cnm))
     } else {
-      c_type <- switch(info$mode,
+      c_type <- switch(
+        info$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -627,16 +1042,24 @@ tccq_cg_fn_body <- function(ir, fn_name) {
   # --- Emit reduction loops referenced in the return expression ---
   ret_reds <- tccq_collect_reductions(ir$ret)
   for (rd in ret_reds) {
-    if (rd$tag == "reduce") lines <- c(lines, tccq_cg_reduce_stmt(rd, 1))
+    if (rd$tag == "reduce") {
+      lines <- c(lines, tccq_cg_reduce_stmt(rd, 1))
+    }
     if (rd$tag == "which_reduce") {
       lines <- c(lines, tccq_cg_which_reduce_stmt(rd, 1))
+    }
+    if (rd$tag == "reduce_expr") {
+      lines <- c(lines, tccq_cg_reduce_expr_stmt(rd, 1))
     }
   }
 
   # --- Return ---
   ret_expr <- tccq_cg_expr(ir$ret)
-  if ((ir$ret_shape %in% c("vector", "matrix")) &&
-    !is.null(ir$ret$tag) && ir$ret$tag == "var") {
+  if (
+    (ir$ret_shape %in% c("vector", "matrix")) &&
+      !is.null(ir$ret$tag) &&
+      ir$ret$tag == "var"
+  ) {
     # Return the SEXP of a named variable
     ret_nm <- tccq_cg_ident(ir$ret$name)
     lines <- c(
@@ -649,8 +1072,9 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     lines <- c(lines, tccq_cg_vec_expr_return(ir, 1))
   } else {
     # Scalar return
-    wrap <- switch(ir$ret_mode,
-      double  = sprintf("Rf_ScalarReal((double)(%s))", ret_expr),
+    wrap <- switch(
+      ir$ret_mode,
+      double = sprintf("Rf_ScalarReal((double)(%s))", ret_expr),
       integer = sprintf("Rf_ScalarInteger((int)(%s))", ret_expr),
       logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", ret_expr),
       ret_expr
