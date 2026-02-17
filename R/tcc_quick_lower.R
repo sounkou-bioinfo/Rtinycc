@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 tcc_quick_fallback_ir <- function(reason) {
-    list(tag = "fallback", reason = reason)
+    list(tag = "fallback", edge = "fallback_eval", reason = reason)
 }
 
 tcc_quick_boundary_calls <- function() {
@@ -82,6 +82,33 @@ tcc_quick_numeric_unary_funs <- function() {
         "trunc",
         "tanh"
     )
+}
+
+tcc_quick_binary_arith_ops <- function() {
+    c("+", "-", "*", "/", "^", "%%", "%/%")
+}
+
+tcc_quick_compare_ops <- function() {
+    c("<", "<=", ">", ">=", "==", "!=")
+}
+
+tcc_quick_logical_ops <- function() {
+    c("&&", "||", "&", "|")
+}
+
+tcc_quick_special_heads <- function() {
+    c("if", "ifelse", "switch", "(")
+}
+
+tcc_quick_non_fallback_heads <- function() {
+    unique(c(
+        tcc_quick_binary_arith_ops(),
+        tcc_quick_compare_ops(),
+        tcc_quick_logical_ops(),
+        "!",
+        tcc_quick_special_heads(),
+        tcc_quick_numeric_unary_funs()
+    ))
 }
 
 tcc_quick_lower_expr <- function(e, decl, locals = list()) {
@@ -347,33 +374,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
 
     # Generic fallback call path: use pairlist call construction + Rf_eval
     # for non-operator symbol calls with symbol arguments.
-    if (
-        !fname %in%
-            c(
-                "+",
-                "-",
-                "*",
-                "/",
-                "^",
-                "%%",
-                "%/%",
-                "<",
-                "<=",
-                ">",
-                ">=",
-                "==",
-                "!=",
-                "&&",
-                "||",
-                "&",
-                "|",
-                "!",
-                "if",
-                "ifelse",
-                "switch",
-                "("
-            )
-    ) {
+    if (!fname %in% tcc_quick_non_fallback_heads()) {
         args <- as.list(e)[-1]
         if (length(args) >= 1L && all(vapply(args, is.symbol, logical(1)))) {
             arg_names <- vapply(args, as.character, character(1))
@@ -446,7 +447,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
         return(rhs)
     }
 
-    if (fname %in% c("+", "-", "*", "/", "^", "%%", "%/%")) {
+    if (fname %in% tcc_quick_binary_arith_ops()) {
         if (
             !lhs$mode %in% c("double", "integer") ||
                 !rhs$mode %in% c("double", "integer")
@@ -468,7 +469,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
         ))
     }
 
-    if (fname %in% c("<", "<=", ">", ">=", "==", "!=")) {
+    if (fname %in% tcc_quick_compare_ops()) {
         if (
             !lhs$mode %in% c("double", "integer", "logical") ||
                 !rhs$mode %in% c("double", "integer", "logical")
@@ -485,7 +486,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
         ))
     }
 
-    if (fname %in% c("&&", "||", "&", "|")) {
+    if (fname %in% tcc_quick_logical_ops()) {
         if (
             !lhs$mode %in% c("logical", "integer", "double") ||
                 !rhs$mode %in% c("logical", "integer", "double")
@@ -869,7 +870,8 @@ tcc_quick_try_lower_roll_mean_kernel <- function(exprs, decl) {
     }
 
     list(
-        tag = "rolling_mean_kernel",
+        tag = "loop_kernel",
+        kind = "window_weighted_sum",
         out = out_name,
         x = x_name,
         weights = weights_name,
@@ -881,14 +883,6 @@ tcc_quick_try_lower_roll_mean_kernel <- function(exprs, decl) {
 }
 
 tcc_quick_try_lower_nested_loop_kernel <- function(exprs, decl) {
-    # Generic kernel pattern:
-    # out <- double(length(x) + length(y) - 1)
-    # for (i in seq_along(x)) {
-    #   for (j in seq_along(y)) {
-    #     out[idx(i,j)] <- <expr using [ ], i, j, constants, arithmetic>
-    #   }
-    # }
-    # out
     if (length(exprs) != 3L) {
         return(NULL)
     }
@@ -977,7 +971,8 @@ tcc_quick_try_lower_nested_loop_kernel <- function(exprs, decl) {
     }
 
     list(
-        tag = "nested_loop_kernel",
+        tag = "loop_kernel",
+        kind = "indexed_store",
         out = out_name,
         out_len_expr = out_len_expr,
         input_arrays = input_arrays,
@@ -996,34 +991,11 @@ tcc_quick_lower_block <- function(exprs, decl) {
     locals <- list()
     if (length(exprs) > 1L) {
         for (i in seq_len(length(exprs) - 1L)) {
-            s <- exprs[[i]]
-            if (!is.call(s) || !is.symbol(s[[1]]) || as.character(s[[1]]) != "<-") {
-                return(tcc_quick_fallback_ir(
-                    "Only <- assignments are supported before final expression"
-                ))
+            step <- tcc_quick_lower_stmt(exprs[[i]], decl, locals)
+            if (!isTRUE(step$ok)) {
+                return(step$ir)
             }
-            if (length(s) != 3L || !is.symbol(s[[2]])) {
-                return(tcc_quick_fallback_ir("Malformed <- assignment in block"))
-            }
-            name <- as.character(s[[2]])
-            rhs <- tcc_quick_lower_expr(s[[3]], decl, locals)
-            if (!isTRUE(rhs$ok)) {
-                if (!is.null(rhs$boundary)) {
-                    return(tcc_quick_fallback_ir(
-                        paste0(
-                            "Boundary call encountered (",
-                            rhs$boundary,
-                            ") - prefer Rf_lang*/Rf_eval path here"
-                        )
-                    ))
-                }
-                reason <- rhs$reason
-                if (is.null(reason)) {
-                    reason <- "Unsupported assignment RHS"
-                }
-                return(tcc_quick_fallback_ir(reason))
-            }
-            locals[[name]] <- list(node = rhs$node, mode = rhs$mode)
+            locals <- step$locals
         }
     }
 
@@ -1079,18 +1051,161 @@ tcc_quick_lower_block <- function(exprs, decl) {
     )
 }
 
+tcc_quick_stmt_handlers <- function() {
+    list(
+        `<-` = tcc_quick_lower_stmt_assign
+    )
+}
+
+tcc_quick_lower_stmt <- function(stmt, decl, locals) {
+    if (!is.call(stmt) || !is.symbol(stmt[[1]])) {
+        return(list(
+            ok = FALSE,
+            ir = tcc_quick_fallback_ir(
+                "Only calls are supported as pre-final statements"
+            )
+        ))
+    }
+
+    head <- as.character(stmt[[1]])
+    handlers <- tcc_quick_stmt_handlers()
+    if (!head %in% names(handlers)) {
+        return(list(
+            ok = FALSE,
+            ir = tcc_quick_fallback_ir(
+                paste0("Statement head not in current subset: ", head)
+            )
+        ))
+    }
+
+    handlers[[head]](stmt, decl, locals)
+}
+
+tcc_quick_lower_stmt_assign <- function(stmt, decl, locals) {
+    if (length(stmt) != 3L || !is.symbol(stmt[[2]])) {
+        return(list(
+            ok = FALSE,
+            ir = tcc_quick_fallback_ir("Malformed <- assignment in block")
+        ))
+    }
+
+    name <- as.character(stmt[[2]])
+    rhs <- tcc_quick_lower_expr(stmt[[3]], decl, locals)
+    if (!isTRUE(rhs$ok)) {
+        if (!is.null(rhs$boundary)) {
+            return(list(
+                ok = FALSE,
+                ir = tcc_quick_fallback_ir(
+                    paste0(
+                        "Boundary call encountered (",
+                        rhs$boundary,
+                        ") - prefer Rf_lang*/Rf_eval path here"
+                    )
+                )
+            ))
+        }
+        reason <- rhs$reason
+        if (is.null(reason)) {
+            reason <- "Unsupported assignment RHS"
+        }
+        return(list(ok = FALSE, ir = tcc_quick_fallback_ir(reason)))
+    }
+
+    locals[[name]] <- list(node = rhs$node, mode = rhs$mode)
+    list(ok = TRUE, locals = locals)
+}
+
+tcc_quick_scan_constructs <- function(exprs) {
+    w <- tccq_make_construct_walker()
+    for (e in exprs) {
+        tccq_visit(w, e)
+    }
+    tccq_constructs(w)
+}
+
+tcc_quick_lex_exprs <- function(exprs) {
+    tcc_quick_scan_constructs(exprs)
+}
+
+tcc_quick_lex_function <- function(fn) {
+    exprs <- tcc_quick_body_without_declare(fn)
+    tcc_quick_lex_exprs(exprs)
+}
+
+tcc_quick_normalize_exprs <- function(exprs, lex) {
+    # Placeholder normalization pass. Keep semantic tree unchanged for now.
+    # Future work: canonicalize seq forms, brace wrapping, and indexing shapes.
+    exprs
+}
+
+tcc_quick_typecheck_exprs <- function(exprs, decl) {
+    # Placeholder pass boundary. Expression-level type checks happen in lowerers.
+    list(ok = TRUE, exprs = exprs, decl = decl)
+}
+
+tcc_quick_verify_ir <- function(ir) {
+    if (identical(ir$tag, "fallback")) {
+        if (is.null(ir$edge)) {
+            ir$edge <- "fallback_eval"
+        }
+        return(ir)
+    }
+    ir
+}
+
+tcc_quick_kernel_matchers <- function() {
+    env <- environment(tcc_quick_kernel_matchers)
+    matcher_names <- ls(
+        envir = env,
+        pattern = "^tcc_quick_try_lower_.*_kernel$",
+        all.names = TRUE
+    )
+    matcher_names <- sort(matcher_names)
+
+    if (length(matcher_names) < 1L) {
+        return(list())
+    }
+
+    lapply(matcher_names, function(nm) {
+        get(nm, envir = env, inherits = FALSE)
+    })
+}
+
+tcc_quick_try_lower_kernels <- function(exprs, decl) {
+    profile <- tcc_quick_lex_exprs(exprs)
+    if (!isTRUE(profile$has_for)) {
+        return(NULL)
+    }
+
+    matchers <- tcc_quick_kernel_matchers()
+    for (matcher in matchers) {
+        ir <- matcher(exprs, decl)
+        if (!is.null(ir)) {
+            return(ir)
+        }
+    }
+    NULL
+}
+
 tcc_quick_lower <- function(fn, decl) {
     exprs <- tcc_quick_body_without_declare(fn)
+    lex <- tcc_quick_lex_exprs(exprs)
+    exprs <- tcc_quick_normalize_exprs(exprs, lex)
 
-    kernel <- tcc_quick_try_lower_nested_loop_kernel(exprs, decl)
+    checked <- tcc_quick_typecheck_exprs(exprs, decl)
+    if (!isTRUE(checked$ok)) {
+        reason <- checked$reason
+        if (is.null(reason)) {
+            reason <- "Typecheck failed"
+        }
+        return(tcc_quick_fallback_ir(reason))
+    }
+    exprs <- checked$exprs
+
+    kernel <- tcc_quick_try_lower_kernels(exprs, decl)
     if (!is.null(kernel)) {
-        return(kernel)
+        return(tcc_quick_verify_ir(kernel))
     }
 
-    roll_kernel <- tcc_quick_try_lower_roll_mean_kernel(exprs, decl)
-    if (!is.null(roll_kernel)) {
-        return(roll_kernel)
-    }
-
-    tcc_quick_lower_block(exprs, decl)
+    tcc_quick_verify_ir(tcc_quick_lower_block(exprs, decl))
 }

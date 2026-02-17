@@ -19,6 +19,9 @@ tccq_visit <- function(walker, node) {
   if (inherits(walker, "tccq_subset_walker")) {
     return(tccq_visit_subset(walker, node))
   }
+  if (inherits(walker, "tccq_construct_walker")) {
+    return(tccq_visit_construct(walker, node))
+  }
   tccq_visit_base(walker, node)
 }
 
@@ -81,4 +84,43 @@ tccq_visit_subset <- function(walker, node) {
 
 tccq_subset_arrays <- function(walker) {
   unique(walker$state$arrays)
+}
+
+tccq_make_construct_walker <- function() {
+  w <- new_tccq_walker(class = "tccq_construct_walker")
+  w$state$calls <- character(0)
+  w$state$max_depth <- 0L
+  w$state$cur_depth <- 0L
+  w
+}
+
+tccq_visit_construct <- function(walker, node) {
+  if (!is.call(node)) {
+    return(invisible(NULL))
+  }
+
+  if (is.symbol(node[[1]])) {
+    walker$state$calls <- unique(c(walker$state$calls, as.character(node[[1]])))
+  }
+
+  if (is.symbol(node[[1]]) && identical(as.character(node[[1]]), "for")) {
+    walker$state$cur_depth <- walker$state$cur_depth + 1L
+    walker$state$max_depth <- max(
+      walker$state$max_depth,
+      walker$state$cur_depth
+    )
+    tccq_visit_base(walker, node)
+    walker$state$cur_depth <- walker$state$cur_depth - 1L
+    return(invisible(NULL))
+  }
+
+  tccq_visit_base(walker, node)
+}
+
+tccq_constructs <- function(walker) {
+  list(
+    calls = sort(unique(walker$state$calls)),
+    has_for = "for" %in% walker$state$calls,
+    max_loop_depth = as.integer(walker$state$max_depth)
+  )
 }
