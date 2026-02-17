@@ -28,7 +28,7 @@ containing generated C source.
 }
 \description{
 \code{tcc_quick()} is an experimental C-first path for compiling a strict subset
-of R functions annotated with \code{declare(type(...))}. In this MVP, supported
+of R functions annotated with \code{declare(type(...))}. In the current subset, supported
 bodies are recursive scalar expressions (arithmetic, comparisons, logical
 operators, unary operators, selected scalar math functions, and scalar
 \code{if (cond) a else b}/\code{ifelse(cond, a, b)}) over declared scalar

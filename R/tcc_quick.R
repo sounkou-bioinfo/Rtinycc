@@ -47,7 +47,7 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 #' Compile a small declare()-annotated R subset with TinyCC
 #'
 #' `tcc_quick()` is an experimental C-first path for compiling a strict subset
-#' of R functions annotated with `declare(type(...))`. In this MVP, supported
+#' of R functions annotated with `declare(type(...))`. In the current subset, supported
 #' bodies are recursive scalar expressions (arithmetic, comparisons, logical
 #' operators, unary operators, selected scalar math functions, and scalar
 #' `if (cond) a else b`/`ifelse(cond, a, b)`) over declared scalar
@@ -89,10 +89,10 @@ tcc_quick <- function(fn, fallback = c("auto", "always", "never"), mode = c("com
             message("tcc_quick fallback reason: ", ir$reason)
         }
         if (mode == "code") {
-            stop("No code generated because function is outside tcc_quick MVP subset: ", ir$reason, call. = FALSE)
+            stop("No code generated because function is outside the current tcc_quick subset: ", ir$reason, call. = FALSE)
         }
         if (fallback == "never") {
-            stop("Function is outside tcc_quick MVP subset: ", ir$reason, call. = FALSE)
+            stop("Function is outside the current tcc_quick subset: ", ir$reason, call. = FALSE)
         }
         return(fn)
     }

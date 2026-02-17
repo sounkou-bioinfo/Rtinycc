@@ -76,6 +76,17 @@ tcc_quick_codegen_node <- function(node) {
         return(sprintf("((%s) ? (%s) : (%s))", cond, yes, no))
     }
 
+    if (identical(node$tag, "switch_num")) {
+        sel <- tcc_quick_codegen_node(node$selector)
+        n <- length(node$cases)
+        out <- "R_NilValue"
+        for (i in seq.int(n, 1L)) {
+            case_i <- tcc_quick_codegen_node(node$cases[[i]])
+            out <- sprintf("((((int)(%s)) == %d) ? (%s) : (%s))", sel, i, case_i, out)
+        }
+        return(out)
+    }
+
     stop("Unsupported expression node in codegen", call. = FALSE)
 }
 
@@ -342,8 +353,52 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
         ))
     }
 
+    if (identical(ir$tag, "switch_num_expr")) {
+        arg_list <- decl$formal_names
+        c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
+
+        extract_lines <- vapply(
+            arg_list,
+            function(a) tcc_quick_codegen_arg_extract(a, ir$arg_modes[[a]]),
+            character(1)
+        )
+
+        sw <- ir$switch
+        sel <- tcc_quick_codegen_node(sw$selector)
+        n <- length(sw$cases)
+
+        case_lines <- character(0)
+        for (i in seq_len(n)) {
+            expr_i <- tcc_quick_codegen_node(sw$cases[[i]])
+            ret_i <- if (sw$result_mode == "double") {
+                sprintf("return Rf_ScalarReal((double)%s);", expr_i)
+            } else if (sw$result_mode == "logical") {
+                sprintf("return Rf_ScalarLogical(((%s) ? 1 : 0));", expr_i)
+            } else {
+                sprintf("return Rf_ScalarInteger((int)%s);", expr_i)
+            }
+            case_lines <- c(case_lines, sprintf("    case %d: %s", i, ret_i))
+        }
+
+        return(paste(
+            "#include <R.h>",
+            "#include <Rinternals.h>",
+            "#include <math.h>",
+            "",
+            sprintf("SEXP %s(%s) {", fn_name, c_args),
+            paste0("  ", extract_lines, collapse = "\n"),
+            sprintf("  int tcc_sw_sel = (int)(%s);", sel),
+            "  switch (tcc_sw_sel) {",
+            paste(case_lines, collapse = "\n"),
+            "    default: return R_NilValue;",
+            "  }",
+            "}",
+            sep = "\n"
+        ))
+    }
+
     if (!identical(ir$tag, "scalar_expr")) {
-        stop("Codegen only supports nested_loop_kernel/scalar_expr/rf_lang3_call/internal_call2 IR in MVP", call. = FALSE)
+        stop("Codegen only supports nested_loop_kernel/scalar_expr/rf_lang3_call/internal_call2/switch_num_expr IR in current subset", call. = FALSE)
     }
 
     arg_list <- decl$formal_names

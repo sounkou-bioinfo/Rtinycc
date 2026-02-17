@@ -40,7 +40,7 @@ tcc_quick_parse_type_spec <- function(spec) {
 
     if (!type_name %in% c("double", "integer", "logical")) {
         stop(
-            "tcc_quick MVP supports only double/integer/logical declarations",
+            "tcc_quick current subset supports only double/integer/logical declarations",
             call. = FALSE
         )
     }

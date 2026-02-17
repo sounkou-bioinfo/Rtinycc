@@ -20,6 +20,29 @@ tcc_quick_promote_mode <- function(lhs, rhs) {
     NULL
 }
 
+tcc_quick_promote_many <- function(modes) {
+    if (length(modes) < 1L) {
+        return(NULL)
+    }
+    out <- modes[[1]]
+    if (length(modes) == 1L) {
+        return(out)
+    }
+    for (m in modes[-1]) {
+        out2 <- tcc_quick_promote_mode(out, m)
+        if (!is.null(out2)) {
+            out <- out2
+            next
+        }
+        if (identical(out, m) && identical(out, "logical")) {
+            out <- "logical"
+            next
+        }
+        return(NULL)
+    }
+    out
+}
+
 tcc_quick_symbol_mode <- function(sym_name, decl) {
     if (!sym_name %in% names(decl$args)) {
         return(NULL)
@@ -87,7 +110,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
 
     if (fname == "if") {
         if (length(e) != 4L) {
-            return(tcc_quick_lower_result(FALSE, reason = "if() requires condition, then, else in MVP"))
+            return(tcc_quick_lower_result(FALSE, reason = "if() requires condition, then, else in current subset"))
         }
         cond <- tcc_quick_lower_expr(e[[2]], decl, locals)
         yes <- tcc_quick_lower_expr(e[[3]], decl, locals)
@@ -126,7 +149,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
 
     if (fname == "ifelse") {
         if (length(e) != 4L) {
-            return(tcc_quick_lower_result(FALSE, reason = "ifelse() requires cond, yes, no in MVP"))
+            return(tcc_quick_lower_result(FALSE, reason = "ifelse() requires cond, yes, no in current subset"))
         }
         cond <- tcc_quick_lower_expr(e[[2]], decl, locals)
         yes <- tcc_quick_lower_expr(e[[3]], decl, locals)
@@ -154,6 +177,58 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
             TRUE,
             node = list(tag = "if", cond = cond$node, yes = yes$node, no = no$node),
             mode = out_mode
+        ))
+    }
+
+    if (fname == "switch") {
+        # Current subset switch support: numeric selector
+        # switch(sel, case1, case2, ...)
+        # Out-of-range selectors return NULL.
+        if (length(e) < 3L) {
+            return(tcc_quick_lower_result(FALSE, reason = "switch() requires selector and at least one case in current subset"))
+        }
+
+        arg_names <- names(as.list(e)[-1])
+        if (!is.null(arg_names) && any(nzchar(arg_names))) {
+            return(tcc_quick_lower_result(FALSE, reason = "switch() named arms are not supported in current subset"))
+        }
+
+        selector <- tcc_quick_lower_expr(e[[2]], decl, locals)
+        if (!selector$ok) {
+            return(selector)
+        }
+        if (!selector$mode %in% c("integer", "double", "logical")) {
+            return(tcc_quick_lower_result(FALSE, reason = "switch() selector must be scalar numeric/logical in current subset"))
+        }
+
+        arm_exprs <- as.list(e)[-c(1, 2)]
+        if (length(arm_exprs) < 1L) {
+            return(tcc_quick_lower_result(FALSE, reason = "switch() requires at least one case"))
+        }
+
+        lowered_arms <- lapply(arm_exprs, function(a) tcc_quick_lower_expr(a, decl, locals))
+        bad <- which(!vapply(lowered_arms, function(x) isTRUE(x$ok), logical(1)))
+        if (length(bad) > 0L) {
+            return(lowered_arms[[bad[[1]]]])
+        }
+
+        arm_modes <- vapply(lowered_arms, function(x) x$mode, character(1))
+        out_mode <- tcc_quick_promote_many(arm_modes)
+        if (is.null(out_mode)) {
+            return(tcc_quick_lower_result(FALSE, reason = "switch() arms must have compatible scalar types"))
+        }
+
+        case_nodes <- lapply(lowered_arms, function(x) x$node)
+
+        return(tcc_quick_lower_result(
+            TRUE,
+            node = list(
+                tag = "switch_num",
+                selector = selector$node,
+                cases = case_nodes,
+                result_mode = out_mode
+            ),
+            mode = "sexp"
         ))
     }
 
@@ -216,7 +291,7 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
     }
 
     if (length(e) != 3L) {
-        return(tcc_quick_lower_result(FALSE, reason = "Unsupported call arity in MVP"))
+        return(tcc_quick_lower_result(FALSE, reason = "Unsupported call arity in current subset"))
     }
 
     lhs <- tcc_quick_lower_expr(e[[2]], decl, locals)
@@ -586,6 +661,10 @@ tcc_quick_lower_block <- function(exprs, decl) {
 
     if (identical(lowered$node$tag, "rf_lang3_call")) {
         return(lowered$node)
+    }
+
+    if (identical(lowered$node$tag, "switch_num")) {
+        return(list(tag = "switch_num_expr", switch = lowered$node, arg_modes = vapply(decl$args[decl$formal_names], function(x) x$mode, character(1))))
     }
 
     if (!lowered$mode %in% c("double", "integer", "logical")) {

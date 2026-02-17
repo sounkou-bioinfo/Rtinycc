@@ -56,6 +56,32 @@ block_fast <- tcc_quick(block_expr)
 expect_equal(block_fast(2.0, 3.0), block_expr(2.0, 3.0))
 expect_equal(block_fast(3.0, 4.0), block_expr(3.0, 4.0))
 
+switch_expr <- function(sel, x, y) {
+    declare(type(sel = integer(1)), type(x = double(1)), type(y = double(1)))
+    switch(sel,
+        x + y,
+        x - y,
+        x * y
+    )
+}
+
+switch_fast <- tcc_quick(switch_expr)
+expect_equal(switch_fast(1L, 5.0, 2.0), switch_expr(1L, 5.0, 2.0))
+expect_equal(switch_fast(2L, 5.0, 2.0), switch_expr(2L, 5.0, 2.0))
+expect_equal(switch_fast(3L, 5.0, 2.0), switch_expr(3L, 5.0, 2.0))
+expect_equal(switch_fast(9L, 5.0, 2.0), switch_expr(9L, 5.0, 2.0))
+
+switch_named <- function(sel, x, y) {
+    declare(type(sel = integer(1)), type(x = double(1)), type(y = double(1)))
+    switch(sel,
+        add = x + y,
+        sub = x - y,
+        x * y
+    )
+}
+
+expect_true(identical(tcc_quick(switch_named, fallback = "always"), switch_named))
+
 max_dbl <- function(x, y) {
     declare(type(x = double(1)), type(y = double(1)))
     max(x, y)
@@ -74,7 +100,7 @@ expect_true(identical(fallback_fn, unsupported))
 
 expect_error(
     tcc_quick(unsupported, fallback = "never"),
-    pattern = "outside tcc_quick MVP subset"
+    pattern = "outside the current tcc_quick subset"
 )
 
 boundary_internal <- function(x) {
@@ -87,7 +113,7 @@ expect_true(identical(boundary_fallback, boundary_internal))
 
 expect_error(
     tcc_quick(boundary_internal, fallback = "never"),
-    pattern = "outside tcc_quick MVP subset"
+    pattern = "outside the current tcc_quick subset"
 )
 
 boundary_nested <- function(x) {
