@@ -2,46 +2,51 @@
 # Copyright (C) 2025-2026 Sounkou Mahamane Toure
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-tcc_quick_make_wrapper <- function(compiled_callable, formals_template, compiled_obj, fn) {
-    out <- function() NULL
-    formals(out) <- formals_template
+tcc_quick_make_wrapper <- function(
+  compiled_callable,
+  formals_template,
+  compiled_obj,
+  fn
+) {
+  out <- function() NULL
+  formals(out) <- formals_template
 
-    arg_syms <- lapply(names(formals_template), as.name)
-    call_expr <- as.call(c(as.name(".compiled_callable"), arg_syms))
-    body(out) <- call_expr
+  arg_syms <- lapply(names(formals_template), as.name)
+  call_expr <- as.call(c(as.name(".compiled_callable"), arg_syms))
+  body(out) <- call_expr
 
-    environment(out) <- list2env(
-        list(
-            .compiled_callable = compiled_callable,
-            .compiled_obj = compiled_obj,
-            .original_fn = fn
-        ),
-        parent = environment(fn)
-    )
+  environment(out) <- list2env(
+    list(
+      .compiled_callable = compiled_callable,
+      .compiled_obj = compiled_obj,
+      .original_fn = fn
+    ),
+    parent = environment(fn)
+  )
 
-    out
+  out
 }
 
 tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
-    entry <- "tcc_quick_entry"
-    src <- tcc_quick_codegen(ir, decl, fn_name = entry)
+  entry <- "tcc_quick_entry"
+  src <- tcc_quick_codegen(ir, decl, fn_name = entry)
 
-    if (isTRUE(debug)) {
-        message("tcc_quick generated C source:\n", src)
-    }
+  if (isTRUE(debug)) {
+    message("tcc_quick generated C source:\n", src)
+  }
 
-    spec <- list(args = rep("sexp", length(decl$formal_names)), returns = "sexp")
-    names(spec$args) <- NULL
+  spec <- list(args = rep("sexp", length(decl$formal_names)), returns = "sexp")
+  names(spec$args) <- NULL
 
-    ffi <- tcc_ffi() |>
-        tcc_source(src)
-    ffi <- do.call(tcc_bind, c(list(ffi), setNames(list(spec), entry)))
-    compiled <- tcc_compile(ffi)
+  ffi <- tcc_ffi() |>
+    tcc_source(src)
+  ffi <- do.call(tcc_bind, c(list(ffi), setNames(list(spec), entry)))
+  compiled <- tcc_compile(ffi)
 
-    list(
-        callable = compiled[[entry]],
-        compiled = compiled
-    )
+  list(
+    callable = compiled[[entry]],
+    compiled = compiled
+  )
 }
 
 #' Compile a small declare()-annotated R subset with TinyCC
@@ -74,41 +79,59 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 #'   fallback is used. When `mode = "code"`, returns a character string
 #'   containing generated C source.
 #' @export
-tcc_quick <- function(fn, fallback = c("auto", "always", "never"), mode = c("compile", "code"), debug = FALSE) {
-    if (!is.function(fn)) {
-        stop("fn must be a function", call. = FALSE)
+tcc_quick <- function(
+  fn,
+  fallback = c("auto", "always", "never"),
+  mode = c("compile", "code"),
+  debug = FALSE
+) {
+  if (!is.function(fn)) {
+    stop("fn must be a function", call. = FALSE)
+  }
+
+  fallback <- match.arg(fallback)
+  mode <- match.arg(mode)
+  decl <- tcc_quick_parse_declare(fn)
+  ir <- tcc_quick_lower(fn, decl)
+
+  if (identical(ir$tag, "fallback")) {
+    if (isTRUE(debug)) {
+      message("tcc_quick fallback reason: ", ir$reason)
     }
-
-    fallback <- match.arg(fallback)
-    mode <- match.arg(mode)
-    decl <- tcc_quick_parse_declare(fn)
-    ir <- tcc_quick_lower(fn, decl)
-
-    if (identical(ir$tag, "fallback")) {
-        if (isTRUE(debug)) {
-            message("tcc_quick fallback reason: ", ir$reason)
-        }
-        if (mode == "code") {
-            stop("No code generated because function is outside the current tcc_quick subset: ", ir$reason, call. = FALSE)
-        }
-        if (fallback == "never") {
-            stop("Function is outside the current tcc_quick subset: ", ir$reason, call. = FALSE)
-        }
-        return(fn)
-    }
-
     if (mode == "code") {
-        return(tcc_quick_codegen(ir, decl, fn_name = "tcc_quick_entry"))
+      stop(
+        "No code generated because function is outside the current tcc_quick subset: ",
+        ir$reason,
+        call. = FALSE
+      )
     }
-
-    cache_key <- tcc_quick_cache_key(fn, decl)
-    cache_hit <- tcc_quick_cache_get(cache_key)
-    if (!is.null(cache_hit)) {
-        return(cache_hit)
+    if (fallback == "never") {
+      stop(
+        "Function is outside the current tcc_quick subset: ",
+        ir$reason,
+        call. = FALSE
+      )
     }
+    return(fn)
+  }
 
-    built <- tcc_quick_compile(fn, decl, ir, debug = debug)
-    wrapped <- tcc_quick_make_wrapper(built$callable, formals(fn), built$compiled, fn)
-    tcc_quick_cache_set(cache_key, wrapped)
-    wrapped
+  if (mode == "code") {
+    return(tcc_quick_codegen(ir, decl, fn_name = "tcc_quick_entry"))
+  }
+
+  cache_key <- tcc_quick_cache_key(fn, decl)
+  cache_hit <- tcc_quick_cache_get(cache_key)
+  if (!is.null(cache_hit)) {
+    return(cache_hit)
+  }
+
+  built <- tcc_quick_compile(fn, decl, ir, debug = debug)
+  wrapped <- tcc_quick_make_wrapper(
+    built$callable,
+    formals(fn),
+    built$compiled,
+    fn
+  )
+  tcc_quick_cache_set(cache_key, wrapped)
+  wrapped
 }

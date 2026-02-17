@@ -281,7 +281,10 @@ tcc_bind <- function(ffi, ...) {
     has_varargs <- !is.null(sym$varargs)
     has_varargs_types <- !is.null(sym$varargs_types)
 
-    if (!is.null(sym$variadic) && (!is.logical(sym$variadic) || length(sym$variadic) != 1)) {
+    if (
+      !is.null(sym$variadic) &&
+        (!is.logical(sym$variadic) || length(sym$variadic) != 1)
+    ) {
       stop(
         "Symbol '",
         sym_name,
@@ -468,7 +471,12 @@ tcc_bind <- function(ffi, ...) {
         sym$varargs_mode <- "prefix"
         sym$varargs_types <- NULL
       }
-    } else if (has_varargs || has_varargs_types || !is.null(sym$varargs_min) || !is.null(sym$varargs_max)) {
+    } else if (
+      has_varargs ||
+        has_varargs_types ||
+        !is.null(sym$varargs_min) ||
+        !is.null(sym$varargs_max)
+    ) {
       stop(
         "Symbol '",
         sym_name,
@@ -697,21 +705,30 @@ infer_variadic_arg_type <- function(x, allowed_types) {
     if ("ptr" %in% allowed_types) {
       return("ptr")
     }
-    stop("external pointer variadic argument requires allowed type 'ptr'", call. = FALSE)
+    stop(
+      "external pointer variadic argument requires allowed type 'ptr'",
+      call. = FALSE
+    )
   }
 
   if (is.character(x) && length(x) == 1) {
     if ("cstring" %in% allowed_types) {
       return("cstring")
     }
-    stop("character variadic argument requires allowed type 'cstring'", call. = FALSE)
+    stop(
+      "character variadic argument requires allowed type 'cstring'",
+      call. = FALSE
+    )
   }
 
   if (is.logical(x) && length(x) == 1) {
     if ("bool" %in% allowed_types) {
       return("bool")
     }
-    stop("logical variadic argument requires allowed type 'bool'", call. = FALSE)
+    stop(
+      "logical variadic argument requires allowed type 'bool'",
+      call. = FALSE
+    )
   }
 
   if (is.raw(x) && length(x) == 1) {
@@ -721,16 +738,33 @@ infer_variadic_arg_type <- function(x, allowed_types) {
     if ("i8" %in% allowed_types) {
       return("i8")
     }
-    stop("raw variadic argument requires allowed type 'u8' or 'i8'", call. = FALSE)
+    stop(
+      "raw variadic argument requires allowed type 'u8' or 'i8'",
+      call. = FALSE
+    )
   }
 
   if (is.integer(x) && length(x) == 1) {
-    pref <- c("i32", "i64", "u32", "u64", "i16", "u16", "i8", "u8", "f64", "f32")
+    pref <- c(
+      "i32",
+      "i64",
+      "u32",
+      "u64",
+      "i16",
+      "u16",
+      "i8",
+      "u8",
+      "f64",
+      "f32"
+    )
     pick <- pref[pref %in% allowed_types]
     if (length(pick) > 0) {
       return(pick[[1]])
     }
-    stop("integer variadic argument has no compatible allowed type", call. = FALSE)
+    stop(
+      "integer variadic argument has no compatible allowed type",
+      call. = FALSE
+    )
   }
 
   if (is.double(x) && length(x) == 1) {
@@ -739,7 +773,10 @@ infer_variadic_arg_type <- function(x, allowed_types) {
     if (length(pick) > 0) {
       return(pick[[1]])
     }
-    stop("numeric variadic argument has no compatible allowed floating type", call. = FALSE)
+    stop(
+      "numeric variadic argument has no compatible allowed floating type",
+      call. = FALSE
+    )
   }
 
   stop(
@@ -1034,7 +1071,10 @@ tcc_compiled_object <- function(
         max_varargs <- sym$varargs_max %||% min_varargs
 
         for (n_varargs in seq.int(min_varargs, max_varargs)) {
-          type_sequences <- generate_variadic_type_sequences(allowed_types, n_varargs)
+          type_sequences <- generate_variadic_type_sequences(
+            allowed_types,
+            n_varargs
+          )
           for (this_types in type_sequences) {
             wrapper_name <- variadic_wrapper_name_types(
               paste0("R_wrap_", sym_name),
@@ -1075,7 +1115,10 @@ tcc_compiled_object <- function(
         min_varargs <- sym$varargs_min %||% max_varargs
 
         for (n_varargs in seq.int(min_varargs, max_varargs)) {
-          wrapper_name <- variadic_wrapper_name(paste0("R_wrap_", sym_name), n_varargs)
+          wrapper_name <- variadic_wrapper_name(
+            paste0("R_wrap_", sym_name),
+            n_varargs
+          )
 
           tryCatch(
             {
@@ -1107,7 +1150,11 @@ tcc_compiled_object <- function(
       }
 
       if (length(fn_ptrs) == 0) {
-        warning("Could not bind any variadic wrappers for symbol '", sym_name, "'")
+        warning(
+          "Could not bind any variadic wrappers for symbol '",
+          sym_name,
+          "'"
+        )
         next
       }
 
@@ -1252,7 +1299,11 @@ make_callable <- function(fn_ptr, sym, state) {
         key <- variadic_signature_key(as.list(inferred_types))
         call_ptr <- if (is.list(fn_ptr)) fn_ptr[[key]] else fn_ptr
       } else {
-        call_ptr <- if (is.list(fn_ptr)) fn_ptr[[as.character(n_tail)]] else fn_ptr
+        call_ptr <- if (is.list(fn_ptr)) {
+          fn_ptr[[as.character(n_tail)]]
+        } else {
+          fn_ptr
+        }
       }
 
       if (is.null(call_ptr)) {

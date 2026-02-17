@@ -91,7 +91,10 @@ variadic_wrapper_name_types <- function(wrapper_name, vararg_types) {
   suffix <- if (length(vararg_types) == 0) {
     "none"
   } else {
-    paste(vapply(vararg_types, variadic_type_token, character(1)), collapse = "__")
+    paste(
+      vapply(vararg_types, variadic_type_token, character(1)),
+      collapse = "__"
+    )
   }
   paste0(wrapper_name, "__v", length(vararg_types), "__", suffix)
 }
@@ -304,12 +307,18 @@ generate_wrappers <- function(
         max_varargs <- sym$varargs_max %||% min_varargs
 
         for (n_varargs in seq.int(min_varargs, max_varargs)) {
-          type_sequences <- generate_variadic_type_sequences(allowed_types, n_varargs)
+          type_sequences <- generate_variadic_type_sequences(
+            allowed_types,
+            n_varargs
+          )
 
           for (this_varargs in type_sequences) {
             wrapper <- generate_c_wrapper(
               symbol_name = sym_name,
-              wrapper_name = variadic_wrapper_name_types(base_wrapper_name, this_varargs),
+              wrapper_name = variadic_wrapper_name_types(
+                base_wrapper_name,
+                this_varargs
+              ),
               arg_types = sym$args,
               vararg_types = this_varargs,
               return_type = sym$returns,

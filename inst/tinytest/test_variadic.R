@@ -1,7 +1,8 @@
 # Variadic FFI bindings
 
 ffi_var <- tcc_ffi() |>
-    tcc_source("
+  tcc_source(
+    "
     #include <stdarg.h>
 
     int sum3(int base, ...) {
@@ -22,34 +23,36 @@ ffi_var <- tcc_ffi() |>
       va_end(ap);
       return x + (double)i + d;
     }
-  ") |>
-    tcc_bind(
-        sum3 = list(
-            args = list("i32"),
-            variadic = TRUE,
-            varargs = list("i32", "i32", "i32"),
-            returns = "i32"
-        ),
-        add_mix = list(
-            args = list("f64"),
-            variadic = TRUE,
-            varargs = list("i32", "f64"),
-            returns = "f64"
-        )
-    ) |>
-    tcc_compile()
+  "
+  ) |>
+  tcc_bind(
+    sum3 = list(
+      args = list("i32"),
+      variadic = TRUE,
+      varargs = list("i32", "i32", "i32"),
+      returns = "i32"
+    ),
+    add_mix = list(
+      args = list("f64"),
+      variadic = TRUE,
+      varargs = list("i32", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
 
 expect_equal(ffi_var$sum3(10L, 1L, 2L, 3L), 16L)
 expect_equal(ffi_var$add_mix(1.5, 2L, 3.25), 6.75)
 
 expect_error(
-    ffi_var$sum3(10L, 1L, 2L),
-    info = "variadic binding enforces declared total argument count"
+  ffi_var$sum3(10L, 1L, 2L),
+  info = "variadic binding enforces declared total argument count"
 )
 
 # Opt-in prefix arity: allow up to N typed varargs via varargs_min = 0
 ffi_var_prefix <- tcc_ffi() |>
-    tcc_source("\
+  tcc_source(
+    "\
     #include <stdarg.h>\
 \
     int sum_n(int n, ...) {\
@@ -60,55 +63,59 @@ ffi_var_prefix <- tcc_ffi() |>
       va_end(ap);\
       return s;\
     }\
-  ") |>
-    tcc_bind(
-        sum_n = list(
-            args = list("i32"),
-            variadic = TRUE,
-            varargs = list("i32", "i32", "i32"),
-            varargs_min = 0L,
-            returns = "i32"
-        )
-    ) |>
-    tcc_compile()
+  "
+  ) |>
+  tcc_bind(
+    sum_n = list(
+      args = list("i32"),
+      variadic = TRUE,
+      varargs = list("i32", "i32", "i32"),
+      varargs_min = 0L,
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
 
 expect_equal(ffi_var_prefix$sum_n(0L), 0L)
 expect_equal(ffi_var_prefix$sum_n(2L, 10L, 20L), 30L)
 expect_equal(ffi_var_prefix$sum_n(3L, 1L, 2L, 3L), 6L)
 
 expect_error(
-    ffi_var_prefix$sum_n(4L, 1L, 2L, 3L, 4L),
-    info = "variadic prefix mode enforces max declared tail"
+  ffi_var_prefix$sum_n(4L, 1L, 2L, 3L, 4L),
+  info = "variadic prefix mode enforces max declared tail"
 )
 
 expect_error(
-    tcc_ffi() |>
-        tcc_bind(bad = list(args = list("i32"), varargs = list("i32"), returns = "i32")),
-    info = "varargs requires variadic=TRUE"
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(args = list("i32"), varargs = list("i32"), returns = "i32")
+    ),
+  info = "varargs requires variadic=TRUE"
 )
 
 expect_error(
-    tcc_ffi() |>
-        tcc_bind(bad = list(args = list("i32"), variadic = TRUE, returns = "i32")),
-    info = "variadic requires varargs or varargs_types"
+  tcc_ffi() |>
+    tcc_bind(bad = list(args = list("i32"), variadic = TRUE, returns = "i32")),
+  info = "variadic requires varargs or varargs_types"
 )
 
 expect_error(
-    tcc_ffi() |>
-        tcc_bind(
-            bad = list(
-                args = list("i32"),
-                variadic = TRUE,
-                varargs = list("integer_array"),
-                returns = "i32"
-            )
-        ),
-    info = "variadic varargs must be scalar types"
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs = list("integer_array"),
+        returns = "i32"
+      )
+    ),
+  info = "variadic varargs must be scalar types"
 )
 
 # True variadic mode with allowed types + min/max arity
 ffi_var_types <- tcc_ffi() |>
-    tcc_source("\
+  tcc_source(
+    "\
     #include <stdarg.h>\
 \
     double probe_types(int tag, ...) {\
@@ -121,72 +128,73 @@ ffi_var_types <- tcc_ffi() |>
       va_end(ap);\
       return out;\
     }\
-  ") |>
-    tcc_bind(
-        probe_types = list(
-            args = list("i32"),
-            variadic = TRUE,
-            varargs_types = list("f64", "i32"),
-            varargs_min = 1L,
-            varargs_max = 2L,
-            returns = "f64"
-        )
-    ) |>
-    tcc_compile()
+  "
+  ) |>
+  tcc_bind(
+    probe_types = list(
+      args = list("i32"),
+      variadic = TRUE,
+      varargs_types = list("f64", "i32"),
+      varargs_min = 1L,
+      varargs_max = 2L,
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
 
 expect_equal(ffi_var_types$probe_types(1L, 2L), 2)
 expect_equal(ffi_var_types$probe_types(2L, 2.5), 2.5)
 expect_equal(ffi_var_types$probe_types(3L, 1L, 2.5), 3.5)
 
 expect_error(
-    ffi_var_types$probe_types(0L),
-    info = "true variadic mode enforces varargs_min"
+  ffi_var_types$probe_types(0L),
+  info = "true variadic mode enforces varargs_min"
 )
 
 expect_error(
-    ffi_var_types$probe_types(4L, 1L, 2L, 3L),
-    info = "true variadic mode enforces varargs_max"
+  ffi_var_types$probe_types(4L, 1L, 2L, 3L),
+  info = "true variadic mode enforces varargs_max"
 )
 
 expect_error(
-    tcc_ffi() |>
-        tcc_bind(
-            bad = list(
-                args = list("i32"),
-                variadic = TRUE,
-                varargs = list("i32"),
-                varargs_types = list("i32"),
-                returns = "i32"
-            )
-        ),
-    info = "cannot set both varargs and varargs_types"
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs = list("i32"),
+        varargs_types = list("i32"),
+        returns = "i32"
+      )
+    ),
+  info = "cannot set both varargs and varargs_types"
 )
 
 expect_error(
-    tcc_ffi() |>
-        tcc_bind(
-            bad = list(
-                args = list("i32"),
-                variadic = TRUE,
-                varargs_types = list("i32"),
-                varargs_min = 2L,
-                varargs_max = 1L,
-                returns = "i32"
-            )
-        ),
-    info = "varargs_min <= varargs_max"
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs_types = list("i32"),
+        varargs_min = 2L,
+        varargs_max = 1L,
+        returns = "i32"
+      )
+    ),
+  info = "varargs_min <= varargs_max"
 )
 
 expect_error(
-    tcc_ffi() |>
-        tcc_bind(
-            bad = list(
-                args = list("i32"),
-                variadic = TRUE,
-                varargs = list("i32", "i32"),
-                varargs_min = 3L,
-                returns = "i32"
-            )
-        ),
-    info = "varargs_min must be between 0 and length(varargs)"
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs = list("i32", "i32"),
+        varargs_min = 3L,
+        returns = "i32"
+      )
+    ),
+  info = "varargs_min must be between 0 and length(varargs)"
 )
