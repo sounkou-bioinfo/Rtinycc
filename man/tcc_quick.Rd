@@ -4,18 +4,27 @@
 \alias{tcc_quick}
 \title{Compile a small declare()-annotated R subset with TinyCC}
 \usage{
-tcc_quick(fn, fallback = c("auto", "always", "never"), debug = FALSE)
+tcc_quick(
+  fn,
+  fallback = c("auto", "always", "never"),
+  mode = c("compile", "code"),
+  debug = FALSE
+)
 }
 \arguments{
 \item{fn}{Function to compile.}
 
 \item{fallback}{One of \code{"auto"}, \code{"always"}, or \code{"never"}.}
 
+\item{mode}{One of \code{"compile"} (default) or \code{"code"}. Use \code{"code"}
+to return generated C source without compiling.}
+
 \item{debug}{Print generated C source and lowering diagnostics.}
 }
 \value{
 A function with the same formals as \code{fn}, or \code{fn} itself when
-fallback is used.
+fallback is used. When \code{mode = "code"}, returns a character string
+containing generated C source.
 }
 \description{
 \code{tcc_quick()} is an experimental C-first path for compiling a strict subset

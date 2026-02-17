@@ -119,3 +119,7 @@ expect_equal(
     slow_convolve(a, b),
     tolerance = 1e-12
 )
+
+code_only <- tcc_quick(slow_convolve, mode = "code")
+expect_true(is.character(code_only))
+expect_true(grepl("SEXP tcc_quick_entry", code_only, fixed = TRUE))

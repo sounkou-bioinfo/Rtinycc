@@ -67,16 +67,20 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 #'
 #' @param fn Function to compile.
 #' @param fallback One of `"auto"`, `"always"`, or `"never"`.
+#' @param mode One of `"compile"` (default) or `"code"`. Use `"code"`
+#'   to return generated C source without compiling.
 #' @param debug Print generated C source and lowering diagnostics.
 #' @return A function with the same formals as `fn`, or `fn` itself when
-#'   fallback is used.
+#'   fallback is used. When `mode = "code"`, returns a character string
+#'   containing generated C source.
 #' @export
-tcc_quick <- function(fn, fallback = c("auto", "always", "never"), debug = FALSE) {
+tcc_quick <- function(fn, fallback = c("auto", "always", "never"), mode = c("compile", "code"), debug = FALSE) {
     if (!is.function(fn)) {
         stop("fn must be a function", call. = FALSE)
     }
 
     fallback <- match.arg(fallback)
+    mode <- match.arg(mode)
     decl <- tcc_quick_parse_declare(fn)
     ir <- tcc_quick_lower(fn, decl)
 
@@ -84,10 +88,17 @@ tcc_quick <- function(fn, fallback = c("auto", "always", "never"), debug = FALSE
         if (isTRUE(debug)) {
             message("tcc_quick fallback reason: ", ir$reason)
         }
+        if (mode == "code") {
+            stop("No code generated because function is outside tcc_quick MVP subset: ", ir$reason, call. = FALSE)
+        }
         if (fallback == "never") {
             stop("Function is outside tcc_quick MVP subset: ", ir$reason, call. = FALSE)
         }
         return(fn)
+    }
+
+    if (mode == "code") {
+        return(tcc_quick_codegen(ir, decl, fn_name = "tcc_quick_entry"))
     }
 
     cache_key <- tcc_quick_cache_key(fn, decl)
