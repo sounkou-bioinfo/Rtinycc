@@ -880,7 +880,7 @@ x <- dnorm(seq(-3, 3, len = 100000))
 weights <- dnorm(seq(-1, 1, len = 100))
 
 timings_roll_mean <- bench::mark(
-  r = slow_roll_mean(x, weights),
+  R = slow_roll_mean(x, weights),
   quickr = quickr_roll_mean(x, weights = weights),
   Rtinycc_quick = quick_tcc_roll_mean(x, weights = weights),
   min_time = 1

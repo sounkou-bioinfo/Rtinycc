@@ -112,6 +112,13 @@ tcc_quick <- function(
         call. = FALSE
       )
     }
+    warning(
+      "tcc_quick: falling back to R for '",
+      deparse(substitute(fn)),
+      "': ",
+      ir$reason,
+      call. = FALSE
+    )
     return(fn)
   }
 

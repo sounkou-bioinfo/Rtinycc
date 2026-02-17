@@ -58,7 +58,11 @@ expect_equal(block_fast(3.0, 4.0), block_expr(3.0, 4.0))
 
 switch_expr <- function(sel, x, y) {
   declare(type(sel = integer(1)), type(x = double(1)), type(y = double(1)))
-  switch(sel, x + y, x - y, x * y)
+  switch(sel,
+    x + y,
+    x - y,
+    x * y
+  )
 }
 
 switch_fast <- tcc_quick(switch_expr)
@@ -69,11 +73,15 @@ expect_equal(switch_fast(9L, 5.0, 2.0), switch_expr(9L, 5.0, 2.0))
 
 switch_named <- function(sel, x, y) {
   declare(type(sel = integer(1)), type(x = double(1)), type(y = double(1)))
-  switch(sel, add = x + y, sub = x - y, x * y)
+  switch(sel,
+    add = x + y,
+    sub = x - y,
+    x * y
+  )
 }
 
 expect_true(identical(
-  tcc_quick(switch_named, fallback = "always"),
+  suppressWarnings(tcc_quick(switch_named, fallback = "always")),
   switch_named
 ))
 
@@ -82,7 +90,7 @@ max_dbl <- function(x, y) {
   max(x, y)
 }
 
-max_fast <- tcc_quick(max_dbl)
+max_fast <- suppressWarnings(tcc_quick(max_dbl))
 expect_equal(max_fast(2.5, 1.5), 2.5)
 
 sqrt_from_fallback <- function(x) {
@@ -98,7 +106,7 @@ pmax3 <- function(x, y, z) {
   pmax(x, y, z)
 }
 
-pmax3_fast <- tcc_quick(pmax3)
+pmax3_fast <- suppressWarnings(tcc_quick(pmax3))
 expect_equal(pmax3_fast(2.0, 9.0, 3.0), pmax3(2.0, 9.0, 3.0), tolerance = 1e-12)
 
 pmax5 <- function(a, b, c, d, e) {
@@ -112,7 +120,7 @@ pmax5 <- function(a, b, c, d, e) {
   pmax(a, b, c, d, e)
 }
 
-pmax5_fast <- tcc_quick(pmax5)
+pmax5_fast <- suppressWarnings(tcc_quick(pmax5))
 expect_equal(
   pmax5_fast(2.0, 9.0, 3.0, 4.0, 8.0),
   pmax5(2.0, 9.0, 3.0, 4.0, 8.0),
@@ -124,7 +132,7 @@ unsupported <- function(x) {
   .Call("some_native_symbol", x)
 }
 
-fallback_fn <- tcc_quick(unsupported, fallback = "always")
+fallback_fn <- suppressWarnings(tcc_quick(unsupported, fallback = "always"))
 expect_true(identical(fallback_fn, unsupported))
 
 expect_error(
@@ -137,7 +145,7 @@ boundary_internal <- function(x) {
   .Primitive("sqrt")(x)
 }
 
-boundary_fallback <- tcc_quick(boundary_internal, fallback = "always")
+boundary_fallback <- suppressWarnings(tcc_quick(boundary_internal, fallback = "always"))
 expect_true(identical(boundary_fallback, boundary_internal))
 
 expect_error(
@@ -151,7 +159,7 @@ boundary_nested <- function(x) {
 }
 
 expect_true(identical(
-  tcc_quick(boundary_nested, fallback = "always"),
+  suppressWarnings(tcc_quick(boundary_nested, fallback = "always")),
   boundary_nested
 ))
 

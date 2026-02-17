@@ -33,7 +33,10 @@ tcc_quick_parse_type_spec <- function(spec) {
   }
 
   type_name <- as.character(spec[[1]])
-  type_name <- switch(type_name, numeric = "double", type_name)
+  type_name <- switch(type_name,
+    numeric = "double",
+    type_name
+  )
 
   if (!type_name %in% c("double", "integer", "logical")) {
     stop(
@@ -52,7 +55,8 @@ tcc_quick_parse_type_spec <- function(spec) {
   list(
     mode = type_name,
     dims = dims,
-    is_scalar = length(dims) == 1L && !is.na(dims[[1]]) && dims[[1]] == 1L
+    is_scalar = length(dims) == 1L && !is.na(dims[[1]]) && dims[[1]] == 1L,
+    is_matrix = length(dims) == 2L
   )
 }
 

@@ -2,22 +2,28 @@
 # Copyright (C) 2025-2026 Sounkou Mahamane Toure
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-tcc_quick_codegen_arg_extract <- function(arg_name, mode) {
-  if (mode == "double") {
-    return(sprintf("double %s_ = Rf_asReal(%s);", arg_name, arg_name))
-  }
-  if (mode == "integer") {
-    return(sprintf("int %s_ = Rf_asInteger(%s);", arg_name, arg_name))
-  }
-  stop("Unsupported argument mode in codegen", call. = FALSE)
+# Unified codegen for tcc_quick.
+#
+# Takes fn_body IR and produces a complete SEXP-returning C function.
+
+# ---------------------------------------------------------------------------
+# Expression codegen
+# ---------------------------------------------------------------------------
+
+tccq_cg_ident <- function(x) {
+  y <- gsub("[^A-Za-z0-9_]", "_", x)
+  if (grepl("^[0-9]", y)) y <- paste0("v_", y)
+  y
 }
 
-tcc_quick_codegen_node <- function(node) {
-  if (identical(node$tag, "var")) {
-    return(sprintf("%s_", node$name))
+tccq_cg_expr <- function(node) {
+  tag <- node$tag
+
+  if (tag == "var") {
+    return(paste0(tccq_cg_ident(node$name), "_"))
   }
 
-  if (identical(node$tag, "const")) {
+  if (tag == "const") {
     if (node$mode == "integer") {
       return(sprintf("%d", as.integer(node$value)))
     }
@@ -27,35 +33,23 @@ tcc_quick_codegen_node <- function(node) {
     if (node$mode == "logical") {
       return(if (isTRUE(node$value)) "1" else "0")
     }
-    stop("Unsupported const mode", call. = FALSE)
+    stop("Unknown const mode", call. = FALSE)
   }
 
-  if (identical(node$tag, "unary")) {
-    x <- tcc_quick_codegen_node(node$x)
+  if (tag == "unary") {
+    x <- tccq_cg_expr(node$x)
     if (node$op == "!") {
-      return(sprintf("(!( %s ))", x))
+      return(sprintf("(!(%s))", x))
     }
     return(sprintf("(%s(%s))", node$op, x))
   }
 
-  if (identical(node$tag, "call1")) {
-    x <- tcc_quick_codegen_node(node$x)
-    fun <- switch(
-      node$fun,
-      abs = "fabs",
-      ceiling = "ceil",
-      trunc = "trunc",
-      node$fun
-    )
-    return(sprintf("(%s((double)(%s)))", fun, x))
-  }
-
-  if (identical(node$tag, "binary")) {
-    lhs <- tcc_quick_codegen_node(node$lhs)
-    rhs <- tcc_quick_codegen_node(node$rhs)
+  if (tag == "binary") {
+    lhs <- tccq_cg_expr(node$lhs)
+    rhs <- tccq_cg_expr(node$rhs)
     op <- node$op
     if (op == "%/%") {
-      return(sprintf("(floor((double)(%s) / (double)(%s)))", lhs, rhs))
+      return(sprintf("((int)floor((double)(%s) / (double)(%s)))", lhs, rhs))
     }
     if (op == "%%") {
       return(sprintf("(fmod((double)(%s), (double)(%s)))", lhs, rhs))
@@ -63,477 +57,611 @@ tcc_quick_codegen_node <- function(node) {
     if (op == "^") {
       return(sprintf("(pow((double)(%s), (double)(%s)))", lhs, rhs))
     }
-    if (op == "&&") {
-      op <- "&&"
-    }
-    if (op == "||") {
-      op <- "||"
-    }
-    if (op == "&") {
-      op <- "&&"
-    }
-    if (op == "|") {
-      op <- "||"
-    }
+    if (op == "&") op <- "&&"
+    if (op == "|") op <- "||"
     return(sprintf("((%s) %s (%s))", lhs, op, rhs))
   }
 
-  if (identical(node$tag, "if")) {
-    cond <- tcc_quick_codegen_node(node$cond)
-    yes <- tcc_quick_codegen_node(node$yes)
-    no <- tcc_quick_codegen_node(node$no)
+  if (tag == "if") {
+    cond <- tccq_cg_expr(node$cond)
+    yes <- tccq_cg_expr(node$yes)
+    no <- tccq_cg_expr(node$no)
     return(sprintf("((%s) ? (%s) : (%s))", cond, yes, no))
   }
 
-  if (identical(node$tag, "switch_num")) {
-    sel <- tcc_quick_codegen_node(node$selector)
-    n <- length(node$cases)
-    out <- "R_NilValue"
-    for (i in seq.int(n, 1L)) {
-      case_i <- tcc_quick_codegen_node(node$cases[[i]])
-      out <- sprintf("((((int)(%s)) == %d) ? (%s) : (%s))", sel, i, case_i, out)
-    }
-    return(out)
+  if (tag == "call1") {
+    x <- tccq_cg_expr(node$x)
+    fun <- switch(node$fun,
+      abs = "fabs",
+      ceiling = "ceil",
+      node$fun
+    )
+    return(sprintf("(%s((double)(%s)))", fun, x))
   }
 
-  stop("Unsupported expression node in codegen", call. = FALSE)
+  if (tag == "length") {
+    return(sprintf("n_%s", tccq_cg_ident(node$arr)))
+  }
+  if (tag == "nrow") {
+    return(sprintf("nrow_%s", tccq_cg_ident(node$arr)))
+  }
+  if (tag == "ncol") {
+    return(sprintf("ncol_%s", tccq_cg_ident(node$arr)))
+  }
+
+  if (tag == "vec_get") {
+    arr <- tccq_cg_ident(node$arr)
+    idx <- tccq_cg_expr(node$idx)
+    return(sprintf("p_%s[(R_xlen_t)((%s) - 1)]", arr, idx))
+  }
+
+  if (tag == "mat_get") {
+    arr <- tccq_cg_ident(node$arr)
+    row <- tccq_cg_expr(node$row)
+    col <- tccq_cg_expr(node$col)
+    return(sprintf(
+      "p_%s[(R_xlen_t)((%s) - 1) + (R_xlen_t)((%s) - 1) * nrow_%s]",
+      arr, row, col, arr
+    ))
+  }
+
+  if (tag == "reduce") {
+    # When appearing as an expression, emit the precomputed variable name.
+    # The actual loop is emitted as a statement via tccq_cg_reduce_stmt.
+    return(sprintf("red_%s_%s", node$op, tccq_cg_ident(node$arr)))
+  }
+
+  if (tag == "which_reduce") {
+    return(sprintf(
+      "which_%s_%s",
+      gsub("\\.", "_", node$op), tccq_cg_ident(node$arr)
+    ))
+  }
+
+  if (tag == "cast") {
+    x <- tccq_cg_expr(node$x)
+    if (node$target_mode == "integer") {
+      return(sprintf("((int)(%s))", x))
+    }
+    if (node$target_mode == "double") {
+      return(sprintf("((double)(%s))", x))
+    }
+    return(x)
+  }
+
+  stop(paste0("tccq_cg_expr: unsupported tag '", tag, "'"), call. = FALSE)
 }
 
-tcc_quick_c_ident <- function(x) {
-  y <- gsub("[^A-Za-z0-9_]", "_", x)
-  if (grepl("^[0-9]", y)) {
-    y <- paste0("v_", y)
-  }
-  y
-}
+# ---------------------------------------------------------------------------
+# Statement codegen
+# ---------------------------------------------------------------------------
 
-tcc_quick_codegen_len_expr <- function(e, len_by_array) {
-  if (length(e) == 1L && is.integer(e)) {
-    return(sprintf("%d", as.integer(e)[[1]]))
-  }
-  if (length(e) == 1L && is.double(e)) {
-    return(format(as.double(e)[[1]], scientific = FALSE, trim = TRUE))
+tccq_cg_stmt <- function(node, indent) {
+  tag <- node$tag
+  pad <- strrep("  ", indent)
+
+  if (tag == "block") {
+    lines <- vapply(node$stmts, function(s) tccq_cg_stmt(s, indent), character(1))
+    return(paste(lines, collapse = "\n"))
   }
 
-  if (!is.call(e) || !is.symbol(e[[1]])) {
-    stop("Unsupported output-length expression node", call. = FALSE)
-  }
+  if (tag == "assign") {
+    nm <- tccq_cg_ident(node$name)
 
-  fn <- as.character(e[[1]])
-  if (fn == "(") {
-    if (length(e) != 2L) {
-      stop("Malformed parenthesized length expression", call. = FALSE)
-    }
-    inner <- tcc_quick_codegen_len_expr(e[[2]], len_by_array)
-    return(sprintf("(%s)", inner))
-  }
-
-  if (fn == "length") {
-    if (length(e) != 2L || !is.symbol(e[[2]])) {
-      stop("Malformed length() in output-length expression", call. = FALSE)
-    }
-    nm <- as.character(e[[2]])
-    if (!nm %in% names(len_by_array)) {
-      stop("Unknown symbol in output-length expression: ", nm, call. = FALSE)
-    }
-    return(len_by_array[[nm]])
-  }
-
-  if (fn %in% c("+", "-") && length(e) == 2L) {
-    x <- tcc_quick_codegen_len_expr(e[[2]], len_by_array)
-    return(sprintf("(%s(%s))", fn, x))
-  }
-
-  if (fn %in% c("+", "-", "*", "/") && length(e) == 3L) {
-    lhs <- tcc_quick_codegen_len_expr(e[[2]], len_by_array)
-    rhs <- tcc_quick_codegen_len_expr(e[[3]], len_by_array)
-    return(sprintf("((%s) %s (%s))", lhs, fn, rhs))
-  }
-
-  stop("Unsupported output-length expression operator: ", fn, call. = FALSE)
-}
-
-tcc_quick_codegen_kernel_index_expr <- function(e, loop_var_c) {
-  if (is.symbol(e)) {
-    nm <- as.character(e)
-    if (nm %in% names(loop_var_c)) {
-      return(loop_var_c[[nm]])
-    }
-    stop("Unsupported symbol in kernel index expression: ", nm, call. = FALSE)
-  }
-
-  if (length(e) == 1L && is.integer(e)) {
-    return(sprintf("%d", as.integer(e)[[1]]))
-  }
-  if (length(e) == 1L && is.double(e)) {
-    v <- as.double(e)[[1]]
-    if (!isTRUE(all.equal(v, round(v)))) {
-      stop("Non-integer numeric constant in index expression", call. = FALSE)
-    }
-    return(sprintf("%d", as.integer(round(v))))
-  }
-
-  if (!is.call(e) || !is.symbol(e[[1]])) {
-    stop("Unsupported kernel index expression node", call. = FALSE)
-  }
-
-  fn <- as.character(e[[1]])
-  if (fn == "(") {
-    if (length(e) != 2L) {
-      stop("Malformed parenthesized index expression", call. = FALSE)
-    }
-    inner <- tcc_quick_codegen_kernel_index_expr(e[[2]], loop_var_c)
-    return(sprintf("(%s)", inner))
-  }
-
-  if (fn %in% c("+", "-") && length(e) == 2L) {
-    x <- tcc_quick_codegen_kernel_index_expr(e[[2]], loop_var_c)
-    return(sprintf("(%s(%s))", fn, x))
-  }
-
-  if (fn %in% c("+", "-", "*") && length(e) == 3L) {
-    lhs <- tcc_quick_codegen_kernel_index_expr(e[[2]], loop_var_c)
-    rhs <- tcc_quick_codegen_kernel_index_expr(e[[3]], loop_var_c)
-    return(sprintf("((%s) %s (%s))", lhs, fn, rhs))
-  }
-
-  stop("Unsupported operator in kernel index expression: ", fn, call. = FALSE)
-}
-
-tcc_quick_codegen_kernel_expr <- function(e, loop_var_c, ptr_by_array) {
-  if (is.symbol(e)) {
-    nm <- as.character(e)
-    if (nm %in% names(loop_var_c)) {
-      return(sprintf("((double)%s)", loop_var_c[[nm]]))
-    }
-    stop("Unsupported symbol in kernel expression: ", nm, call. = FALSE)
-  }
-
-  if (length(e) == 1L && is.integer(e)) {
-    return(sprintf("%d", as.integer(e)[[1]]))
-  }
-  if (length(e) == 1L && is.double(e)) {
-    return(format(as.double(e)[[1]], scientific = FALSE, trim = TRUE))
-  }
-
-  if (!is.call(e) || !is.symbol(e[[1]])) {
-    stop("Unsupported kernel expression node", call. = FALSE)
-  }
-
-  fn <- as.character(e[[1]])
-  if (fn == "[") {
-    if (length(e) != 3L || !is.symbol(e[[2]])) {
-      stop("Unsupported subset in kernel expression", call. = FALSE)
-    }
-    arr <- as.character(e[[2]])
-    idx <- tcc_quick_codegen_kernel_index_expr(e[[3]], loop_var_c)
-    if (!arr %in% names(ptr_by_array)) {
-      stop(
-        paste0("Unknown array symbol in kernel expression: ", arr),
-        call. = FALSE
+    # --- vector allocation ---
+    if (identical(node$shape, "vector") &&
+      identical(node$expr$tag, "vec_alloc")) {
+      alloc_mode <- node$expr$alloc_mode
+      sxp_type <- switch(alloc_mode,
+        double = "REALSXP",
+        integer = "INTSXP",
+        logical = "LGLSXP",
+        "REALSXP"
       )
+      len <- tccq_cg_expr(node$expr$len_expr)
+      ptr_fun <- switch(alloc_mode,
+        double = "REAL",
+        integer = "INTEGER",
+        logical = "LOGICAL",
+        "REAL"
+      )
+      return(paste0(
+        pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type,
+        ", (R_xlen_t)(", len, ")));\n",
+        pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
+        pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
+        pad, "nprotect_++;\n",
+        pad, "for (R_xlen_t zz_ = 0; zz_ < n_", nm,
+        "; ++zz_) p_", nm, "[zz_] = 0;"
+      ))
     }
-    ptr <- ptr_by_array[[arr]]
-    return(sprintf("%s[(R_xlen_t)((%s) - 1)]", ptr, idx))
+
+    # --- matrix allocation ---
+    if (identical(node$shape, "matrix") &&
+      identical(node$expr$tag, "mat_alloc")) {
+      nr <- tccq_cg_expr(node$expr$nrow)
+      nc <- tccq_cg_expr(node$expr$ncol)
+      fill <- format(node$expr$fill, scientific = FALSE)
+      return(paste0(
+        pad, "s_", nm, " = PROTECT(Rf_allocMatrix(REALSXP, (int)(",
+        nr, "), (int)(", nc, ")));\n",
+        pad, "nrow_", nm, " = (int)(", nr, ");\n",
+        pad, "ncol_", nm, " = (int)(", nc, ");\n",
+        pad, "n_", nm, " = (R_xlen_t)nrow_", nm,
+        " * (R_xlen_t)ncol_", nm, ";\n",
+        pad, "p_", nm, " = REAL(s_", nm, ");\n",
+        pad, "nprotect_++;\n",
+        pad, "for (R_xlen_t zz_ = 0; zz_ < n_", nm,
+        "; ++zz_) p_", nm, "[zz_] = ", fill, ";"
+      ))
+    }
+
+    # --- scalar assignment ---
+    expr <- tccq_cg_expr(node$expr)
+    return(paste0(pad, nm, "_ = ", expr, ";"))
   }
 
-  if (fn %in% c("+", "-", "*", "/") && length(e) == 3L) {
-    lhs <- tcc_quick_codegen_kernel_expr(e[[2]], loop_var_c, ptr_by_array)
-    rhs <- tcc_quick_codegen_kernel_expr(e[[3]], loop_var_c, ptr_by_array)
-    return(sprintf("((%s) %s (%s))", lhs, fn, rhs))
+  if (tag == "vec_set") {
+    arr <- tccq_cg_ident(node$arr)
+    idx <- tccq_cg_expr(node$idx)
+    val <- tccq_cg_expr(node$value)
+    return(paste0(
+      pad, "p_", arr, "[(R_xlen_t)((", idx, ") - 1)] = ", val, ";"
+    ))
   }
 
-  if (fn %in% c("+", "-") && length(e) == 2L) {
-    x <- tcc_quick_codegen_kernel_expr(e[[2]], loop_var_c, ptr_by_array)
-    return(sprintf("(%s(%s))", fn, x))
+  if (tag == "mat_set") {
+    arr <- tccq_cg_ident(node$arr)
+    row <- tccq_cg_expr(node$row)
+    col <- tccq_cg_expr(node$col)
+    val <- tccq_cg_expr(node$value)
+    return(paste0(
+      pad, "p_", arr, "[(R_xlen_t)((", row, ") - 1) + (R_xlen_t)((",
+      col, ") - 1) * nrow_", arr, "] = ", val, ";"
+    ))
   }
 
-  stop("Unsupported operator in kernel expression: ", fn, call. = FALSE)
+  if (tag == "for") {
+    var <- tccq_cg_ident(node$var)
+    iter <- node$iter
+    body_c <- tccq_cg_stmt(node$body, indent + 1)
+
+    if (iter$tag == "seq_along") {
+      lim <- sprintf("n_%s", tccq_cg_ident(iter$target))
+      return(paste0(
+        pad, "for (R_xlen_t ", var, "_ = 1; ", var, "_ <= ",
+        lim, "; ++", var, "_) {\n",
+        body_c, "\n", pad, "}"
+      ))
+    }
+    if (iter$tag == "seq_len") {
+      lim <- tccq_cg_expr(iter$n)
+      return(paste0(
+        pad, "for (R_xlen_t ", var, "_ = 1; ", var,
+        "_ <= (R_xlen_t)(", lim, "); ++", var, "_) {\n",
+        body_c, "\n", pad, "}"
+      ))
+    }
+    if (iter$tag == "seq_range") {
+      from <- tccq_cg_expr(iter$from)
+      to <- tccq_cg_expr(iter$to)
+      return(paste0(
+        pad, "for (R_xlen_t ", var, "_ = (R_xlen_t)(", from, "); ",
+        var, "_ <= (R_xlen_t)(", to, "); ++", var, "_) {\n",
+        body_c, "\n", pad, "}"
+      ))
+    }
+    stop("Unsupported for-loop iterator tag", call. = FALSE)
+  }
+
+  if (tag == "while") {
+    cond <- tccq_cg_expr(node$cond)
+    body_c <- tccq_cg_stmt(node$body, indent + 1)
+    return(paste0(
+      pad, "while (", cond, ") {\n", body_c, "\n", pad, "}"
+    ))
+  }
+
+  if (tag == "repeat") {
+    body_c <- tccq_cg_stmt(node$body, indent + 1)
+    return(paste0(pad, "for (;;) {\n", body_c, "\n", pad, "}"))
+  }
+
+  if (tag == "break") {
+    return(paste0(pad, "break;"))
+  }
+  if (tag == "next") {
+    return(paste0(pad, "continue;"))
+  }
+
+  if (tag == "if_stmt") {
+    cond <- tccq_cg_expr(node$cond)
+    yes <- tccq_cg_stmt(node$yes, indent + 1)
+    return(paste0(pad, "if (", cond, ") {\n", yes, "\n", pad, "}"))
+  }
+
+  if (tag == "if_else_stmt") {
+    cond <- tccq_cg_expr(node$cond)
+    yes <- tccq_cg_stmt(node$yes, indent + 1)
+    no <- tccq_cg_stmt(node$no, indent + 1)
+    return(paste0(
+      pad, "if (", cond, ") {\n", yes, "\n",
+      pad, "} else {\n", no, "\n", pad, "}"
+    ))
+  }
+
+  if (tag == "reduce") {
+    return(tccq_cg_reduce_stmt(node, indent))
+  }
+
+  # Fallback: bare expression statement
+  return(paste0(pad, tccq_cg_expr(node), ";"))
 }
 
-tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
-  if (identical(ir$tag, "loop_kernel") && identical(ir$kind, "indexed_store")) {
-    arg_list <- decl$formal_names
-    c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
+# ---------------------------------------------------------------------------
+# Reduce / which_reduce statement emission
+# ---------------------------------------------------------------------------
 
-    arr_c <- setNames(
-      vapply(ir$input_arrays, function(a) tcc_quick_c_ident(a), character(1)),
-      ir$input_arrays
-    )
-    sexp_var <- setNames(paste0(arr_c, "_"), names(arr_c))
-    len_var <- setNames(paste0("n_", arr_c), names(arr_c))
-    ptr_var <- setNames(paste0("x_", arr_c), names(arr_c))
-    ptr_with_out <- c(ptr_var, setNames("xo", ir$out))
+tccq_cg_reduce_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  arr <- tccq_cg_ident(node$arr)
+  op <- node$op
+  var <- sprintf("red_%s_%s", op, arr)
 
-    loop_var_c <- setNames(
-      vapply(ir$loop_vars, function(v) tcc_quick_c_ident(v), character(1)),
-      ir$loop_vars
-    )
+  init <- switch(op,
+    sum = "0.0",
+    prod = "1.0",
+    max = sprintf("p_%s[0]", arr),
+    min = sprintf("p_%s[0]", arr),
+    "0.0"
+  )
+  update <- switch(op,
+    sum = sprintf("%s += p_%s[ri_];", var, arr),
+    prod = sprintf("%s *= p_%s[ri_];", var, arr),
+    max = sprintf("if (p_%s[ri_] > %s) %s = p_%s[ri_];", arr, var, var, arr),
+    min = sprintf("if (p_%s[ri_] < %s) %s = p_%s[ri_];", arr, var, var, arr),
+    ""
+  )
+  start <- if (op %in% c("max", "min")) "1" else "0"
+  paste0(
+    pad, "double ", var, " = ", init, ";\n",
+    pad, "for (R_xlen_t ri_ = ", start, "; ri_ < n_", arr, "; ++ri_) {\n",
+    pad, "  ", update, "\n",
+    pad, "}"
+  )
+}
 
-    out_len <- tcc_quick_codegen_len_expr(ir$out_len_expr, len_var)
-    out_idx <- tcc_quick_codegen_kernel_index_expr(ir$out_idx, loop_var_c)
-    rhs <- tcc_quick_codegen_kernel_expr(ir$rhs, loop_var_c, ptr_with_out)
+tccq_cg_which_reduce_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  arr <- tccq_cg_ident(node$arr)
+  op <- node$op
+  var <- sprintf("which_%s_%s", gsub("\\.", "_", op), arr)
+  cmp <- if (op == "which.max") ">" else "<"
 
-    coerce_lines <- vapply(
-      names(sexp_var),
-      function(a) {
-        sprintf(
-          "  SEXP %s = PROTECT(Rf_coerceVector(%s, REALSXP));",
-          sexp_var[[a]],
-          a
-        )
-      },
-      character(1)
-    )
-    len_lines <- vapply(
-      names(len_var),
-      function(a) {
-        sprintf("  R_xlen_t %s = XLENGTH(%s);", len_var[[a]], sexp_var[[a]])
-      },
-      character(1)
-    )
-    ptr_lines <- vapply(
-      names(ptr_var),
-      function(a) {
-        sprintf("  double *%s = REAL(%s);", ptr_var[[a]], sexp_var[[a]])
-      },
-      character(1)
-    )
+  paste0(
+    pad, "int ", var, " = 1;\n",
+    pad, "double ", var, "_best = p_", arr, "[0];\n",
+    pad, "for (R_xlen_t ri_ = 1; ri_ < n_", arr, "; ++ri_) {\n",
+    pad, "  if (p_", arr, "[ri_] ", cmp, " ", var, "_best) {\n",
+    pad, "    ", var, "_best = p_", arr, "[ri_];\n",
+    pad, "    ", var, " = (int)(ri_ + 1);\n",
+    pad, "  }\n",
+    pad, "}"
+  )
+}
 
-    loop_open <- vapply(
-      ir$loops,
-      function(lp) {
-        if (!identical(lp$kind, "seq_along")) {
-          stop("Unsupported loop kind in kernel", call. = FALSE)
-        }
-        if (!lp$target %in% names(len_var)) {
-          stop("Unknown loop target in kernel: ", lp$target, call. = FALSE)
-        }
-        v <- loop_var_c[[lp$var]]
-        lim <- len_var[[lp$target]]
-        sprintf("  for (R_xlen_t %s = 1; %s <= %s; ++%s) {", v, v, lim, v)
-      },
-      character(1)
-    )
+# ---------------------------------------------------------------------------
+# Collect all reduce/which_reduce nodes from an IR tree
+# ---------------------------------------------------------------------------
 
-    nprotect <- length(ir$input_arrays) + 1L
-
-    return(paste(
-      "#include <R.h>",
-      "#include <Rinternals.h>",
-      "",
-      sprintf("SEXP %s(%s) {", fn_name, c_args),
-      paste(coerce_lines, collapse = "\n"),
-      paste(len_lines, collapse = "\n"),
-      sprintf("  R_xlen_t n_out = (R_xlen_t)(%s);", out_len),
-      "  SEXP out = PROTECT(Rf_allocVector(REALSXP, n_out));",
-      paste(ptr_lines, collapse = "\n"),
-      "  double *xo = REAL(out);",
-      "  for (R_xlen_t k = 0; k < n_out; ++k) xo[k] = 0.0;",
-      paste(loop_open, collapse = "\n"),
-      sprintf("      xo[(R_xlen_t)((%s) - 1)] = %s;", out_idx, rhs),
-      paste(rep("  }", length(ir$loops)), collapse = "\n"),
-      sprintf("  UNPROTECT(%d);", nprotect),
-      "  return out;",
-      "}",
-      sep = "\n"
-    ))
+tccq_collect_reductions <- function(node) {
+  if (is.null(node) || is.null(node$tag)) {
+    return(list())
   }
 
-  if (
-    identical(ir$tag, "loop_kernel") &&
-      identical(ir$kind, "window_weighted_sum")
-  ) {
-    arg_list <- decl$formal_names
-    c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
+  out <- list()
+  if (node$tag %in% c("reduce", "which_reduce")) out <- list(node)
 
-    x <- ir$x
-    w <- ir$weights
-    nrm <- ir$normalize
-
-    return(paste(
-      "#include <R.h>",
-      "#include <Rinternals.h>",
-      "",
-      sprintf("SEXP %s(%s) {", fn_name, c_args),
-      sprintf("  SEXP %s_ = PROTECT(Rf_coerceVector(%s, REALSXP));", x, x),
-      sprintf("  SEXP %s_ = PROTECT(Rf_coerceVector(%s, REALSXP));", w, w),
-      sprintf("  int %s_ = Rf_asLogical(%s);", nrm, nrm),
-      sprintf("  R_xlen_t n_%s = XLENGTH(%s_);", x, x),
-      sprintf("  R_xlen_t n_%s = XLENGTH(%s_);", w, w),
-      sprintf("  R_xlen_t n_out = n_%s - n_%s + 1;", x, w),
-      "  if (n_out < 0) {",
-      "    UNPROTECT(2);",
-      "    Rf_error(\"rolling mean output length is negative\");",
-      "  }",
-      "  SEXP out = PROTECT(Rf_allocVector(REALSXP, n_out));",
-      sprintf("  double *x_%s = REAL(%s_);", x, x),
-      sprintf("  double *x_%s = REAL(%s_);", w, w),
-      "  double *xo = REAL(out);",
-      "  double w_scale = 1.0;",
-      sprintf("  if (%s_) {", nrm),
-      "    double w_sum = 0.0;",
-      sprintf("    for (R_xlen_t j = 0; j < n_%s; ++j) {", w),
-      sprintf("      w_sum += x_%s[j];", w),
-      "    }",
-      sprintf("    w_scale = ((double)n_%s) / w_sum;", w),
-      "  }",
-      "  for (R_xlen_t i = 0; i < n_out; ++i) {",
-      "    double acc = 0.0;",
-      sprintf("    for (R_xlen_t j = 0; j < n_%s; ++j) {", w),
-      sprintf("      acc += x_%s[i + j] * (x_%s[j] * w_scale);", x, w),
-      "    }",
-      sprintf("    xo[i] = acc / (double)n_%s;", w),
-      "  }",
-      "  UNPROTECT(3);",
-      "  return out;",
-      "}",
-      sep = "\n"
-    ))
-  }
-
-  if (identical(ir$tag, "rf_lang_call")) {
-    arg_list <- decl$formal_names
-    c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
-
-    if (length(ir$args) < 1L) {
-      stop("rf_lang_call requires at least one arg", call. = FALSE)
+  for (nm in names(node)) {
+    child <- node[[nm]]
+    if (is.list(child) && !is.null(child$tag)) {
+      out <- c(out, tccq_collect_reductions(child))
     }
-
-    build_lines <- character(0)
-    for (i in seq_along(ir$args)) {
-      node_var <- sprintf("node_%d", i)
-      build_lines <- c(
-        build_lines,
-        sprintf(
-          "  SEXP %s = PROTECT(Rf_cons(%s, R_NilValue));",
-          node_var,
-          ir$args[[i]]
-        ),
-        sprintf("  SETCDR(tail, %s);", node_var),
-        sprintf("  tail = %s;", node_var)
-      )
-    }
-    nprotect <- length(ir$args) + 1L
-
-    return(paste(
-      "#include <R.h>",
-      "#include <Rinternals.h>",
-      "",
-      sprintf("SEXP %s(%s) {", fn_name, c_args),
-      sprintf("  SEXP call = PROTECT(Rf_lang1(Rf_install(\"%s\")));", ir$fun),
-      "  SEXP tail = call;",
-      paste(build_lines, collapse = "\n"),
-      "  SEXP out = Rf_eval(call, R_BaseEnv);",
-      sprintf("  UNPROTECT(%d);", nprotect),
-      "  return out;",
-      "}",
-      sep = "\n"
-    ))
-  }
-
-  if (identical(ir$tag, "internal_call2")) {
-    arg_list <- decl$formal_names
-    c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
-    return(paste(
-      "#include <R.h>",
-      "#include <Rinternals.h>",
-      "",
-      sprintf("SEXP %s(%s) {", fn_name, c_args),
-      sprintf(
-        "  SEXP inner = PROTECT(Rf_lang3(Rf_install(\"%s\"), %s, %s));",
-        ir$fun,
-        ir$arg1,
-        ir$arg2
-      ),
-      "  SEXP call = PROTECT(Rf_lang2(Rf_install(\".Internal\"), inner));",
-      "  SEXP out = Rf_eval(call, R_BaseEnv);",
-      "  UNPROTECT(2);",
-      "  return out;",
-      "}",
-      sep = "\n"
-    ))
-  }
-
-  if (identical(ir$tag, "switch_num_expr")) {
-    arg_list <- decl$formal_names
-    c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
-
-    extract_lines <- vapply(
-      arg_list,
-      function(a) tcc_quick_codegen_arg_extract(a, ir$arg_modes[[a]]),
-      character(1)
-    )
-
-    sw <- ir$switch
-    sel <- tcc_quick_codegen_node(sw$selector)
-    n <- length(sw$cases)
-
-    case_lines <- character(0)
-    for (i in seq_len(n)) {
-      expr_i <- tcc_quick_codegen_node(sw$cases[[i]])
-      ret_i <- if (sw$result_mode == "double") {
-        sprintf("return Rf_ScalarReal((double)%s);", expr_i)
-      } else if (sw$result_mode == "logical") {
-        sprintf("return Rf_ScalarLogical(((%s) ? 1 : 0));", expr_i)
-      } else {
-        sprintf("return Rf_ScalarInteger((int)%s);", expr_i)
+    if (is.list(child) && is.null(child$tag)) {
+      for (item in child) {
+        if (is.list(item) && !is.null(item$tag)) {
+          out <- c(out, tccq_collect_reductions(item))
+        }
       }
-      case_lines <- c(case_lines, sprintf("    case %d: %s", i, ret_i))
     }
-
-    return(paste(
-      "#include <R.h>",
-      "#include <Rinternals.h>",
-      "#include <math.h>",
-      "",
-      sprintf("SEXP %s(%s) {", fn_name, c_args),
-      paste0("  ", extract_lines, collapse = "\n"),
-      sprintf("  int tcc_sw_sel = (int)(%s);", sel),
-      "  switch (tcc_sw_sel) {",
-      paste(case_lines, collapse = "\n"),
-      "    default: return R_NilValue;",
-      "  }",
-      "}",
-      sep = "\n"
-    ))
   }
+  out
+}
 
-  if (!identical(ir$tag, "scalar_expr")) {
-    stop(
-      "Codegen only supports loop_kernel/scalar_expr/rf_lang_call/internal_call2/switch_num_expr IR in current subset",
-      call. = FALSE
-    )
+# ---------------------------------------------------------------------------
+# Vector expression return: materialize element-wise into a new vector
+# ---------------------------------------------------------------------------
+
+tccq_cg_vec_expr_return <- function(ir, indent) {
+  pad <- strrep("  ", indent)
+  len_c <- tccq_cg_vec_len(ir$ret)
+  if (is.null(len_c)) {
+    stop("Cannot determine length for vector return expression", call. = FALSE)
   }
+  elem_expr <- tccq_cg_vec_elem(ir$ret, "ei_")
 
-  arg_list <- decl$formal_names
-  c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
-
-  extract_lines <- vapply(
-    arg_list,
-    function(a) tcc_quick_codegen_arg_extract(a, ir$arg_modes[[a]]),
-    character(1)
+  sxp_type <- switch(ir$ret_mode,
+    double = "REALSXP",
+    integer = "INTSXP",
+    logical = "LGLSXP",
+    "REALSXP"
+  )
+  ptr_fun <- switch(ir$ret_mode,
+    double = "REAL",
+    integer = "INTEGER",
+    logical = "LOGICAL",
+    "REAL"
+  )
+  c_type <- switch(ir$ret_mode,
+    double = "double",
+    integer = "int",
+    logical = "int",
+    "double"
   )
 
-  expr <- tcc_quick_codegen_node(ir$expr)
+  paste0(
+    pad, "R_xlen_t ret_len_ = (R_xlen_t)(", len_c, ");\n",
+    pad, "SEXP ret_ = PROTECT(Rf_allocVector(", sxp_type, ", ret_len_));\n",
+    pad, "nprotect_++;\n",
+    pad, c_type, " *p_ret_ = ", ptr_fun, "(ret_);\n",
+    pad, "for (R_xlen_t ei_ = 0; ei_ < ret_len_; ++ei_) {\n",
+    pad, "  p_ret_[ei_] = (", c_type, ")(", elem_expr, ");\n",
+    pad, "}\n",
+    pad, "UNPROTECT(nprotect_);\n",
+    pad, "return ret_;"
+  )
+}
 
-  ret_line <- if (ir$result_mode == "double") {
-    sprintf("return Rf_ScalarReal((double)%s);", expr)
-  } else if (ir$result_mode == "logical") {
-    sprintf("return Rf_ScalarLogical(((%s) ? 1 : 0));", expr)
-  } else {
-    sprintf("return Rf_ScalarInteger((int)%s);", expr)
+# Infer C length expression for a vector IR node
+tccq_cg_vec_len <- function(node) {
+  tag <- node$tag
+  if (tag == "var") {
+    return(sprintf("n_%s", tccq_cg_ident(node$name)))
+  }
+  if (tag == "binary") {
+    return(tccq_cg_vec_len(node$lhs) %||% tccq_cg_vec_len(node$rhs))
+  }
+  if (tag == "unary") {
+    return(tccq_cg_vec_len(node$x))
+  }
+  if (tag == "call1") {
+    return(tccq_cg_vec_len(node$x))
+  }
+  if (tag == "if") {
+    return(tccq_cg_vec_len(node$yes) %||% tccq_cg_vec_len(node$no))
+  }
+  NULL
+}
+
+# Generate C for the i-th element (0-based) of a vector expression
+tccq_cg_vec_elem <- function(node, idx_var) {
+  tag <- node$tag
+
+  if (tag == "var") {
+    return(sprintf("p_%s[%s]", tccq_cg_ident(node$name), idx_var))
   }
 
-  paste(
+  if (tag == "const") {
+    if (node$mode == "integer") {
+      return(sprintf("%d", as.integer(node$value)))
+    }
+    if (node$mode == "double") {
+      return(format(as.double(node$value), scientific = FALSE, trim = TRUE))
+    }
+    if (node$mode == "logical") {
+      return(if (isTRUE(node$value)) "1" else "0")
+    }
+  }
+
+  if (tag == "unary") {
+    x <- tccq_cg_vec_elem(node$x, idx_var)
+    if (node$op == "!") {
+      return(sprintf("(!(%s))", x))
+    }
+    return(sprintf("(%s(%s))", node$op, x))
+  }
+
+  if (tag == "binary") {
+    lhs <- tccq_cg_vec_elem(node$lhs, idx_var)
+    rhs <- tccq_cg_vec_elem(node$rhs, idx_var)
+    op <- node$op
+    if (op == "%/%") {
+      return(sprintf("((int)floor((double)(%s) / (double)(%s)))", lhs, rhs))
+    }
+    if (op == "%%") {
+      return(sprintf("(fmod((double)(%s), (double)(%s)))", lhs, rhs))
+    }
+    if (op == "^") {
+      return(sprintf("(pow((double)(%s), (double)(%s)))", lhs, rhs))
+    }
+    if (op == "&") op <- "&&"
+    if (op == "|") op <- "||"
+    return(sprintf("((%s) %s (%s))", lhs, op, rhs))
+  }
+
+  if (tag == "call1") {
+    x <- tccq_cg_vec_elem(node$x, idx_var)
+    fun <- switch(node$fun,
+      abs = "fabs",
+      ceiling = "ceil",
+      node$fun
+    )
+    return(sprintf("(%s((double)(%s)))", fun, x))
+  }
+
+  if (tag == "if") {
+    cond <- tccq_cg_vec_elem(node$cond, idx_var)
+    yes <- tccq_cg_vec_elem(node$yes, idx_var)
+    no <- tccq_cg_vec_elem(node$no, idx_var)
+    return(sprintf("((%s) ? (%s) : (%s))", cond, yes, no))
+  }
+
+  # Scalar expression fallback (constants broadcast)
+  tccq_cg_expr(node)
+}
+
+# ---------------------------------------------------------------------------
+# Top-level fn_body codegen → complete C source
+# ---------------------------------------------------------------------------
+
+tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
+  if (!identical(ir$tag, "fn_body")) {
+    stop("Codegen requires fn_body IR, got: ", ir$tag, call. = FALSE)
+  }
+  tccq_cg_fn_body(ir, fn_name)
+}
+
+tccq_cg_fn_body <- function(ir, fn_name) {
+  formal_names <- ir$formal_names
+  c_args <- paste(sprintf("SEXP %s", formal_names), collapse = ", ")
+
+  lines <- c(
     "#include <R.h>",
     "#include <Rinternals.h>",
     "#include <math.h>",
     "",
     sprintf("SEXP %s(%s) {", fn_name, c_args),
-    paste0("  ", extract_lines, collapse = "\n"),
-    paste0("  ", ret_line),
-    "}",
-    sep = "\n"
+    "  int nprotect_ = 0;"
   )
+
+  # --- Parameter extraction ---
+  for (nm in formal_names) {
+    spec <- ir$params[[nm]]
+    cnm <- tccq_cg_ident(nm)
+    if (isTRUE(spec$is_scalar)) {
+      extract <- switch(spec$mode,
+        double  = sprintf("  double %s_ = Rf_asReal(%s);", cnm, nm),
+        integer = sprintf("  int %s_ = Rf_asInteger(%s);", cnm, nm),
+        logical = sprintf("  int %s_ = Rf_asLogical(%s);", cnm, nm)
+      )
+      lines <- c(lines, extract)
+    } else {
+      sxp_type <- switch(spec$mode,
+        double = "REALSXP",
+        integer = "INTSXP",
+        logical = "LGLSXP",
+        "REALSXP"
+      )
+      ptr_fun <- switch(spec$mode,
+        double = "REAL",
+        integer = "INTEGER",
+        logical = "LOGICAL",
+        "REAL"
+      )
+      c_type <- switch(spec$mode,
+        double = "double",
+        integer = "int",
+        logical = "int",
+        "double"
+      )
+      lines <- c(
+        lines,
+        sprintf(
+          "  SEXP s_%s = PROTECT(Rf_coerceVector(%s, %s));",
+          cnm, nm, sxp_type
+        ),
+        "  nprotect_++;",
+        sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
+        sprintf("  %s *p_%s = %s(s_%s);", c_type, cnm, ptr_fun, cnm)
+      )
+      if (length(spec$dims) == 2L) {
+        lines <- c(
+          lines,
+          sprintf("  int nrow_%s = Rf_nrows(s_%s);", cnm, cnm),
+          sprintf("  int ncol_%s = Rf_ncols(s_%s);", cnm, cnm)
+        )
+      }
+    }
+  }
+
+  # --- Local variable declarations ---
+  for (nm in names(ir$locals)) {
+    info <- ir$locals[[nm]]
+    cnm <- tccq_cg_ident(nm)
+    if (info$shape == "scalar") {
+      c_type <- switch(info$mode,
+        double = "double",
+        integer = "int",
+        logical = "int",
+        "double"
+      )
+      lines <- c(lines, sprintf("  %s %s_ = 0;", c_type, cnm))
+    } else {
+      c_type <- switch(info$mode,
+        double = "double",
+        integer = "int",
+        logical = "int",
+        "double"
+      )
+      lines <- c(
+        lines,
+        sprintf("  SEXP s_%s = R_NilValue;", cnm),
+        sprintf("  R_xlen_t n_%s = 0;", cnm),
+        sprintf("  %s *p_%s = NULL;", c_type, cnm)
+      )
+      if (info$shape == "matrix") {
+        lines <- c(
+          lines,
+          sprintf("  int nrow_%s = 0;", cnm),
+          sprintf("  int ncol_%s = 0;", cnm)
+        )
+      }
+    }
+  }
+
+  # --- Body statements ---
+  for (s in ir$stmts) {
+    lines <- c(lines, tccq_cg_stmt(s, 1))
+  }
+
+  # --- Emit reduction loops referenced in the return expression ---
+  ret_reds <- tccq_collect_reductions(ir$ret)
+  for (rd in ret_reds) {
+    if (rd$tag == "reduce") lines <- c(lines, tccq_cg_reduce_stmt(rd, 1))
+    if (rd$tag == "which_reduce") {
+      lines <- c(lines, tccq_cg_which_reduce_stmt(rd, 1))
+    }
+  }
+
+  # --- Return ---
+  ret_expr <- tccq_cg_expr(ir$ret)
+  if ((ir$ret_shape %in% c("vector", "matrix")) &&
+    !is.null(ir$ret$tag) && ir$ret$tag == "var") {
+    # Return the SEXP of a named variable
+    ret_nm <- tccq_cg_ident(ir$ret$name)
+    lines <- c(
+      lines,
+      "  UNPROTECT(nprotect_);",
+      sprintf("  return s_%s;", ret_nm)
+    )
+  } else if (ir$ret_shape %in% c("vector", "matrix")) {
+    # Materialize a vector expression element-wise
+    lines <- c(lines, tccq_cg_vec_expr_return(ir, 1))
+  } else {
+    # Scalar return
+    wrap <- switch(ir$ret_mode,
+      double  = sprintf("Rf_ScalarReal((double)(%s))", ret_expr),
+      integer = sprintf("Rf_ScalarInteger((int)(%s))", ret_expr),
+      logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", ret_expr),
+      ret_expr
+    )
+    lines <- c(
+      lines,
+      "  UNPROTECT(nprotect_);",
+      sprintf("  return %s;", wrap)
+    )
+  }
+
+  lines <- c(lines, "}")
+  paste(lines, collapse = "\n")
 }
