@@ -90,6 +90,22 @@ max_dbl <- function(x, y) {
 max_fast <- tcc_quick(max_dbl)
 expect_equal(max_fast(2.5, 1.5), 2.5)
 
+sqrt_from_fallback <- function(x) {
+    declare(type(x = double(1)))
+    sqrt(x)
+}
+
+sqrt_fast <- tcc_quick(sqrt_from_fallback)
+expect_equal(sqrt_fast(9.0), sqrt_from_fallback(9.0), tolerance = 1e-12)
+
+pmax3 <- function(x, y, z) {
+    declare(type(x = double(1)), type(y = double(1)), type(z = double(1)))
+    pmax(x, y, z)
+}
+
+pmax3_fast <- tcc_quick(pmax3)
+expect_equal(pmax3_fast(2.0, 9.0, 3.0), pmax3(2.0, 9.0, 3.0), tolerance = 1e-12)
+
 unsupported <- function(x) {
     declare(type(x = double(1)))
     .Call("some_native_symbol", x)

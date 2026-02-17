@@ -248,20 +248,17 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
         ))
     }
 
-    # Preserve existing top-level convenience path for non-boundary 2-arg calls
-    # that should run via R internals/primitives through Rf_lang3/Rf_eval.
-    if (length(e) == 3L &&
-        !fname %in% c("+", "-", "*", "/", "^", "%%", "%/%", "<", "<=", ">", ">=", "==", "!=", "&&", "||", "&", "|", "!")) {
-        a1 <- e[[2]]
-        a2 <- e[[3]]
-        if (is.symbol(a1) && is.symbol(a2)) {
-            a1n <- as.character(a1)
-            a2n <- as.character(a2)
-            if (!is.null(tcc_quick_symbol_mode(a1n, decl)) && !is.null(tcc_quick_symbol_mode(a2n, decl)) &&
-                !a1n %in% names(locals) && !a2n %in% names(locals)) {
+    # Generic fallback call path: use Rf_lang* + Rf_eval for non-operator
+    # symbol calls with up to 4 symbol arguments.
+    if (!fname %in% c("+", "-", "*", "/", "^", "%%", "%/%", "<", "<=", ">", ">=", "==", "!=", "&&", "||", "&", "|", "!", "if", "ifelse", "switch", "(")) {
+        args <- as.list(e)[-1]
+        if (length(args) >= 1L && length(args) <= 4L && all(vapply(args, is.symbol, logical(1)))) {
+            arg_names <- vapply(args, as.character, character(1))
+            ok_args <- all(vapply(arg_names, function(a) !is.null(tcc_quick_symbol_mode(a, decl)) && !a %in% names(locals), logical(1)))
+            if (ok_args) {
                 return(tcc_quick_lower_result(
                     TRUE,
-                    node = list(tag = "rf_lang3_call", fun = fname, arg1 = a1n, arg2 = a2n),
+                    node = list(tag = "rf_lang_call", fun = fname, args = arg_names),
                     mode = "sexp"
                 ))
             }
@@ -371,57 +368,16 @@ tcc_quick_parse_subset <- function(x) {
     list(arr = as.character(x[[2]]), idx = x[[3]])
 }
 
-tcc_quick_walk_code <- function(e, walker) {
-    if (is.call(e)) {
-        fun <- e[[1]]
-        if (is.symbol(fun)) {
-            h <- walker$handler(as.character(fun), walker)
-            if (!is.null(h)) {
-                return(h(e, walker))
-            }
-        }
-        return(walker$call(e, walker))
-    }
-    walker$leaf(e, walker)
-}
-
-tcc_quick_make_walker <- function(handler = function(name, w) NULL,
-                                  call = function(e, w) {
-                                      for (i in seq_along(e)[-1]) {
-                                          tcc_quick_walk_code(e[[i]], w)
-                                      }
-                                  },
-                                  leaf = function(e, w) NULL,
-                                  ...) {
-    list(handler = handler, call = call, leaf = leaf, ...)
-}
-
 tcc_quick_expr_has_boundary <- function(e) {
-    found <- FALSE
-    w <- tcc_quick_make_walker(
-        handler = function(name, w) {
-            if (name %in% tcc_quick_boundary_calls()) {
-                found <<- TRUE
-            }
-            NULL
-        }
-    )
-    tcc_quick_walk_code(e, w)
-    found
+    w <- tccq_make_boundary_walker(tcc_quick_boundary_calls())
+    tccq_visit(w, e)
+    tccq_boundary_found(w)
 }
 
 tcc_quick_collect_subset_arrays <- function(e) {
-    if (!is.call(e)) {
-        return(character(0))
-    }
-    out <- character(0)
-    if (tcc_quick_is_call_sym(e, "[") && length(e) == 3L && is.symbol(e[[2]])) {
-        out <- c(out, as.character(e[[2]]))
-    }
-    for (i in seq_along(e)[-1]) {
-        out <- c(out, tcc_quick_collect_subset_arrays(e[[i]]))
-    }
-    unique(out)
+    w <- tccq_make_subset_walker()
+    tccq_visit(w, e)
+    tccq_subset_arrays(w)
 }
 
 tcc_quick_validate_len_expr <- function(e, decl) {
@@ -659,7 +615,7 @@ tcc_quick_lower_block <- function(exprs, decl) {
         return(tcc_quick_fallback_ir(reason))
     }
 
-    if (identical(lowered$node$tag, "rf_lang3_call")) {
+    if (identical(lowered$node$tag, "rf_lang_call")) {
         return(lowered$node)
     }
 

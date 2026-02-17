@@ -318,15 +318,25 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
         ))
     }
 
-    if (identical(ir$tag, "rf_lang3_call")) {
+    if (identical(ir$tag, "rf_lang_call")) {
         arg_list <- decl$formal_names
         c_args <- paste(sprintf("SEXP %s", arg_list), collapse = ", ")
+        call_ctor <- switch(as.character(length(ir$args)),
+            `1` = sprintf("Rf_lang2(Rf_install(\"%s\"), %s)", ir$fun, ir$args[[1]]),
+            `2` = sprintf("Rf_lang3(Rf_install(\"%s\"), %s, %s)", ir$fun, ir$args[[1]], ir$args[[2]]),
+            `3` = sprintf("Rf_lang4(Rf_install(\"%s\"), %s, %s, %s)", ir$fun, ir$args[[1]], ir$args[[2]], ir$args[[3]]),
+            `4` = sprintf("Rf_lang5(Rf_install(\"%s\"), %s, %s, %s, %s)", ir$fun, ir$args[[1]], ir$args[[2]], ir$args[[3]], ir$args[[4]]),
+            NULL
+        )
+        if (is.null(call_ctor)) {
+            stop("rf_lang_call supports 1..4 args", call. = FALSE)
+        }
         return(paste(
             "#include <R.h>",
             "#include <Rinternals.h>",
             "",
             sprintf("SEXP %s(%s) {", fn_name, c_args),
-            sprintf("  SEXP call = PROTECT(Rf_lang3(Rf_install(\"%s\"), %s, %s));", ir$fun, ir$arg1, ir$arg2),
+            sprintf("  SEXP call = PROTECT(%s);", call_ctor),
             "  SEXP out = Rf_eval(call, R_BaseEnv);",
             "  UNPROTECT(1);",
             "  return out;",
@@ -398,7 +408,7 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
     }
 
     if (!identical(ir$tag, "scalar_expr")) {
-        stop("Codegen only supports nested_loop_kernel/scalar_expr/rf_lang3_call/internal_call2/switch_num_expr IR in current subset", call. = FALSE)
+        stop("Codegen only supports nested_loop_kernel/scalar_expr/rf_lang_call/internal_call2/switch_num_expr IR in current subset", call. = FALSE)
     }
 
     arg_list <- decl$formal_names
