@@ -133,6 +133,53 @@ tcc_quick_codegen_len_expr <- function(e, len_by_array) {
     stop("Unsupported output-length expression operator: ", fn, call. = FALSE)
 }
 
+tcc_quick_codegen_kernel_index_expr <- function(e, loop_var_c) {
+    if (is.symbol(e)) {
+        nm <- as.character(e)
+        if (nm %in% names(loop_var_c)) {
+            return(loop_var_c[[nm]])
+        }
+        stop("Unsupported symbol in kernel index expression: ", nm, call. = FALSE)
+    }
+
+    if (length(e) == 1L && is.integer(e)) {
+        return(sprintf("%d", as.integer(e)[[1]]))
+    }
+    if (length(e) == 1L && is.double(e)) {
+        v <- as.double(e)[[1]]
+        if (!isTRUE(all.equal(v, round(v)))) {
+            stop("Non-integer numeric constant in index expression", call. = FALSE)
+        }
+        return(sprintf("%d", as.integer(round(v))))
+    }
+
+    if (!is.call(e) || !is.symbol(e[[1]])) {
+        stop("Unsupported kernel index expression node", call. = FALSE)
+    }
+
+    fn <- as.character(e[[1]])
+    if (fn == "(") {
+        if (length(e) != 2L) {
+            stop("Malformed parenthesized index expression", call. = FALSE)
+        }
+        inner <- tcc_quick_codegen_kernel_index_expr(e[[2]], loop_var_c)
+        return(sprintf("(%s)", inner))
+    }
+
+    if (fn %in% c("+", "-") && length(e) == 2L) {
+        x <- tcc_quick_codegen_kernel_index_expr(e[[2]], loop_var_c)
+        return(sprintf("(%s(%s))", fn, x))
+    }
+
+    if (fn %in% c("+", "-", "*") && length(e) == 3L) {
+        lhs <- tcc_quick_codegen_kernel_index_expr(e[[2]], loop_var_c)
+        rhs <- tcc_quick_codegen_kernel_index_expr(e[[3]], loop_var_c)
+        return(sprintf("((%s) %s (%s))", lhs, fn, rhs))
+    }
+
+    stop("Unsupported operator in kernel index expression: ", fn, call. = FALSE)
+}
+
 tcc_quick_codegen_kernel_expr <- function(e, loop_var_c, ptr_by_array) {
     if (is.symbol(e)) {
         nm <- as.character(e)
@@ -159,12 +206,12 @@ tcc_quick_codegen_kernel_expr <- function(e, loop_var_c, ptr_by_array) {
             stop("Unsupported subset in kernel expression", call. = FALSE)
         }
         arr <- as.character(e[[2]])
-        idx <- tcc_quick_codegen_kernel_expr(e[[3]], loop_var_c, ptr_by_array)
+        idx <- tcc_quick_codegen_kernel_index_expr(e[[3]], loop_var_c)
         if (!arr %in% names(ptr_by_array)) {
             stop(paste0("Unknown array symbol in kernel expression: ", arr), call. = FALSE)
         }
         ptr <- ptr_by_array[[arr]]
-        return(sprintf("%s[(R_xlen_t)((%s) - 1.0)]", ptr, idx))
+        return(sprintf("%s[(R_xlen_t)((%s) - 1)]", ptr, idx))
     }
 
     if (fn %in% c("+", "-", "*", "/") && length(e) == 3L) {
@@ -201,7 +248,7 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
         )
 
         out_len <- tcc_quick_codegen_len_expr(ir$out_len_expr, len_var)
-        out_idx <- tcc_quick_codegen_kernel_expr(ir$out_idx, loop_var_c, ptr_with_out)
+        out_idx <- tcc_quick_codegen_kernel_index_expr(ir$out_idx, loop_var_c)
         rhs <- tcc_quick_codegen_kernel_expr(ir$rhs, loop_var_c, ptr_with_out)
 
         coerce_lines <- vapply(
@@ -251,7 +298,7 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
             "  double *xo = REAL(out);",
             "  for (R_xlen_t k = 0; k < n_out; ++k) xo[k] = 0.0;",
             paste(loop_open, collapse = "\n"),
-            sprintf("      xo[(R_xlen_t)((%s) - 1.0)] = %s;", out_idx, rhs),
+            sprintf("      xo[(R_xlen_t)((%s) - 1)] = %s;", out_idx, rhs),
             paste(rep("  }", length(ir$loops)), collapse = "\n"),
             sprintf("  UNPROTECT(%d);", nprotect),
             "  return out;",
