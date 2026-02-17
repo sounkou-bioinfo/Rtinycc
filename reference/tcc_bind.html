@@ -54,14 +54,8 @@ This is the core of the declarative FFI API.</p>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Named list of symbol definitions. Each definition is a list with:</p><ul><li><p>args: List of fixed FFI argument types (e.g., list("i32", "f64"))</p></li>
+<dd><p>Named list of symbol definitions. Each definition is a list with:</p><ul><li><p>args: List of FFI types for arguments (e.g., list("i32", "f64"))</p></li>
 <li><p>returns: FFI type for return value (e.g., "f64", "cstring")</p></li>
-<li><p>variadic: Set TRUE for C varargs functions</p></li>
-<li><p>varargs: Legacy typed variadic tail (exact/prefix mode)</p></li>
-<li><p>varargs_types: Allowed scalar FFI types for true variadic tails</p></li>
-<li><p>varargs_min: Minimum number of trailing varargs</p></li>
-<li><p>varargs_max: Maximum number of trailing varargs (required for
-true variadic mode, defaults to <code>varargs_min</code>)</p></li>
 <li><p>code: Optional C code for the symbol (for embedded functions)</p></li>
 </ul><p>Callback arguments should use the form <code>callback:&lt;signature&gt;</code> (e.g.,
 <code>callback:double(double)</code>). The generated trampoline expects a

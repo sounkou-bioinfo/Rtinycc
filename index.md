@@ -58,9 +58,14 @@ functions via
 before relocation. Any new C function referenced by generated TCC code
 must be added there.
 
-On Windows, the `configure.win` script generates a UCRT-backed
-`msvcrt.def` so TinyCC resolves CRT symbols against `ucrtbase.dll` (R
-4.2+ uses UCRT).
+On Windows, the build still generates a UCRT-backed `msvcrt.def` so
+TinyCC resolves CRT symbols against `ucrtbase.dll` (R 4.2+ uses UCRT).
+That avoids cross-CRT heap mismatches, but it is **not** the root cause
+of the segfaults we investigated. The crashes were due to lifetime
+management of external pointers and finalizers: multiple externalptr
+wrappers owning the same `TCCState*` led to double finalization when the
+garbage collector ran. The fix is to track ownership explicitly and
+ensure only one externalptr owns a given state.
 
 Ownership semantics are explicit. Pointers from
 [`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
@@ -179,7 +184,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x62d181c02f20"
+#> [1] "0x55cb09271500"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -210,11 +215,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x62d183c192e0>
+#> <pointer: 0x55cb08a81820>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x62d1819810e0>
+#> <pointer: 0x55cb0816b900>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x62d183c192e0>
+#> <pointer: 0x55cb08a81820>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -277,8 +282,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       901ms    901ms      1.11   134.1MB    11.1 
-#> 2 Rbuiltin      535µs    568µs   1632.      9.05KB     8.00
+#> 1 Rtinycc    248.99ms  251.1ms      3.98   53.98KB     5.97
+#> 2 Rbuiltin     3.36ms    3.8ms    256.      9.05KB     4.00
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -307,67 +312,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    97.1µs    104µs     9449.    52.8KB     10.6
-#> 2 Rbuiltin_vec   16.9µs   17.6µs    54350.    78.2KB     65.3
-```
-
-### Variadic calls (e.g. `Rprintf` style)
-
-Rtinycc supports two ways to bind variadic tails. The legacy approach
-uses `varargs` as a typed prefix tail, while the bounded dynamic
-approach uses `varargs_types` together with `varargs_min` and
-`varargs_max`. In the bounded mode, wrappers are generated across the
-allowed arity and type combinations, and runtime dispatch selects the
-matching wrapper from the scalar tail values provided at call time.
-
-``` r
-ffi_var <- tcc_ffi() |>
-  tcc_header("#include <R_ext/Print.h>") |>
-  tcc_source('
-    #include <stdarg.h>
-
-    int sum_fmt(int n, ...) {
-      va_list ap;
-      va_start(ap, n);
-      int s = 0;
-      for (int i = 0; i < n; i++) s += va_arg(ap, int);
-      va_end(ap);
-      Rprintf("sum_fmt(%d) = %d\\n", n, s);
-      return s;
-    }
-  ') |>
-  tcc_bind(
-    Rprintf = list(
-      args = list("cstring"),
-      variadic = TRUE,
-      varargs_types = list("i32"),
-      varargs_min = 0L,
-      varargs_max = 4L,
-      returns = "void"
-    ),
-    sum_fmt = list(
-      args = list("i32"),
-      variadic = TRUE,
-      varargs_types = list("i32"),
-      varargs_min = 0L,
-      varargs_max = 4L,
-      returns = "i32"
-    )
-  ) |>
-  tcc_compile()
-
-ffi_var$Rprintf("Rprintf via bind: %d + %d = %d\n", 2L, 3L, 5L)
-#> Rprintf via bind: 2 + 3 = 5
-#> NULL
-ffi_var$sum_fmt(0L)
-#> sum_fmt(0) = 0
-#> [1] 0
-ffi_var$sum_fmt(2L, 10L, 20L)
-#> sum_fmt(2) = 30
-#> [1] 30
-ffi_var$sum_fmt(4L, 1L, 2L, 3L, 4L)
-#> sum_fmt(4) = 10
-#> [1] 10
+#> 1 Rtinycc_vec   125.8µs  161.6µs     6107.    39.1KB     4.25
+#> 2 Rbuiltin_vec   55.7µs   78.4µs    11637.    78.2KB    16.1
 ```
 
 ### Linking external libraries
@@ -430,7 +376,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @62d19022f0a8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @55cb0b383e50 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -446,7 +392,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @62d19022f0a8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @55cb0b383e50 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ### Benchmark
@@ -510,9 +456,9 @@ timings
 #> # A tibble: 3 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R          600.59ms 601.91ms      1.65     844KB    0.550
-#> 2 quickr       3.77ms   4.12ms    242.       782KB    3.09 
-#> 3 Rtinycc     55.47ms  57.08ms     17.6      796KB    0.504
+#> 1 R             3.55s    3.55s     0.282     847KB     0   
+#> 2 quickr      10.09ms  17.11ms    68.3       782KB     1.02
+#> 3 Rtinycc       178ms 250.43ms     3.94      782KB     0
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -541,15 +487,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x62d19efb58f0>
+#> <pointer: 0x55cb0d50ef50>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x62d19efb58f0>
+#> <pointer: 0x55cb0d50ef50>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x62d19b9e9ff0>
+#> <pointer: 0x55cb094477b0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x62d19b9e9ff0>
+#> <pointer: 0x55cb094477b0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -594,9 +540,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x62d187243de0>
+#> <pointer: 0x55cb0722e9d0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x62d187243de0>
+#> <pointer: 0x55cb0722e9d0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -827,7 +773,7 @@ sqlite <- tcc_ffi() |>
   tcc_compile()
 
 sqlite$sqlite3_libversion()
-#> [1] "3.45.1"
+#> [1] "3.26.0"
 
 db <- sqlite$open_db()
 sqlite$sqlite3_exec(db, "CREATE TABLE t (id INTEGER, name TEXT);", cb, tcc_callback_ptr(cb), tcc_null_ptr())
@@ -896,134 +842,12 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x62d18b9bc420>
+#> <pointer: 0x55cb0f40c720>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
 #> [1] 0
 ```
-
-## io_uring Demo
-
-`CSV` parser using [`io_uring`](https://en.wikipedia.org/wiki/Io_uring)
-on linux
-
-``` r
-if (Sys.info()[["sysname"]] == "Linux") {
-  c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
-
-  n_rows <- 2000000L
-  n_cols <- 8L
-  block_size <- 1024L * 1024L
-
-  set.seed(42)
-  tmp_csv <- tempfile("rtinycc_io_uring_readme_", fileext = ".csv")
-  on.exit(unlink(tmp_csv), add = TRUE)
-
-  mat <- matrix(runif(n_rows * n_cols), ncol = n_cols)
-  df <- as.data.frame(mat)
-  names(df) <- paste0("V", seq_len(n_cols))
-  utils::write.table(df, file = tmp_csv, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
-  csv_size_mb <- as.double(file.info(tmp_csv)$size) / 1024^2
-  message(sprintf("CSV size: %.2f MB", csv_size_mb))
-
-  io_uring_src <- paste(readLines(c_file, warn = FALSE), collapse = "\n")
-
-  ffi <- tcc_ffi() |>
-    tcc_source(io_uring_src) |>
-    tcc_bind(
-      csv_table_read = list(
-        args = list("cstring", "i32", "i32"),
-        returns = "sexp"
-      ),
-      csv_table_io_uring = list(
-        args = list("cstring", "i32", "i32"),
-        returns = "sexp"
-      )
-    ) |>
-    tcc_compile()
-
-  baseline <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
-  c_tbl <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
-  uring_tbl <- ffi$csv_table_io_uring(tmp_csv, block_size, n_cols)
-  vroom_tbl <- vroom::vroom(
-    tmp_csv,
-    delim = ",",
-    altrep = FALSE,
-    col_types = vroom::cols(.default = "d"),
-    progress = FALSE,
-    show_col_types = FALSE
-  )
-
-  stopifnot(
-    identical(dim(c_tbl), dim(baseline)),
-    identical(dim(uring_tbl), dim(baseline)),
-    identical(dim(vroom_tbl), dim(baseline)),
-    isTRUE(all.equal(c_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
-    isTRUE(all.equal(uring_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE)),
-    isTRUE(all.equal(vroom_tbl, baseline, tolerance = 1e-8, check.attributes = FALSE))
-  )
-
-  timings <- bench::mark(
-    read_table_df = {
-      x <- utils::read.table(tmp_csv, sep = ",", header = TRUE)
-      nrow(x)
-    },
-    vroom_df_altrep_false = {
-      x <- vroom::vroom(
-        tmp_csv,
-        delim = ",",
-        altrep = FALSE,
-        col_types = vroom::cols(.default = "d"),
-        progress = FALSE,
-        show_col_types = FALSE
-      )
-      nrow(x)
-    },
-     vroom_df_altrep_false_mat = {
-      vroom::vroom(
-        tmp_csv,
-        delim = ",",
-        altrep = FALSE,
-        col_types = vroom::cols(.default = "d"),
-        progress = FALSE,
-        show_col_types = FALSE
-      )
-      nrow(x)
-    },
-    c_read_df = {
-      x <- ffi$csv_table_read(tmp_csv, block_size, n_cols)
-      nrow(x)
-    },
-    io_uring_df = {
-      x <- ffi$csv_table_io_uring(tmp_csv, block_size, n_cols)
-      nrow(x)
-    },
-    iterations = 2,
-    memory = TRUE
-  )
-
-  
-  print(timings)
-  
-  plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
-}
-#> CSV size: 274.66 MB
-#> Warning: Some expressions had a GC in every iteration; so filtering is
-#> disabled.
-#> # A tibble: 5 × 13
-#>   expression               min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
-#>   <bch:expr>          <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 read_table_df          7.34s   10.59s    0.0944     494MB    0.189     2     4
-#> 2 vroom_df_altrep_fa… 223.38ms 446.76ms    2.24       122MB    1.12      2     1
-#> 3 vroom_df_altrep_fa… 207.07ms 741.08ms    1.35       122MB    0.675     2     1
-#> 4 c_read_df              2.03s    2.03s    0.492      122MB    0         2     0
-#> 5 io_uring_df            2.03s    2.05s    0.489      122MB    0         2     0
-#> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
-#> #   time <list>, gc <list>
-```
-
-![](reference/figures/README-io_uring-demo-1.png)
 
 ## Known limitations
 
@@ -1038,8 +862,9 @@ code when headers pull in complex types.
 ### 64-bit integer precision
 
 R represents `i64` and `u64` values as `double`, which loses precision
-beyond $2^{53}$. Values that differ only past that threshold become
-indistinguishable.
+beyond
+![2^{53}](https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&space;%5Cbg_white&space;2%5E%7B53%7D%20%222%5E%7B53%7D%22).
+Values that differ only past that threshold become indistinguishable.
 
 ``` r
 sprintf("2^53:     %.0f", 2^53)
@@ -1073,11 +898,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x62d186763690>
+#> <pointer: 0x55cb12d3f700>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x62d1a006c2c0>
+#> <pointer: 0x55cb0e8acb20>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1108,9 +933,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x62d19ac20700>
+#> <pointer: 0x55cb09544d50>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x62d19ac20700>
+#> <pointer: 0x55cb09544d50>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
