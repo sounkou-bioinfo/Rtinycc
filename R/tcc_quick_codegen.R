@@ -7,6 +7,54 @@
 # Takes fn_body IR and produces a complete SEXP-returning C function.
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Recursively walk IR, looking for call1/call2 nodes whose fun requires Rmath.h
+tccq_ir_needs_rmath <- function(node) {
+  if (is.null(node) || !is.list(node)) {
+    return(FALSE)
+  }
+  if (!is.null(node$tag)) {
+    if (node$tag %in% c("call1", "call2")) {
+      entry <- tcc_ir_registry_lookup(node$fun)
+      if (!is.null(entry) && !is.null(entry$header)) {
+        return(TRUE)
+      }
+    }
+    # Recurse into sub-nodes
+    for (field in c(
+      "x", "y", "lhs", "rhs", "cond", "yes", "no",
+      "expr", "body", "stmts", "ret", "len_expr",
+      "idx", "value", "row", "col", "from", "to",
+      "nrow", "ncol", "iter", "n"
+    )) {
+      if (tccq_ir_needs_rmath(node[[field]])) {
+        return(TRUE)
+      }
+    }
+    return(FALSE)
+  }
+  # Plain list (e.g. stmts)
+  for (child in node) {
+    if (tccq_ir_needs_rmath(child)) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+# Map R function name to C function name for codegen
+tccq_cg_c_fun <- function(r_fun) {
+  entry <- tcc_ir_registry_lookup(r_fun)
+  if (!is.null(entry)) {
+    return(entry$c_fun)
+  }
+  # Fallback for pmin/pmax (not in registry, handled inline)
+  r_fun
+}
+
+# ---------------------------------------------------------------------------
 # Expression codegen
 # ---------------------------------------------------------------------------
 
@@ -77,8 +125,26 @@ tccq_cg_expr <- function(node) {
 
   if (tag == "call1") {
     x <- tccq_cg_expr(node$x)
-    fun <- switch(node$fun, abs = "fabs", ceiling = "ceil", node$fun)
+    fun <- tccq_cg_c_fun(node$fun)
     return(sprintf("(%s((double)(%s)))", fun, x))
+  }
+
+  if (tag == "call2") {
+    x <- tccq_cg_expr(node$x)
+    y <- tccq_cg_expr(node$y)
+    fun <- node$fun
+    if (fun == "pmin") {
+      return(sprintf("((%s) < (%s) ? (%s) : (%s))", x, y, x, y))
+    }
+    if (fun == "pmax") {
+      return(sprintf("((%s) > (%s) ? (%s) : (%s))", x, y, x, y))
+    }
+    c_fun <- tccq_cg_c_fun(fun)
+    return(sprintf("(%s((double)(%s), (double)(%s)))", c_fun, x, y))
+  }
+
+  if (tag == "stop") {
+    return(sprintf("Rf_error(\"%s\")", gsub("\"", "\\\\\"", node$msg)))
   }
 
   if (tag == "length") {
@@ -179,16 +245,14 @@ tccq_cg_stmt <- function(node, indent) {
         identical(node$expr$tag, "vec_alloc")
     ) {
       alloc_mode <- node$expr$alloc_mode
-      sxp_type <- switch(
-        alloc_mode,
+      sxp_type <- switch(alloc_mode,
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
       len <- tccq_cg_expr(node$expr$len_expr)
-      ptr_fun <- switch(
-        alloc_mode,
+      ptr_fun <- switch(alloc_mode,
         double = "REAL",
         integer = "INTEGER",
         logical = "LOGICAL",
@@ -285,6 +349,31 @@ tccq_cg_stmt <- function(node, indent) {
     }
 
     # --- scalar assignment ---
+    # First handle cumulative ops which need alloc + fill loop
+    if (identical(node$expr$tag, "cumulative") && identical(node$shape, "vector")) {
+      len_c <- tccq_cg_vec_len(node$expr$expr)
+      sxp_type <- switch(node$mode,
+        integer = "INTSXP",
+        logical = "LGLSXP",
+        "REALSXP"
+      )
+      ptr_fun <- switch(node$mode,
+        integer = "INTEGER",
+        logical = "LOGICAL",
+        "REAL"
+      )
+      alloc_lines <- paste0(
+        pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type, ", (R_xlen_t)(", len_c, ")));\n",
+        pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
+        pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
+        pad, "nprotect_++;"
+      )
+      cum_lines <- tccq_cg_cumulative_stmt(
+        node$expr, indent, paste0("p_", nm)
+      )
+      return(paste(c(alloc_lines, cum_lines), collapse = "\n"))
+    }
+
     parts <- c()
     reds <- tccq_collect_reductions(node$expr)
     for (rd in reds) {
@@ -518,6 +607,18 @@ tccq_cg_stmt <- function(node, indent) {
     return(tccq_cg_reduce_expr_stmt(node, indent))
   }
 
+  if (tag == "stop") {
+    return(paste0(
+      pad,
+      sprintf("Rf_error(\"%s\");", gsub("\"", "\\\\\"", node$msg))
+    ))
+  }
+
+  if (tag == "cumulative") {
+    # cumulative as a bare statement requires a target; should go through assign
+    stop("cumulative must appear as right-hand side of an assignment", call. = FALSE)
+  }
+
   # Fallback: bare expression statement
   return(paste0(pad, tccq_cg_expr(node), ";"))
 }
@@ -532,42 +633,31 @@ tccq_cg_reduce_stmt <- function(node, indent) {
   op <- node$op
   var <- sprintf("red_%s_%s", op, arr)
 
-  init <- switch(
-    op,
+  c_type <- if (op %in% c("any", "all")) "int" else "double"
+  init <- switch(op,
     sum = "0.0",
     prod = "1.0",
     max = sprintf("p_%s[0]", arr),
     min = sprintf("p_%s[0]", arr),
+    any = "0",
+    all = "1",
     "0.0"
   )
-  update <- switch(
-    op,
+  update <- switch(op,
     sum = sprintf("%s += p_%s[ri_];", var, arr),
     prod = sprintf("%s *= p_%s[ri_];", var, arr),
     max = sprintf("if (p_%s[ri_] > %s) %s = p_%s[ri_];", arr, var, var, arr),
     min = sprintf("if (p_%s[ri_] < %s) %s = p_%s[ri_];", arr, var, var, arr),
+    any = sprintf("if (p_%s[ri_]) { %s = 1; break; }", arr, var),
+    all = sprintf("if (!p_%s[ri_]) { %s = 0; break; }", arr, var),
     ""
   )
   start <- if (op %in% c("max", "min")) "1" else "0"
   paste0(
-    pad,
-    "double ",
-    var,
-    " = ",
-    init,
-    ";\n",
-    pad,
-    "for (R_xlen_t ri_ = ",
-    start,
-    "; ri_ < n_",
-    arr,
-    "; ++ri_) {\n",
-    pad,
-    "  ",
-    update,
-    "\n",
-    pad,
-    "}"
+    pad, c_type, " ", var, " = ", init, ";\n",
+    pad, "for (R_xlen_t ri_ = ", start, "; ri_ < n_", arr, "; ++ri_) {\n",
+    pad, "  ", update, "\n",
+    pad, "}"
   )
 }
 
@@ -646,48 +736,63 @@ tccq_cg_reduce_expr_stmt <- function(node, indent) {
   idx <- sprintf("rx%d_", tccq_reduce_expr_counter_$n)
   elem <- tccq_cg_vec_elem(node$expr, idx)
 
-  init <- switch(
-    op,
+  c_type <- if (op %in% c("any", "all")) "int" else "double"
+  init <- switch(op,
     sum = "0.0",
     prod = "1.0",
     max = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
     min = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
+    any = "0",
+    all = "1",
     "0.0"
   )
-  update <- switch(
-    op,
+  update <- switch(op,
     sum = sprintf("%s += %s;", var, elem),
     prod = sprintf("%s *= %s;", var, elem),
     max = sprintf("{ double v_ = %s; if (v_ > %s) %s = v_; }", elem, var, var),
     min = sprintf("{ double v_ = %s; if (v_ < %s) %s = v_; }", elem, var, var),
+    any = sprintf("if (%s) { %s = 1; break; }", elem, var),
+    all = sprintf("if (!(%s)) { %s = 0; break; }", elem, var),
     ""
   )
   start <- if (op %in% c("max", "min")) "1" else "0"
   paste0(
-    pad,
-    "double ",
-    var,
-    " = ",
-    init,
-    ";\n",
-    pad,
-    "for (R_xlen_t ",
-    idx,
-    " = ",
-    start,
-    "; ",
-    idx,
-    " < (R_xlen_t)(",
-    len_c,
-    "); ++",
-    idx,
-    ") {\n",
-    pad,
-    "  ",
-    update,
-    "\n",
-    pad,
-    "}"
+    pad, c_type, " ", var, " = ", init, ";\n",
+    pad, "for (R_xlen_t ", idx, " = ", start, "; ",
+    idx, " < (R_xlen_t)(", len_c, "); ++", idx, ") {\n",
+    pad, "  ", update, "\n",
+    pad, "}"
+  )
+}
+
+# Cumulative ops: cumsum/cumprod/cummax/cummin
+# target_ptr: C pointer expression (e.g. "p_result" or "p_ret_").
+tccq_cg_cumulative_stmt <- function(node, indent, target_ptr) {
+  pad <- strrep("  ", indent)
+  op <- node$op
+  idx <- "ci_"
+  elem0 <- tccq_cg_vec_elem(node$expr, "0")
+  elem_i <- tccq_cg_vec_elem(node$expr, idx)
+  len_c <- tccq_cg_vec_len(node$expr)
+
+  update <- switch(op,
+    cumsum = sprintf("%s[%s] = %s[%s - 1] + %s;", target_ptr, idx, target_ptr, idx, elem_i),
+    cumprod = sprintf("%s[%s] = %s[%s - 1] * %s;", target_ptr, idx, target_ptr, idx, elem_i),
+    cummax = sprintf(
+      "{ double v_ = %s; %s[%s] = v_ > %s[%s - 1] ? v_ : %s[%s - 1]; }",
+      elem_i, target_ptr, idx, target_ptr, idx, target_ptr, idx
+    ),
+    cummin = sprintf(
+      "{ double v_ = %s; %s[%s] = v_ < %s[%s - 1] ? v_ : %s[%s - 1]; }",
+      elem_i, target_ptr, idx, target_ptr, idx, target_ptr, idx
+    ),
+    ""
+  )
+  paste0(
+    pad, target_ptr, "[0] = ", elem0, ";\n",
+    pad, "for (R_xlen_t ", idx, " = 1; ", idx, " < (R_xlen_t)(", len_c, "); ++", idx, ") {\n",
+    pad, "  ", update, "\n",
+    pad, "}"
   )
 }
 
@@ -723,28 +828,61 @@ tccq_collect_reductions <- function(node) {
 
 tccq_cg_vec_expr_return <- function(ir, indent) {
   pad <- strrep("  ", indent)
+
+  # Special case: cumulative ops can't be expressed element-wise
+  if (!is.null(ir$ret$tag) && ir$ret$tag == "cumulative") {
+    len_c <- tccq_cg_vec_len(ir$ret$expr)
+    if (is.null(len_c)) {
+      stop("Cannot determine length for cumulative return", call. = FALSE)
+    }
+    sxp_type <- switch(ir$ret_mode,
+      integer = "INTSXP",
+      logical = "LGLSXP",
+      "REALSXP"
+    )
+    ptr_fun <- switch(ir$ret_mode,
+      integer = "INTEGER",
+      logical = "LOGICAL",
+      "REAL"
+    )
+    alloc_lines <- paste0(
+      pad, "R_xlen_t ret_len_ = (R_xlen_t)(", len_c, ");\n",
+      pad, "SEXP ret_ = PROTECT(Rf_allocVector(", sxp_type, ", ret_len_));\n",
+      pad, "nprotect_++;\n",
+      pad, switch(ir$ret_mode,
+        integer = "int",
+        logical = "int",
+        "double"
+      ),
+      " *p_ret_ = ", ptr_fun, "(ret_);"
+    )
+    cum_lines <- tccq_cg_cumulative_stmt(ir$ret, indent, "p_ret_")
+    return(paste0(
+      alloc_lines, "\n", cum_lines, "\n",
+      pad, "UNPROTECT(nprotect_);\n",
+      pad, "return ret_;"
+    ))
+  }
+
   len_c <- tccq_cg_vec_len(ir$ret)
   if (is.null(len_c)) {
     stop("Cannot determine length for vector return expression", call. = FALSE)
   }
   elem_expr <- tccq_cg_vec_elem(ir$ret, "ei_")
 
-  sxp_type <- switch(
-    ir$ret_mode,
+  sxp_type <- switch(ir$ret_mode,
     double = "REALSXP",
     integer = "INTSXP",
     logical = "LGLSXP",
     "REALSXP"
   )
-  ptr_fun <- switch(
-    ir$ret_mode,
+  ptr_fun <- switch(ir$ret_mode,
     double = "REAL",
     integer = "INTEGER",
     logical = "LOGICAL",
     "REAL"
   )
-  c_type <- switch(
-    ir$ret_mode,
+  c_type <- switch(ir$ret_mode,
     double = "double",
     integer = "int",
     logical = "int",
@@ -803,6 +941,15 @@ tccq_cg_vec_len <- function(node) {
   }
   if (tag == "call1") {
     return(tccq_cg_vec_len(node$x))
+  }
+  if (tag == "call2") {
+    return(tccq_cg_vec_len(node$x) %||% tccq_cg_vec_len(node$y))
+  }
+  if (tag == "rev") {
+    return(tccq_cg_vec_len(node$expr))
+  }
+  if (tag == "cumulative") {
+    return(tccq_cg_vec_len(node$expr))
   }
   if (tag == "if") {
     return(tccq_cg_vec_len(node$yes) %||% tccq_cg_vec_len(node$no))
@@ -868,8 +1015,22 @@ tccq_cg_vec_elem <- function(node, idx_var) {
 
   if (tag == "call1") {
     x <- tccq_cg_vec_elem(node$x, idx_var)
-    fun <- switch(node$fun, abs = "fabs", ceiling = "ceil", node$fun)
+    fun <- tccq_cg_c_fun(node$fun)
     return(sprintf("(%s((double)(%s)))", fun, x))
+  }
+
+  if (tag == "call2") {
+    x <- tccq_cg_vec_elem(node$x, idx_var)
+    y <- tccq_cg_vec_elem(node$y, idx_var)
+    fun <- node$fun
+    if (fun == "pmin") {
+      return(sprintf("((%s) < (%s) ? (%s) : (%s))", x, y, x, y))
+    }
+    if (fun == "pmax") {
+      return(sprintf("((%s) > (%s) ? (%s) : (%s))", x, y, x, y))
+    }
+    c_fun <- tccq_cg_c_fun(fun)
+    return(sprintf("(%s((double)(%s), (double)(%s)))", c_fun, x, y))
   }
 
   if (tag == "if") {
@@ -877,6 +1038,12 @@ tccq_cg_vec_elem <- function(node, idx_var) {
     yes <- tccq_cg_vec_elem(node$yes, idx_var)
     no <- tccq_cg_vec_elem(node$no, idx_var)
     return(sprintf("((%s) ? (%s) : (%s))", cond, yes, no))
+  }
+
+  if (tag == "rev") {
+    len <- tccq_cg_vec_len(node$expr)
+    inner <- tccq_cg_vec_elem(node$expr, sprintf("((%s) - 1 - %s)", len, idx_var))
+    return(inner)
   }
 
   # Scalar expression fallback (constants broadcast)
@@ -932,61 +1099,88 @@ tccq_cg_fn_body <- function(ir, fn_name) {
   formal_names <- ir$formal_names
   c_args <- paste(sprintf("SEXP %s", formal_names), collapse = ", ")
 
+  # Determine needed headers by scanning IR for Rmath calls
+  needs_rmath <- tccq_ir_needs_rmath(ir)
+
   lines <- c(
     "#include <R.h>",
     "#include <Rinternals.h>",
     "#include <math.h>",
+    if (needs_rmath) "#include <Rmath.h>",
     "",
     sprintf("SEXP %s(%s) {", fn_name, c_args),
     "  int nprotect_ = 0;"
   )
 
   # --- Parameter extraction ---
+  mutated <- ir$mutated_params %||% character(0)
   for (nm in formal_names) {
     spec <- ir$params[[nm]]
     cnm <- tccq_cg_ident(nm)
+    is_mutated <- nm %in% mutated
     if (isTRUE(spec$is_scalar)) {
-      extract <- switch(
-        spec$mode,
+      extract <- switch(spec$mode,
         double = sprintf("  double %s_ = Rf_asReal(%s);", cnm, nm),
         integer = sprintf("  int %s_ = Rf_asInteger(%s);", cnm, nm),
         logical = sprintf("  int %s_ = Rf_asLogical(%s);", cnm, nm)
       )
       lines <- c(lines, extract)
     } else {
-      sxp_type <- switch(
-        spec$mode,
+      sxp_type <- switch(spec$mode,
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
-      ptr_fun <- switch(
-        spec$mode,
-        double = "REAL",
-        integer = "INTEGER",
-        logical = "LOGICAL",
-        "REAL"
-      )
-      c_type <- switch(
-        spec$mode,
+      ptr_fun <- if (is_mutated) {
+        switch(spec$mode,
+          double = "REAL",
+          integer = "INTEGER",
+          logical = "LOGICAL",
+          "REAL"
+        )
+      } else {
+        switch(spec$mode,
+          double = "REAL_RO",
+          integer = "INTEGER_RO",
+          logical = "LOGICAL_RO",
+          "REAL_RO"
+        )
+      }
+      c_type <- switch(spec$mode,
         double = "double",
         integer = "int",
         logical = "int",
         "double"
       )
-      lines <- c(
-        lines,
-        sprintf(
-          "  SEXP s_%s = PROTECT(Rf_coerceVector(%s, %s));",
-          cnm,
-          nm,
-          sxp_type
-        ),
-        "  nprotect_++;",
-        sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
-        sprintf("  %s *p_%s = %s(s_%s);", c_type, cnm, ptr_fun, cnm)
-      )
+      const_q <- if (is_mutated) "" else "const "
+      if (is_mutated) {
+        # Duplicate before coerce to avoid mutating caller's object
+        lines <- c(
+          lines,
+          sprintf(
+            "  SEXP s_%s = PROTECT(Rf_coerceVector(Rf_duplicate(%s), %s));",
+            cnm, nm, sxp_type
+          ),
+          "  nprotect_++;",
+          sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
+          sprintf("  %s *p_%s = %s(s_%s);", c_type, cnm, ptr_fun, cnm)
+        )
+      } else {
+        lines <- c(
+          lines,
+          sprintf(
+            "  SEXP s_%s = PROTECT(Rf_coerceVector(%s, %s));",
+            cnm, nm, sxp_type
+          ),
+          "  nprotect_++;",
+          sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
+          sprintf(
+            "  %s%s *p_%s = %s(s_%s);",
+            const_q, c_type, cnm, ptr_fun, cnm
+          )
+        )
+      }
       if (length(spec$dims) == 2L) {
         lines <- c(
           lines,
@@ -1002,8 +1196,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     info <- ir$locals[[nm]]
     cnm <- tccq_cg_ident(nm)
     if (info$shape == "scalar") {
-      c_type <- switch(
-        info$mode,
+      c_type <- switch(info$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -1011,8 +1204,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
       )
       lines <- c(lines, sprintf("  %s %s_ = 0;", c_type, cnm))
     } else {
-      c_type <- switch(
-        info$mode,
+      c_type <- switch(info$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -1054,7 +1246,6 @@ tccq_cg_fn_body <- function(ir, fn_name) {
   }
 
   # --- Return ---
-  ret_expr <- tccq_cg_expr(ir$ret)
   if (
     (ir$ret_shape %in% c("vector", "matrix")) &&
       !is.null(ir$ret$tag) &&
@@ -1072,8 +1263,8 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     lines <- c(lines, tccq_cg_vec_expr_return(ir, 1))
   } else {
     # Scalar return
-    wrap <- switch(
-      ir$ret_mode,
+    ret_expr <- tccq_cg_expr(ir$ret)
+    wrap <- switch(ir$ret_mode,
       double = sprintf("Rf_ScalarReal((double)(%s))", ret_expr),
       integer = sprintf("Rf_ScalarInteger((int)(%s))", ret_expr),
       logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", ret_expr),

@@ -49,6 +49,136 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   )
 }
 
+#' Supported operations table for tcc_quick
+#'
+#' Returns a data.frame listing every R construct that `tcc_quick()` can
+#' lower to C.  The table is assembled programmatically from the call
+#' registry and from the lowerer/codegen, so it stays in sync with
+#' the implementation.  The `vectorized` column indicates whether the
+#' operation is fused element-wise into vector loops via condensation
+#' (no intermediate allocation).
+#'
+#' @return A data.frame with columns `category`, `r`, `c`, `vectorized`.
+#' @export
+tcc_quick_ops <- function() {
+  # --- Registry-driven math (call1 / call2) ---
+  reg <- tcc_ir_c_api_registry()
+  math_rows <- lapply(names(reg), function(nm) {
+    e <- reg[[nm]]
+    hdr <- if (!is.null(e$header)) e$header else "math.h"
+    c_repr <- e$c_fun
+    if (!is.null(e$transform) && e$transform == "x+1") {
+      c_repr <- paste0(e$c_fun, "(x+1)")
+    }
+    if (e$arity == 2L) {
+      c_repr <- paste0(c_repr, "(x, y)")
+    } else {
+      c_repr <- paste0(c_repr, "(x)")
+    }
+    data.frame(
+      category = paste0("math (", hdr, ")"),
+      r = nm,
+      c = c_repr,
+      vectorized = TRUE,
+      stringsAsFactors = FALSE
+    )
+  })
+  math_df <- do.call(rbind, math_rows)
+
+  # --- Arithmetic / comparison / logical operators ---
+  op_rows <- list(
+    data.frame(category = "arithmetic", r = "+", c = "+", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "arithmetic", r = "-", c = "-", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "arithmetic", r = "*", c = "*", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "arithmetic", r = "/", c = "/", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "arithmetic", r = "^", c = "pow(x, y)", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "arithmetic", r = "%%", c = "fmod(x, y)", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "arithmetic", r = "%/%", c = "floor(x / y)", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "comparison", r = "< <= > >= == !=", c = "< <= > >= == !=", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "logical", r = "& | && || !", c = "& | && || !", vectorized = TRUE, stringsAsFactors = FALSE)
+  )
+  ops_df <- do.call(rbind, op_rows)
+
+  # --- Reductions ---
+  red_rows <- list(
+    data.frame(category = "reduction", r = "sum(x)", c = "accumulate loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "prod(x)", c = "accumulate loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "min(x)", c = "accumulate loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "max(x)", c = "accumulate loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "any(x)", c = "short-circuit loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "all(x)", c = "short-circuit loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "which.min(x)", c = "argmin loop", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "reduction", r = "which.max(x)", c = "argmax loop", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  red_df <- do.call(rbind, red_rows)
+
+  # --- Cumulative ---
+  cum_rows <- list(
+    data.frame(category = "cumulative", r = "cumsum(x)", c = "sequential scan", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "cumulative", r = "cumprod(x)", c = "sequential scan", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "cumulative", r = "cummax(x)", c = "sequential scan", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "cumulative", r = "cummin(x)", c = "sequential scan", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  cum_df <- do.call(rbind, cum_rows)
+
+  # --- Element-wise binary (non-registry) ---
+  ew_rows <- list(
+    data.frame(category = "element-wise", r = "pmin(x, y)", c = "ternary (x < y ? x : y)", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "element-wise", r = "pmax(x, y)", c = "ternary (x > y ? x : y)", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "element-wise", r = "rev(x)", c = "reversed index", vectorized = TRUE, stringsAsFactors = FALSE)
+  )
+  ew_df <- do.call(rbind, ew_rows)
+
+  # --- Vector accessors ---
+  vec_rows <- list(
+    data.frame(category = "vector", r = "x[i]", c = "p_x[i-1]", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "vector", r = "x[i] <- v", c = "p_x[i-1] = v", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "vector", r = "x[a:b]", c = "view (pointer + offset)", vectorized = TRUE, stringsAsFactors = FALSE),
+    data.frame(category = "vector", r = "length(x)", c = "n_x", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "vector", r = "double(n)", c = "Rf_allocVector", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "vector", r = "integer(n)", c = "Rf_allocVector", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "vector", r = "logical(n)", c = "Rf_allocVector", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  vec_df <- do.call(rbind, vec_rows)
+
+  # --- Matrix ---
+  mat_rows <- list(
+    data.frame(category = "matrix", r = "x[i, j]", c = "p_x[(j-1)*nrow + (i-1)]", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "matrix", r = "x[i, j] <- v", c = "p_x[(j-1)*nrow + (i-1)] = v", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "matrix", r = "nrow(x)", c = "nrow_x", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "matrix", r = "ncol(x)", c = "ncol_x", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "matrix", r = "matrix(fill, nr, nc)", c = "Rf_allocMatrix", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  mat_df <- do.call(rbind, mat_rows)
+
+  # --- Control flow ---
+  cf_rows <- list(
+    data.frame(category = "control flow", r = "for (i in seq_along(x))", c = "for (int i = 0; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "for (i in seq_len(n))", c = "for (int i = 0; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "for (i in a:b)", c = "for (int i = a; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "while (cond)", c = "while (cond)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "repeat", c = "while (1)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "break", c = "break", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "next", c = "continue", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "if / if-else", c = "if / if-else", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "ifelse(c, a, b)", c = "c ? a : b", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "stop(\"msg\")", c = "Rf_error(\"msg\")", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  cf_df <- do.call(rbind, cf_rows)
+
+  # --- Casts / coercion ---
+  cast_rows <- list(
+    data.frame(category = "cast", r = "as.integer(x)", c = "(int)(x)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "cast", r = "as.double(x)", c = "(double)(x)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "cast", r = "as.numeric(x)", c = "(double)(x)", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  cast_df <- do.call(rbind, cast_rows)
+
+  out <- rbind(ops_df, math_df, red_df, cum_df, ew_df, vec_df, mat_df, cf_df, cast_df)
+  rownames(out) <- NULL
+  out
+}
+
 #' Compile a small declare()-annotated R subset with TinyCC
 #'
 #' `tcc_quick()` is an experimental C-first path for compiling a strict subset

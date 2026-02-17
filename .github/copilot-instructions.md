@@ -4,6 +4,8 @@ This file is the minimum guidance for agentic work on Rtinycc. Read relevant cod
 
 Agents must read actual implementations before guessing. If you need third-party code or headers, check the `.sync` directory for local copies of libraries we depend on so you can read them directly instead of assuming behavior. We also generate `<package>.llm.txt` files for R package docs; for example, treesitter.c docs can be found in `treesitter.c.llm.txt`.
 
+The `.sync` directory also contains reference implementations that inform the `tcc_quick` compiler design: `codetools` (walker/handler), `quickr` (handler registry, scope tracking), `spy` (typed C AST, codegen), and `Stdlib` (the SaC standard library from the SacBase project — array primitives, reductions, transforms, and with-loop patterns that inform our condensation/ψ-reduction architecture).
+
 ## What this package does
 
 Rtinycc embeds TinyCC and exposes both CLI and libtcc APIs to R. It provides a Bun-style FFI that generates SEXP wrappers at runtime, compiles them with TinyCC, and calls them via `.Call`.
@@ -144,29 +146,60 @@ R's `parallel::mclapply` uses `fork()` which does not exist on Windows. Fork-rel
 
 ### Architecture
 
-The compiler pipeline draws on three reference implementations in `.sync/`:
+The compiler pipeline draws on four reference implementations in `.sync/`:
 
 - **codetools**: generic `walkCode`/`makeCodeWalker` dispatcher — adopted in `R/tcc_quick_walk.R`.
 - **quickr**: handler registry environment, scope/variable tracking — adopted in `R/tcc_ir_registry.R` and lowering dispatch.
 - **spy**: typed C AST with precedence, `emit()` pattern — informs codegen style.
+- **SaC Stdlib** (SacBase/Stdlib): the standard library for the Single Assignment C language. Provides dimension-independent array primitives (`dim`, `shape`, `sel`, `reshape`, `take`, `drop`, `rotate`, `cat`), element-wise arithmetic (`ArrayArith`), reductions (`ArrayReduce`: `sum`, `prod`, `minval`, `maxval` via `fold`), and transforms (`ArrayTransform`: `transpose`, `where`, `mask`). All built on with-loops (SAC's genarray/modarray comprehensions) and ψ-reduction (condensation) — the technique of fusing consecutive array operations into single loops that never materialize intermediate arrays.
 
 The pipeline: `R AST → declare parse → walk + lower → IR → codegen → TinyCC`.
+
+### Condensation / ψ-reduction (critical design principle)
+
+The core codegen mechanism is `tccq_cg_vec_elem(node, idx_var)`, which recursively defines the k-th element of any vector expression tree in terms of its children's k-th elements. This IS ψ-reduction (Mullin 1988) / condensation (Schmittgen 1986) as described in Scholz's SAC paper: consecutive array operations are fused into a single loop body that computes each element without materializing intermediates.
+
+For example, `sum(x[i:(i+n-1)] * weights)` compiles to a single loop:
+```c
+for (k = 0; k < len; ++k) acc += p_x[(i-1)+k] * p_weights[k];
+```
+No slice array is allocated, no product array is allocated. The composition `reduce(binary(vec_slice, var))` is resolved entirely by recursive element access.
+
+Correspondence with SAC:
+
+| SAC concept | Our implementation |
+|---|---|
+| Single assignment scoping | R's functional semantics (free) |
+| `with` genarray/modarray | `vec_alloc` + `for`/`vec_set` |
+| ψ-reduction (condensation) | `tccq_cg_vec_elem` recursion |
+| `sel(v, A)` / `A[v]` | `vec_get`, `mat_get` |
+| `take`/`drop` (subarray) | `vec_slice` (range view) |
+| Element-wise `Op(A, B)` | `binary` with shape="vector" |
+| `fold(fun, neutral)` | `reduce` / `reduce_expr` |
+| No intermediate arrays | Slices are views, not allocations |
 
 ### Current state
 
 - `tcc_quick()` API is exported and working.
 - Declaration parsing (`R/tcc_quick_declare.R`), codetools-style walker (`R/tcc_quick_walk.R`), lowering (`R/tcc_quick_lower.R`), codegen (`R/tcc_quick_codegen.R`), and caching (`R/tcc_quick_cache.R`) are all implemented.
-- IR node constructors are in `R/tcc_ir.R`; R→C function registry in `R/tcc_ir_registry.R`.
-- Scalar lowering/codegen works for arithmetic, comparisons, logical ops, `if`/`ifelse`, and unary math calls.
-- Vector kernel lowering works for nested loops with dynamic depth.
-- Boundary detection (`.Call`, `.C`, `.External`, `.Internal`, `.Primitive`) and fallback policy (`auto`/`always`/`never`) are implemented.
-- 28 tinytests in `test_tcc_quick_basic.R`, including convolution parity.
+- IR node constructors are in `R/tcc_ir.R`; R→C function registry in `R/tcc_ir_registry.R` (39 entries covering math.h and Rmath.h).
+- Registry-driven dispatch: the lowerer checks `tcc_ir_c_api_registry()` for any function call and emits `call1` (arity-1) or `call2` (arity-2) IR nodes. Adding a new math function requires one registry entry, no dispatcher or codegen changes.
+- Scalar lowering/codegen: arithmetic, comparisons, logical ops, `if`/`ifelse`, unary math, casts, `stop`.
+- Vector operations: `vec_alloc`, `vec_get`/`vec_set`, `vec_slice` (range view `x[a:b]`), `vec_rewrite` (element-wise in-place reassignment), element-wise binary/unary on vectors, `rev`, `pmin`/`pmax`.
+- Reductions: `reduce` (named variable), `reduce_expr` (arbitrary vector expression — the condensation path), `which_reduce`, `any`/`all` (short-circuit).
+- Cumulative operations: `cumsum`, `cumprod`, `cummax`, `cummin` (sequential scan, not condensable).
+- Matrix: `mat_alloc`, `mat_get`, `mat_set`, `nrow`, `ncol`.
+- Control flow: `for` (seq_along/seq_len/seq_range), `while`, `repeat`, `break`, `next`, `if`/`if-else` statements.
+- Boundary detection (`.Call`, `.C`, `.External`, `.Internal`, `.Primitive`) and fallback policy (`auto`/`always`/`never`).
+- ALTREP-safe codegen: read-only input parameters use `REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` pointer qualifiers. Parameters that are mutated (targeted by `vec_set`/`mat_set`/`vec_rewrite`) are `Rf_duplicate()`d before coercion to avoid corrupting the caller's objects. Mutation tracking is handled by `tccq_scope_mark_mutated()` in the lowerer and propagated as `ir$mutated_params`.
+- Tests: `test_tcc_quick_scalar.R` (10), `test_tcc_quick_vector.R` (7), `test_tcc_quick_matrix.R` (2), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (5), `test_tcc_quick_ops.R` (30). 308 total package tests.
 
 ### Remaining work
 
-- Lowering is still partly pattern-driven for kernel forms; converting to full statement-level handler registry (like quickr's per-construct files) is the next refactor target.
 - SSA conversion (Phase 2 in `docs/ir_design.md`): Phi/Upsilon form for scalar values, abstract heaps, optimization passes.
-- No centralized R API allowlist enforcement step yet (`.sync/API.csv`).
+- SAC-inspired array primitives not yet implemented: `reshape`, `rotate`, `take`, `drop`, `cat`, `transpose`, `where`.
+- No centralized R API allowlist enforcement step yet (`.inst/RAPI/API.csv`).
+- Dimension-independent operations (SAC's `with`-loops over shape-polymorphic arrays) are future work.
 
 ### Fallback strategy
 
@@ -174,7 +207,7 @@ Fallback happens inside generated C via `Rf_lang*` + `Rf_eval`, not by bouncing 
 
 ### Generated C style
 
-Explicit `PROTECT`/`UNPROTECT` counts; coerce once at function boundary; hoist `LENGTH()` outside loops; use raw pointers (`REAL()`, `INTEGER()`, `LOGICAL()`) in hot loops; emit informative `Rf_error` messages for shape/type mismatch.
+Explicit `PROTECT`/`UNPROTECT` counts; coerce once at function boundary; hoist `LENGTH()` outside loops; use `REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` for read-only inputs, `REAL()`/`INTEGER()`/`LOGICAL()` only for outputs and mutated inputs; `Rf_duplicate()` mutated input parameters before coercion; conditional `#include <Rmath.h>` when registry entries require it; emit informative `Rf_error` messages for shape/type mismatch.
 
 ## README and DOCS Style
 

@@ -16,15 +16,24 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://s
 
 Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc),
 providing both CLI access and a libtcc-backed in-memory compiler. It
-includes an experimental FFI inspired by [Bun’s
+includes an FFI inspired by [Bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
-predictable type conversions and pointer utilities. The package runs on
-unix-alikes and windows( pace UCRT issues, so WSL2 is recommended) and
-focuses on embedding TinyCC and enabling JIT-compiled bindings directly
-from R. Combined with
+predictable type conversions and pointer utilities, and an R-to-C
+transpiler (`tcc_quick()`, inspired by
+[quickr](https://github.com/t-kalinowski/quickr)) that compiles
+`declare()`-annotated R functions to C via TinyCC. The package runs on
+unix-alikes and Windows and focuses on embedding TinyCC and enabling
+JIT-compiled bindings directly from R. Combined with
 [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which
 provides C header parsers, it can be used to rapidly generate
 declarative bindings.
+
+We use ψ-reduction (Mullin 1988), also known as condensation in the SAC
+literature (Scholz 1994), as the core array codegen mechanism: vector
+expression trees are fused into single tight loops that never allocate
+intermediate arrays. Slices are views, reductions over expressions
+iterate element-wise, and the whole composition is resolved recursively
+at codegen time.
 
 ## How it works
 
@@ -177,7 +186,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5b6b4c8fb170"
+#> [1] "0x58cf85743820"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -208,11 +217,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5b6b498aa350>
+#> <pointer: 0x58cf8694e060>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5b6b49680620>
+#> <pointer: 0x58cf86989d80>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5b6b498aa350>
+#> <pointer: 0x58cf8694e060>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -275,8 +284,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       911ms    911ms      1.10   134.1MB    11.0 
-#> 2 Rbuiltin      537µs    572µs   1172.      9.05KB     5.99
+#> 1 Rtinycc       941ms    941ms      1.06   134.1MB     15.9
+#> 2 Rbuiltin      568µs    590µs   1606.      9.05KB     12.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -305,8 +314,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec      97µs    106µs     9262.    52.8KB     6.18
-#> 2 Rbuiltin_vec   16.9µs   17.7µs    53878.    78.2KB    43.1
+#> 1 Rtinycc_vec    97.5µs  106.2µs     9253.    52.8KB     12.8
+#> 2 Rbuiltin_vec   17.7µs   18.4µs    45595.    78.2KB     31.9
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -428,7 +437,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5b6b5f1dccb0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @58cf9bed95b8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -444,7 +453,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5b6b5f1dccb0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @58cf9bed95b8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -471,15 +480,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5b6b638fb190>
+#> <pointer: 0x58cf9e893870>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5b6b638fb190>
+#> <pointer: 0x58cf9e893870>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5b6b63ff6310>
+#> <pointer: 0x58cf95bafae0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5b6b63ff6310>
+#> <pointer: 0x58cf95bafae0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -524,9 +533,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5b6b670add50>
+#> <pointer: 0x58cf9b7d2c10>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5b6b670add50>
+#> <pointer: 0x58cf9b7d2c10>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -818,7 +827,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5b6b59e61220>
+#> <pointer: 0x58cf8b24d5f0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -934,11 +943,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 46.27ms 47.59ms      21.0    6.33MB        0     2     0     95.2ms
-#> 2 vroom_df_…  7.39ms   7.5ms     133.     1.22MB        0     2     0       15ms
-#> 3 vroom_df_…  7.17ms  7.64ms     131.     1.22MB        0     2     0     15.3ms
-#> 4 c_read_df  20.84ms 21.02ms      47.6    1.23MB        0     2     0     42.1ms
-#> 5 io_uring_… 20.31ms 20.41ms      49.0    1.23MB        0     2     0     40.8ms
+#> 1 read_tabl…  50.3ms 50.51ms      19.8    6.33MB        0     2     0      101ms
+#> 2 vroom_df_…  7.17ms  7.49ms     134.     1.22MB        0     2     0       15ms
+#> 3 vroom_df_…  7.25ms  7.27ms     138.     1.22MB        0     2     0     14.5ms
+#> 4 c_read_df  21.14ms 21.38ms      46.8    1.23MB        0     2     0     42.8ms
+#> 5 io_uring_… 21.17ms 21.25ms      47.0    1.23MB        0     2     0     42.5ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -946,10 +955,115 @@ if (Sys.info()[["sysname"]] == "Linux") {
 
 ## tcc_quick
 
-`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc. It
-compiles a declared subset of R code into C and executes it via TinyCC,
-while preserving a safe fallback route to R evaluation through
+`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc,
+inspired by [quickr](https://github.com/t-kalinowski/quickr). It
+compiles a `declare()`-annotated subset of R into C and executes it via
+TinyCC, while preserving a safe fallback route to R evaluation through
 `Rf_lang*` + `Rf_eval` when needed.
+
+The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation
+(Scholz, SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th
+element of any vector expression tree, fusing slices, element-wise ops,
+and reductions into single tight loops with zero intermediate
+allocations. Vector slices (`x[a:b]`) are views (pointer + offset),
+never copies.
+
+### Supported operations
+
+`tcc_quick_ops()` returns the full table programmatically. Here is the
+current snapshot, grouped by category:
+
+``` r
+knitr::kable(tcc_quick_ops(), row.names = FALSE)
+```
+
+| category       | r                       | c                              | vectorized |
+|:---------------|:------------------------|:-------------------------------|:-----------|
+| arithmetic     | \+                      | \+                             | TRUE       |
+| arithmetic     | \-                      | \-                             | TRUE       |
+| arithmetic     | \*                      | \*                             | TRUE       |
+| arithmetic     | /                       | /                              | TRUE       |
+| arithmetic     | ^                       | pow(x, y)                      | TRUE       |
+| arithmetic     | %%                      | fmod(x, y)                     | TRUE       |
+| arithmetic     | %/%                     | floor(x / y)                   | TRUE       |
+| comparison     | \< \<= \> \>= == !=     | \< \<= \> \>= == !=            | TRUE       |
+| logical        | & \| && \|\| !          | & \| && \|\| !                 | TRUE       |
+| math (math.h)  | abs                     | fabs(x)                        | TRUE       |
+| math (math.h)  | sqrt                    | sqrt(x)                        | TRUE       |
+| math (math.h)  | sin                     | sin(x)                         | TRUE       |
+| math (math.h)  | cos                     | cos(x)                         | TRUE       |
+| math (math.h)  | tan                     | tan(x)                         | TRUE       |
+| math (math.h)  | asin                    | asin(x)                        | TRUE       |
+| math (math.h)  | acos                    | acos(x)                        | TRUE       |
+| math (math.h)  | atan                    | atan(x)                        | TRUE       |
+| math (math.h)  | exp                     | exp(x)                         | TRUE       |
+| math (math.h)  | log                     | log(x)                         | TRUE       |
+| math (math.h)  | log10                   | log10(x)                       | TRUE       |
+| math (math.h)  | log2                    | log2(x)                        | TRUE       |
+| math (math.h)  | log1p                   | log1p(x)                       | TRUE       |
+| math (math.h)  | expm1                   | expm1(x)                       | TRUE       |
+| math (math.h)  | floor                   | floor(x)                       | TRUE       |
+| math (math.h)  | ceiling                 | ceil(x)                        | TRUE       |
+| math (math.h)  | trunc                   | trunc(x)                       | TRUE       |
+| math (math.h)  | tanh                    | tanh(x)                        | TRUE       |
+| math (math.h)  | sinh                    | sinh(x)                        | TRUE       |
+| math (math.h)  | cosh                    | cosh(x)                        | TRUE       |
+| math (math.h)  | asinh                   | asinh(x)                       | TRUE       |
+| math (math.h)  | acosh                   | acosh(x)                       | TRUE       |
+| math (math.h)  | atanh                   | atanh(x)                       | TRUE       |
+| math (math.h)  | atan2                   | atan2(x, y)                    | TRUE       |
+| math (math.h)  | hypot                   | hypot(x, y)                    | TRUE       |
+| math (Rmath.h) | gamma                   | gammafn(x)                     | TRUE       |
+| math (Rmath.h) | lgamma                  | lgammafn(x)                    | TRUE       |
+| math (Rmath.h) | digamma                 | digamma(x)                     | TRUE       |
+| math (Rmath.h) | trigamma                | trigamma(x)                    | TRUE       |
+| math (Rmath.h) | factorial               | gammafn(x+1)(x)                | TRUE       |
+| math (Rmath.h) | lfactorial              | lgammafn(x+1)(x)               | TRUE       |
+| math (Rmath.h) | beta                    | beta(x, y)                     | TRUE       |
+| math (Rmath.h) | lbeta                   | lbeta(x, y)                    | TRUE       |
+| math (Rmath.h) | choose                  | choose(x, y)                   | TRUE       |
+| math (Rmath.h) | lchoose                 | lchoose(x, y)                  | TRUE       |
+| math (Rmath.h) | sign                    | sign(x)                        | TRUE       |
+| reduction      | sum(x)                  | accumulate loop                | FALSE      |
+| reduction      | prod(x)                 | accumulate loop                | FALSE      |
+| reduction      | min(x)                  | accumulate loop                | FALSE      |
+| reduction      | max(x)                  | accumulate loop                | FALSE      |
+| reduction      | any(x)                  | short-circuit loop             | FALSE      |
+| reduction      | all(x)                  | short-circuit loop             | FALSE      |
+| reduction      | which.min(x)            | argmin loop                    | FALSE      |
+| reduction      | which.max(x)            | argmax loop                    | FALSE      |
+| cumulative     | cumsum(x)               | sequential scan                | FALSE      |
+| cumulative     | cumprod(x)              | sequential scan                | FALSE      |
+| cumulative     | cummax(x)               | sequential scan                | FALSE      |
+| cumulative     | cummin(x)               | sequential scan                | FALSE      |
+| element-wise   | pmin(x, y)              | ternary (x \< y ? x : y)       | TRUE       |
+| element-wise   | pmax(x, y)              | ternary (x \> y ? x : y)       | TRUE       |
+| element-wise   | rev(x)                  | reversed index                 | TRUE       |
+| vector         | x\[i\]                  | p_x\[i-1\]                     | FALSE      |
+| vector         | x\[i\] \<- v            | p_x\[i-1\] = v                 | FALSE      |
+| vector         | x\[a:b\]                | view (pointer + offset)        | TRUE       |
+| vector         | length(x)               | n_x                            | FALSE      |
+| vector         | double(n)               | Rf_allocVector                 | FALSE      |
+| vector         | integer(n)              | Rf_allocVector                 | FALSE      |
+| vector         | logical(n)              | Rf_allocVector                 | FALSE      |
+| matrix         | x\[i, j\]               | p_x\[(j-1)\*nrow + (i-1)\]     | FALSE      |
+| matrix         | x\[i, j\] \<- v         | p_x\[(j-1)\*nrow + (i-1)\] = v | FALSE      |
+| matrix         | nrow(x)                 | nrow_x                         | FALSE      |
+| matrix         | ncol(x)                 | ncol_x                         | FALSE      |
+| matrix         | matrix(fill, nr, nc)    | Rf_allocMatrix                 | FALSE      |
+| control flow   | for (i in seq_along(x)) | for (int i = 0; …)             | FALSE      |
+| control flow   | for (i in seq_len(n))   | for (int i = 0; …)             | FALSE      |
+| control flow   | for (i in a:b)          | for (int i = a; …)             | FALSE      |
+| control flow   | while (cond)            | while (cond)                   | FALSE      |
+| control flow   | repeat                  | while (1)                      | FALSE      |
+| control flow   | break                   | break                          | FALSE      |
+| control flow   | next                    | continue                       | FALSE      |
+| control flow   | if / if-else            | if / if-else                   | FALSE      |
+| control flow   | ifelse(c, a, b)         | c ? a : b                      | FALSE      |
+| control flow   | stop(“msg”)             | Rf_error(“msg”)                | FALSE      |
+| cast           | as.integer(x)           | (int)(x)                       | FALSE      |
+| cast           | as.double(x)            | (double)(x)                    | FALSE      |
+| cast           | as.numeric(x)           | (double)(x)                    | FALSE      |
 
 ### Convolution benchmark
 
@@ -1019,10 +1133,10 @@ print(timings)
 #> # A tibble: 4 × 13
 #>   expression            min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
 #>   <bch:expr>       <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 R                600.55ms 605.25ms      1.65     782KB     0        4     0
-#> 2 quickr             3.73ms   4.16ms    240.       782KB     2.56   468     5
-#> 3 Rtinycc_quick     16.99ms   17.3ms     57.4      796KB     1.04   110     2
-#> 4 Rtinycc_manual_c  57.02ms  57.61ms     17.3      796KB     0       35     0
+#> 1 R                624.06ms 624.72ms      1.60     782KB     0        4     0
+#> 2 quickr             3.78ms   4.18ms    239.       782KB     1.01   474     2
+#> 3 Rtinycc_quick     17.25ms  17.84ms     56.0      796KB     0      112     0
+#> 4 Rtinycc_manual_c  57.97ms  58.14ms     17.0      796KB     0       34     0
 #> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
 #> #   time <list>, gc <list>
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1066,15 +1180,13 @@ timings_roll_mean <- bench::mark(
   Rtinycc_quick = quick_tcc_roll_mean(x, weights = weights),
   min_time = 1
 )
-#> Warning: Some expressions had a GC in every iteration; so filtering is
-#> disabled.
 timings_roll_mean
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R              78.98ms  80.23ms      10.5     124MB   10.5  
-#> 2 quickr          2.89ms   4.01ms     253.      781KB    0.996
-#> 3 Rtinycc_quick  16.26ms  16.72ms      59.4     795KB    0.989
+#> 1 R                 69ms  69.01ms      14.5     124MB   130.  
+#> 2 quickr           2.9ms   4.05ms     253.      781KB     2.04
+#> 3 Rtinycc_quick   16.2ms  16.31ms      61.0     796KB     0
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1128,11 +1240,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5b6b63613350>
+#> <pointer: 0x58cfa4887f60>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5b6b6318d790>
+#> <pointer: 0x58cfa0d44630>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1161,9 +1273,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5b6b6729d950>
+#> <pointer: 0x58cfa304b4e0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5b6b6729d950>
+#> <pointer: 0x58cfa304b4e0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

@@ -23,7 +23,9 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes and windows( pace UCRT issues, so WSL2 is recommended) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an R-to-C transpiler (`tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr)) that compiles `declare()`-annotated R functions to C via TinyCC. The package runs on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+
+We use ψ-reduction (Mullin 1988), also known as condensation in the SAC literature (Scholz 1994), as the core array codegen mechanism: vector expression trees are fused into single tight loops that never allocate intermediate arrays. Slices are views, reductions over expressions iterate element-wise, and the whole composition is resolved recursively at codegen time.
 
 
 ## How it works
@@ -779,9 +781,25 @@ if (Sys.info()[["sysname"]] == "Linux") {
 
 ## tcc_quick
 
-`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc. It compiles a
-declared subset of R code into C and executes it via TinyCC, while preserving a
-safe fallback route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
+`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc, inspired by
+[quickr](https://github.com/t-kalinowski/quickr). It compiles a `declare()`-annotated
+subset of R into C and executes it via TinyCC, while preserving a safe fallback
+route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
+
+The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz,
+SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector
+expression tree, fusing slices, element-wise ops, and reductions into single
+tight loops with zero intermediate allocations. Vector slices (`x[a:b]`) are
+views (pointer + offset), never copies.
+
+### Supported operations
+
+`tcc_quick_ops()` returns the full table programmatically. Here is the current
+snapshot, grouped by category:
+
+```{r tcc-quick-ops-table}
+knitr::kable(tcc_quick_ops(), row.names = FALSE)
+```
 
 ### Convolution benchmark
 
