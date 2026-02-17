@@ -36,9 +36,9 @@ operators, unary operators, selected scalar math functions, and scalar
 scalar \verb{<-} assignments before the final expression are supported.
 }
 \details{
-For non-arithmetic two-argument calls (e.g. \code{max(x, y)}), \code{tcc_quick()}
-emits a wrapper that constructs the call via \code{Rf_lang3()} and evaluates it
-in base, so R's primitive/internal implementation is used.
+For non-arithmetic symbol calls (e.g. \code{max(x, y)} or \code{pmax(a, b, c, d, e)}),
+\code{tcc_quick()} emits a wrapper that constructs the call pairlist and evaluates
+it in base via \code{Rf_eval()}, so R's primitive/internal implementation is used.
 
 Lowering descends recursively through expressions and stops at boundary calls
 (\code{.Call}, \code{.C}, \code{.External}, \code{.Internal}, \code{.Primitive}), where it currently
