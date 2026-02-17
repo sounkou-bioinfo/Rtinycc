@@ -19,9 +19,20 @@ tcc_bind(ffi, ...)
 
   Named list of symbol definitions. Each definition is a list with:
 
-  - args: List of FFI types for arguments (e.g., list("i32", "f64"))
+  - args: List of fixed FFI argument types (e.g., list("i32", "f64"))
 
   - returns: FFI type for return value (e.g., "f64", "cstring")
+
+  - variadic: Set TRUE for C varargs functions
+
+  - varargs: Legacy typed variadic tail (exact/prefix mode)
+
+  - varargs_types: Allowed scalar FFI types for true variadic tails
+
+  - varargs_min: Minimum number of trailing varargs
+
+  - varargs_max: Maximum number of trailing varargs (required for true
+    variadic mode, defaults to `varargs_min`)
 
   - code: Optional C code for the symbol (for embedded functions)
 

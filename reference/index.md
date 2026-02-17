@@ -178,6 +178,9 @@
 - [`tcc_ptr_utils`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_utils.md)
   : Pointer and Buffer Utilities for FFI
 
+- [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
+  : Compile a small declare()-annotated R subset with TinyCC
+
 - [`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md)
   : Read raw bytes from a pointer
 
