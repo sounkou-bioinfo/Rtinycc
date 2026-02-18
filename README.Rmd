@@ -238,7 +238,6 @@ timings_ffi_vec <- bench::mark(
   }
 )
 timings_ffi_vec
-plot(timings_ffi_vec, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
