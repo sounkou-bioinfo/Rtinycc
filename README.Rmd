@@ -204,7 +204,10 @@ ffi <- tcc_ffi() |>
 ffi$add(5L, 3L)
 
 # Compare to the R builtin `+` in a tight loop.
-# Each FFI call allocates a return SEXP, so GC pressure is expected.
+# Each FFI call boxes the return value into a fresh SEXP.
+# In tight scalar loops this creates allocation churn, so GC pressure is expected.
+# Note: custom arena allocators can help temporary C buffers, but cannot replace
+# R's allocator for SEXP arguments/returns at the R<->C boundary.
 r_p <- sample(10000)
 timings_ffi_scalar <- bench::mark(
   Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
@@ -212,7 +215,8 @@ timings_ffi_scalar <- bench::mark(
 )
 timings_ffi_scalar
 
-# For performance-sensitive code, move the loop into C and operate on arrays.
+# For performance-sensitive code, move the loop into C and operate on arrays
+# (one call over many elements instead of many scalar calls).
 ffi_vec <- tcc_ffi() |>
   tcc_source(" \
     void add_vec(int32_t* x, int32_t n) {\
@@ -1072,6 +1076,13 @@ timings_ols <- bench::mark(
 )
 timings_ols
 plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+
+# Notes on allocation behavior:
+# - crossprod() and %*% are native-lowered in this example.
+# - solve() is delegated through Rf_eval() in soft mode, which allocates
+#   language objects/SEXP wrappers in addition to result objects.
+# - To reduce GC pressure, prefer native-lowered paths (fallback="hard") where
+#   possible, and batch work to avoid repeated scalar boundary crossings.
 ```
 
 ### Native statistics lowering

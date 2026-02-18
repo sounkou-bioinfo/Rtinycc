@@ -2296,7 +2296,8 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
     # Fallback: build LCONS manually for high-arity calls
     lines <- c(
       lines,
-      paste0(pad, "SEXP rfcall_e_ = Rf_allocList(", lang_n, ");"),
+      paste0(pad, "SEXP rfcall_e_ = PROTECT(Rf_allocList(", lang_n, "));"),
+      paste0(pad, "nprotect_++;"),
       paste0(pad, "SETCAR(rfcall_e_, ", fun_sym, ");"),
       paste0(pad, "SET_TYPEOF(rfcall_e_, LANGSXP);")
     )
