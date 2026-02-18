@@ -96,3 +96,30 @@ expect_error(
   tcc_quick(not_allowlisted_call, fallback = "hard"),
   pattern = "outside the current tcc_quick subset|Unsupported function call"
 )
+
+# raw arithmetic is intentionally disallowed; use bitw* helpers or explicit casts
+raw_add_bad <- function(x, y) {
+  declare(type(x = raw(1)), type(y = raw(1)))
+  x + y
+}
+
+expect_error(
+  tcc_quick(raw_add_bad, fallback = "hard"),
+  pattern = "raw mode is not supported"
+)
+
+# rank-3+ arrays are reserved for upcoming multidimensional support
+rank3_decl <- function(x) {
+  declare(type(x = double(NA, NA, NA)))
+  x
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(rank3_decl, fallback = "soft")),
+  rank3_decl
+))
+
+expect_error(
+  tcc_quick(rank3_decl, fallback = "hard"),
+  pattern = "Rank-3\\+ array declarations"
+)

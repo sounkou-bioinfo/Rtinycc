@@ -192,6 +192,7 @@ Correspondence with SAC:
 - Native stats reducers: `mean`, `sd`, `median`, `quantile` (scalar and vector `probs`), including literal `na.rm = TRUE/FALSE` handling.
 - Cumulative operations: `cumsum`, `cumprod`, `cummax`, `cummin` (sequential scan, not condensable).
 - Matrix: `mat_alloc`, `mat_get`, `mat_set`, `nrow`, `ncol`.
+- Multidimensional declaration space: rank-3+ types are parsed/tracked as `array` shape but currently reserved (fallback in `soft/auto`, hard error in `hard`).
 - BLAS-backed matrix products: `%*%`, `crossprod`, `tcrossprod` lower to `matmul` and codegen to `F77_CALL(dgemm)` via `R_ext/BLAS.h`.
 - LAPACK-backed linear solve: direct `solve(A, b)` / `solve(A, B)` lowers to `solve_lin` and codegen to `F77_CALL(dgesv)`.
 - Windows BLAS linkage note: when `matmul` is present, `tcc_quick_compile()` links `Rblas` explicitly (in addition to `R`) because `dgemm` often resolves from `Rblas.dll`.
@@ -202,7 +203,7 @@ Correspondence with SAC:
 - IR validation pass: hard mode rejects any `rf_call` path; malformed IR nodes fail fast.
 - ALTREP-safe codegen: read-only input parameters use `REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` pointer qualifiers. Parameters that are mutated (targeted by `vec_set`/`mat_set`/`vec_rewrite`) are `Rf_duplicate()`d before coercion to avoid corrupting the caller's objects. Mutation tracking is handled by `tccq_scope_mark_mutated()` in the lowerer and propagated as `ir$mutated_params`.
 - Capability table helpers are available in `R/tcc_ir_registry.R` (`tcc_rapi_table()`, `tcc_rapi_has()`, `tcc_rapi_summary()`, `tcc_quick_rf_call_allowlist()`, `tcc_quick_rf_call_quiet()`).
-- Tests: `test_tcc_quick_scalar.R` (10), `test_tcc_quick_vector.R` (22), `test_tcc_quick_matrix.R` (11), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (11), `test_tcc_quick_ops.R` (30). Full package suite currently runs 338 tests.
+- Tests: `test_tcc_quick_scalar.R` (11), `test_tcc_quick_vector.R` (23), `test_tcc_quick_matrix.R` (11), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (14), `test_tcc_quick_ops.R` (30). Full package suite currently runs 343 tests.
 
 ### Remaining work
 

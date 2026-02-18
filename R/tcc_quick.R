@@ -686,6 +686,9 @@ tcc_quick_ops <- function() {
 #' `if (cond) a else b`/`ifelse(cond, a, b)`) over declared scalar
 #' `double`/`integer`/`logical` arguments. Simple statement blocks with
 #' scalar `<-` assignments before the final expression are supported.
+#' Rank-3+ declarations (for example `double(NA, NA, NA)`) are accepted at
+#' parse time but currently reserved for upcoming multidimensional array
+#' support; they fallback in `soft`/`auto` and error in `hard` mode.
 #'
 #' For non-arithmetic symbol calls (e.g. `max(x, y)` or `pmax(a, b, c, d, e)`),
 #' `tcc_quick()` emits a wrapper that constructs the call pairlist and evaluates

@@ -65,6 +65,8 @@ tccq_scope_new <- function(decl) {
     spec <- decl$args[[nm]]
     shape <- if (isTRUE(spec$is_scalar)) {
       "scalar"
+    } else if (isTRUE(spec$is_array)) {
+      "array"
     } else if (isTRUE(spec$is_matrix)) {
       "matrix"
     } else {
@@ -78,6 +80,17 @@ tccq_scope_new <- function(decl) {
     )
   }
   sc
+}
+
+tccq_scope_has_array <- function(sc) {
+  nms <- ls(sc, all.names = TRUE)
+  for (nm in nms) {
+    info <- tccq_scope_get(sc, nm)
+    if (!is.null(info) && identical(info$shape, "array")) {
+      return(TRUE)
+    }
+  }
+  FALSE
 }
 
 tccq_scope_get <- function(sc, name) {
@@ -878,6 +891,37 @@ tccq_lower_expr <- function(e, sc, decl) {
   cmp_ops <- c("<", "<=", ">", ">=", "==", "!=")
   log_ops <- c("&&", "||", "&", "|")
 
+  # --- Bitwise functions: integer subset ---
+  bitw_funs <- c("bitwAnd", "bitwOr", "bitwXor", "bitwShiftL", "bitwShiftR")
+  if (fname %in% bitw_funs && length(e) == 3L) {
+    lhs <- tccq_lower_expr(e[[2]], sc, decl)
+    rhs <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!lhs$ok) {
+      return(lhs)
+    }
+    if (!rhs$ok) {
+      return(rhs)
+    }
+    if (!lhs$mode %in% c("integer") || !rhs$mode %in% c("integer")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, " requires integer arguments")
+      ))
+    }
+    out_shape <- if (lhs$shape == "vector" || rhs$shape == "vector") {
+      "vector"
+    } else {
+      "scalar"
+    }
+    out_mode <- "integer"
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "call2", fun = fname, x = lhs$node, y = rhs$node),
+      mode = out_mode,
+      shape = out_shape
+    ))
+  }
+
   if (fname %in% c(arith_ops, cmp_ops, log_ops) && length(e) == 3L) {
     lhs <- tccq_lower_expr(e[[2]], sc, decl)
     rhs <- tccq_lower_expr(e[[3]], sc, decl)
@@ -886,6 +930,20 @@ tccq_lower_expr <- function(e, sc, decl) {
     }
     if (!rhs$ok) {
       return(rhs)
+    }
+    if (lhs$mode == "raw" || rhs$mode == "raw") {
+      if (fname %in% cmp_ops) {
+        # raw comparisons are allowed and produce logical results.
+      } else {
+        return(tccq_lower_result(
+          FALSE,
+          reason = paste0(
+            "raw mode is not supported for operator '",
+            fname,
+            "'; use bitw* helpers or explicit cast"
+          )
+        ))
+      }
     }
     out_mode <- if (fname %in% cmp_ops || fname %in% log_ops) {
       "logical"
@@ -1597,6 +1655,11 @@ tccq_lower_fn_body <- function(fn, decl) {
   }
 
   sc <- tccq_scope_new(decl)
+  if (isTRUE(tccq_scope_has_array(sc))) {
+    return(tcc_quick_fallback_ir(
+      "Rank-3+ array declarations are reserved for upcoming multidimensional support"
+    ))
+  }
   stmts <- list()
 
   if (length(exprs) > 1L) {

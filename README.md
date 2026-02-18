@@ -976,6 +976,12 @@ wrapper call environment (`environment()`), not a fixed global
 environment, so lexical lookups are consistent with normal function
 calls.
 
+Type declarations also reserve space for multidimensional arrays:
+rank-3+ declarations (for example `double(NA, NA, NA)`) are parsed and
+tracked, but currently treated as outside the native subset pending full
+shape-polymorphic array lowering. In practice: `soft`/`auto` fall back,
+`hard` errors.
+
 The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation
 (Scholz, SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th
 element of any vector expression tree, fusing slices, element-wise ops,

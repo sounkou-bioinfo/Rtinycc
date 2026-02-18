@@ -52,8 +52,10 @@ tcc_quick_parse_type_spec <- function(spec) {
   list(
     mode = type_name,
     dims = dims,
+    rank = length(dims),
     is_scalar = length(dims) == 1L && !is.na(dims[[1]]) && dims[[1]] == 1L,
-    is_matrix = length(dims) == 2L
+    is_matrix = length(dims) == 2L,
+    is_array = length(dims) > 2L
   )
 }
 

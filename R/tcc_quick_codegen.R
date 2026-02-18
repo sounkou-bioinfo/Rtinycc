@@ -162,6 +162,21 @@ tccq_cg_expr <- function(node) {
     if (fun == "pmax") {
       return(sprintf("((%s) > (%s) ? (%s) : (%s))", x, y, x, y))
     }
+    if (fun == "bitwAnd") {
+      return(sprintf("(((int)(%s)) & ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwOr") {
+      return(sprintf("(((int)(%s)) | ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwXor") {
+      return(sprintf("(((int)(%s)) ^ ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwShiftL") {
+      return(sprintf("(((int)(%s)) << ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwShiftR") {
+      return(sprintf("(((int)(%s)) >> ((int)(%s)))", x, y))
+    }
     c_fun <- tccq_cg_c_fun(fun)
     return(sprintf("(%s((double)(%s), (double)(%s)))", c_fun, x, y))
   }
@@ -2885,6 +2900,21 @@ tccq_cg_vec_elem <- function(node, idx_var) {
     }
     if (fun == "pmax") {
       return(sprintf("((%s) > (%s) ? (%s) : (%s))", x, y, x, y))
+    }
+    if (fun == "bitwAnd") {
+      return(sprintf("(((int)(%s)) & ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwOr") {
+      return(sprintf("(((int)(%s)) | ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwXor") {
+      return(sprintf("(((int)(%s)) ^ ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwShiftL") {
+      return(sprintf("(((int)(%s)) << ((int)(%s)))", x, y))
+    }
+    if (fun == "bitwShiftR") {
+      return(sprintf("(((int)(%s)) >> ((int)(%s)))", x, y))
     }
     c_fun <- tccq_cg_c_fun(fun)
     return(sprintf("(%s((double)(%s), (double)(%s)))", c_fun, x, y))

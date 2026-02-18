@@ -252,3 +252,18 @@ expect_equal(
   apply_col_means_na(Xm2),
   tolerance = 1e-12
 )
+
+# raw bitwise ops
+raw_mask <- function(x) {
+  declare(type(x = raw(NA)))
+  n <- length(x)
+  y <- raw(n)
+  for (i in seq_len(n)) {
+    y[i] <- as.raw(bitwAnd(as.integer(x[i]), 15L))
+  }
+  y
+}
+
+f_raw_mask <- tcc_quick(raw_mask, fallback = "never")
+xr <- as.raw(sample.int(255L, 64L, replace = TRUE) - 1L)
+expect_equal(f_raw_mask(xr), raw_mask(xr))
