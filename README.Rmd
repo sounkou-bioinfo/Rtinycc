@@ -211,7 +211,6 @@ timings_ffi_scalar <- bench::mark(
   Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
 )
 timings_ffi_scalar
-plot(timings_ffi_scalar, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -1039,8 +1038,8 @@ In the example below, `%*%` and `crossprod` compile natively, while `solve`
 continues to delegate to R.
 
 ```{r tcc-quick-linalg-bypass}
-# A function that mixes scalar loops (compiled) with matrix operations (R).
-# Everything compiles; the matrix ops go through Rf_eval() transparently.
+# A function that mixes native matrix products with delegated linear solves.
+# crossprod() and %*% lower natively; solve() delegates through Rf_eval() in soft mode.
 fast_ols <- function(X, y) {
   declare(
     type(X = double(NA, NA)),
