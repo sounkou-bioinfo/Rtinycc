@@ -105,6 +105,16 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 
   ffi <- tcc_ffi() |>
     tcc_source(src)
+
+  # Matrix products lower to BLAS dgemm. On Windows this symbol typically
+  # lives in Rblas.dll (not R.dll), so add Rblas explicitly when needed.
+  if (
+    identical(.Platform$OS.type, "windows") &&
+      isTRUE(tccq_ir_has_tag(ir, "matmul"))
+  ) {
+    ffi <- tcc_library(ffi, "Rblas")
+  }
+
   ffi <- do.call(tcc_bind, c(list(ffi), stats::setNames(list(spec), entry)))
   compiled <- tcc_compile(ffi)
 
