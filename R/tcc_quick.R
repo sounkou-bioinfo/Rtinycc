@@ -12,7 +12,11 @@ tcc_quick_make_wrapper <- function(
   formals(out) <- formals_template
 
   arg_syms <- lapply(names(formals_template), as.name)
-  call_expr <- as.call(c(as.name(".compiled_callable"), arg_syms))
+  call_expr <- as.call(c(
+    as.name(".compiled_callable"),
+    arg_syms,
+    quote(environment())
+  ))
   body(out) <- call_expr
 
   environment(out) <- list2env(
@@ -101,7 +105,10 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
     message("tcc_quick generated C source:\n", src)
   }
 
-  spec <- list(args = rep("sexp", length(decl$formal_names)), returns = "sexp")
+  spec <- list(
+    args = rep("sexp", length(decl$formal_names) + 1L),
+    returns = "sexp"
+  )
   names(spec$args) <- NULL
 
   ffi <- tcc_ffi() |>
