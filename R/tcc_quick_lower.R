@@ -532,6 +532,40 @@ tccq_lower_expr <- function(e, sc, decl) {
     ))
   }
 
+  # --- row/col reducers on matrices ---
+  if (
+    fname %in%
+      c("rowSums", "colSums", "rowMeans", "colMeans") &&
+      length(e) >= 2L
+  ) {
+    na <- tccq_parse_na_rm(e)
+    if (!na$ok) {
+      return(tccq_lower_result(FALSE, reason = na$reason))
+    }
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (
+      x$shape == "matrix" &&
+        identical(x$node$tag, "var") &&
+        x$mode %in% c("double", "integer", "logical")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "mat_reduce",
+          op = fname,
+          arr = x$node$name,
+          arr_mode = x$mode,
+          na_rm = na$value
+        ),
+        mode = "double",
+        shape = "vector"
+      ))
+    }
+  }
+
   # --- apply(X, MARGIN, FUN): typed delegated subset ---
   if (fname == "apply" && length(e) >= 4L) {
     x <- tccq_lower_expr(e[[2]], sc, decl)
@@ -565,6 +599,28 @@ tccq_lower_expr <- function(e, sc, decl) {
       na <- tccq_parse_na_rm(e)
       if (!na$ok) {
         return(tccq_lower_result(FALSE, reason = na$reason))
+      }
+      if (
+        identical(x$node$tag, "var") &&
+          x$mode %in% c("double", "integer", "logical")
+      ) {
+        op <- if (fun_name == "sum") {
+          if (margin == 1L) "rowSums" else "colSums"
+        } else {
+          if (margin == 1L) "rowMeans" else "colMeans"
+        }
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "mat_reduce",
+            op = op,
+            arr = x$node$name,
+            arr_mode = x$mode,
+            na_rm = na$value
+          ),
+          mode = "double",
+          shape = "vector"
+        ))
       }
       delegated <- if (fun_name == "sum") {
         if (margin == 1L) "rowSums" else "colSums"
@@ -813,6 +869,22 @@ tccq_lower_expr <- function(e, sc, decl) {
           trans_b = TRUE
         ),
         mode = "double",
+        shape = "matrix"
+      ))
+    }
+  }
+
+  # --- matrix transpose: t(A) ---
+  if (fname == "t" && length(e) == 2L) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!a$ok) {
+      return(a)
+    }
+    if (a$shape == "matrix" && identical(a$node$tag, "var")) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "transpose", a = a$node$name),
+        mode = a$mode,
         shape = "matrix"
       ))
     }

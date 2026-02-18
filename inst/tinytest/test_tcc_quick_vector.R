@@ -235,7 +235,7 @@ apply_row_sums <- function(X) {
   apply(X, 1, sum)
 }
 
-f_apply_row_sums <- tcc_quick(apply_row_sums, fallback = "soft")
+f_apply_row_sums <- tcc_quick(apply_row_sums, fallback = "hard")
 Xm <- matrix(runif(50), nrow = 10)
 expect_equal(f_apply_row_sums(Xm), apply_row_sums(Xm), tolerance = 1e-12)
 
@@ -244,7 +244,7 @@ apply_col_means_na <- function(X) {
   apply(X, 2, mean, na.rm = TRUE)
 }
 
-f_apply_col_means_na <- tcc_quick(apply_col_means_na, fallback = "soft")
+f_apply_col_means_na <- tcc_quick(apply_col_means_na, fallback = "hard")
 Xm2 <- matrix(runif(30), nrow = 6)
 Xm2[2, 3] <- NA_real_
 expect_equal(

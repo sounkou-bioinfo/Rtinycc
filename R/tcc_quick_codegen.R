@@ -432,6 +432,22 @@ tccq_cg_stmt <- function(node, indent) {
       return(tccq_cg_matmul_stmt(node$expr, indent, nm))
     }
 
+    # --- matrix transpose assignment ---
+    if (
+      identical(node$shape, "matrix") &&
+        identical(node$expr$tag, "transpose")
+    ) {
+      return(tccq_cg_transpose_stmt(node$expr, indent, nm, mode = node$mode))
+    }
+
+    # --- matrix row/col reducers assignment ---
+    if (
+      identical(node$shape, "vector") &&
+        identical(node$expr$tag, "mat_reduce")
+    ) {
+      return(tccq_cg_mat_reduce_stmt(node$expr, indent, nm))
+    }
+
     # --- linear solve assignment (LAPACK dgesv) ---
     if (
       identical(node$shape, "vector") &&
@@ -2297,6 +2313,269 @@ tccq_cg_solve_lin_stmt <- function(node, indent, out_name) {
   )
 }
 
+tccq_cg_transpose_stmt <- function(node, indent, out_name, mode = "double") {
+  pad <- strrep("  ", indent)
+  a <- tccq_cg_ident(node$a)
+  out <- tccq_cg_ident(out_name)
+
+  sxp_type <- switch(
+    mode,
+    integer = "INTSXP",
+    logical = "LGLSXP",
+    raw = "RAWSXP",
+    "REALSXP"
+  )
+  ptr_fun <- switch(
+    mode,
+    integer = "INTEGER",
+    logical = "LOGICAL",
+    raw = "RAW",
+    "REAL"
+  )
+
+  paste0(
+    pad,
+    "nrow_",
+    out,
+    " = ncol_",
+    a,
+    ";\n",
+    pad,
+    "ncol_",
+    out,
+    " = nrow_",
+    a,
+    ";\n",
+    pad,
+    "s_",
+    out,
+    " = PROTECT(Rf_allocMatrix(",
+    sxp_type,
+    ", nrow_",
+    out,
+    ", ncol_",
+    out,
+    "));\n",
+    pad,
+    "nprotect_++;\n",
+    pad,
+    "n_",
+    out,
+    " = (R_xlen_t)nrow_",
+    out,
+    " * (R_xlen_t)ncol_",
+    out,
+    ";\n",
+    pad,
+    "p_",
+    out,
+    " = ",
+    ptr_fun,
+    "(s_",
+    out,
+    ");\n",
+    pad,
+    "for (int j_ = 0; j_ < ncol_",
+    a,
+    "; ++j_) {\n",
+    pad,
+    "  for (int i_ = 0; i_ < nrow_",
+    a,
+    "; ++i_) {\n",
+    pad,
+    "    p_",
+    out,
+    "[i_ * nrow_",
+    out,
+    " + j_] = p_",
+    a,
+    "[j_ * nrow_",
+    a,
+    " + i_];\n",
+    pad,
+    "  }\n",
+    pad,
+    "}"
+  )
+}
+
+tccq_cg_mat_reduce_stmt <- function(node, indent, out_name) {
+  pad <- strrep("  ", indent)
+  arr <- tccq_cg_ident(node$arr)
+  out <- tccq_cg_ident(out_name)
+  op <- node$op
+  na_rm <- isTRUE(node$na_rm)
+  by_row <- op %in% c("rowSums", "rowMeans")
+  is_mean <- op %in% c("rowMeans", "colMeans")
+
+  idx_outer <- if (by_row) "i_" else "j_"
+  idx_inner <- if (by_row) "j_" else "i_"
+  out_len_expr <- if (by_row) {
+    sprintf("nrow_%s", arr)
+  } else {
+    sprintf("ncol_%s", arr)
+  }
+
+  lines <- c(
+    paste0(
+      pad,
+      "s_",
+      out,
+      " = PROTECT(Rf_allocVector(REALSXP, (R_xlen_t)",
+      out_len_expr,
+      "));"
+    ),
+    paste0(pad, "nprotect_++;"),
+    paste0(pad, "n_", out, " = XLENGTH(s_", out, ");"),
+    paste0(pad, "p_", out, " = REAL(s_", out, ");"),
+    paste0(
+      pad,
+      "for (R_xlen_t k_ = 0; k_ < n_",
+      out,
+      "; ++k_) p_",
+      out,
+      "[k_] = 0.0;"
+    )
+  )
+
+  if (!na_rm) {
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "int *",
+        out,
+        "_bad = (int *)R_alloc((size_t)n_",
+        out,
+        ", sizeof(int));"
+      ),
+      paste0(
+        pad,
+        "for (R_xlen_t k_ = 0; k_ < n_",
+        out,
+        "; ++k_) ",
+        out,
+        "_bad[k_] = 0;"
+      )
+    )
+  }
+
+  if (is_mean) {
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "R_xlen_t *",
+        out,
+        "_cnt = (R_xlen_t *)R_alloc((size_t)n_",
+        out,
+        ", sizeof(R_xlen_t));"
+      ),
+      paste0(
+        pad,
+        "for (R_xlen_t k_ = 0; k_ < n_",
+        out,
+        "; ++k_) ",
+        out,
+        "_cnt[k_] = 0;"
+      )
+    )
+  }
+
+  lines <- c(
+    lines,
+    paste0(
+      pad,
+      "for (int ",
+      idx_outer,
+      " = 0; ",
+      idx_outer,
+      " < ",
+      out_len_expr,
+      "; ++",
+      idx_outer,
+      ") {"
+    ),
+    paste0(
+      pad,
+      "  for (int ",
+      idx_inner,
+      " = 0; ",
+      idx_inner,
+      " < ",
+      if (by_row) sprintf("ncol_%s", arr) else sprintf("nrow_%s", arr),
+      "; ++",
+      idx_inner,
+      ") {"
+    ),
+    paste0(
+      pad,
+      "    double v_ = (double)p_",
+      arr,
+      "[",
+      if (by_row) {
+        paste0(idx_outer, " + ", idx_inner, " * nrow_", arr)
+      } else {
+        paste0(idx_inner, " + ", idx_outer, " * nrow_", arr)
+      },
+      "];"
+    )
+  )
+
+  if (na_rm) {
+    lines <- c(lines, paste0(pad, "    if (ISNAN(v_)) continue;"))
+    if (is_mean) {
+      lines <- c(lines, paste0(pad, "    ", out, "_cnt[", idx_outer, "]++;"))
+    }
+    lines <- c(lines, paste0(pad, "    p_", out, "[", idx_outer, "] += v_;"))
+  } else {
+    lines <- c(
+      lines,
+      paste0(pad, "    if (", out, "_bad[", idx_outer, "]) continue;"),
+      paste0(
+        pad,
+        "    if (ISNAN(v_)) { ",
+        out,
+        "_bad[",
+        idx_outer,
+        "] = 1; p_",
+        out,
+        "[",
+        idx_outer,
+        "] = NA_REAL; continue; }"
+      ),
+      paste0(pad, "    p_", out, "[", idx_outer, "] += v_;")
+    )
+    if (is_mean) {
+      lines <- c(lines, paste0(pad, "    ", out, "_cnt[", idx_outer, "]++;"))
+    }
+  }
+
+  lines <- c(lines, paste0(pad, "  }"), paste0(pad, "}"))
+
+  if (is_mean) {
+    lines <- c(
+      lines,
+      paste0(pad, "for (R_xlen_t k_ = 0; k_ < n_", out, "; ++k_) {"),
+      paste0(
+        pad,
+        "  if (",
+        out,
+        "_cnt[k_] > 0) p_",
+        out,
+        "[k_] /= (double)",
+        out,
+        "_cnt[k_]; else p_",
+        out,
+        "[k_] = NA_REAL;"
+      ),
+      paste0(pad, "}")
+    )
+  }
+
+  paste(lines, collapse = "\n")
+}
+
 # Cumulative ops: cumsum/cumprod/cummax/cummin
 # target_ptr: C pointer expression (e.g. "p_result" or "p_ret_").
 tccq_cg_cumulative_stmt <- function(node, indent, target_ptr) {
@@ -3362,6 +3641,43 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     lines <- c(lines, tccq_cg_matmul_stmt(ir$ret, 1, "ret"))
     lines <- c(
       lines,
+      "  UNPROTECT(nprotect_);",
+      "  return s_ret;"
+    )
+  } else if (
+    ir$ret_shape == "matrix" &&
+      !is.null(ir$ret$tag) &&
+      ir$ret$tag == "transpose"
+  ) {
+    c_type_ret <- switch(
+      ir$ret_mode,
+      integer = "int",
+      logical = "int",
+      raw = "Rbyte",
+      "double"
+    )
+    lines <- c(
+      lines,
+      "  SEXP s_ret = R_NilValue;",
+      "  R_xlen_t n_ret = 0;",
+      "  int nrow_ret = 0;",
+      "  int ncol_ret = 0;",
+      paste0("  ", c_type_ret, " *p_ret = NULL;"),
+      tccq_cg_transpose_stmt(ir$ret, 1, "ret", mode = ir$ret_mode),
+      "  UNPROTECT(nprotect_);",
+      "  return s_ret;"
+    )
+  } else if (
+    ir$ret_shape == "vector" &&
+      !is.null(ir$ret$tag) &&
+      ir$ret$tag == "mat_reduce"
+  ) {
+    lines <- c(
+      lines,
+      "  SEXP s_ret = R_NilValue;",
+      "  R_xlen_t n_ret = 0;",
+      "  double *p_ret = NULL;",
+      tccq_cg_mat_reduce_stmt(ir$ret, 1, "ret"),
       "  UNPROTECT(nprotect_);",
       "  return s_ret;"
     )

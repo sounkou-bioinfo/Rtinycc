@@ -187,11 +187,12 @@ Correspondence with SAC:
 - Registry-driven dispatch: the lowerer checks `tcc_ir_c_api_registry()` for any function call and emits `call1` (arity-1) or `call2` (arity-2) IR nodes. Adding a new math function requires one registry entry, no dispatcher or codegen changes.
 - Scalar lowering/codegen: arithmetic, comparisons, logical ops, `if`/`ifelse`, unary math, casts, `stop`.
 - Vector operations: `vec_alloc`, `vec_get`/`vec_set`, `vec_slice` (range view `x[a:b]`), `vec_rewrite` (element-wise in-place reassignment), element-wise binary/unary on vectors, `rev`, `pmin`/`pmax`, and `raw` vectors (`raw(n)`, `as.raw`, `type(... = raw(...))`).
-- Typed mapping subset: `sapply(x, FUN)` for supported symbol `FUN`; `apply(X, MARGIN, FUN)` for matrix `X`, literal `MARGIN` in `{1,2}`, and `FUN` in `{sum, mean}` (delegated to row/col reducers in soft/auto).
+- Typed mapping subset: `sapply(x, FUN)` for supported symbol `FUN`; `apply(X, MARGIN, FUN)` for matrix `X`, literal `MARGIN` in `{1,2}`, and `FUN` in `{sum, mean}` (native row/col reducers for direct matrix-variable inputs, delegated fallback otherwise).
 - Reductions: `reduce` (named variable), `reduce_expr` (arbitrary vector expression — the condensation path), `which_reduce`, `any`/`all` (short-circuit).
 - Native stats reducers: `mean`, `sd`, `median`, `quantile` (scalar and vector `probs`), including literal `na.rm = TRUE/FALSE` handling.
 - Cumulative operations: `cumsum`, `cumprod`, `cummax`, `cummin` (sequential scan, not condensable).
 - Matrix: `mat_alloc`, `mat_get`, `mat_set`, `nrow`, `ncol`.
+- Native matrix row/col reducers: `rowSums`, `colSums`, `rowMeans`, `colMeans` (including literal `na.rm`).
 - Multidimensional declaration space: rank-3+ types are parsed/tracked as `array` shape but currently reserved (fallback in `soft/auto`, hard error in `hard`).
 - BLAS-backed matrix products: `%*%`, `crossprod`, `tcrossprod` lower to `matmul` and codegen to `F77_CALL(dgemm)` via `R_ext/BLAS.h`.
 - LAPACK-backed linear solve: direct `solve(A, b)` / `solve(A, B)` lowers to `solve_lin` and codegen to `F77_CALL(dgesv)`.
@@ -203,7 +204,7 @@ Correspondence with SAC:
 - IR validation pass: hard mode rejects any `rf_call` path; malformed IR nodes fail fast.
 - ALTREP-safe codegen: read-only input parameters use `REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` pointer qualifiers. Parameters that are mutated (targeted by `vec_set`/`mat_set`/`vec_rewrite`) are `Rf_duplicate()`d before coercion to avoid corrupting the caller's objects. Mutation tracking is handled by `tccq_scope_mark_mutated()` in the lowerer and propagated as `ir$mutated_params`.
 - Capability table helpers are available in `R/tcc_ir_registry.R` (`tcc_rapi_table()`, `tcc_rapi_has()`, `tcc_rapi_summary()`, `tcc_quick_rf_call_allowlist()`, `tcc_quick_rf_call_quiet()`).
-- Tests: `test_tcc_quick_scalar.R` (11), `test_tcc_quick_vector.R` (23), `test_tcc_quick_matrix.R` (11), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (14), `test_tcc_quick_ops.R` (30). Full package suite currently runs 343 tests.
+- Tests: `test_tcc_quick_scalar.R` (11), `test_tcc_quick_vector.R` (23), `test_tcc_quick_matrix.R` (18), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (14), `test_tcc_quick_ops.R` (30). Full package suite currently runs 350 tests.
 
 ### Remaining work
 

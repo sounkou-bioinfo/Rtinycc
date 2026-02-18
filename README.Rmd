@@ -1139,8 +1139,9 @@ plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 - `sapply(x, FUN)` where `FUN` is a symbol in the supported subset (for example
   unary math intrinsics, `identity`, and scalar casts such as `as.raw`).
 - `apply(X, MARGIN, FUN)` for matrix inputs with literal `MARGIN` (`1` or `2`)
-  and `FUN` in `{sum, mean}` (lowered to delegated `rowSums`/`colSums`/
-  `rowMeans`/`colMeans` in `soft`/`auto`).
+  and `FUN` in `{sum, mean}`. Direct matrix-variable cases lower natively via
+  `rowSums`/`colSums`/`rowMeans`/`colMeans` loops; non-direct cases may still
+  delegate in `soft`/`auto`.
 
 ```{r tcc-quick-apply-subset}
 sapply_example <- function(x) {

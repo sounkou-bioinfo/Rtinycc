@@ -87,6 +87,16 @@ tccq_validate_ir <- function(ir, fallback = c("auto", "soft", "hard")) {
           stop("solve_lin missing operands", call. = FALSE)
         }
       }
+      if (tag == "transpose") {
+        if (is.null(node$a)) {
+          stop("transpose missing operand", call. = FALSE)
+        }
+      }
+      if (tag == "mat_reduce") {
+        if (is.null(node$op) || is.null(node$arr)) {
+          stop("mat_reduce missing fields", call. = FALSE)
+        }
+      }
     }
 
     for (nm in names(node)) {

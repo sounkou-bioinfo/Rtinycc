@@ -133,3 +133,71 @@ expect_error(
   f_solve_vec(matrix(runif(12), 3, 4), rnorm(3)),
   pattern = "square matrix"
 )
+
+# --- native transpose t(A) ---
+
+t_mat <- function(A) {
+  declare(type(A = double(NA, NA)))
+  t(A)
+}
+
+f_t_mat <- tcc_quick(t_mat, fallback = "never")
+A7 <- matrix(runif(21), 7, 3)
+expect_equal(f_t_mat(A7), t(A7), tolerance = 1e-12)
+
+t_int_mat <- function(A) {
+  declare(type(A = integer(NA, NA)))
+  t(A)
+}
+
+f_t_int_mat <- tcc_quick(t_int_mat, fallback = "never")
+A8 <- matrix(sample.int(100L, 20L, replace = TRUE), 5, 4)
+expect_equal(f_t_int_mat(A8), t(A8))
+
+# --- native row/col reducers ---
+
+row_sums_native <- function(A) {
+  declare(type(A = double(NA, NA)))
+  rowSums(A)
+}
+
+col_sums_native <- function(A) {
+  declare(type(A = double(NA, NA)))
+  colSums(A)
+}
+
+row_means_native <- function(A) {
+  declare(type(A = double(NA, NA)))
+  rowMeans(A)
+}
+
+col_means_native <- function(A) {
+  declare(type(A = double(NA, NA)))
+  colMeans(A)
+}
+
+f_row_sums_native <- tcc_quick(row_sums_native, fallback = "never")
+f_col_sums_native <- tcc_quick(col_sums_native, fallback = "never")
+f_row_means_native <- tcc_quick(row_means_native, fallback = "never")
+f_col_means_native <- tcc_quick(col_means_native, fallback = "never")
+
+A9 <- matrix(rnorm(84), 12, 7)
+expect_equal(f_row_sums_native(A9), rowSums(A9), tolerance = 1e-12)
+expect_equal(f_col_sums_native(A9), colSums(A9), tolerance = 1e-12)
+expect_equal(f_row_means_native(A9), rowMeans(A9), tolerance = 1e-12)
+expect_equal(f_col_means_native(A9), colMeans(A9), tolerance = 1e-12)
+
+row_means_na_native <- function(A) {
+  declare(type(A = double(NA, NA)))
+  rowMeans(A, na.rm = TRUE)
+}
+
+f_row_means_na_native <- tcc_quick(row_means_na_native, fallback = "never")
+A10 <- A9
+A10[3, 2] <- NA_real_
+A10[8, 5] <- NA_real_
+expect_equal(
+  f_row_means_na_native(A10),
+  rowMeans(A10, na.rm = TRUE),
+  tolerance = 1e-12
+)

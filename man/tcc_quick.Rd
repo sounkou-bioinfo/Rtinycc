@@ -35,6 +35,9 @@ operators, unary operators, selected scalar math functions, and scalar
 \code{if (cond) a else b}/\code{ifelse(cond, a, b)}) over declared scalar
 \code{double}/\code{integer}/\code{logical} arguments. Simple statement blocks with
 scalar \verb{<-} assignments before the final expression are supported.
+Rank-3+ declarations (for example \code{double(NA, NA, NA)}) are accepted at
+parse time but currently reserved for upcoming multidimensional array
+support; they fallback in \code{soft}/\code{auto} and error in \code{hard} mode.
 }
 \details{
 For non-arithmetic symbol calls (e.g. \code{max(x, y)} or \code{pmax(a, b, c, d, e)}),
