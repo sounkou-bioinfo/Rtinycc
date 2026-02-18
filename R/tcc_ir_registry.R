@@ -68,6 +68,83 @@ tcc_ir_registry_lookup <- function(fname) {
   reg[[fname]]
 }
 
+# Functions explicitly permitted to lower as rf_call fallback nodes.
+# Calls outside this list are treated as outside the current tcc_quick subset.
+tcc_quick_rf_call_allowlist <- function() {
+  c(
+    "%*%",
+    "crossprod",
+    "tcrossprod",
+    "t",
+    "solve",
+    "qr",
+    "qr.solve",
+    "qr.coef",
+    "qr.resid",
+    "qr.fitted",
+    "qr.Q",
+    "qr.R",
+    "qr.X",
+    "svd",
+    "eigen",
+    "chol",
+    "chol2inv",
+    "backsolve",
+    "forwardsolve",
+    "det",
+    "norm",
+    "rcond",
+    "kappa",
+    "diag",
+    "outer",
+    "rowSums",
+    "colSums",
+    "rowMeans",
+    "colMeans",
+    "drop",
+    "dim",
+    "nchar",
+    "paste",
+    "paste0",
+    "array",
+    "rbind",
+    "cbind",
+    "rep",
+    "rep_len",
+    "is.na",
+    "is.finite",
+    "is.infinite",
+    "is.nan",
+    "which",
+    "tabulate",
+    "table",
+    "match",
+    "sort",
+    "order",
+    "rank",
+    "duplicated",
+    "unique",
+    "sprintf",
+    "format",
+    "cat",
+    "print",
+    "message",
+    "warning",
+    "list",
+    "c",
+    "unlist",
+    "do.call",
+    "Recall",
+    "Sys.time",
+    "proc.time"
+  )
+}
+
+# rf_call entries that should not emit a fallback diagnostic message.
+tcc_quick_rf_call_quiet <- function() {
+  c("%*%", "crossprod", "tcrossprod")
+}
+
 # Load exported R API symbol table bundled in inst/RAPI/API.csv
 tcc_rapi_table <- function() {
   p <- system.file("RAPI", "API.csv", package = "Rtinycc")

@@ -785,7 +785,8 @@ if (Sys.info()[["sysname"]] == "Linux") {
 `tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc, inspired by
 [quickr](https://github.com/t-kalinowski/quickr). It compiles a `declare()`-annotated
 subset of R into C and executes it via TinyCC, while preserving a safe fallback
-route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
+route to R evaluation through `Rf_lang*` + `Rf_eval` for an explicit allowlist
+of delegated calls.
 
 Fallback behavior is explicit:
 
@@ -1023,9 +1024,11 @@ plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 This keeps behavior portable across platforms while still using R's linked BLAS
 stack.
 
-Unsupported operations (for example `solve` and `svd`) are still delegated to R
-via `Rf_eval()` in `soft`/`auto` mode. In `hard` mode, those paths are rejected
-at compile time.
+Allowlisted delegated operations (for example `solve` and `svd`) are still
+evaluated through `Rf_eval()` in `soft`/`auto` mode. Calls outside the current
+native subset and delegation allowlist are treated as outside the supported
+`tcc_quick` subset. In `hard` mode, all `rf_call` paths are rejected at compile
+time.
 
 In the example below, `%*%` and `crossprod` compile natively, while `solve`
 continues to delegate to R.

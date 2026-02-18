@@ -74,3 +74,25 @@ expect_error(
   tcc_quick(bad_na_rm, fallback = "hard"),
   pattern = "outside the current tcc_quick subset|na.rm must be literal"
 )
+
+# --- rf_call allowlist enforcement ---
+
+not_allowlisted_call <- function(x) {
+  declare(type(x = double(1)))
+  identity(x)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(not_allowlisted_call, fallback = "soft")),
+  not_allowlisted_call
+))
+
+expect_warning(
+  tcc_quick(not_allowlisted_call, fallback = "soft"),
+  pattern = "Unsupported function call: identity"
+)
+
+expect_error(
+  tcc_quick(not_allowlisted_call, fallback = "hard"),
+  pattern = "outside the current tcc_quick subset|Unsupported function call"
+)

@@ -256,7 +256,7 @@ tccq_cg_expr <- function(node) {
     # rf_call as sub-expression: the statement was hoisted before this
     # expression is evaluated.  Return the pre-assigned variable name.
     if (is.null(node$var_name)) {
-      stop("rf_call missing var_name — pre-pass not run?", call. = FALSE)
+      stop("rf_call missing var_name - pre-pass not run?", call. = FALSE)
     }
     # For scalar extraction: Rf_asReal / Rf_asInteger / Rf_asLogical
     mode <- node$mode %||% "double"
@@ -861,7 +861,7 @@ tccq_cg_stmt <- function(node, indent) {
       to <- tccq_cg_expr(iter$to)
       by <- tccq_cg_expr(iter$by)
       v <- paste0(var, "_")
-      # by can be positive or negative — branch at runtime
+      # by can be positive or negative - branch at runtime
       return(paste0(
         pad,
         "{\n",
@@ -2214,7 +2214,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
 
   lines <- c()
 
-  # Build the argument SEXPs — scalars need wrapping, vectors use s_name.
+  # Build the argument SEXPs - scalars need wrapping, vectors use s_name.
   # Nested rf_calls are recursively emitted first.
   arg_c <- character(n)
   for (i in seq_len(n)) {
@@ -2223,15 +2223,28 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
     a_tag <- a$tag %||% ""
 
     if (a_tag == "rf_call") {
-      # Nested rf_call — emit it first, use its result SEXP
+      # Nested rf_call - emit it first, use its result SEXP
       child <- tccq_cg_rf_call_stmt(a, indent)
       lines <- c(lines, child$lines)
       arg_c[i] <- child$var
+    } else if (a_tag == "matmul") {
+      # Matrix expression used as argument to an R call: materialize first
+      tmpm <- sprintf("rfmat_%s_%d_%d", tccq_cg_ident(fun), uid, i)
+      lines <- c(
+        lines,
+        paste0(pad, "SEXP s_", tmpm, " = R_NilValue;"),
+        paste0(pad, "R_xlen_t n_", tmpm, " = 0;"),
+        paste0(pad, "double *p_", tmpm, " = NULL;"),
+        paste0(pad, "int nrow_", tmpm, " = 0;"),
+        paste0(pad, "int ncol_", tmpm, " = 0;")
+      )
+      lines <- c(lines, tccq_cg_matmul_stmt(a, indent, tmpm))
+      arg_c[i] <- sprintf("s_%s", tmpm)
     } else if (a_tag == "var" && a_shape %in% c("vector", "matrix")) {
-      # Vector / matrix variable — pass the SEXP directly
+      # Vector / matrix variable - pass the SEXP directly
       arg_c[i] <- sprintf("s_%s", tccq_cg_ident(a$name))
     } else if (a_tag == "var" && a_shape == "scalar") {
-      # Scalar variable — re-wrap from C scalar to SEXP
+      # Scalar variable - re-wrap from C scalar to SEXP
       c_nm <- tccq_cg_ident(a$name)
       a_mode <- a$mode %||% "double"
       wrap <- switch(
@@ -2245,7 +2258,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       lines <- c(lines, paste0(pad, "nprotect_++;"))
       arg_c[i] <- tmp
     } else {
-      # Scalar expression — wrap as SEXP
+      # Scalar expression - wrap as SEXP
       val <- tccq_cg_expr(a)
       mode <- a$mode %||% "double"
       wrap <- switch(
@@ -2311,7 +2324,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
 
   list(lines = paste(lines, collapse = "\n"), var = var)
 } # ---------------------------------------------------------------------------
-# vec_mask: x[mask] — count TRUEs, allocate, fill
+# vec_mask: x[mask] - count TRUEs, allocate, fill
 # ---------------------------------------------------------------------------
 
 tccq_cg_vec_mask_assign <- function(node, indent) {
@@ -2682,7 +2695,7 @@ tccq_cg_vec_elem <- function(node, idx_var) {
   }
 
   if (tag == "rf_call") {
-    # Hoisted rf_call result — access element via REAL(var_name)[idx]
+    # Hoisted rf_call result - access element via REAL(var_name)[idx]
     if (!is.null(node$var_name)) {
       return(sprintf("REAL(%s)[%s]", node$var_name, idx_var))
     }
@@ -2832,7 +2845,7 @@ tccq_assign_stat_expr_names <- function(node, counter_env = NULL) {
 }
 
 # ---------------------------------------------------------------------------
-# Top-level fn_body codegen → complete C source
+# Top-level fn_body codegen -> complete C source
 # ---------------------------------------------------------------------------
 
 tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {

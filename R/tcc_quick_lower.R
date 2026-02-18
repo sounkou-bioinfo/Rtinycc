@@ -1011,81 +1011,15 @@ tccq_lower_expr <- function(e, sc, decl) {
   # --- Unknown function: emit rf_call (inline R evaluation) ---
   # Try to lower all arguments; if any fails, bail out entirely.
 
-  # Known matrix / linear algebra ops — these are expected to go through
-  # rf_call and should not produce a diagnostic message.
-  linalg_ops <- c(
-    "%*%",
-    "crossprod",
-    "tcrossprod",
-    "t",
-    "solve",
-    "qr",
-    "qr.solve",
-    "qr.coef",
-    "qr.resid",
-    "qr.fitted",
-    "qr.Q",
-    "qr.R",
-    "qr.X",
-    "svd",
-    "eigen",
-    "chol",
-    "chol2inv",
-    "backsolve",
-    "forwardsolve",
-    "det",
-    "norm",
-    "rcond",
-    "kappa",
-    "diag",
-    "outer",
-    "rowSums",
-    "colSums",
-    "rowMeans",
-    "colMeans",
-    "median",
-    "quantile",
-    "drop",
-    "dim",
-    "nchar",
-    "paste",
-    "paste0",
-    "matrix",
-    "array",
-    "rbind",
-    "cbind",
-    "seq",
-    "seq.int",
-    "rep",
-    "rep_len",
-    "is.na",
-    "is.finite",
-    "is.infinite",
-    "is.nan",
-    "which",
-    "tabulate",
-    "table",
-    "match",
-    "sort",
-    "order",
-    "rank",
-    "duplicated",
-    "unique",
-    "sprintf",
-    "format",
-    "cat",
-    "print",
-    "message",
-    "warning",
-    "list",
-    "c",
-    "unlist",
-    "do.call",
-    "Recall",
-    "Sys.time",
-    "proc.time"
-  )
-  if (!fname %in% linalg_ops) {
+  rf_allow <- tcc_quick_rf_call_allowlist()
+  if (!fname %in% rf_allow) {
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Unsupported function call: ", fname)
+    ))
+  }
+
+  if (!fname %in% tcc_quick_rf_call_quiet()) {
     message(
       "[tcc_quick] '",
       fname,
@@ -1476,7 +1410,7 @@ tccq_lower_stmt <- function(e, sc, decl) {
 tccq_lower_fn_body <- function(fn, decl) {
   exprs <- tcc_quick_body_without_declare(fn)
   if (length(exprs) < 1L) {
-    return(NULL)
+    return(tcc_quick_fallback_ir("Empty function body after declare()"))
   }
 
   sc <- tccq_scope_new(decl)
@@ -1486,7 +1420,9 @@ tccq_lower_fn_body <- function(fn, decl) {
     for (i in seq_len(length(exprs) - 1L)) {
       r <- tccq_lower_stmt(exprs[[i]], sc, decl)
       if (!r$ok) {
-        return(NULL)
+        return(tcc_quick_fallback_ir(
+          r$reason %||% paste0("Unsupported statement at position ", i)
+        ))
       }
       stmts[[length(stmts) + 1L]] <- r$node
     }
@@ -1495,7 +1431,9 @@ tccq_lower_fn_body <- function(fn, decl) {
   last <- exprs[[length(exprs)]]
   ret <- tccq_lower_expr(last, sc, decl)
   if (!ret$ok) {
-    return(NULL)
+    return(tcc_quick_fallback_ir(
+      ret$reason %||% "Unsupported return expression"
+    ))
   }
 
   locals <- list()
@@ -1529,10 +1467,5 @@ tccq_lower_fn_body <- function(fn, decl) {
 
 tcc_quick_lower <- function(fn, decl) {
   ir <- tccq_lower_fn_body(fn, decl)
-  if (!is.null(ir)) {
-    return(tcc_quick_verify_ir(ir))
-  }
-  tcc_quick_verify_ir(
-    tcc_quick_fallback_ir("Function body outside the current tcc_quick subset")
-  )
+  tcc_quick_verify_ir(ir)
 }
