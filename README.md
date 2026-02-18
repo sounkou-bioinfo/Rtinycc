@@ -190,7 +190,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5895418762a0"
+#> [1] "0x6020b825c850"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -221,11 +221,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x58953f88b9b0>
+#> <pointer: 0x6020b82bb6a0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x589541469d40>
+#> <pointer: 0x6020b66b8af0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x58953f88b9b0>
+#> <pointer: 0x6020b82bb6a0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -288,8 +288,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       1.09s    1.09s     0.918   134.1MB     7.35
-#> 2 Rbuiltin   542.41µs 570.13µs  1712.       9.05KB     6.00
+#> 1 Rtinycc       898ms    898ms      1.11   134.1MB    11.1 
+#> 2 Rbuiltin      542µs    570µs   1187.      9.05KB     6.16
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -318,8 +318,8 @@ bench::mark(
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    96.7µs    104µs     9428.    52.8KB     8.21
-#> 2 Rbuiltin_vec   16.9µs   17.8µs    44275.    78.2KB    31.0
+#> 1 Rtinycc_vec    97.1µs  103.5µs     9579.    52.8KB     6.16
+#> 2 Rbuiltin_vec     17µs   18.4µs    43268.    78.2KB    34.6
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -441,7 +441,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5895540e7ab8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @6020cb874538 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -457,7 +457,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5895540e7ab8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @6020cb874538 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -484,15 +484,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x58954cbc7c90>
+#> <pointer: 0x6020bff5ca80>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x58954cbc7c90>
+#> <pointer: 0x6020bff5ca80>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x58953ed3ac20>
+#> <pointer: 0x6020b906b2a0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x58953ed3ac20>
+#> <pointer: 0x6020b906b2a0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -537,9 +537,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x58955adf2870>
+#> <pointer: 0x6020bbd6bb70>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x58955adf2870>
+#> <pointer: 0x6020bbd6bb70>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -831,7 +831,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x589548eca070>
+#> <pointer: 0x6020bbb51fe0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -947,11 +947,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 51.72ms 52.32ms      19.1    6.33MB        0     2     0    104.6ms
-#> 2 vroom_df_…  7.27ms  7.44ms     134.     1.22MB        0     2     0     14.9ms
-#> 3 vroom_df_…  7.31ms  8.07ms     124.     1.22MB        0     2     0     16.1ms
-#> 4 c_read_df  20.96ms  21.1ms      47.4    1.23MB        0     2     0     42.2ms
-#> 5 io_uring_… 21.39ms  21.4ms      46.7    1.23MB        0     2     0     42.8ms
+#> 1 read_tabl… 49.15ms 50.29ms      19.9    6.33MB        0     2     0    100.6ms
+#> 2 vroom_df_…  7.22ms  7.46ms     134.     1.22MB        0     2     0     14.9ms
+#> 3 vroom_df_…  9.22ms   9.3ms     108.     1.22MB        0     2     0     18.6ms
+#> 4 c_read_df   20.8ms  21.4ms      46.7    1.23MB        0     2     0     42.8ms
+#> 5 io_uring_… 20.69ms 20.89ms      47.9    1.23MB        0     2     0     41.8ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -981,93 +981,98 @@ current snapshot, grouped by category:
 knitr::kable(tcc_quick_ops(), row.names = FALSE)
 ```
 
-| category       | r                       | c                              | vectorized |
-|:---------------|:------------------------|:-------------------------------|:-----------|
-| arithmetic     | \+                      | \+                             | TRUE       |
-| arithmetic     | \-                      | \-                             | TRUE       |
-| arithmetic     | \*                      | \*                             | TRUE       |
-| arithmetic     | /                       | /                              | TRUE       |
-| arithmetic     | ^                       | pow(x, y)                      | TRUE       |
-| arithmetic     | %%                      | fmod(x, y)                     | TRUE       |
-| arithmetic     | %/%                     | floor(x / y)                   | TRUE       |
-| comparison     | \< \<= \> \>= == !=     | \< \<= \> \>= == !=            | TRUE       |
-| logical        | & \| && \|\| !          | & \| && \|\| !                 | TRUE       |
-| math (math.h)  | abs                     | fabs(x)                        | TRUE       |
-| math (math.h)  | sqrt                    | sqrt(x)                        | TRUE       |
-| math (math.h)  | sin                     | sin(x)                         | TRUE       |
-| math (math.h)  | cos                     | cos(x)                         | TRUE       |
-| math (math.h)  | tan                     | tan(x)                         | TRUE       |
-| math (math.h)  | asin                    | asin(x)                        | TRUE       |
-| math (math.h)  | acos                    | acos(x)                        | TRUE       |
-| math (math.h)  | atan                    | atan(x)                        | TRUE       |
-| math (math.h)  | exp                     | exp(x)                         | TRUE       |
-| math (math.h)  | log                     | log(x)                         | TRUE       |
-| math (math.h)  | log10                   | log10(x)                       | TRUE       |
-| math (math.h)  | log2                    | log2(x)                        | TRUE       |
-| math (math.h)  | log1p                   | log1p(x)                       | TRUE       |
-| math (math.h)  | expm1                   | expm1(x)                       | TRUE       |
-| math (math.h)  | floor                   | floor(x)                       | TRUE       |
-| math (math.h)  | ceiling                 | ceil(x)                        | TRUE       |
-| math (math.h)  | trunc                   | trunc(x)                       | TRUE       |
-| math (math.h)  | tanh                    | tanh(x)                        | TRUE       |
-| math (math.h)  | sinh                    | sinh(x)                        | TRUE       |
-| math (math.h)  | cosh                    | cosh(x)                        | TRUE       |
-| math (math.h)  | asinh                   | asinh(x)                       | TRUE       |
-| math (math.h)  | acosh                   | acosh(x)                       | TRUE       |
-| math (math.h)  | atanh                   | atanh(x)                       | TRUE       |
-| math (math.h)  | atan2                   | atan2(x, y)                    | TRUE       |
-| math (math.h)  | hypot                   | hypot(x, y)                    | TRUE       |
-| math (Rmath.h) | gamma                   | gammafn(x)                     | TRUE       |
-| math (Rmath.h) | lgamma                  | lgammafn(x)                    | TRUE       |
-| math (Rmath.h) | digamma                 | digamma(x)                     | TRUE       |
-| math (Rmath.h) | trigamma                | trigamma(x)                    | TRUE       |
-| math (Rmath.h) | factorial               | gammafn(x+1)(x)                | TRUE       |
-| math (Rmath.h) | lfactorial              | lgammafn(x+1)(x)               | TRUE       |
-| math (Rmath.h) | beta                    | beta(x, y)                     | TRUE       |
-| math (Rmath.h) | lbeta                   | lbeta(x, y)                    | TRUE       |
-| math (Rmath.h) | choose                  | choose(x, y)                   | TRUE       |
-| math (Rmath.h) | lchoose                 | lchoose(x, y)                  | TRUE       |
-| math (Rmath.h) | sign                    | sign(x)                        | TRUE       |
-| reduction      | sum(x)                  | accumulate loop                | FALSE      |
-| reduction      | prod(x)                 | accumulate loop                | FALSE      |
-| reduction      | min(x)                  | accumulate loop                | FALSE      |
-| reduction      | max(x)                  | accumulate loop                | FALSE      |
-| reduction      | any(x)                  | short-circuit loop             | FALSE      |
-| reduction      | all(x)                  | short-circuit loop             | FALSE      |
-| reduction      | which.min(x)            | argmin loop                    | FALSE      |
-| reduction      | which.max(x)            | argmax loop                    | FALSE      |
-| cumulative     | cumsum(x)               | sequential scan                | FALSE      |
-| cumulative     | cumprod(x)              | sequential scan                | FALSE      |
-| cumulative     | cummax(x)               | sequential scan                | FALSE      |
-| cumulative     | cummin(x)               | sequential scan                | FALSE      |
-| element-wise   | pmin(x, y)              | ternary (x \< y ? x : y)       | TRUE       |
-| element-wise   | pmax(x, y)              | ternary (x \> y ? x : y)       | TRUE       |
-| element-wise   | rev(x)                  | reversed index                 | TRUE       |
-| vector         | x\[i\]                  | p_x\[i-1\]                     | FALSE      |
-| vector         | x\[i\] \<- v            | p_x\[i-1\] = v                 | FALSE      |
-| vector         | x\[a:b\]                | view (pointer + offset)        | TRUE       |
-| vector         | length(x)               | n_x                            | FALSE      |
-| vector         | double(n)               | Rf_allocVector                 | FALSE      |
-| vector         | integer(n)              | Rf_allocVector                 | FALSE      |
-| vector         | logical(n)              | Rf_allocVector                 | FALSE      |
-| matrix         | x\[i, j\]               | p_x\[(j-1)\*nrow + (i-1)\]     | FALSE      |
-| matrix         | x\[i, j\] \<- v         | p_x\[(j-1)\*nrow + (i-1)\] = v | FALSE      |
-| matrix         | nrow(x)                 | nrow_x                         | FALSE      |
-| matrix         | ncol(x)                 | ncol_x                         | FALSE      |
-| matrix         | matrix(fill, nr, nc)    | Rf_allocMatrix                 | FALSE      |
-| control flow   | for (i in seq_along(x)) | for (int i = 0; …)             | FALSE      |
-| control flow   | for (i in seq_len(n))   | for (int i = 0; …)             | FALSE      |
-| control flow   | for (i in a:b)          | for (int i = a; …)             | FALSE      |
-| control flow   | while (cond)            | while (cond)                   | FALSE      |
-| control flow   | repeat                  | while (1)                      | FALSE      |
-| control flow   | break                   | break                          | FALSE      |
-| control flow   | next                    | continue                       | FALSE      |
-| control flow   | if / if-else            | if / if-else                   | FALSE      |
-| control flow   | ifelse(c, a, b)         | c ? a : b                      | FALSE      |
-| control flow   | stop(“msg”)             | Rf_error(“msg”)                | FALSE      |
-| cast           | as.integer(x)           | (int)(x)                       | FALSE      |
-| cast           | as.double(x)            | (double)(x)                    | FALSE      |
-| cast           | as.numeric(x)           | (double)(x)                    | FALSE      |
+| category       | r                        | c                              | vectorized |
+|:---------------|:-------------------------|:-------------------------------|:-----------|
+| arithmetic     | \+                       | \+                             | TRUE       |
+| arithmetic     | \-                       | \-                             | TRUE       |
+| arithmetic     | \*                       | \*                             | TRUE       |
+| arithmetic     | /                        | /                              | TRUE       |
+| arithmetic     | ^                        | pow(x, y)                      | TRUE       |
+| arithmetic     | %%                       | fmod(x, y)                     | TRUE       |
+| arithmetic     | %/%                      | floor(x / y)                   | TRUE       |
+| comparison     | \< \<= \> \>= == !=      | \< \<= \> \>= == !=            | TRUE       |
+| logical        | & \| && \|\| !           | & \| && \|\| !                 | TRUE       |
+| math (math.h)  | abs                      | fabs(x)                        | TRUE       |
+| math (math.h)  | sqrt                     | sqrt(x)                        | TRUE       |
+| math (math.h)  | sin                      | sin(x)                         | TRUE       |
+| math (math.h)  | cos                      | cos(x)                         | TRUE       |
+| math (math.h)  | tan                      | tan(x)                         | TRUE       |
+| math (math.h)  | asin                     | asin(x)                        | TRUE       |
+| math (math.h)  | acos                     | acos(x)                        | TRUE       |
+| math (math.h)  | atan                     | atan(x)                        | TRUE       |
+| math (math.h)  | exp                      | exp(x)                         | TRUE       |
+| math (math.h)  | log                      | log(x)                         | TRUE       |
+| math (math.h)  | log10                    | log10(x)                       | TRUE       |
+| math (math.h)  | log2                     | log2(x)                        | TRUE       |
+| math (math.h)  | log1p                    | log1p(x)                       | TRUE       |
+| math (math.h)  | expm1                    | expm1(x)                       | TRUE       |
+| math (math.h)  | floor                    | floor(x)                       | TRUE       |
+| math (math.h)  | ceiling                  | ceil(x)                        | TRUE       |
+| math (math.h)  | trunc                    | trunc(x)                       | TRUE       |
+| math (math.h)  | tanh                     | tanh(x)                        | TRUE       |
+| math (math.h)  | sinh                     | sinh(x)                        | TRUE       |
+| math (math.h)  | cosh                     | cosh(x)                        | TRUE       |
+| math (math.h)  | asinh                    | asinh(x)                       | TRUE       |
+| math (math.h)  | acosh                    | acosh(x)                       | TRUE       |
+| math (math.h)  | atanh                    | atanh(x)                       | TRUE       |
+| math (math.h)  | atan2                    | atan2(x, y)                    | TRUE       |
+| math (math.h)  | hypot                    | hypot(x, y)                    | TRUE       |
+| math (Rmath.h) | gamma                    | gammafn(x)                     | TRUE       |
+| math (Rmath.h) | lgamma                   | lgammafn(x)                    | TRUE       |
+| math (Rmath.h) | digamma                  | digamma(x)                     | TRUE       |
+| math (Rmath.h) | trigamma                 | trigamma(x)                    | TRUE       |
+| math (Rmath.h) | factorial                | gammafn(x+1)(x)                | TRUE       |
+| math (Rmath.h) | lfactorial               | lgammafn(x+1)(x)               | TRUE       |
+| math (Rmath.h) | beta                     | beta(x, y)                     | TRUE       |
+| math (Rmath.h) | lbeta                    | lbeta(x, y)                    | TRUE       |
+| math (Rmath.h) | choose                   | choose(x, y)                   | TRUE       |
+| math (Rmath.h) | lchoose                  | lchoose(x, y)                  | TRUE       |
+| math (Rmath.h) | sign                     | sign(x)                        | TRUE       |
+| reduction      | sum(x)                   | accumulate loop                | FALSE      |
+| reduction      | prod(x)                  | accumulate loop                | FALSE      |
+| reduction      | min(x)                   | accumulate loop                | FALSE      |
+| reduction      | max(x)                   | accumulate loop                | FALSE      |
+| reduction      | any(x)                   | short-circuit loop             | FALSE      |
+| reduction      | all(x)                   | short-circuit loop             | FALSE      |
+| reduction      | which.min(x)             | argmin loop                    | FALSE      |
+| reduction      | which.max(x)             | argmax loop                    | FALSE      |
+| cumulative     | cumsum(x)                | sequential scan                | FALSE      |
+| cumulative     | cumprod(x)               | sequential scan                | FALSE      |
+| cumulative     | cummax(x)                | sequential scan                | FALSE      |
+| cumulative     | cummin(x)                | sequential scan                | FALSE      |
+| element-wise   | pmin(x, y)               | ternary (x \< y ? x : y)       | TRUE       |
+| element-wise   | pmax(x, y)               | ternary (x \> y ? x : y)       | TRUE       |
+| element-wise   | rev(x)                   | reversed index                 | TRUE       |
+| vector         | x\[i\]                   | p_x\[i-1\]                     | FALSE      |
+| vector         | x\[i\] \<- v             | p_x\[i-1\] = v                 | FALSE      |
+| vector         | x\[a:b\]                 | view (pointer + offset)        | TRUE       |
+| vector         | length(x)                | n_x                            | FALSE      |
+| vector         | double(n)                | Rf_allocVector                 | FALSE      |
+| vector         | integer(n)               | Rf_allocVector                 | FALSE      |
+| vector         | logical(n)               | Rf_allocVector                 | FALSE      |
+| matrix         | x\[i, j\]                | p_x\[(j-1)\*nrow + (i-1)\]     | FALSE      |
+| matrix         | x\[i, j\] \<- v          | p_x\[(j-1)\*nrow + (i-1)\] = v | FALSE      |
+| matrix         | nrow(x)                  | nrow_x                         | FALSE      |
+| matrix         | ncol(x)                  | ncol_x                         | FALSE      |
+| matrix         | matrix(fill, nr, nc)     | Rf_allocMatrix                 | FALSE      |
+| control flow   | for (i in seq_along(x))  | for (int i = 0; …)             | FALSE      |
+| control flow   | for (i in seq_len(n))    | for (int i = 0; …)             | FALSE      |
+| control flow   | for (i in a:b)           | for (int i = a; …)             | FALSE      |
+| control flow   | for (i in seq(a, b))     | for (int i = a; …)             | FALSE      |
+| control flow   | for (x in seq(a, b, by)) | for (double x = a; …)          | FALSE      |
+| control flow   | for (x in vec)           | for + x = vec\[i\]             | FALSE      |
+| control flow   | while (cond)             | while (cond)                   | FALSE      |
+| control flow   | repeat                   | while (1)                      | FALSE      |
+| control flow   | break                    | break                          | FALSE      |
+| control flow   | next                     | continue                       | FALSE      |
+| control flow   | if / if-else             | if / if-else                   | FALSE      |
+| control flow   | ifelse(c, a, b)          | c ? a : b                      | FALSE      |
+| control flow   | stop(“msg”)              | Rf_error(“msg”)                | FALSE      |
+| cast           | as.integer(x)            | (int)(x)                       | FALSE      |
+| cast           | as.double(x)             | (double)(x)                    | FALSE      |
+| cast           | as.numeric(x)            | (double)(x)                    | FALSE      |
+| R fallback     | f(x, …)                  | Rf_eval(Rf_lang(…))            | FALSE      |
+| R fallback     | x\[mask\]                | count + alloc + fill           | FALSE      |
 
 ### Convolution benchmark
 
@@ -1137,10 +1142,10 @@ print(timings)
 #> # A tibble: 4 × 13
 #>   expression            min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
 #>   <bch:expr>       <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 R                605.25ms 608.98ms      1.63     782KB    0         4     0
-#> 2 quickr             3.73ms   4.26ms    235.       782KB    2.56    459     5
-#> 3 Rtinycc_quick     17.06ms  17.42ms     57.2      796KB    0.502   114     1
-#> 4 Rtinycc_manual_c   55.7ms   56.3ms     17.6      796KB    0.504    35     1
+#> 1 R                606.52ms 623.27ms      1.62     782KB    0.539     3     1
+#> 2 quickr             3.62ms   4.16ms    240.       782KB    2.62    457     5
+#> 3 Rtinycc_quick     17.02ms  17.26ms     57.8      796KB    0.503   115     1
+#> 4 Rtinycc_manual_c   55.5ms  56.25ms     17.6      796KB    0.502    35     1
 #> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
 #> #   time <list>, gc <list>
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1190,15 +1195,216 @@ timings_roll_mean
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R              79.04ms  82.08ms      12.1     124MB    12.1 
-#> 2 quickr          2.98ms   4.03ms     252.      781KB     2.00
-#> 3 Rtinycc_quick  16.24ms  16.97ms      59.5     796KB     0
+#> 1 R               75.5ms   86.3ms      9.87     124MB    14.8 
+#> 2 quickr           2.9ms   3.92ms    255.       781KB     2.00
+#> 3 Rtinycc_quick   16.2ms  16.34ms     61.1      796KB     0
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 <img src="man/figures/README-benchmark-tcc-quick-roll-mean-1.png" width="100%" />
+
+### Viterbi benchmark (from quickr README)
+
+The [Viterbi algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm)
+is a classic dynamic programming example from Hidden Markov Models. This
+version uses operations that `tcc_quick` lowers natively (`matrix`,
+`for`, `which.max`, `max`, scalar arithmetic, integer vector allocation)
+alongside operations that fall back to R via `Rf_eval` (column-slice `*`
+with matrix subscripts). The loop body itself — index iteration, argmax
+tracking, element access — runs in compiled C, which is where most of
+the time is spent.
+
+``` r
+slow_viterbi <- function(observations, states, initial_probs,
+                         transition_probs, emission_probs) {
+    declare(
+      type(observations = integer(NA)),
+      type(states = integer(NA)),
+      type(initial_probs = double(NA)),
+      type(transition_probs = double(NA, NA)),
+      type(emission_probs = double(NA, NA))
+    )
+
+    n_states <- length(states)
+    n_obs <- length(observations)
+    trellis <- matrix(0.0, nrow = n_states, ncol = n_obs)
+    backpointer <- matrix(0L, nrow = n_states, ncol = n_obs)
+
+    for (s in seq_len(n_states)) {
+      trellis[s, 1L] <- initial_probs[s] * emission_probs[s, observations[1L]]
+    }
+
+    for (step in 2:n_obs) {
+      for (cs in seq_len(n_states)) {
+        best_prob <- -1.0
+        best_state <- 1L
+        for (ps in seq_len(n_states)) {
+          p <- trellis[ps, step - 1L] * transition_probs[ps, cs]
+          if (p > best_prob) {
+            best_prob <- p
+            best_state <- ps
+          }
+        }
+        trellis[cs, step] <- best_prob * emission_probs[cs, observations[step]]
+        backpointer[cs, step] <- best_state
+      }
+    }
+
+    path <- integer(n_obs)
+    best_final <- -1.0
+    best_final_s <- 1L
+    for (s in seq_len(n_states)) {
+      if (trellis[s, n_obs] > best_final) {
+        best_final <- trellis[s, n_obs]
+        best_final_s <- s
+      }
+    }
+    path[n_obs] <- best_final_s
+
+    for (step in (n_obs - 1L):1L) {
+      path[step] <- backpointer[path[step + 1L], step + 1L]
+    }
+    path
+}
+
+quick_viterbi <- tcc_quick(slow_viterbi, fallback = "never")
+
+set.seed(1234)
+n_steps <- 16L
+n_states <- 8L
+n_obs <- 16L
+
+observations <- sample(1:n_obs, n_steps, replace = TRUE)
+states <- 1:n_states
+initial_probs <- runif(n_states)
+initial_probs <- initial_probs / sum(initial_probs)
+transition_probs <- matrix(runif(n_states * n_states), nrow = n_states)
+transition_probs <- transition_probs / rowSums(transition_probs)
+emission_probs <- matrix(runif(n_states * n_obs), nrow = n_states)
+emission_probs <- emission_probs / rowSums(emission_probs)
+
+stopifnot(identical(
+  slow_viterbi(observations, states, initial_probs, transition_probs, emission_probs),
+  quick_viterbi(observations, states, initial_probs, transition_probs, emission_probs)
+))
+
+timings_viterbi <- bench::mark(
+  R = slow_viterbi(observations, states, initial_probs,
+                   transition_probs, emission_probs),
+  Rtinycc_quick = quick_viterbi(observations, states, initial_probs,
+                                transition_probs, emission_probs)
+)
+timings_viterbi
+#> # A tibble: 2 × 6
+#>   expression         min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 R                 69µs   73.2µs    13562.    1.59KB     4.06
+#> 2 Rtinycc_quick    106µs  112.2µs     8778.   16.47KB    10.4
+```
+
+### Matrix algebra and R delegation
+
+`tcc_quick` does not re-implement matrix operations like `%*%`,
+`crossprod`, `solve`, or `svd`. R already dispatches these to optimized
+BLAS/LAPACK routines, so there is nothing to gain from emitting BLAS
+calls directly — and TinyCC’s single-pass codegen cannot outperform an
+optimized BLAS anyway.
+
+Instead, any unsupported function call is automatically delegated to R
+via `Rf_eval()`. The generated C builds the call pairlist, evaluates it
+in `R_GlobalEnv`, and feeds the result back into the compiled pipeline.
+This means that a function mixing scalar loops with occasional matrix
+calls compiles the loops to native code while the matrix operations
+still use R’s BLAS backend — the best of both worlds.
+
+``` r
+# A function that mixes scalar loops (compiled) with matrix operations (R).
+# Everything compiles; the matrix ops go through Rf_eval() transparently.
+fast_ols <- function(X, y) {
+  declare(
+    type(X = double(NA, NA)),
+    type(y = double(NA))
+  )
+  coef <- solve(crossprod(X), crossprod(X, y))
+  resid <- y - X %*% coef
+  n <- nrow(X)
+  k <- ncol(X)
+  s2 <- 0.0
+  for (i in seq_len(n)) {
+    s2 <- s2 + resid[i] * resid[i]
+  }
+  s2 <- s2 / as.double(n - k)
+  s2
+}
+
+quick_ols <- tcc_quick(fast_ols)
+
+set.seed(42)
+X <- cbind(1, matrix(rnorm(400), ncol = 4))
+y <- X %*% c(1, 2, -1, 0.5, 3) + rnorm(100)
+
+stopifnot(all.equal(fast_ols(X, y), quick_ols(X, y), tolerance = 1e-10))
+cat("Residual variance:", quick_ols(X, y), "\n")
+#> Residual variance: 1.016322
+```
+
+### Bypassing the R interpreter with type declarations
+
+Even when every function call in the body falls back to `Rf_eval`,
+`tcc_quick` still bypasses the R interpreter’s bytecode dispatch loop.
+The compiled C code calls R functions directly through the C API — no
+`GETVAR`, no `CALL`, no promise forcing, no stack-frame management. The
+type declarations let `tcc_quick` generate typed local variables, coerce
+arguments once at the boundary, and thread scalar values through
+registers instead of boxed SEXPs.
+
+Today the return type from `Rf_eval` is always treated as `double` (the
+declared type of the result variable). In the future, if `declare()` is
+extended to annotate function return types, `tcc_quick` could propagate
+types through `rf_call` nodes and eliminate even the unboxing overhead,
+turning every R function call into a typed C function call.
+
+``` r
+# Every operation here is an rf_call — nothing is natively lowered
+# except the scalar plumbing (locals, control flow, return).
+# Still faster than the interpreter because it's compiled C calling R.
+slow_stats <- function(x) {
+  declare(type(x = double(NA)))
+  m <- mean(x)
+  s <- sd(x)
+  med <- median(x)
+  q1 <- quantile(x, 0.25)
+  q3 <- quantile(x, 0.75)
+  iqr <- q3 - q1
+  iqr
+}
+
+quick_stats <- tcc_quick(slow_stats)
+#> [tcc_quick] 'mean' not natively supported is delegating to R via Rf_eval() !
+#> [tcc_quick] 'sd' not natively supported is delegating to R via Rf_eval() !
+#> [tcc_quick] 'median' not natively supported is delegating to R via Rf_eval() !
+#> [tcc_quick] 'quantile' not natively supported is delegating to R via Rf_eval() !
+#> [tcc_quick] 'quantile' not natively supported is delegating to R via Rf_eval() !
+
+x <- rnorm(10000)
+stopifnot(all.equal(
+  unname(slow_stats(x)), unname(quick_stats(x)),
+  tolerance = 1e-10
+))
+
+bench::mark(
+  R = slow_stats(x),
+  Rtinycc_quick = quick_stats(x),
+  check = FALSE
+)
+#> # A tibble: 2 × 6
+#>   expression         min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 R                387µs    403µs     2462.     422KB     8.20
+#> 2 Rtinycc_quick    500µs    524µs     1898.     405KB     8.24
+```
 
 ## Known limitations
 
@@ -1246,11 +1452,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x5895583ff350>
+#> <pointer: 0x6020bf8aea70>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x5895443ce8f0>
+#> <pointer: 0x6020d0f11ab0>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1279,9 +1485,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x589559ff05b0>
+#> <pointer: 0x6020d35c54c0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x589559ff05b0>
+#> <pointer: 0x6020d35c54c0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

@@ -156,6 +156,9 @@ tcc_quick_ops <- function() {
     data.frame(category = "control flow", r = "for (i in seq_along(x))", c = "for (int i = 0; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
     data.frame(category = "control flow", r = "for (i in seq_len(n))", c = "for (int i = 0; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
     data.frame(category = "control flow", r = "for (i in a:b)", c = "for (int i = a; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "for (i in seq(a, b))", c = "for (int i = a; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "for (x in seq(a, b, by))", c = "for (double x = a; ...)", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "control flow", r = "for (x in vec)", c = "for + x = vec[i]", vectorized = FALSE, stringsAsFactors = FALSE),
     data.frame(category = "control flow", r = "while (cond)", c = "while (cond)", vectorized = FALSE, stringsAsFactors = FALSE),
     data.frame(category = "control flow", r = "repeat", c = "while (1)", vectorized = FALSE, stringsAsFactors = FALSE),
     data.frame(category = "control flow", r = "break", c = "break", vectorized = FALSE, stringsAsFactors = FALSE),
@@ -174,7 +177,14 @@ tcc_quick_ops <- function() {
   )
   cast_df <- do.call(rbind, cast_rows)
 
-  out <- rbind(ops_df, math_df, red_df, cum_df, ew_df, vec_df, mat_df, cf_df, cast_df)
+  # --- R fallback (rf_call) ---
+  rf_rows <- list(
+    data.frame(category = "R fallback", r = "f(x, ...)", c = "Rf_eval(Rf_lang(...))", vectorized = FALSE, stringsAsFactors = FALSE),
+    data.frame(category = "R fallback", r = "x[mask]", c = "count + alloc + fill", vectorized = FALSE, stringsAsFactors = FALSE)
+  )
+  rf_df <- do.call(rbind, rf_rows)
+
+  out <- rbind(ops_df, math_df, red_df, cum_df, ew_df, vec_df, mat_df, cf_df, cast_df, rf_df)
   rownames(out) <- NULL
   out
 }

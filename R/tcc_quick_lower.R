@@ -219,7 +219,7 @@ tccq_lower_expr <- function(e, sc, decl) {
         ))
     }
 
-    # --- 1D subscript: x[i] or x[a:b] ---
+    # --- 1D subscript: x[i], x[a:b], or x[mask] ---
     if (fname == "[" && length(e) == 3L) {
         arr <- tccq_lower_expr(e[[2]], sc, decl)
         idx <- tccq_lower_expr(e[[3]], sc, decl)
@@ -241,6 +241,19 @@ tccq_lower_expr <- function(e, sc, decl) {
                     arr = arr$node$name,
                     from = idx$node$from,
                     to = idx$node$to
+                ),
+                mode = arr$mode,
+                shape = "vector"
+            ))
+        }
+        # Logical mask subscript → vec_mask (count + fill)
+        if (idx$shape == "vector" && idx$mode == "logical") {
+            return(tccq_lower_result(
+                TRUE,
+                node = list(
+                    tag = "vec_mask",
+                    arr = arr$node$name,
+                    mask = idx$node
                 ),
                 mode = arr$mode,
                 shape = "vector"
@@ -602,6 +615,54 @@ tccq_lower_expr <- function(e, sc, decl) {
         ))
     }
 
+    # --- seq(from, to) and seq(from, to, by) ---
+    if (fname == "seq") {
+        # seq(from, to) → same as from:to
+        if (length(e) == 3L) {
+            from <- tccq_lower_expr(e[[2]], sc, decl)
+            to <- tccq_lower_expr(e[[3]], sc, decl)
+            if (!from$ok) return(from)
+            if (!to$ok) return(to)
+            return(tccq_lower_result(
+                TRUE,
+                node = list(
+                    tag = "seq_range",
+                    from = from$node,
+                    to = to$node
+                ),
+                mode = "integer",
+                shape = "vector"
+            ))
+        }
+        # seq(from, to, by) — positional or named `by=`
+        if (length(e) == 4L) {
+            nms <- names(e)
+            by_pos <- 4L
+            if (!is.null(nms) && any(nms == "by")) {
+                by_pos <- which(nms == "by")
+            }
+            # Determine from/to positions (everything that isn't by)
+            positional <- setdiff(2:4, by_pos)
+            from <- tccq_lower_expr(e[[positional[1]]], sc, decl)
+            to <- tccq_lower_expr(e[[positional[2]]], sc, decl)
+            by <- tccq_lower_expr(e[[by_pos]], sc, decl)
+            if (!from$ok) return(from)
+            if (!to$ok) return(to)
+            if (!by$ok) return(by)
+            return(tccq_lower_result(
+                TRUE,
+                node = list(
+                    tag = "seq_by",
+                    from = from$node,
+                    to = to$node,
+                    by = by$node
+                ),
+                mode = "double",
+                shape = "vector"
+            ))
+        }
+    }
+
     # --- any / all reductions (logical) ---
     if (fname %in% c("any", "all") && length(e) == 2L) {
         x <- tccq_lower_expr(e[[2]], sc, decl)
@@ -707,8 +768,71 @@ tccq_lower_expr <- function(e, sc, decl) {
         ))
     }
 
-    # --- Unknown function ---
-    tccq_lower_result(FALSE, reason = paste0("Unsupported call: ", fname))
+    # --- Unknown function: emit rf_call (inline R evaluation) ---
+    # Try to lower all arguments; if any fails, bail out entirely.
+
+    # Known matrix / linear algebra ops — these are expected to go through
+    # rf_call and should not produce a diagnostic message.
+    linalg_ops <- c(
+        "%*%", "crossprod", "tcrossprod", "t", "solve", "qr", "qr.solve",
+        "qr.coef", "qr.resid", "qr.fitted", "qr.Q", "qr.R", "qr.X",
+        "svd", "eigen", "chol", "chol2inv", "backsolve", "forwardsolve",
+        "det", "norm", "rcond", "kappa",
+        "diag", "outer", "rowSums", "colSums", "rowMeans", "colMeans",
+        "drop", "dim", "nchar", "paste", "paste0",
+        "matrix", "array", "rbind", "cbind",
+        "seq", "seq.int", "rep", "rep_len",
+        "is.na", "is.finite", "is.infinite", "is.nan",
+        "which", "tabulate", "table", "match",
+        "sort", "order", "rank", "duplicated", "unique",
+        "sprintf", "format", "cat", "print", "message", "warning",
+        "list", "c", "unlist", "do.call", "Recall",
+        "Sys.time", "proc.time"
+    )
+    if (!fname %in% linalg_ops) {
+        message(
+            "[tcc_quick] '", fname,
+            "' not natively supported is delegating to R via Rf_eval() !"
+        )
+    }
+    rf_args <- list()
+    for (ai in seq_len(length(e) - 1L)) {
+        a <- tccq_lower_expr(e[[ai + 1L]], sc, decl)
+        if (!a$ok) {
+            return(tccq_lower_result(
+                FALSE,
+                reason = paste0("Cannot lower argument ", ai, " of ", fname)
+            ))
+        }
+        rf_args[[ai]] <- a
+    }
+    rf_arg_nodes <- lapply(rf_args, function(a) {
+        nd <- a$node
+        nd$shape <- a$shape
+        nd$mode <- a$mode
+        nd
+    })
+    # Determine output shape heuristically: if any arg is vector/matrix,
+    # result is likely vector (e.g. %*%, t()).  For scalars, assume scalar.
+    out_shape <- "scalar"
+    for (a in rf_args) {
+        if (a$shape %in% c("vector", "matrix")) {
+            out_shape <- "vector"
+            break
+        }
+    }
+    tccq_lower_result(
+        TRUE,
+        node = list(
+            tag = "rf_call",
+            fun = fname,
+            args = rf_arg_nodes,
+            mode = "double",
+            shape = out_shape
+        ),
+        mode = "double",
+        shape = out_shape
+    )
 }
 
 # ---------------------------------------------------------------------------
@@ -876,12 +1000,83 @@ tccq_lower_stmt <- function(e, sc, decl) {
             return(iter_r)
         }
 
+        # Value iteration: for (x in vec) where vec is a named vector
+        # Desugar to: hidden index loop + x = vec[idx] at top of body
+        if (
+            iter_r$shape == "vector" &&
+                identical(iter_r$node$tag, "var")
+        ) {
+            idx_var <- paste0(".tccq_i_", var)
+            vec_name <- iter_r$node$name
+
+            tccq_scope_set(
+                sc,
+                idx_var,
+                list(kind = "loop_var", mode = "integer", shape = "scalar")
+            )
+            tccq_scope_set(
+                sc,
+                var,
+                list(
+                    kind = "local",
+                    mode = iter_r$mode,
+                    shape = "scalar"
+                )
+            )
+
+            body_r <- tccq_lower_stmt(e[[4]], sc, decl)
+            if (!body_r$ok) {
+                return(body_r)
+            }
+
+            # Prepend: var <- vec[idx]
+            extract_stmt <- list(
+                tag = "assign",
+                name = var,
+                expr = list(
+                    tag = "vec_get",
+                    arr = vec_name,
+                    idx = list(tag = "var", name = idx_var)
+                ),
+                mode = iter_r$mode,
+                shape = "scalar"
+            )
+            inner_body <- if (identical(body_r$node$tag, "block")) {
+                list(
+                    tag = "block",
+                    stmts = c(list(extract_stmt), body_r$node$stmts)
+                )
+            } else {
+                list(
+                    tag = "block",
+                    stmts = list(extract_stmt, body_r$node)
+                )
+            }
+
+            return(tccq_lower_result(
+                TRUE,
+                node = list(
+                    tag = "for",
+                    var = idx_var,
+                    iter = list(tag = "seq_along", target = vec_name),
+                    body = inner_body
+                ),
+                mode = "void"
+            ))
+        }
+
+        # Set loop variable mode: double for seq_by, integer otherwise
+        loop_mode <- if (identical(iter_r$node$tag, "seq_by")) {
+            "double"
+        } else {
+            "integer"
+        }
         tccq_scope_set(
             sc,
             var,
             list(
                 kind = "loop_var",
-                mode = "integer",
+                mode = loop_mode,
                 shape = "scalar"
             )
         )

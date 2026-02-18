@@ -909,6 +909,188 @@ timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
+### Viterbi benchmark (from quickr README)
+
+The [Viterbi algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm) is a
+classic dynamic programming example from Hidden Markov Models. This version
+uses operations that `tcc_quick` lowers natively (`matrix`, `for`, `which.max`,
+`max`, scalar arithmetic, integer vector allocation) alongside operations that
+fall back to R via `Rf_eval` (column-slice `*` with matrix subscripts). The
+loop body itself — index iteration, argmax tracking, element access — runs in
+compiled C, which is where most of the time is spent.
+
+```{r benchmark-tcc-quick-viterbi}
+slow_viterbi <- function(observations, states, initial_probs,
+                         transition_probs, emission_probs) {
+    declare(
+      type(observations = integer(NA)),
+      type(states = integer(NA)),
+      type(initial_probs = double(NA)),
+      type(transition_probs = double(NA, NA)),
+      type(emission_probs = double(NA, NA))
+    )
+
+    n_states <- length(states)
+    n_obs <- length(observations)
+    trellis <- matrix(0.0, nrow = n_states, ncol = n_obs)
+    backpointer <- matrix(0L, nrow = n_states, ncol = n_obs)
+
+    for (s in seq_len(n_states)) {
+      trellis[s, 1L] <- initial_probs[s] * emission_probs[s, observations[1L]]
+    }
+
+    for (step in 2:n_obs) {
+      for (cs in seq_len(n_states)) {
+        best_prob <- -1.0
+        best_state <- 1L
+        for (ps in seq_len(n_states)) {
+          p <- trellis[ps, step - 1L] * transition_probs[ps, cs]
+          if (p > best_prob) {
+            best_prob <- p
+            best_state <- ps
+          }
+        }
+        trellis[cs, step] <- best_prob * emission_probs[cs, observations[step]]
+        backpointer[cs, step] <- best_state
+      }
+    }
+
+    path <- integer(n_obs)
+    best_final <- -1.0
+    best_final_s <- 1L
+    for (s in seq_len(n_states)) {
+      if (trellis[s, n_obs] > best_final) {
+        best_final <- trellis[s, n_obs]
+        best_final_s <- s
+      }
+    }
+    path[n_obs] <- best_final_s
+
+    for (step in (n_obs - 1L):1L) {
+      path[step] <- backpointer[path[step + 1L], step + 1L]
+    }
+    path
+}
+
+quick_viterbi <- tcc_quick(slow_viterbi, fallback = "never")
+
+set.seed(1234)
+n_steps <- 16L
+n_states <- 8L
+n_obs <- 16L
+
+observations <- sample(1:n_obs, n_steps, replace = TRUE)
+states <- 1:n_states
+initial_probs <- runif(n_states)
+initial_probs <- initial_probs / sum(initial_probs)
+transition_probs <- matrix(runif(n_states * n_states), nrow = n_states)
+transition_probs <- transition_probs / rowSums(transition_probs)
+emission_probs <- matrix(runif(n_states * n_obs), nrow = n_states)
+emission_probs <- emission_probs / rowSums(emission_probs)
+
+stopifnot(identical(
+  slow_viterbi(observations, states, initial_probs, transition_probs, emission_probs),
+  quick_viterbi(observations, states, initial_probs, transition_probs, emission_probs)
+))
+
+timings_viterbi <- bench::mark(
+  R = slow_viterbi(observations, states, initial_probs,
+                   transition_probs, emission_probs),
+  Rtinycc_quick = quick_viterbi(observations, states, initial_probs,
+                                transition_probs, emission_probs)
+)
+timings_viterbi
+```
+
+### Matrix algebra and R delegation
+
+`tcc_quick` does not re-implement matrix operations like `%*%`, `crossprod`,
+`solve`, or `svd`. R already dispatches these to optimized BLAS/LAPACK
+routines, so there is nothing to gain from emitting BLAS calls directly — and
+TinyCC's single-pass codegen cannot outperform an optimized BLAS anyway.
+
+Instead, any unsupported function call is automatically delegated to R via
+`Rf_eval()`. The generated C builds the call pairlist, evaluates it in
+`R_GlobalEnv`, and feeds the result back into the compiled pipeline. This means
+that a function mixing scalar loops with occasional matrix calls compiles the
+loops to native code while the matrix operations still use R's BLAS backend —
+the best of both worlds.
+
+```{r tcc-quick-linalg-bypass}
+# A function that mixes scalar loops (compiled) with matrix operations (R).
+# Everything compiles; the matrix ops go through Rf_eval() transparently.
+fast_ols <- function(X, y) {
+  declare(
+    type(X = double(NA, NA)),
+    type(y = double(NA))
+  )
+  coef <- solve(crossprod(X), crossprod(X, y))
+  resid <- y - X %*% coef
+  n <- nrow(X)
+  k <- ncol(X)
+  s2 <- 0.0
+  for (i in seq_len(n)) {
+    s2 <- s2 + resid[i] * resid[i]
+  }
+  s2 <- s2 / as.double(n - k)
+  s2
+}
+
+quick_ols <- tcc_quick(fast_ols)
+
+set.seed(42)
+X <- cbind(1, matrix(rnorm(400), ncol = 4))
+y <- X %*% c(1, 2, -1, 0.5, 3) + rnorm(100)
+
+stopifnot(all.equal(fast_ols(X, y), quick_ols(X, y), tolerance = 1e-10))
+cat("Residual variance:", quick_ols(X, y), "\n")
+```
+
+### Bypassing the R interpreter with type declarations
+
+Even when every function call in the body falls back to `Rf_eval`, `tcc_quick`
+still bypasses the R interpreter's bytecode dispatch loop. The compiled C code
+calls R functions directly through the C API — no `GETVAR`, no `CALL`, no
+promise forcing, no stack-frame management. The type declarations let
+`tcc_quick` generate typed local variables, coerce arguments once at the
+boundary, and thread scalar values through registers instead of boxed SEXPs.
+
+Today the return type from `Rf_eval` is always treated as `double` (the
+declared type of the result variable). In the future, if `declare()` is
+extended to annotate function return types, `tcc_quick` could propagate types
+through `rf_call` nodes and eliminate even the unboxing overhead, turning every
+R function call into a typed C function call.
+
+```{r tcc-quick-bypass}
+# Every operation here is an rf_call — nothing is natively lowered
+# except the scalar plumbing (locals, control flow, return).
+# Still faster than the interpreter because it's compiled C calling R.
+slow_stats <- function(x) {
+  declare(type(x = double(NA)))
+  m <- mean(x)
+  s <- sd(x)
+  med <- median(x)
+  q1 <- quantile(x, 0.25)
+  q3 <- quantile(x, 0.75)
+  iqr <- q3 - q1
+  iqr
+}
+
+quick_stats <- tcc_quick(slow_stats)
+
+x <- rnorm(10000)
+stopifnot(all.equal(
+  unname(slow_stats(x)), unname(quick_stats(x)),
+  tolerance = 1e-10
+))
+
+bench::mark(
+  R = slow_stats(x),
+  Rtinycc_quick = quick_stats(x),
+  check = FALSE
+)
+```
+
 ## Known limitations
 
 ### `_Complex` types

@@ -27,7 +27,7 @@ tccq_ir_needs_rmath <- function(node) {
       "x", "y", "lhs", "rhs", "cond", "yes", "no",
       "expr", "body", "stmts", "ret", "len_expr",
       "idx", "value", "row", "col", "from", "to",
-      "nrow", "ncol", "iter", "n"
+      "nrow", "ncol", "iter", "n", "args", "mask"
     )) {
       if (tccq_ir_needs_rmath(node[[field]])) {
         return(TRUE)
@@ -216,6 +216,22 @@ tccq_cg_expr <- function(node) {
     return(x)
   }
 
+  if (tag == "rf_call") {
+    # rf_call as sub-expression: the statement was hoisted before this
+    # expression is evaluated.  Return the pre-assigned variable name.
+    if (is.null(node$var_name)) {
+      stop("rf_call missing var_name — pre-pass not run?", call. = FALSE)
+    }
+    # For scalar extraction: Rf_asReal / Rf_asInteger / Rf_asLogical
+    mode <- node$mode %||% "double"
+    extract <- switch(mode,
+      integer = sprintf("Rf_asInteger(%s)", node$var_name),
+      logical = sprintf("Rf_asLogical(%s)", node$var_name),
+      sprintf("Rf_asReal(%s)", node$var_name)
+    )
+    return(extract)
+  }
+
   stop(paste0("tccq_cg_expr: unsupported tag '", tag, "'"), call. = FALSE)
 }
 
@@ -374,7 +390,57 @@ tccq_cg_stmt <- function(node, indent) {
       return(paste(c(alloc_lines, cum_lines), collapse = "\n"))
     }
 
+    # --- rf_call assignment: y <- fun(x, ...) via Rf_eval ---
+    if (identical(node$expr$tag, "rf_call")) {
+      rf_res <- tccq_cg_rf_call_stmt(node$expr, indent)
+      rf_lines <- rf_res$lines
+      rf_var <- rf_res$var
+      if (identical(node$shape, "vector") || identical(node$shape, "matrix")) {
+        sxp_type <- switch(node$mode,
+          integer = "INTSXP",
+          logical = "LGLSXP",
+          "REALSXP"
+        )
+        ptr_fun <- switch(node$mode,
+          integer = "INTEGER",
+          logical = "LOGICAL",
+          "REAL"
+        )
+        return(paste0(
+          rf_lines, "\n",
+          pad, "s_", nm, " = PROTECT(Rf_coerceVector(", rf_var, ", ", sxp_type, "));\n",
+          pad, "nprotect_++;\n",
+          pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
+          pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");"
+        ))
+      } else {
+        extract <- switch(node$mode,
+          integer = sprintf("Rf_asInteger(%s)", rf_var),
+          logical = sprintf("Rf_asLogical(%s)", rf_var),
+          sprintf("Rf_asReal(%s)", rf_var)
+        )
+        return(paste0(
+          rf_lines, "\n",
+          pad, nm, "_ = ", extract, ";"
+        ))
+      }
+    }
+
+    # --- vec_mask assignment: y <- x[mask] (count + alloc + fill) ---
+    if (
+      identical(node$shape, "vector") &&
+        identical(node$expr$tag, "vec_mask")
+    ) {
+      return(tccq_cg_vec_mask_assign(node, indent))
+    }
+
     parts <- c()
+    # Hoist rf_calls
+    rfs <- tccq_collect_rf_calls(node$expr)
+    for (rf in rfs) {
+      parts <- c(parts, tccq_cg_rf_call_stmt(rf, indent)$lines)
+    }
+    # Hoist reductions
     reds <- tccq_collect_reductions(node$expr)
     for (rd in reds) {
       if (rd$tag == "reduce") {
@@ -384,6 +450,40 @@ tccq_cg_stmt <- function(node, indent) {
         parts <- c(parts, tccq_cg_reduce_expr_stmt(rd, indent))
       }
     }
+
+    # --- Vector condensation: alloc + element-wise loop ---
+    if (identical(node$shape, "vector")) {
+      len_c <- tccq_cg_vec_len(node$expr)
+      if (is.null(len_c)) {
+        stop(
+          "Cannot determine length for vector assign to '", node$name, "'",
+          call. = FALSE
+        )
+      }
+      elem_expr <- tccq_cg_vec_elem(node$expr, "zz_")
+      sxp_type <- switch(node$mode,
+        integer = "INTSXP",
+        logical = "LGLSXP",
+        "REALSXP"
+      )
+      ptr_fun <- switch(node$mode,
+        integer = "INTEGER",
+        logical = "LOGICAL",
+        "REAL"
+      )
+      parts <- c(parts, paste0(
+        pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type,
+        ", (R_xlen_t)(", len_c, ")));\n",
+        pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
+        pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
+        pad, "nprotect_++;\n",
+        pad, "for (R_xlen_t zz_ = 0; zz_ < n_", nm, "; ++zz_) ",
+        "p_", nm, "[zz_] = ", elem_expr, ";"
+      ))
+      return(paste(parts, collapse = "\n"))
+    }
+
+    # --- Scalar assignment ---
     expr <- tccq_cg_expr(node$expr)
     parts <- c(parts, paste0(pad, nm, "_ = ", expr, ";"))
     return(paste(parts, collapse = "\n"))
@@ -392,6 +492,11 @@ tccq_cg_stmt <- function(node, indent) {
   if (tag == "vec_rewrite") {
     nm <- tccq_cg_ident(node$name)
     parts <- c()
+    # Hoist rf_calls in the RHS expression
+    rfs <- tccq_collect_rf_calls(node$expr)
+    for (rf in rfs) {
+      parts <- c(parts, tccq_cg_rf_call_stmt(rf, indent)$lines)
+    }
     # Hoist any reductions in the RHS expression
     reds <- tccq_collect_reductions(node$expr)
     for (rd in reds) {
@@ -427,6 +532,11 @@ tccq_cg_stmt <- function(node, indent) {
     arr <- tccq_cg_ident(node$arr)
     idx <- tccq_cg_expr(node$idx)
     parts <- c()
+    # Hoist any rf_calls in the value expression
+    rfs <- tccq_collect_rf_calls(node$value)
+    for (rf in rfs) {
+      parts <- c(parts, tccq_cg_rf_call_stmt(rf, indent)$lines)
+    }
     # Hoist any reductions in the value expression
     reds <- tccq_collect_reductions(node$value)
     for (rd in reds) {
@@ -524,21 +634,58 @@ tccq_cg_stmt <- function(node, indent) {
     if (iter$tag == "seq_range") {
       from <- tccq_cg_expr(iter$from)
       to <- tccq_cg_expr(iter$to)
+      # Support both ascending (from <= to) and descending (from > to) ranges
+      v <- paste0(var, "_")
       return(paste0(
         pad,
-        "for (R_xlen_t ",
-        var,
-        "_ = (R_xlen_t)(",
-        from,
-        "); ",
-        var,
-        "_ <= (R_xlen_t)(",
-        to,
-        "); ++",
-        var,
-        "_) {\n",
-        body_c,
-        "\n",
+        "if ((R_xlen_t)(", from, ") <= (R_xlen_t)(", to, ")) {\n",
+        pad,
+        "  for (R_xlen_t ", v, " = (R_xlen_t)(", from, "); ",
+        v, " <= (R_xlen_t)(", to, "); ++", v, ") {\n",
+        body_c, "\n",
+        pad,
+        "  }\n",
+        pad,
+        "} else {\n",
+        pad,
+        "  for (R_xlen_t ", v, " = (R_xlen_t)(", from, "); ",
+        v, " >= (R_xlen_t)(", to, "); --", v, ") {\n",
+        body_c, "\n",
+        pad,
+        "  }\n",
+        pad,
+        "}"
+      ))
+    }
+    if (iter$tag == "seq_by") {
+      from <- tccq_cg_expr(iter$from)
+      to <- tccq_cg_expr(iter$to)
+      by <- tccq_cg_expr(iter$by)
+      v <- paste0(var, "_")
+      # by can be positive or negative — branch at runtime
+      return(paste0(
+        pad,
+        "{\n",
+        pad,
+        "  double seq_by_val_ = (double)(", by, ");\n",
+        pad,
+        "  if (seq_by_val_ > 0) {\n",
+        pad,
+        "    for (double ", v, " = (double)(", from, "); ",
+        v, " <= (double)(", to, "); ", v, " += seq_by_val_) {\n",
+        body_c, "\n",
+        pad,
+        "    }\n",
+        pad,
+        "  } else if (seq_by_val_ < 0) {\n",
+        pad,
+        "    for (double ", v, " = (double)(", from, "); ",
+        v, " >= (double)(", to, "); ", v, " += seq_by_val_) {\n",
+        body_c, "\n",
+        pad,
+        "    }\n",
+        pad,
+        "  }\n",
         pad,
         "}"
       ))
@@ -612,6 +759,10 @@ tccq_cg_stmt <- function(node, indent) {
       pad,
       sprintf("Rf_error(\"%s\");", gsub("\"", "\\\\\"", node$msg))
     ))
+  }
+
+  if (tag == "rf_call") {
+    return(tccq_cg_rf_call_stmt(node, indent)$lines)
   }
 
   if (tag == "cumulative") {
@@ -717,6 +868,15 @@ tccq_reduce_expr_next_id <- function() {
   tccq_reduce_expr_counter_$n
 }
 
+# rf_call / vec_mask counters for unique variable names
+tccq_rfcall_counter_ <- new.env(parent = emptyenv())
+tccq_rfcall_counter_$n <- 0L
+
+tccq_rfcall_next_id <- function() {
+  tccq_rfcall_counter_$n <- tccq_rfcall_counter_$n + 1L
+  tccq_rfcall_counter_$n
+}
+
 tccq_cg_reduce_expr_stmt <- function(node, indent) {
   pad <- strrep("  ", indent)
   op <- node$op
@@ -792,6 +952,161 @@ tccq_cg_cumulative_stmt <- function(node, indent, target_ptr) {
     pad, target_ptr, "[0] = ", elem0, ";\n",
     pad, "for (R_xlen_t ", idx, " = 1; ", idx, " < (R_xlen_t)(", len_c, "); ++", idx, ") {\n",
     pad, "  ", update, "\n",
+    pad, "}"
+  )
+}
+
+# ---------------------------------------------------------------------------
+# rf_call: emit Rf_lang + Rf_eval to call R function from generated C
+# ---------------------------------------------------------------------------
+
+tccq_cg_rf_call_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  fun <- node$fun
+  args <- node$args
+  n <- length(args)
+  if (!is.null(node$var_name)) {
+    var <- node$var_name
+    uid <- as.integer(sub(".*_(\\d+)_$", "\\1", var))
+  } else {
+    uid <- tccq_rfcall_next_id()
+    var <- sprintf("rfcall_%s_%d_", tccq_cg_ident(fun), uid)
+  }
+
+  lines <- c()
+
+  # Build the argument SEXPs — scalars need wrapping, vectors use s_name.
+  # Nested rf_calls are recursively emitted first.
+  arg_c <- character(n)
+  for (i in seq_len(n)) {
+    a <- args[[i]]
+    a_shape <- a$shape %||% "scalar"
+    a_tag <- a$tag %||% ""
+
+    if (a_tag == "rf_call") {
+      # Nested rf_call — emit it first, use its result SEXP
+      child <- tccq_cg_rf_call_stmt(a, indent)
+      lines <- c(lines, child$lines)
+      arg_c[i] <- child$var
+    } else if (a_tag == "var" && a_shape %in% c("vector", "matrix")) {
+      # Vector / matrix variable — pass the SEXP directly
+      arg_c[i] <- sprintf("s_%s", tccq_cg_ident(a$name))
+    } else if (a_tag == "var" && a_shape == "scalar") {
+      # Scalar variable — re-wrap from C scalar to SEXP
+      c_nm <- tccq_cg_ident(a$name)
+      a_mode <- a$mode %||% "double"
+      wrap <- switch(a_mode,
+        integer = sprintf("Rf_ScalarInteger(%s_)", c_nm),
+        logical = sprintf("Rf_ScalarLogical(%s_)", c_nm),
+        sprintf("Rf_ScalarReal(%s_)", c_nm)
+      )
+      tmp <- sprintf("rfarg_%s_%d_%d_", tccq_cg_ident(fun), uid, i)
+      lines <- c(lines, paste0(pad, "SEXP ", tmp, " = PROTECT(", wrap, ");"))
+      lines <- c(lines, paste0(pad, "nprotect_++;"))
+      arg_c[i] <- tmp
+    } else {
+      # Scalar expression — wrap as SEXP
+      val <- tccq_cg_expr(a)
+      mode <- a$mode %||% "double"
+      wrap <- switch(mode,
+        integer = sprintf("Rf_ScalarInteger((int)(%s))", val),
+        logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", val),
+        sprintf("Rf_ScalarReal((double)(%s))", val)
+      )
+      tmp <- sprintf("rfarg_%s_%d_%d_", tccq_cg_ident(fun), uid, i)
+      lines <- c(lines, paste0(pad, "SEXP ", tmp, " = PROTECT(", wrap, ");"))
+      lines <- c(lines, paste0(pad, "nprotect_++;"))
+      arg_c[i] <- tmp
+    }
+  }
+
+  # Emit Rf_lang call.  Use Rf_install for the function symbol.
+  # For operators like %*%, Rf_install handles them fine.
+  fun_sym <- sprintf("Rf_install(\"%s\")", fun)
+  lang_n <- n + 1L
+  if (lang_n <= 6L) {
+    lang_args <- paste(c(fun_sym, arg_c), collapse = ", ")
+    lines <- c(
+      lines,
+      paste0(
+        pad, "SEXP ", var, " = PROTECT(Rf_eval(PROTECT(",
+        sprintf("Rf_lang%d(%s)", lang_n, lang_args),
+        "), R_GlobalEnv));"
+      ),
+      paste0(pad, "nprotect_ += 2;")
+    )
+  } else {
+    # Fallback: build LCONS manually for high-arity calls
+    lines <- c(
+      lines,
+      paste0(pad, "SEXP rfcall_e_ = Rf_allocList(", lang_n, ");"),
+      paste0(pad, "SETCAR(rfcall_e_, ", fun_sym, ");"),
+      paste0(pad, "SET_TYPEOF(rfcall_e_, LANGSXP);")
+    )
+    lines <- c(lines, paste0(pad, "SEXP rfcall_t_ = CDR(rfcall_e_);"))
+    for (i in seq_len(n)) {
+      lines <- c(
+        lines,
+        paste0(pad, "SETCAR(rfcall_t_, ", arg_c[i], ");")
+      )
+      if (i < n) {
+        lines <- c(lines, paste0(pad, "rfcall_t_ = CDR(rfcall_t_);"))
+      }
+    }
+    lines <- c(
+      lines,
+      paste0(
+        pad, "SEXP ", var, " = PROTECT(Rf_eval(rfcall_e_, R_GlobalEnv));"
+      ),
+      paste0(pad, "nprotect_++;")
+    )
+  }
+
+  list(lines = paste(lines, collapse = "\n"), var = var)
+} # ---------------------------------------------------------------------------
+# vec_mask: x[mask] — count TRUEs, allocate, fill
+# ---------------------------------------------------------------------------
+
+tccq_cg_vec_mask_assign <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  nm <- tccq_cg_ident(node$name)
+  arr <- tccq_cg_ident(node$expr$arr)
+  mask_node <- node$expr$mask
+
+  # The mask must be a named variable for now
+  if (!identical(mask_node$tag, "var")) {
+    stop("vec_mask codegen requires a named mask variable", call. = FALSE)
+  }
+  mask <- tccq_cg_ident(mask_node$name)
+
+  sxp_type <- switch(node$mode,
+    integer = "INTSXP",
+    logical = "LGLSXP",
+    "REALSXP"
+  )
+  ptr_fun <- switch(node$mode,
+    integer = "INTEGER",
+    logical = "LOGICAL",
+    "REAL"
+  )
+
+  paste0(
+    pad, "// vec_mask: ", nm, " = ", arr, "[", mask, "]\n",
+    pad, "R_xlen_t vm_cnt_ = 0;\n",
+    pad, "for (R_xlen_t vm_ = 0; vm_ < n_", mask, "; ++vm_) {\n",
+    pad, "  if (p_", mask, "[vm_]) vm_cnt_++;\n",
+    pad, "}\n",
+    pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type, ", vm_cnt_));\n",
+    pad, "nprotect_++;\n",
+    pad, "n_", nm, " = vm_cnt_;\n",
+    pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
+    pad, "{\n",
+    pad, "  R_xlen_t vm_j_ = 0;\n",
+    pad, "  for (R_xlen_t vm_ = 0; vm_ < n_", mask, "; ++vm_) {\n",
+    pad, "    if (p_", mask, "[vm_]) {\n",
+    pad, "      p_", nm, "[vm_j_++] = p_", arr, "[vm_];\n",
+    pad, "    }\n",
+    pad, "  }\n",
     pad, "}"
   )
 }
@@ -954,6 +1269,11 @@ tccq_cg_vec_len <- function(node) {
   if (tag == "if") {
     return(tccq_cg_vec_len(node$yes) %||% tccq_cg_vec_len(node$no))
   }
+  if (tag == "rf_call") {
+    if (!is.null(node$var_name)) {
+      return(sprintf("XLENGTH(%s)", node$var_name))
+    }
+  }
   NULL
 }
 
@@ -1040,6 +1360,14 @@ tccq_cg_vec_elem <- function(node, idx_var) {
     return(sprintf("((%s) ? (%s) : (%s))", cond, yes, no))
   }
 
+  if (tag == "rf_call") {
+    # Hoisted rf_call result — access element via REAL(var_name)[idx]
+    if (!is.null(node$var_name)) {
+      return(sprintf("REAL(%s)[%s]", node$var_name, idx_var))
+    }
+    stop("rf_call in vec_elem without var_name", call. = FALSE)
+  }
+
   if (tag == "rev") {
     len <- tccq_cg_vec_len(node$expr)
     inner <- tccq_cg_vec_elem(node$expr, sprintf("((%s) - 1 - %s)", len, idx_var))
@@ -1048,6 +1376,64 @@ tccq_cg_vec_elem <- function(node, idx_var) {
 
   # Scalar expression fallback (constants broadcast)
   tccq_cg_expr(node)
+}
+
+# ---------------------------------------------------------------------------
+# Pre-pass: assign var_name to all rf_call nodes in the IR tree.
+# ---------------------------------------------------------------------------
+
+tccq_assign_rf_call_names <- function(node, counter_env = NULL) {
+  if (is.null(counter_env)) {
+    counter_env <- new.env(parent = emptyenv())
+    counter_env$n <- 0L
+  }
+  if (is.null(node) || !is.list(node)) {
+    return(node)
+  }
+  if (is.null(node$tag)) {
+    return(lapply(node, tccq_assign_rf_call_names, counter_env))
+  }
+
+  if (node$tag == "rf_call" && is.null(node$var_name)) {
+    counter_env$n <- counter_env$n + 1L
+    node$var_name <- sprintf(
+      "rfcall_%s_%d_", tccq_cg_ident(node$fun), counter_env$n
+    )
+  }
+
+  for (nm in names(node)) {
+    child <- node[[nm]]
+    if (is.list(child)) {
+      node[[nm]] <- tccq_assign_rf_call_names(child, counter_env)
+    }
+  }
+  node
+}
+
+tccq_collect_rf_calls <- function(node) {
+  # Post-order traversal: children first, then self.
+  # This ensures nested rf_calls are emitted before the outer ones.
+  if (is.null(node) || is.null(node$tag)) {
+    return(list())
+  }
+  out <- list()
+  for (nm in names(node)) {
+    child <- node[[nm]]
+    if (is.list(child) && !is.null(child$tag)) {
+      out <- c(out, tccq_collect_rf_calls(child))
+    }
+    if (is.list(child) && is.null(child$tag)) {
+      for (item in child) {
+        if (is.list(item) && !is.null(item$tag)) {
+          out <- c(out, tccq_collect_rf_calls(item))
+        }
+      }
+    }
+  }
+  if (node$tag == "rf_call") {
+    out <- c(out, list(node))
+  }
+  out
 }
 
 # ---------------------------------------------------------------------------
@@ -1090,7 +1476,8 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
   if (!identical(ir$tag, "fn_body")) {
     stop("Codegen requires fn_body IR, got: ", ir$tag, call. = FALSE)
   }
-  # Pre-pass: assign stable variable names to reduce_expr nodes
+  # Pre-pass: assign stable variable names
+  ir <- tccq_assign_rf_call_names(ir)
   ir <- tccq_assign_reduce_expr_names(ir)
   tccq_cg_fn_body(ir, fn_name)
 }
@@ -1231,7 +1618,11 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     lines <- c(lines, tccq_cg_stmt(s, 1))
   }
 
-  # --- Emit reduction loops referenced in the return expression ---
+  # --- Emit rf_calls and reduction loops referenced in the return expression ---
+  ret_rfs <- tccq_collect_rf_calls(ir$ret)
+  for (rf in ret_rfs) {
+    lines <- c(lines, tccq_cg_rf_call_stmt(rf, 1)$lines)
+  }
   ret_reds <- tccq_collect_reductions(ir$ret)
   for (rd in ret_reds) {
     if (rd$tag == "reduce") {
@@ -1247,6 +1638,18 @@ tccq_cg_fn_body <- function(ir, fn_name) {
 
   # --- Return ---
   if (
+    !is.null(ir$ret$tag) && ir$ret$tag == "rf_call"
+  ) {
+    # rf_call return: emit the call and return the SEXP
+    rf_res <- tccq_cg_rf_call_stmt(ir$ret, 1)
+    lines <- c(lines, rf_res$lines)
+    rf_var <- rf_res$var
+    lines <- c(
+      lines,
+      "  UNPROTECT(nprotect_);",
+      sprintf("  return %s;", rf_var)
+    )
+  } else if (
     (ir$ret_shape %in% c("vector", "matrix")) &&
       !is.null(ir$ret$tag) &&
       ir$ret$tag == "var"
