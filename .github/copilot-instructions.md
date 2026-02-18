@@ -192,6 +192,8 @@ Correspondence with SAC:
 - Cumulative operations: `cumsum`, `cumprod`, `cummax`, `cummin` (sequential scan, not condensable).
 - Matrix: `mat_alloc`, `mat_get`, `mat_set`, `nrow`, `ncol`.
 - BLAS-backed matrix products: `%*%`, `crossprod`, `tcrossprod` lower to `matmul` and codegen to `F77_CALL(dgemm)` via `R_ext/BLAS.h`.
+- Windows BLAS linkage note: when `matmul` is present, `tcc_quick_compile()` links `Rblas` explicitly (in addition to `R`) because `dgemm` often resolves from `Rblas.dll`.
+- Debug diagnostics: `tcc_quick(..., debug = TRUE)` prints compile diagnostics including OS, `has_matmul`, linked libraries, and library paths.
 - Control flow: `for` (seq_along/seq_len/seq_range), `while`, `repeat`, `break`, `next`, `if`/`if-else` statements.
 - Boundary detection (`.Call`, `.C`, `.External`, `.Internal`, `.Primitive`) and fallback policy (`auto`/`soft`/`hard`; aliases `always`/`never`).
 - IR validation pass: hard mode rejects any `rf_call` path; malformed IR nodes fail fast.

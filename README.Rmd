@@ -1024,6 +1024,11 @@ plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 This keeps behavior portable across platforms while still using R's linked BLAS
 stack.
 
+Platform note: on Windows, BLAS symbols used by `dgemm` are typically provided
+via `Rblas.dll` rather than `R.dll`. `tcc_quick` now links `Rblas` whenever a
+`matmul` IR node is present. With `debug = TRUE`, compile diagnostics print the
+detected `matmul` usage and linked library list to help triage CI issues.
+
 Allowlisted delegated operations (for example `solve` and `svd`) are still
 evaluated through `Rf_eval()` in `soft`/`auto` mode. Calls outside the current
 native subset and delegation allowlist are treated as outside the supported
