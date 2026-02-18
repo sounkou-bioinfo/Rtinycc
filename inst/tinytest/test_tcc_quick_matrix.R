@@ -103,3 +103,33 @@ f_tcp1 <- tcc_quick(tcp1, fallback = "never")
 A5 <- matrix(runif(15), 5, 3)
 expect_equal(f_cp1(A5), crossprod(A5), tolerance = 1e-10)
 expect_equal(f_tcp1(A5), tcrossprod(A5), tolerance = 1e-10)
+
+# --- LAPACK-backed solve(A, b) ---
+
+solve_vec <- function(A, b) {
+  declare(type(A = double(NA, NA)), type(b = double(NA)))
+  solve(A, b)
+}
+
+f_solve_vec <- tcc_quick(solve_vec, fallback = "never")
+A6 <- crossprod(matrix(rnorm(36), 6, 6)) + diag(6) * 0.5
+b6 <- rnorm(6)
+expect_equal(
+  as.numeric(f_solve_vec(A6, b6)),
+  as.numeric(solve(A6, b6)),
+  tolerance = 1e-10
+)
+
+solve_mat <- function(A, B) {
+  declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
+  solve(A, B)
+}
+
+f_solve_mat <- tcc_quick(solve_mat, fallback = "never")
+B6 <- matrix(rnorm(18), 6, 3)
+expect_equal(f_solve_mat(A6, B6), solve(A6, B6), tolerance = 1e-10)
+
+expect_error(
+  f_solve_vec(matrix(runif(12), 3, 4), rnorm(3)),
+  pattern = "square matrix"
+)

@@ -19,11 +19,12 @@ knitr::opts_chunk$set(
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)[![Rtinycc status badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rtinycc)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an R-to-C transpiler (`tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr)) that compiles `declare()`-annotated R functions to C via TinyCC. The package runs on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an experimental R-to-C transpiler (`tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr)) that compiles `declare()`-annotated R functions to C via TinyCC. The package runs on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
 
 <!--
 Where quickr generates Fortran and relies on the Fortran compiler to fuse array temporaries, we generate C with guaranteed fusion at codegen time — we have to, because TinyCC is a single-pass compiler that does no optimization. The mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz, SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector expression tree, so `sum(x[a:b] * w)` compiles to a single accumulator loop with inline index arithmetic — no slice array, no product array, no intermediates. Slices are pointer offsets, element-wise ops are inline expressions, and reductions wrap the whole thing in one loop body.
@@ -797,8 +798,10 @@ Fallback behavior is explicit:
 - `fallback = "soft"`: allow mixed compiled + `Rf_eval` execution.
 - `fallback = "auto"`: compatibility mode (default behavior).
 
-Legacy aliases are still accepted: `"never"` maps to `"hard"`, and
-`"always"` maps to `"soft"`.
+When delegated calls are used, `Rf_eval` now runs in the compiled wrapper call
+environment (`environment()`), not a fixed global environment, so lexical
+lookups are consistent with normal function calls.
+
 
 The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz,
 SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector
@@ -1022,24 +1025,25 @@ plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 ### Matrix algebra, BLAS, and delegation
 
-`tcc_quick` now emits native BLAS-backed paths for `%*%`, `crossprod`, and
-`tcrossprod` (matrix/matrix cases) using `F77_CALL(dgemm)` through R headers.
-This keeps behavior portable across platforms while still using R's linked BLAS
-stack.
+`tcc_quick` now emits native BLAS/LAPACK-backed paths for `%*%`, `crossprod`,
+`tcrossprod` (matrix/matrix cases, `F77_CALL(dgemm)`) and `solve(A, b)` /
+`solve(A, B)` (`F77_CALL(dgesv)`) through R headers. This keeps behavior
+portable across platforms while still using R's linked BLAS/LAPACK stack.
 
 Platform note: on Windows, BLAS symbols used by `dgemm` are typically provided
 via `Rblas.dll` rather than `R.dll`. `tcc_quick` now links `Rblas` whenever a
 `matmul` IR node is present. With `debug = TRUE`, compile diagnostics print the
 detected `matmul` usage and linked library list to help triage CI issues.
 
-Allowlisted delegated operations (for example `solve` and `svd`) are still
+Allowlisted delegated operations (for example `svd`) are still
 evaluated through `Rf_eval()` in `soft`/`auto` mode. Calls outside the current
 native subset and delegation allowlist are treated as outside the supported
 `tcc_quick` subset. In `hard` mode, all `rf_call` paths are rejected at compile
 time.
 
-In the example below, `%*%` and `crossprod` compile natively, while `solve`
-continues to delegate to R.
+In the example below, `%*%` and `crossprod` compile natively. `solve` can also
+compile natively for direct `solve(A, b/B)` forms, but this OLS expression still
+delegates because `solve` is fed nested expression arguments.
 
 ```{r tcc-quick-linalg-bypass}
 # A function that mixes native matrix products with delegated linear solves.
@@ -1121,6 +1125,37 @@ timings_bypass <- bench::mark(
 )
 timings_bypass
 plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+### Typed `sapply` / `apply` subset
+
+`tcc_quick` now supports a typed subset of mapping helpers:
+
+- `sapply(x, FUN)` where `FUN` is a symbol in the supported subset (for example
+  unary math intrinsics, `identity`, and scalar casts such as `as.raw`).
+- `apply(X, MARGIN, FUN)` for matrix inputs with literal `MARGIN` (`1` or `2`)
+  and `FUN` in `{sum, mean}` (lowered to delegated `rowSums`/`colSums`/
+  `rowMeans`/`colMeans` in `soft`/`auto`).
+
+```{r tcc-quick-apply-subset}
+sapply_example <- function(x) {
+  declare(type(x = double(NA)))
+  sapply(x, sqrt)
+}
+
+apply_example <- function(X) {
+  declare(type(X = double(NA, NA)))
+  apply(X, 1, sum)
+}
+
+f_sapply <- tcc_quick(sapply_example, fallback = "hard")
+f_apply <- tcc_quick(apply_example, fallback = "soft")
+
+x <- runif(10)
+X <- matrix(runif(30), nrow = 6)
+
+stopifnot(all.equal(f_sapply(x), sapply_example(x), tolerance = 1e-12))
+stopifnot(all.equal(f_apply(X), apply_example(X), tolerance = 1e-12))
 ```
 
 ## Known limitations

@@ -112,6 +112,19 @@ tccq_parse_na_rm <- function(e) {
   list(ok = FALSE, reason = "na.rm must be literal TRUE/FALSE")
 }
 
+tccq_parse_literal_int <- function(x) {
+  if (length(x) == 1L && is.integer(x) && !is.na(x)) {
+    return(as.integer(x)[[1]])
+  }
+  if (length(x) == 1L && is.double(x) && !is.na(x)) {
+    v <- as.integer(x)
+    if (!is.na(v) && as.double(v) == as.double(x)) {
+      return(v[[1]])
+    }
+  }
+  NA_integer_
+}
+
 # ---------------------------------------------------------------------------
 # Expression lowering — returns list(ok, node, mode, shape, reason)
 # ---------------------------------------------------------------------------
@@ -450,6 +463,129 @@ tccq_lower_expr <- function(e, sc, decl) {
     ))
   }
 
+  # --- sapply(x, FUN): typed subset (symbol FUN only) ---
+  if (fname == "sapply" && length(e) == 3L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "sapply() currently requires vector input"
+      ))
+    }
+    fun_e <- e[[3]]
+    if (!is.symbol(fun_e)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "sapply() FUN must be a symbol in current subset"
+      ))
+    }
+    fun_name <- as.character(fun_e)
+
+    if (fun_name %in% math_funs) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "call1", fun = fun_name, x = x$node),
+        mode = "double",
+        shape = "vector"
+      ))
+    }
+
+    if (fun_name %in% c("as.integer", "as.double", "as.numeric", "as.raw")) {
+      target_mode <- if (fun_name == "as.integer") {
+        "integer"
+      } else if (fun_name == "as.raw") {
+        "raw"
+      } else {
+        "double"
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "cast", x = x$node, target_mode = target_mode),
+        mode = target_mode,
+        shape = "vector"
+      ))
+    }
+
+    if (fun_name == "identity") {
+      return(x)
+    }
+
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Unsupported sapply FUN in current subset: ", fun_name)
+    ))
+  }
+
+  # --- apply(X, MARGIN, FUN): typed delegated subset ---
+  if (fname == "apply" && length(e) >= 4L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape != "matrix") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "apply() currently requires matrix input"
+      ))
+    }
+
+    margin <- tccq_parse_literal_int(e[[3]])
+    if (!margin %in% c(1L, 2L)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "apply() MARGIN must be literal 1 or 2"
+      ))
+    }
+    fun_e <- e[[4]]
+    if (!is.symbol(fun_e)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "apply() FUN must be a symbol in current subset"
+      ))
+    }
+    fun_name <- as.character(fun_e)
+
+    if (fun_name %in% c("sum", "mean")) {
+      na <- tccq_parse_na_rm(e)
+      if (!na$ok) {
+        return(tccq_lower_result(FALSE, reason = na$reason))
+      }
+      delegated <- if (fun_name == "sum") {
+        if (margin == 1L) "rowSums" else "colSums"
+      } else {
+        if (margin == 1L) "rowMeans" else "colMeans"
+      }
+      args <- list(c(x$node, list(mode = x$mode, shape = x$shape)))
+      if (isTRUE(na$value)) {
+        args[[length(args) + 1L]] <- list(
+          tag = "const",
+          value = TRUE,
+          mode = "logical",
+          shape = "scalar"
+        )
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "rf_call",
+          fun = delegated,
+          args = args,
+          mode = "double",
+          shape = "vector"
+        ),
+        mode = "double",
+        shape = "vector"
+      ))
+    }
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Unsupported apply FUN in current subset: ", fun_name)
+    ))
+  }
+
   # --- Reductions: sum, prod, max, min ---
   if (fname %in% c("sum", "prod", "max", "min") && length(e) == 2L) {
     x <- tccq_lower_expr(e[[2]], sc, decl)
@@ -665,6 +801,38 @@ tccq_lower_expr <- function(e, sc, decl) {
         ),
         mode = "double",
         shape = "matrix"
+      ))
+    }
+  }
+
+  # --- LAPACK-backed linear solve: solve(A, b) ---
+  if (fname == "solve" && length(e) == 3L) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    b <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!a$ok) {
+      return(a)
+    }
+    if (!b$ok) {
+      return(b)
+    }
+    if (
+      a$shape == "matrix" &&
+        b$shape %in% c("vector", "matrix") &&
+        identical(a$node$tag, "var") &&
+        identical(b$node$tag, "var") &&
+        identical(a$mode, "double") &&
+        identical(b$mode, "double")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "solve_lin",
+          a = a$node$name,
+          b = b$node$name,
+          b_shape = b$shape
+        ),
+        mode = "double",
+        shape = b$shape
       ))
     }
   }

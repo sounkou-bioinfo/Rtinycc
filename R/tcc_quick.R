@@ -82,6 +82,11 @@ tccq_validate_ir <- function(ir, fallback = c("auto", "soft", "hard")) {
           stop("matmul missing operands", call. = FALSE)
         }
       }
+      if (tag == "solve_lin") {
+        if (is.null(node$a) || is.null(node$b) || is.null(node$b_shape)) {
+          stop("solve_lin missing operands", call. = FALSE)
+        }
+      }
     }
 
     for (nm in names(node)) {

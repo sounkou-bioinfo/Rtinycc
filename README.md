@@ -10,6 +10,8 @@ Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)[![Rtinycc
 status
 badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rtinycc)
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
 ## Abstract
@@ -18,8 +20,8 @@ Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc),
 providing both CLI access and a libtcc-backed in-memory compiler. It
 includes an FFI inspired by [Bun’s
 FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with
-predictable type conversions and pointer utilities, and an R-to-C
-transpiler (`tcc_quick()`, inspired by
+predictable type conversions and pointer utilities, and an experimental
+R-to-C transpiler (`tcc_quick()`, inspired by
 [quickr](https://github.com/t-kalinowski/quickr)) that compiles
 `declare()`-annotated R functions to C via TinyCC. The package runs on
 unix-alikes and Windows and focuses on embedding TinyCC and enabling
@@ -183,7 +185,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x56a632d7b1d0"
+#> [1] "0x63b69c81be10"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -214,11 +216,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x56a6322f07f0>
+#> <pointer: 0x63b69ecfcb50>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x56a6325aad60>
+#> <pointer: 0x63b69e186370>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x56a6322f07f0>
+#> <pointer: 0x63b69ecfcb50>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -284,8 +286,8 @@ timings_ffi_scalar
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       946ms    946ms      1.06   134.1MB     14.8
-#> 2 Rbuiltin      555µs    595µs   1595.      9.05KB     12.0
+#> 1 Rtinycc       911ms    911ms      1.10   134.1MB     16.5
+#> 2 Rbuiltin      546µs    572µs   1653.      9.05KB     12.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays
 # (one call over many elements instead of many scalar calls).
@@ -316,8 +318,8 @@ timings_ffi_vec
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec    98.8µs  106.9µs     9217.    52.8KB     15.1
-#> 2 Rbuiltin_vec   16.9µs   18.3µs    49543.    78.2KB     34.7
+#> 1 Rtinycc_vec      98µs  105.8µs     9323.    52.8KB     15.0
+#> 2 Rbuiltin_vec   16.9µs   18.4µs    45681.    78.2KB     32.0
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -439,7 +441,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @56a6484ebb28 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @63b6b289dd48 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -455,7 +457,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @56a6484ebb28 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @63b6b289dd48 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -482,15 +484,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x56a63ba3f2f0>
+#> <pointer: 0x63b6b1d2cf10>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x56a63ba3f2f0>
+#> <pointer: 0x63b6b1d2cf10>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x56a64ab8e650>
+#> <pointer: 0x63b6b5023750>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x56a64ab8e650>
+#> <pointer: 0x63b6b5023750>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -535,9 +537,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x56a64786def0>
+#> <pointer: 0x63b6b1dcc690>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x56a64786def0>
+#> <pointer: 0x63b6b1dcc690>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -829,7 +831,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x56a63e2ed4f0>
+#> <pointer: 0x63b6a5df44a0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -945,11 +947,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 48.63ms    50ms      20.0    6.33MB        0     2     0      100ms
-#> 2 vroom_df_…  7.26ms  7.55ms     132.     1.22MB        0     2     0     15.1ms
-#> 3 vroom_df_…  7.37ms   7.4ms     135.     1.22MB        0     2     0     14.8ms
-#> 4 c_read_df   21.3ms 21.31ms      46.9    1.23MB        0     2     0     42.6ms
-#> 5 io_uring_… 21.44ms  21.7ms      46.1    1.23MB        0     2     0     43.4ms
+#> 1 read_tabl… 46.37ms 48.07ms      20.8    6.33MB        0     2     0     96.1ms
+#> 2 vroom_df_…  7.38ms  7.52ms     133.     1.22MB        0     2     0       15ms
+#> 3 vroom_df_…  7.22ms  7.26ms     138.     1.22MB        0     2     0     14.5ms
+#> 4 c_read_df  21.26ms 21.45ms      46.6    1.23MB        0     2     0     42.9ms
+#> 5 io_uring_… 21.68ms 22.38ms      44.7    1.23MB        0     2     0     44.8ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -969,8 +971,10 @@ Fallback behavior is explicit:
 - `fallback = "soft"`: allow mixed compiled + `Rf_eval` execution.
 - `fallback = "auto"`: compatibility mode (default behavior).
 
-Legacy aliases are still accepted: `"never"` maps to `"hard"`, and
-`"always"` maps to `"soft"`.
+When delegated calls are used, `Rf_eval` now runs in the compiled
+wrapper call environment (`environment()`), not a fixed global
+environment, so lexical lookups are consistent with normal function
+calls.
 
 The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation
 (Scholz, SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th
@@ -1156,10 +1160,10 @@ print(timings)
 #> # A tibble: 4 × 13
 #>   expression            min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
 #>   <bch:expr>       <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 R                618.58ms 626.42ms      1.60     782KB    0         4     0
-#> 2 quickr             3.76ms   4.35ms    230.       782KB    1.52    455     3
-#> 3 Rtinycc_quick     17.43ms  18.16ms     55.2      796KB    0       111     0
-#> 4 Rtinycc_manual_c  55.76ms  58.08ms     17.2      796KB    0.507    34     1
+#> 1 R                602.82ms  604.4ms      1.65     782KB    0         4     0
+#> 2 quickr             3.68ms    4.1ms    243.       782KB    1.52    480     3
+#> 3 Rtinycc_quick     16.99ms   17.2ms     57.7      796KB    0.502   115     1
+#> 4 Rtinycc_manual_c  55.54ms   57.5ms     17.4      796KB    0        35     0
 #> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
 #> #   time <list>, gc <list>
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1209,9 +1213,9 @@ timings_roll_mean
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R               81.5ms   82.8ms      11.4     124MB    13.3 
-#> 2 quickr           2.9ms    3.9ms     255.      781KB     2.00
-#> 3 Rtinycc_quick   16.4ms   17.2ms      58.8     796KB     0
+#> 1 R              77.98ms  80.89ms      11.9     124MB   13.8  
+#> 2 quickr          2.92ms   3.92ms     259.      781KB    2.00 
+#> 3 Rtinycc_quick  16.24ms  16.46ms      60.1     796KB    0.985
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1317,9 +1321,9 @@ timings_viterbi
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R               11.2ms   11.4ms      87.8     119KB     1.01
-#> 2 quickr         197.8µs    207µs    4869.        2KB     0   
-#> 3 Rtinycc_quick    717µs  787.6µs    1259.      173KB     2.02
+#> 1 R               10.7ms   10.8ms      92.5     119KB     1.01
+#> 2 quickr         197.8µs  198.8µs    5013.        2KB     0   
+#> 3 Rtinycc_quick  723.5µs  760.9µs    1306.      173KB     3.05
 plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1327,10 +1331,11 @@ plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 ### Matrix algebra, BLAS, and delegation
 
-`tcc_quick` now emits native BLAS-backed paths for `%*%`, `crossprod`,
-and `tcrossprod` (matrix/matrix cases) using `F77_CALL(dgemm)` through R
-headers. This keeps behavior portable across platforms while still using
-R’s linked BLAS stack.
+`tcc_quick` now emits native BLAS/LAPACK-backed paths for `%*%`,
+`crossprod`, `tcrossprod` (matrix/matrix cases, `F77_CALL(dgemm)`) and
+`solve(A, b)` / `solve(A, B)` (`F77_CALL(dgesv)`) through R headers.
+This keeps behavior portable across platforms while still using R’s
+linked BLAS/LAPACK stack.
 
 Platform note: on Windows, BLAS symbols used by `dgemm` are typically
 provided via `Rblas.dll` rather than `R.dll`. `tcc_quick` now links
@@ -1338,14 +1343,16 @@ provided via `Rblas.dll` rather than `R.dll`. `tcc_quick` now links
 compile diagnostics print the detected `matmul` usage and linked library
 list to help triage CI issues.
 
-Allowlisted delegated operations (for example `solve` and `svd`) are
-still evaluated through `Rf_eval()` in `soft`/`auto` mode. Calls outside
-the current native subset and delegation allowlist are treated as
-outside the supported `tcc_quick` subset. In `hard` mode, all `rf_call`
-paths are rejected at compile time.
+Allowlisted delegated operations (for example `svd`) are still evaluated
+through `Rf_eval()` in `soft`/`auto` mode. Calls outside the current
+native subset and delegation allowlist are treated as outside the
+supported `tcc_quick` subset. In `hard` mode, all `rf_call` paths are
+rejected at compile time.
 
-In the example below, `%*%` and `crossprod` compile natively, while
-`solve` continues to delegate to R.
+In the example below, `%*%` and `crossprod` compile natively. `solve`
+can also compile natively for direct `solve(A, b/B)` forms, but this OLS
+expression still delegates because `solve` is fed nested expression
+arguments.
 
 ``` r
 # A function that mixes native matrix products with delegated linear solves.
@@ -1385,8 +1392,8 @@ timings_ols
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R                254µs    289µs     3425.    39.8KB     1.01
-#> 2 Rtinycc_quick    249µs    270µs     3360.    93.3KB     3.07
+#> 1 R                266µs    291µs     3305.    39.8KB     2.03
+#> 2 Rtinycc_quick    270µs    289µs     3228.    93.3KB     3.07
 plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1441,12 +1448,44 @@ timings_bypass
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R             411.32µs  433.5µs     2276.     422KB     8.33
-#> 2 Rtinycc_quick   2.26ms    2.3ms      435.     249KB     2.09
+#> 1 R             401.64µs  412.8µs     2384.     422KB     7.77
+#> 2 Rtinycc_quick   2.17ms    2.2ms      451.     249KB     0
 plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 <img src="man/figures/README-tcc-quick-bypass-1.png" width="100%" />
+
+### Typed `sapply` / `apply` subset
+
+`tcc_quick` now supports a typed subset of mapping helpers:
+
+- `sapply(x, FUN)` where `FUN` is a symbol in the supported subset (for
+  example unary math intrinsics, `identity`, and scalar casts such as
+  `as.raw`).
+- `apply(X, MARGIN, FUN)` for matrix inputs with literal `MARGIN` (`1`
+  or `2`) and `FUN` in `{sum, mean}` (lowered to delegated
+  `rowSums`/`colSums`/ `rowMeans`/`colMeans` in `soft`/`auto`).
+
+``` r
+sapply_example <- function(x) {
+  declare(type(x = double(NA)))
+  sapply(x, sqrt)
+}
+
+apply_example <- function(X) {
+  declare(type(X = double(NA, NA)))
+  apply(X, 1, sum)
+}
+
+f_sapply <- tcc_quick(sapply_example, fallback = "hard")
+f_apply <- tcc_quick(apply_example, fallback = "soft")
+
+x <- runif(10)
+X <- matrix(runif(30), nrow = 6)
+
+stopifnot(all.equal(f_sapply(x), sapply_example(x), tolerance = 1e-12))
+stopifnot(all.equal(f_apply(X), apply_example(X), tolerance = 1e-12))
+```
 
 ## Known limitations
 
@@ -1494,11 +1533,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x56a6478a9290>
+#> <pointer: 0x63b6b72e16b0>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x56a637d33b30>
+#> <pointer: 0x63b6b1ca6c90>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1527,9 +1566,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x56a64dbeae20>
+#> <pointer: 0x63b6b7dc98f0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x56a64dbeae20>
+#> <pointer: 0x63b6b7dc98f0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

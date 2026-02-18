@@ -209,3 +209,46 @@ raw_from_int <- function(x) {
 f_raw_from_int <- tcc_quick(raw_from_int, fallback = "never")
 xint <- sample.int(255L, 64L, replace = TRUE) - 1L
 expect_equal(f_raw_from_int(xint), raw_from_int(xint))
+
+# sapply typed subset (symbol FUN)
+sapply_sqrt <- function(x) {
+  declare(type(x = double(NA)))
+  sapply(x, sqrt)
+}
+
+f_sapply_sqrt <- tcc_quick(sapply_sqrt, fallback = "never")
+xs <- runif(32)
+expect_equal(f_sapply_sqrt(xs), sapply_sqrt(xs), tolerance = 1e-12)
+
+sapply_raw <- function(x) {
+  declare(type(x = integer(NA)))
+  sapply(x, as.raw)
+}
+
+f_sapply_raw <- tcc_quick(sapply_raw, fallback = "never")
+xis <- sample.int(255L, 32L, replace = TRUE) - 1L
+expect_equal(f_sapply_raw(xis), sapply_raw(xis))
+
+# apply typed delegated subset
+apply_row_sums <- function(X) {
+  declare(type(X = double(NA, NA)))
+  apply(X, 1, sum)
+}
+
+f_apply_row_sums <- tcc_quick(apply_row_sums, fallback = "soft")
+Xm <- matrix(runif(50), nrow = 10)
+expect_equal(f_apply_row_sums(Xm), apply_row_sums(Xm), tolerance = 1e-12)
+
+apply_col_means_na <- function(X) {
+  declare(type(X = double(NA, NA)))
+  apply(X, 2, mean, na.rm = TRUE)
+}
+
+f_apply_col_means_na <- tcc_quick(apply_col_means_na, fallback = "soft")
+Xm2 <- matrix(runif(30), nrow = 6)
+Xm2[2, 3] <- NA_real_
+expect_equal(
+  f_apply_col_means_na(Xm2),
+  apply_col_means_na(Xm2),
+  tolerance = 1e-12
+)

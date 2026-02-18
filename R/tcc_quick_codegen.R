@@ -417,6 +417,20 @@ tccq_cg_stmt <- function(node, indent) {
       return(tccq_cg_matmul_stmt(node$expr, indent, nm))
     }
 
+    # --- linear solve assignment (LAPACK dgesv) ---
+    if (
+      identical(node$shape, "vector") &&
+        identical(node$expr$tag, "solve_lin")
+    ) {
+      return(tccq_cg_solve_lin_stmt(node$expr, indent, nm))
+    }
+    if (
+      identical(node$shape, "matrix") &&
+        identical(node$expr$tag, "solve_lin")
+    ) {
+      return(tccq_cg_solve_lin_stmt(node$expr, indent, nm))
+    }
+
     # --- scalar assignment ---
     # First handle cumulative ops which need alloc + fill loop
     if (
@@ -2136,6 +2150,138 @@ tccq_cg_matmul_stmt <- function(node, indent, out_name) {
   )
 }
 
+tccq_cg_solve_lin_stmt <- function(node, indent, out_name) {
+  pad <- strrep("  ", indent)
+  a <- tccq_cg_ident(node$a)
+  b <- tccq_cg_ident(node$b)
+  out <- tccq_cg_ident(out_name)
+  b_is_matrix <- identical(node$b_shape, "matrix")
+
+  rhs_dim_check <- if (b_is_matrix) {
+    paste0(
+      pad,
+      "  if ((int)nrow_",
+      b,
+      " != nsol_n_) Rf_error(\"solve dimension mismatch\");\n"
+    )
+  } else {
+    paste0(
+      pad,
+      "  if ((int)n_",
+      b,
+      " != nsol_n_) Rf_error(\"solve dimension mismatch\");\n"
+    )
+  }
+  rhs_n_expr <- if (b_is_matrix) sprintf("ncol_%s", b) else "1"
+
+  out_alloc <- if (b_is_matrix) {
+    paste0(
+      pad,
+      "  nrow_",
+      out,
+      " = nsol_n_;\n",
+      pad,
+      "  ncol_",
+      out,
+      " = nsol_nrhs_;\n",
+      pad,
+      "  s_",
+      out,
+      " = PROTECT(Rf_allocMatrix(REALSXP, nrow_",
+      out,
+      ", ncol_",
+      out,
+      "));\n",
+      pad,
+      "  nprotect_++;\n",
+      pad,
+      "  n_",
+      out,
+      " = (R_xlen_t)nrow_",
+      out,
+      " * (R_xlen_t)ncol_",
+      out,
+      ";\n",
+      pad,
+      "  p_",
+      out,
+      " = REAL(s_",
+      out,
+      ");\n"
+    )
+  } else {
+    paste0(
+      pad,
+      "  s_",
+      out,
+      " = PROTECT(Rf_allocVector(REALSXP, (R_xlen_t)nsol_n_));\n",
+      pad,
+      "  nprotect_++;\n",
+      pad,
+      "  n_",
+      out,
+      " = (R_xlen_t)nsol_n_;\n",
+      pad,
+      "  p_",
+      out,
+      " = REAL(s_",
+      out,
+      ");\n"
+    )
+  }
+
+  paste0(
+    pad,
+    "{\n",
+    pad,
+    "  int nsol_n_ = (int)nrow_",
+    a,
+    ";\n",
+    pad,
+    "  if ((int)ncol_",
+    a,
+    " != nsol_n_) Rf_error(\"solve requires a square matrix\");\n",
+    rhs_dim_check,
+    pad,
+    "  int nsol_nrhs_ = (int)(",
+    rhs_n_expr,
+    ");\n",
+    pad,
+    "  int nsol_lda_ = nsol_n_;\n",
+    pad,
+    "  int nsol_ldb_ = nsol_n_;\n",
+    pad,
+    "  int nsol_info_ = 0;\n",
+    pad,
+    "  int *nsol_ipiv_ = (int *)R_alloc((size_t)nsol_n_, sizeof(int));\n",
+    pad,
+    "  double *nsol_a_ = (double *)R_alloc((size_t)nsol_n_ * (size_t)nsol_n_, sizeof(double));\n",
+    pad,
+    "  double *nsol_b_ = (double *)R_alloc((size_t)nsol_n_ * (size_t)nsol_nrhs_, sizeof(double));\n",
+    pad,
+    "  for (R_xlen_t i_ = 0; i_ < (R_xlen_t)nsol_n_ * (R_xlen_t)nsol_n_; ++i_) nsol_a_[i_] = p_",
+    a,
+    "[i_];\n",
+    pad,
+    "  for (R_xlen_t i_ = 0; i_ < (R_xlen_t)nsol_n_ * (R_xlen_t)nsol_nrhs_; ++i_) nsol_b_[i_] = p_",
+    b,
+    "[i_];\n",
+    pad,
+    "  F77_CALL(dgesv)(&nsol_n_, &nsol_nrhs_, nsol_a_, &nsol_lda_, nsol_ipiv_, nsol_b_, &nsol_ldb_, &nsol_info_);\n",
+    pad,
+    "  if (nsol_info_ < 0) Rf_error(\"dgesv: invalid argument\");\n",
+    pad,
+    "  if (nsol_info_ > 0) Rf_error(\"solve failed: singular system\");\n",
+    out_alloc,
+    pad,
+    "  for (R_xlen_t i_ = 0; i_ < (R_xlen_t)nsol_n_ * (R_xlen_t)nsol_nrhs_; ++i_) p_",
+    out,
+    "[i_] = nsol_b_[i_];\n",
+    pad,
+    "}"
+  )
+}
+
 # Cumulative ops: cumsum/cumprod/cummax/cummin
 # target_ptr: C pointer expression (e.g. "p_result" or "p_ret_").
 tccq_cg_cumulative_stmt <- function(node, indent, target_ptr) {
@@ -2306,7 +2452,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
         var,
         " = PROTECT(Rf_eval(PROTECT(",
         sprintf("Rf_lang%d(%s)", lang_n, lang_args),
-        "), R_GlobalEnv));"
+        "), tccq_env));"
       ),
       paste0(pad, "nprotect_ += 2;")
     )
@@ -2335,7 +2481,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
         pad,
         "SEXP ",
         var,
-        " = PROTECT(Rf_eval(rfcall_e_, R_GlobalEnv));"
+        " = PROTECT(Rf_eval(rfcall_e_, tccq_env));"
       ),
       paste0(pad, "nprotect_++;")
     )
@@ -2622,6 +2768,9 @@ tccq_cg_vec_len <- function(node) {
   if (tag == "unary") {
     return(tccq_cg_vec_len(node$x))
   }
+  if (tag == "cast") {
+    return(tccq_cg_vec_len(node$x))
+  }
   if (tag == "call1") {
     return(tccq_cg_vec_len(node$x))
   }
@@ -2683,6 +2832,20 @@ tccq_cg_vec_elem <- function(node, idx_var) {
       return(sprintf("(!(%s))", x))
     }
     return(sprintf("(%s(%s))", node$op, x))
+  }
+
+  if (tag == "cast") {
+    x <- tccq_cg_vec_elem(node$x, idx_var)
+    if (node$target_mode == "integer") {
+      return(sprintf("((int)(%s))", x))
+    }
+    if (node$target_mode == "double") {
+      return(sprintf("((double)(%s))", x))
+    }
+    if (node$target_mode == "raw") {
+      return(sprintf("((Rbyte)(%s))", x))
+    }
+    return(x)
   }
 
   if (tag == "binary") {
@@ -2901,7 +3064,8 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
 
 tccq_cg_fn_body <- function(ir, fn_name) {
   formal_names <- ir$formal_names
-  c_args <- paste(sprintf("SEXP %s", formal_names), collapse = ", ")
+  c_arg_names <- c(formal_names, "tccq_env")
+  c_args <- paste(sprintf("SEXP %s", c_arg_names), collapse = ", ")
 
   # Determine needed headers by scanning IR for Rmath calls
   needs_rmath <- tccq_ir_needs_rmath(ir)
@@ -3096,7 +3260,11 @@ tccq_cg_fn_body <- function(ir, fn_name) {
   }
 
   # --- Emit rf_calls and reduction loops referenced in the return expression ---
-  ret_rfs <- tccq_collect_rf_calls(ir$ret)
+  ret_rfs <- if (!is.null(ir$ret$tag) && ir$ret$tag == "rf_call") {
+    list()
+  } else {
+    tccq_collect_rf_calls(ir$ret)
+  }
   for (rf in ret_rfs) {
     lines <- c(lines, tccq_cg_rf_call_stmt(rf, 1)$lines)
   }
@@ -3162,6 +3330,31 @@ tccq_cg_fn_body <- function(ir, fn_name) {
       "  int ncol_ret = 0;"
     )
     lines <- c(lines, tccq_cg_matmul_stmt(ir$ret, 1, "ret"))
+    lines <- c(
+      lines,
+      "  UNPROTECT(nprotect_);",
+      "  return s_ret;"
+    )
+  } else if (
+    ir$ret_shape %in%
+      c("vector", "matrix") &&
+      !is.null(ir$ret$tag) &&
+      ir$ret$tag == "solve_lin"
+  ) {
+    lines <- c(
+      lines,
+      "  SEXP s_ret = R_NilValue;",
+      "  R_xlen_t n_ret = 0;",
+      "  double *p_ret = NULL;"
+    )
+    if (ir$ret_shape == "matrix") {
+      lines <- c(
+        lines,
+        "  int nrow_ret = 0;",
+        "  int ncol_ret = 0;"
+      )
+    }
+    lines <- c(lines, tccq_cg_solve_lin_stmt(ir$ret, 1, "ret"))
     lines <- c(
       lines,
       "  UNPROTECT(nprotect_);",
