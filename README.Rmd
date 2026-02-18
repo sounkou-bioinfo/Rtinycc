@@ -972,12 +972,13 @@ slow_viterbi <- function(observations, states, initial_probs,
     path
 }
 
+quickr_viterbi <- quick(slow_viterbi)
 quick_viterbi <- tcc_quick(slow_viterbi, fallback = "never")
 
 set.seed(1234)
-n_steps <- 16L
-n_states <- 8L
-n_obs <- 16L
+n_steps <- 500L
+n_states <- 20L
+n_obs <- 20L
 
 observations <- sample(1:n_obs, n_steps, replace = TRUE)
 states <- 1:n_states
@@ -996,8 +997,11 @@ stopifnot(identical(
 timings_viterbi <- bench::mark(
   R = slow_viterbi(observations, states, initial_probs,
                    transition_probs, emission_probs),
+  quickr = quickr_viterbi(observations, states, initial_probs,
+                          transition_probs, emission_probs),
   Rtinycc_quick = quick_viterbi(observations, states, initial_probs,
-                                transition_probs, emission_probs)
+                                transition_probs, emission_probs),
+  min_time = 1
 )
 timings_viterbi
 ```
@@ -1015,6 +1019,11 @@ Instead, any unsupported function call is automatically delegated to R via
 that a function mixing scalar loops with occasional matrix calls compiles the
 loops to native code while the matrix operations still use R's BLAS backend —
 the best of both worlds.
+
+No speedup is expected in this example: the heavy work is in `solve`,
+`crossprod`, and `%*%` (already C/BLAS in R), and the scalar loop is too
+small to matter. The point is that `tcc_quick` compiles the function without
+choking on unsupported calls — quickr, for instance, rejects `solve` outright.
 
 ```{r tcc-quick-linalg-bypass}
 # A function that mixes scalar loops (compiled) with matrix operations (R).
@@ -1039,11 +1048,16 @@ fast_ols <- function(X, y) {
 quick_ols <- tcc_quick(fast_ols)
 
 set.seed(42)
-X <- cbind(1, matrix(rnorm(400), ncol = 4))
-y <- X %*% c(1, 2, -1, 0.5, 3) + rnorm(100)
+X <- cbind(1, matrix(rnorm(5000 * 4), ncol = 4))
+y <- X %*% c(1, 2, -1, 0.5, 3) + rnorm(5000)
 
 stopifnot(all.equal(fast_ols(X, y), quick_ols(X, y), tolerance = 1e-10))
-cat("Residual variance:", quick_ols(X, y), "\n")
+
+bench::mark(
+  R = fast_ols(X, y),
+  Rtinycc_quick = quick_ols(X, y),
+  min_time = 1
+)
 ```
 
 ### Bypassing the R interpreter with type declarations
