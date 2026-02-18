@@ -95,6 +95,7 @@ tccq_validate_ir <- function(ir, fallback = c("auto", "soft", "hard")) {
 tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   entry <- "tcc_quick_entry"
   src <- tcc_quick_codegen(ir, decl, fn_name = entry)
+  has_matmul <- isTRUE(tccq_ir_has_tag(ir, "matmul"))
 
   if (isTRUE(debug)) {
     message("tcc_quick generated C source:\n", src)
@@ -110,9 +111,25 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   # lives in Rblas.dll (not R.dll), so add Rblas explicitly when needed.
   if (
     identical(.Platform$OS.type, "windows") &&
-      isTRUE(tccq_ir_has_tag(ir, "matmul"))
+      has_matmul
   ) {
     ffi <- tcc_library(ffi, "Rblas")
+  }
+
+  if (isTRUE(debug)) {
+    message(
+      "tcc_quick compile diagnostics: ",
+      "os=",
+      .Platform$OS.type,
+      ", has_matmul=",
+      has_matmul,
+      ", ffi_libraries=[",
+      paste(ffi$libraries, collapse = ","),
+      "]",
+      ", ffi_lib_paths=[",
+      paste(ffi$lib_paths, collapse = ","),
+      "]"
+    )
   }
 
   ffi <- do.call(tcc_bind, c(list(ffi), stats::setNames(list(spec), entry)))
