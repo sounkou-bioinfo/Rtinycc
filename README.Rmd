@@ -25,9 +25,9 @@ knitr::opts_chunk$set(
 
 Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an R-to-C transpiler (`tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr)) that compiles `declare()`-annotated R functions to C via TinyCC. The package runs on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
 
+<!--
 Where quickr generates Fortran and relies on the Fortran compiler to fuse array temporaries, we generate C with guaranteed fusion at codegen time — we have to, because TinyCC is a single-pass compiler that does no optimization. The mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz, SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector expression tree, so `sum(x[a:b] * w)` compiles to a single accumulator loop with inline index arithmetic — no slice array, no product array, no intermediates. Slices are pointer offsets, element-wise ops are inline expressions, and reductions wrap the whole thing in one loop body.
-
-
+-->
 ## How it works
 
 When you call `tcc_compile()`, Rtinycc generates C wrapper functions whose
@@ -206,11 +206,12 @@ ffi$add(5L, 3L)
 # Compare to the R builtin `+` in a tight loop.
 # Each FFI call allocates a return SEXP, so GC pressure is expected.
 r_p <- sample(10000)
-bench::mark(
+timings_ffi_scalar <- bench::mark(
   Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
   Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
-
 )
+timings_ffi_scalar
+plot(timings_ffi_scalar, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 # For performance-sensitive code, move the loop into C and operate on arrays.
 ffi_vec <- tcc_ffi() |>
@@ -223,7 +224,7 @@ ffi_vec <- tcc_ffi() |>
   tcc_compile()
 
 x <- sample(10000)
-bench::mark(
+timings_ffi_vec <- bench::mark(
   Rtinycc_vec = {
     y <- as.integer(x)
     y <- y + 0L
@@ -236,7 +237,8 @@ bench::mark(
     y + 1L
   }
 )
-
+timings_ffi_vec
+plot(timings_ffi_vec, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -1004,6 +1006,7 @@ timings_viterbi <- bench::mark(
   min_time = 1
 )
 timings_viterbi
+plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ### Matrix algebra and R delegation
@@ -1053,11 +1056,13 @@ y <- X %*% c(1, 2, -1, 0.5, 3) + rnorm(5000)
 
 stopifnot(all.equal(fast_ols(X, y), quick_ols(X, y), tolerance = 1e-10))
 
-bench::mark(
+timings_ols <- bench::mark(
   R = fast_ols(X, y),
   Rtinycc_quick = quick_ols(X, y),
   min_time = 1
 )
+timings_ols
+plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ### Bypassing the R interpreter with type declarations
@@ -1098,11 +1103,13 @@ stopifnot(all.equal(
   tolerance = 1e-10
 ))
 
-bench::mark(
+timings_bypass <- bench::mark(
   R = slow_stats(x),
   Rtinycc_quick = quick_stats(x),
   check = FALSE
 )
+timings_bypass
+plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
 ## Known limitations
