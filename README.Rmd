@@ -787,6 +787,15 @@ if (Sys.info()[["sysname"]] == "Linux") {
 subset of R into C and executes it via TinyCC, while preserving a safe fallback
 route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
 
+Fallback behavior is explicit:
+
+- `fallback = "hard"`: compile-only; reject any `rf_call` path.
+- `fallback = "soft"`: allow mixed compiled + `Rf_eval` execution.
+- `fallback = "auto"`: compatibility mode (default behavior).
+
+Legacy aliases are still accepted: `"never"` maps to `"hard"`, and
+`"always"` maps to `"soft"`.
+
 The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz,
 SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector
 expression tree, fusing slices, element-wise ops, and reductions into single
@@ -915,8 +924,7 @@ plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NUL
 The [Viterbi algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm) is a
 classic dynamic programming example from Hidden Markov Models. This version
 uses operations that `tcc_quick` lowers natively (`matrix`, `for`, `which.max`,
-`max`, scalar arithmetic, integer vector allocation) alongside operations that
-fall back to R via `Rf_eval` (column-slice `*` with matrix subscripts). The
+`max`, scalar arithmetic, integer vector allocation, matrix element access). The
 loop body itself — index iteration, argmax tracking, element access — runs in
 compiled C, which is where most of the time is spent.
 
@@ -1008,24 +1016,19 @@ timings_viterbi
 plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
-### Matrix algebra and R delegation
+### Matrix algebra, BLAS, and delegation
 
-`tcc_quick` does not re-implement matrix operations like `%*%`, `crossprod`,
-`solve`, or `svd`. R already dispatches these to optimized BLAS/LAPACK
-routines, so there is nothing to gain from emitting BLAS calls directly — and
-TinyCC's single-pass codegen cannot outperform an optimized BLAS anyway.
+`tcc_quick` now emits native BLAS-backed paths for `%*%`, `crossprod`, and
+`tcrossprod` (matrix/matrix cases) using `F77_CALL(dgemm)` through R headers.
+This keeps behavior portable across platforms while still using R's linked BLAS
+stack.
 
-Instead, any unsupported function call is automatically delegated to R via
-`Rf_eval()`. The generated C builds the call pairlist, evaluates it in
-`R_GlobalEnv`, and feeds the result back into the compiled pipeline. This means
-that a function mixing scalar loops with occasional matrix calls compiles the
-loops to native code while the matrix operations still use R's BLAS backend —
-the best of both worlds.
+Unsupported operations (for example `solve` and `svd`) are still delegated to R
+via `Rf_eval()` in `soft`/`auto` mode. In `hard` mode, those paths are rejected
+at compile time.
 
-No speedup is expected in this example: the heavy work is in `solve`,
-`crossprod`, and `%*%` (already C/BLAS in R), and the scalar loop is too
-small to matter. The point is that `tcc_quick` compiles the function without
-choking on unsupported calls — quickr, for instance, rejects `solve` outright.
+In the example below, `%*%` and `crossprod` compile natively, while `solve`
+continues to delegate to R.
 
 ```{r tcc-quick-linalg-bypass}
 # A function that mixes scalar loops (compiled) with matrix operations (R).
@@ -1047,7 +1050,7 @@ fast_ols <- function(X, y) {
   s2
 }
 
-quick_ols <- tcc_quick(fast_ols)
+quick_ols <- tcc_quick(fast_ols, fallback = "soft")
 
 set.seed(42)
 X <- cbind(1, matrix(rnorm(5000 * 4), ncol = 4))
@@ -1064,25 +1067,16 @@ timings_ols
 plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
-### Bypassing the R interpreter with type declarations
+### Native statistics lowering
 
-Even when every function call in the body falls back to `Rf_eval`, `tcc_quick`
-still bypasses the R interpreter's bytecode dispatch loop. The compiled C code
-calls R functions directly through the C API — no `GETVAR`, no `CALL`, no
-promise forcing, no stack-frame management. The type declarations let
-`tcc_quick` generate typed local variables, coerce arguments once at the
-boundary, and thread scalar values through registers instead of boxed SEXPs.
+`tcc_quick` now lowers common statistics directly (`mean`, `sd`, `median`,
+`quantile`) including `na.rm = TRUE` and vector `probs` for `quantile`.
 
-Today the return type from `Rf_eval` is always treated as `double` (the
-declared type of the result variable). In the future, if `declare()` is
-extended to annotate function return types, `tcc_quick` could propagate types
-through `rf_call` nodes and eliminate even the unboxing overhead, turning every
-R function call into a typed C function call.
+That means this example runs as native generated loops (plus sorting for
+`median`/`quantile`) rather than going through `Rf_eval`.
 
 ```{r tcc-quick-bypass}
-# Every operation here is an rf_call — nothing is natively lowered
-# except the scalar plumbing (locals, control flow, return).
-# Still faster than the interpreter because it's compiled C calling R.
+# These operations are natively lowered in tcc_quick.
 slow_stats <- function(x) {
   declare(type(x = double(NA)))
   m <- mean(x)
@@ -1094,7 +1088,7 @@ slow_stats <- function(x) {
   iqr
 }
 
-quick_stats <- tcc_quick(slow_stats)
+quick_stats <- tcc_quick(slow_stats, fallback = "hard")
 
 x <- rnorm(10000)
 stopifnot(all.equal(
@@ -1217,4 +1211,3 @@ GPL-3
 - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
 - [CSlug](https://cslug.readthedocs.io/en/latest/)
 - [quickr](https://github.com/t-kalinowski/quickr)
-
