@@ -186,7 +186,7 @@ Correspondence with SAC:
 - IR node constructors are in `R/tcc_ir.R`; R→C function registry in `R/tcc_ir_registry.R` (39 entries covering math.h and Rmath.h).
 - Registry-driven dispatch: the lowerer checks `tcc_ir_c_api_registry()` for any function call and emits `call1` (arity-1) or `call2` (arity-2) IR nodes. Adding a new math function requires one registry entry, no dispatcher or codegen changes.
 - Scalar lowering/codegen: arithmetic, comparisons, logical ops, `if`/`ifelse`, unary math, casts, `stop`.
-- Vector operations: `vec_alloc`, `vec_get`/`vec_set`, `vec_slice` (range view `x[a:b]`), `vec_rewrite` (element-wise in-place reassignment), element-wise binary/unary on vectors, `rev`, `pmin`/`pmax`.
+- Vector operations: `vec_alloc`, `vec_get`/`vec_set`, `vec_slice` (range view `x[a:b]`), `vec_rewrite` (element-wise in-place reassignment), element-wise binary/unary on vectors, `rev`, `pmin`/`pmax`, and `raw` vectors (`raw(n)`, `as.raw`, `type(... = raw(...))`).
 - Reductions: `reduce` (named variable), `reduce_expr` (arbitrary vector expression — the condensation path), `which_reduce`, `any`/`all` (short-circuit).
 - Native stats reducers: `mean`, `sd`, `median`, `quantile` (scalar and vector `probs`), including literal `na.rm = TRUE/FALSE` handling.
 - Cumulative operations: `cumsum`, `cumprod`, `cummax`, `cummin` (sequential scan, not condensable).
@@ -199,7 +199,7 @@ Correspondence with SAC:
 - IR validation pass: hard mode rejects any `rf_call` path; malformed IR nodes fail fast.
 - ALTREP-safe codegen: read-only input parameters use `REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` pointer qualifiers. Parameters that are mutated (targeted by `vec_set`/`mat_set`/`vec_rewrite`) are `Rf_duplicate()`d before coercion to avoid corrupting the caller's objects. Mutation tracking is handled by `tccq_scope_mark_mutated()` in the lowerer and propagated as `ir$mutated_params`.
 - Capability table helpers are available in `R/tcc_ir_registry.R` (`tcc_rapi_table()`, `tcc_rapi_has()`, `tcc_rapi_summary()`, `tcc_quick_rf_call_allowlist()`, `tcc_quick_rf_call_quiet()`).
-- Tests: `test_tcc_quick_scalar.R` (10), `test_tcc_quick_vector.R` (16), `test_tcc_quick_matrix.R` (8), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (11), `test_tcc_quick_ops.R` (30). Full package suite currently runs 329 tests.
+- Tests: `test_tcc_quick_scalar.R` (10), `test_tcc_quick_vector.R` (18), `test_tcc_quick_matrix.R` (8), `test_tcc_quick_control.R` (6), `test_tcc_quick_fallback.R` (11), `test_tcc_quick_ops.R` (30). Full package suite currently runs 331 tests.
 
 ### Remaining work
 

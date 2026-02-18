@@ -33,14 +33,11 @@ tcc_quick_parse_type_spec <- function(spec) {
   }
 
   type_name <- as.character(spec[[1]])
-  type_name <- switch(type_name,
-    numeric = "double",
-    type_name
-  )
+  type_name <- switch(type_name, numeric = "double", type_name)
 
-  if (!type_name %in% c("double", "integer", "logical")) {
+  if (!type_name %in% c("double", "integer", "logical", "raw")) {
     stop(
-      "tcc_quick current subset supports only double/integer/logical declarations",
+      "tcc_quick current subset supports only double/integer/logical/raw declarations",
       call. = FALSE
     )
   }

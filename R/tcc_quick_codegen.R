@@ -103,6 +103,9 @@ tccq_cg_expr <- function(node) {
     if (node$mode == "logical") {
       return(if (isTRUE(node$value)) "1" else "0")
     }
+    if (node$mode == "raw") {
+      return(sprintf("((Rbyte)%d)", as.integer(node$value)))
+    }
     stop("Unknown const mode", call. = FALSE)
   }
 
@@ -249,6 +252,9 @@ tccq_cg_expr <- function(node) {
     if (node$target_mode == "double") {
       return(sprintf("((double)(%s))", x))
     }
+    if (node$target_mode == "raw") {
+      return(sprintf("((Rbyte)(%s))", x))
+    }
     return(x)
   }
 
@@ -264,6 +270,7 @@ tccq_cg_expr <- function(node) {
       mode,
       integer = sprintf("Rf_asInteger(%s)", node$var_name),
       logical = sprintf("Rf_asLogical(%s)", node$var_name),
+      raw = sprintf("((unsigned char)Rf_asInteger(%s))", node$var_name),
       sprintf("Rf_asReal(%s)", node$var_name)
     )
     return(extract)
@@ -303,6 +310,7 @@ tccq_cg_stmt <- function(node, indent) {
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
+        raw = "RAWSXP",
         "REALSXP"
       )
       len <- tccq_cg_expr(node$expr$len_expr)
@@ -311,6 +319,7 @@ tccq_cg_stmt <- function(node, indent) {
         double = "REAL",
         integer = "INTEGER",
         logical = "LOGICAL",
+        raw = "RAW",
         "REAL"
       )
       return(paste0(
@@ -418,12 +427,14 @@ tccq_cg_stmt <- function(node, indent) {
         node$mode,
         integer = "INTSXP",
         logical = "LGLSXP",
+        raw = "RAWSXP",
         "REALSXP"
       )
       ptr_fun <- switch(
         node$mode,
         integer = "INTEGER",
         logical = "LOGICAL",
+        raw = "RAW",
         "REAL"
       )
       alloc_lines <- paste0(
@@ -470,12 +481,14 @@ tccq_cg_stmt <- function(node, indent) {
           node$mode,
           integer = "INTSXP",
           logical = "LGLSXP",
+          raw = "RAWSXP",
           "REALSXP"
         )
         ptr_fun <- switch(
           node$mode,
           integer = "INTEGER",
           logical = "LOGICAL",
+          raw = "RAW",
           "REAL"
         )
         return(paste0(
@@ -511,6 +524,7 @@ tccq_cg_stmt <- function(node, indent) {
           node$mode,
           integer = sprintf("Rf_asInteger(%s)", rf_var),
           logical = sprintf("Rf_asLogical(%s)", rf_var),
+          raw = sprintf("((unsigned char)Rf_asInteger(%s))", rf_var),
           sprintf("Rf_asReal(%s)", rf_var)
         )
         return(paste0(
@@ -585,12 +599,14 @@ tccq_cg_stmt <- function(node, indent) {
         node$mode,
         integer = "INTSXP",
         logical = "LGLSXP",
+        raw = "RAWSXP",
         "REALSXP"
       )
       ptr_fun <- switch(
         node$mode,
         integer = "INTEGER",
         logical = "LOGICAL",
+        raw = "RAW",
         "REAL"
       )
       parts <- c(
@@ -2251,6 +2267,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
         a_mode,
         integer = sprintf("Rf_ScalarInteger(%s_)", c_nm),
         logical = sprintf("Rf_ScalarLogical(%s_)", c_nm),
+        raw = sprintf("Rf_ScalarRaw((Rbyte)(%s_))", c_nm),
         sprintf("Rf_ScalarReal(%s_)", c_nm)
       )
       tmp <- sprintf("rfarg_%s_%d_%d_", tccq_cg_ident(fun), uid, i)
@@ -2265,6 +2282,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
         mode,
         integer = sprintf("Rf_ScalarInteger((int)(%s))", val),
         logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", val),
+        raw = sprintf("Rf_ScalarRaw((Rbyte)(%s))", val),
         sprintf("Rf_ScalarReal((double)(%s))", val)
       )
       tmp <- sprintf("rfarg_%s_%d_%d_", tccq_cg_ident(fun), uid, i)
@@ -2344,9 +2362,16 @@ tccq_cg_vec_mask_assign <- function(node, indent) {
     node$mode,
     integer = "INTSXP",
     logical = "LGLSXP",
+    raw = "RAWSXP",
     "REALSXP"
   )
-  ptr_fun <- switch(node$mode, integer = "INTEGER", logical = "LOGICAL", "REAL")
+  ptr_fun <- switch(
+    node$mode,
+    integer = "INTEGER",
+    logical = "LOGICAL",
+    raw = "RAW",
+    "REAL"
+  )
 
   paste0(
     pad,
@@ -2470,12 +2495,14 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
       ir$ret_mode,
       integer = "INTSXP",
       logical = "LGLSXP",
+      raw = "RAWSXP",
       "REALSXP"
     )
     ptr_fun <- switch(
       ir$ret_mode,
       integer = "INTEGER",
       logical = "LOGICAL",
+      raw = "RAW",
       "REAL"
     )
     alloc_lines <- paste0(
@@ -2490,7 +2517,13 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
       pad,
       "nprotect_++;\n",
       pad,
-      switch(ir$ret_mode, integer = "int", logical = "int", "double"),
+      switch(
+        ir$ret_mode,
+        integer = "int",
+        logical = "int",
+        raw = "Rbyte",
+        "double"
+      ),
       " *p_ret_ = ",
       ptr_fun,
       "(ret_);"
@@ -2519,6 +2552,7 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
     double = "REALSXP",
     integer = "INTSXP",
     logical = "LGLSXP",
+    raw = "RAWSXP",
     "REALSXP"
   )
   ptr_fun <- switch(
@@ -2526,6 +2560,7 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
     double = "REAL",
     integer = "INTEGER",
     logical = "LOGICAL",
+    raw = "RAW",
     "REAL"
   )
   c_type <- switch(
@@ -2533,6 +2568,7 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
     double = "double",
     integer = "int",
     logical = "int",
+    raw = "Rbyte",
     "double"
   )
 
@@ -2635,6 +2671,9 @@ tccq_cg_vec_elem <- function(node, idx_var) {
     }
     if (node$mode == "logical") {
       return(if (isTRUE(node$value)) "1" else "0")
+    }
+    if (node$mode == "raw") {
+      return(sprintf("((Rbyte)%d)", as.integer(node$value)))
     }
   }
 
@@ -2893,7 +2932,12 @@ tccq_cg_fn_body <- function(ir, fn_name) {
         spec$mode,
         double = sprintf("  double %s_ = Rf_asReal(%s);", cnm, nm),
         integer = sprintf("  int %s_ = Rf_asInteger(%s);", cnm, nm),
-        logical = sprintf("  int %s_ = Rf_asLogical(%s);", cnm, nm)
+        logical = sprintf("  int %s_ = Rf_asLogical(%s);", cnm, nm),
+        raw = sprintf(
+          "  unsigned char %s_ = (unsigned char)Rf_asInteger(%s);",
+          cnm,
+          nm
+        )
       )
       lines <- c(lines, extract)
     } else {
@@ -2902,6 +2946,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
+        raw = "RAWSXP",
         "REALSXP"
       )
       ptr_fun <- if (is_mutated) {
@@ -2910,6 +2955,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
           double = "REAL",
           integer = "INTEGER",
           logical = "LOGICAL",
+          raw = "RAW",
           "REAL"
         )
       } else {
@@ -2918,6 +2964,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
           double = "REAL_RO",
           integer = "INTEGER_RO",
           logical = "LOGICAL_RO",
+          raw = "RAW",
           "REAL_RO"
         )
       }
@@ -2926,33 +2973,63 @@ tccq_cg_fn_body <- function(ir, fn_name) {
         double = "double",
         integer = "int",
         logical = "int",
+        raw = "Rbyte",
         "double"
+      )
+      sxp_tag <- switch(
+        spec$mode,
+        double = "REALSXP",
+        integer = "INTSXP",
+        logical = "LGLSXP",
+        raw = "RAWSXP",
+        "REALSXP"
       )
       const_q <- if (is_mutated) "" else "const "
       if (is_mutated) {
-        # Duplicate before coerce to avoid mutating caller's object
+        # Duplicate before potential coercion to avoid mutating caller's object.
+        # Use PROTECT_WITH_INDEX/REPROTECT so the protected slot can be updated
+        # if coercion allocates a replacement object.
         lines <- c(
           lines,
+          sprintf("  SEXP s_%s = R_NilValue;", cnm),
+          sprintf("  PROTECT_INDEX ipx_%s;", cnm),
           sprintf(
-            "  SEXP s_%s = PROTECT(Rf_coerceVector(Rf_duplicate(%s), %s));",
+            "  PROTECT_WITH_INDEX(s_%s = Rf_duplicate(%s), &ipx_%s);",
             cnm,
             nm,
-            sxp_type
+            cnm
           ),
           "  nprotect_++;",
+          sprintf(
+            "  if (TYPEOF(s_%s) != %s) REPROTECT(s_%s = Rf_coerceVector(s_%s, %s), ipx_%s);",
+            cnm,
+            sxp_tag,
+            cnm,
+            cnm,
+            sxp_type,
+            cnm
+          ),
           sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
           sprintf("  %s *p_%s = %s(s_%s);", c_type, cnm, ptr_fun, cnm)
         )
       } else {
+        # Reuse original argument buffer when already in target SEXPTYPE.
+        # Only allocate/protect when coercion is required.
         lines <- c(
           lines,
+          sprintf("  SEXP s_%s = %s;", cnm, nm),
+          sprintf("  if (TYPEOF(s_%s) != %s) {", cnm, sxp_tag),
+          sprintf("    PROTECT_INDEX ipx_%s;", cnm),
+          sprintf("    PROTECT_WITH_INDEX(s_%s, &ipx_%s);", cnm, cnm),
+          "    nprotect_++;",
           sprintf(
-            "  SEXP s_%s = PROTECT(Rf_coerceVector(%s, %s));",
+            "    REPROTECT(s_%s = Rf_coerceVector(s_%s, %s), ipx_%s);",
             cnm,
-            nm,
-            sxp_type
+            cnm,
+            sxp_type,
+            cnm
           ),
-          "  nprotect_++;",
+          "  }",
           sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
           sprintf(
             "  %s%s *p_%s = %s(s_%s);",
@@ -2984,6 +3061,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
         double = "double",
         integer = "int",
         logical = "int",
+        raw = "Rbyte",
         "double"
       )
       lines <- c(lines, sprintf("  %s %s_ = 0;", c_type, cnm))
@@ -2993,6 +3071,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
         double = "double",
         integer = "int",
         logical = "int",
+        raw = "Rbyte",
         "double"
       )
       lines <- c(
@@ -3116,6 +3195,7 @@ tccq_cg_fn_body <- function(ir, fn_name) {
       double = sprintf("Rf_ScalarReal((double)(%s))", ret_expr),
       integer = sprintf("Rf_ScalarInteger((int)(%s))", ret_expr),
       logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", ret_expr),
+      raw = sprintf("Rf_ScalarRaw((Rbyte)(%s))", ret_expr),
       ret_expr
     )
     lines <- c(

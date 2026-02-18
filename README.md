@@ -183,7 +183,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x65540e09f910"
+#> [1] "0x56a632d7b1d0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -214,11 +214,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x65540eff0960>
+#> <pointer: 0x56a6322f07f0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x65540ca7cf70>
+#> <pointer: 0x56a6325aad60>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x65540eff0960>
+#> <pointer: 0x56a6322f07f0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -284,8 +284,8 @@ timings_ffi_scalar
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       944ms    944ms      1.06   134.1MB    10.6 
-#> 2 Rbuiltin      553µs    601µs   1121.      9.05KB     5.81
+#> 1 Rtinycc       946ms    946ms      1.06   134.1MB     14.8
+#> 2 Rbuiltin      555µs    595µs   1595.      9.05KB     12.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays
 # (one call over many elements instead of many scalar calls).
@@ -316,8 +316,8 @@ timings_ffi_vec
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec   101.5µs  107.6µs     9166.    52.8KB     6.16
-#> 2 Rbuiltin_vec   17.6µs   18.4µs    50237.    78.2KB    40.2
+#> 1 Rtinycc_vec    98.8µs  106.9µs     9217.    52.8KB     15.1
+#> 2 Rbuiltin_vec   16.9µs   18.3µs    49543.    78.2KB     34.7
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -439,7 +439,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @655422bf6800 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @56a6484ebb28 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -455,7 +455,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @655422bf6800 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @56a6484ebb28 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -482,15 +482,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x655427175a10>
+#> <pointer: 0x56a63ba3f2f0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x655427175a10>
+#> <pointer: 0x56a63ba3f2f0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x655420625f60>
+#> <pointer: 0x56a64ab8e650>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x655420625f60>
+#> <pointer: 0x56a64ab8e650>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -535,9 +535,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x65541a8d8690>
+#> <pointer: 0x56a64786def0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x65541a8d8690>
+#> <pointer: 0x56a64786def0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -829,7 +829,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x65540d6a3490>
+#> <pointer: 0x56a63e2ed4f0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -945,11 +945,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 50.84ms 51.85ms      19.3    6.33MB        0     2     0    103.7ms
-#> 2 vroom_df_…  7.19ms  7.61ms     131.     1.22MB        0     2     0     15.2ms
-#> 3 vroom_df_…  7.64ms  8.09ms     124.     1.22MB        0     2     0     16.2ms
-#> 4 c_read_df  21.61ms 21.73ms      46.0    1.23MB        0     2     0     43.5ms
-#> 5 io_uring_… 21.51ms 21.66ms      46.2    1.23MB        0     2     0     43.3ms
+#> 1 read_tabl… 48.63ms    50ms      20.0    6.33MB        0     2     0      100ms
+#> 2 vroom_df_…  7.26ms  7.55ms     132.     1.22MB        0     2     0     15.1ms
+#> 3 vroom_df_…  7.37ms   7.4ms     135.     1.22MB        0     2     0     14.8ms
+#> 4 c_read_df   21.3ms 21.31ms      46.9    1.23MB        0     2     0     42.6ms
+#> 5 io_uring_… 21.44ms  21.7ms      46.1    1.23MB        0     2     0     43.4ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1156,10 +1156,10 @@ print(timings)
 #> # A tibble: 4 × 13
 #>   expression            min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
 #>   <bch:expr>       <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 R                618.96ms 624.67ms      1.60     782KB    0.533     3     1
-#> 2 quickr             3.72ms   4.35ms    231.       782KB    2.63    439     5
-#> 3 Rtinycc_quick     17.25ms  18.05ms     55.5      796KB    0.505   110     1
-#> 4 Rtinycc_manual_c   57.1ms  59.55ms     16.9      796KB    0        34     0
+#> 1 R                618.58ms 626.42ms      1.60     782KB    0         4     0
+#> 2 quickr             3.76ms   4.35ms    230.       782KB    1.52    455     3
+#> 3 Rtinycc_quick     17.43ms  18.16ms     55.2      796KB    0       111     0
+#> 4 Rtinycc_manual_c  55.76ms  58.08ms     17.2      796KB    0.507    34     1
 #> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
 #> #   time <list>, gc <list>
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1209,9 +1209,9 @@ timings_roll_mean
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R              82.85ms   84.5ms      8.85     124MB    9.83 
-#> 2 quickr          3.08ms    4.1ms    246.       781KB    0.999
-#> 3 Rtinycc_quick  16.26ms   17.1ms     58.5      796KB    0.991
+#> 1 R               81.5ms   82.8ms      11.4     124MB    13.3 
+#> 2 quickr           2.9ms    3.9ms     255.      781KB     2.00
+#> 3 Rtinycc_quick   16.4ms   17.2ms      58.8     796KB     0
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1317,9 +1317,9 @@ timings_viterbi
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R               10.8ms   11.3ms      88.9     119KB     1.01
-#> 2 quickr         198.1µs  207.9µs    4834.        2KB     0   
-#> 3 Rtinycc_quick  710.1µs  781.6µs    1275.      173KB     2.02
+#> 1 R               11.2ms   11.4ms      87.8     119KB     1.01
+#> 2 quickr         197.8µs    207µs    4869.        2KB     0   
+#> 3 Rtinycc_quick    717µs  787.6µs    1259.      173KB     2.02
 plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1385,9 +1385,14 @@ timings_ols
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R                266µs    291µs     2977.    39.8KB     1.01
-#> 2 Rtinycc_quick    252µs    268µs     3500.    93.3KB     3.06
+#> 1 R                254µs    289µs     3425.    39.8KB     1.01
+#> 2 Rtinycc_quick    249µs    270µs     3360.    93.3KB     3.07
 plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+<img src="man/figures/README-tcc-quick-linalg-bypass-1.png" width="100%" />
+
+``` r
 
 # Notes on allocation behavior:
 # - crossprod() and %*% are native-lowered in this example.
@@ -1396,8 +1401,6 @@ plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 # - To reduce GC pressure, prefer native-lowered paths (fallback="hard") where
 #   possible, and batch work to avoid repeated scalar boundary crossings.
 ```
-
-<img src="man/figures/README-tcc-quick-linalg-bypass-1.png" width="100%" />
 
 ### Native statistics lowering
 
@@ -1438,8 +1441,8 @@ timings_bypass
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R             407.11µs 431.96µs     2275.     422KB     6.14
-#> 2 Rtinycc_quick   2.16ms   2.28ms      441.     249KB     2.02
+#> 1 R             411.32µs  433.5µs     2276.     422KB     8.33
+#> 2 Rtinycc_quick   2.26ms    2.3ms      435.     249KB     2.09
 plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1491,11 +1494,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x65542a16a160>
+#> <pointer: 0x56a6478a9290>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x65540eb50b80>
+#> <pointer: 0x56a637d33b30>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1524,9 +1527,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x65542a334240>
+#> <pointer: 0x56a64dbeae20>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x65542a334240>
+#> <pointer: 0x56a64dbeae20>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

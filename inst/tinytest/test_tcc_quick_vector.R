@@ -180,3 +180,32 @@ expect_equal(
   as.numeric(quantile(c(x3, NA), p4, na.rm = TRUE)),
   tolerance = 1e-12
 )
+
+# raw vectors
+raw_copy <- function(x) {
+  declare(type(x = raw(NA)))
+  n <- length(x)
+  y <- raw(n)
+  for (i in seq_len(n)) {
+    y[i] <- x[i]
+  }
+  y
+}
+
+f_raw_copy <- tcc_quick(raw_copy, fallback = "never")
+xraw <- as.raw(sample.int(255L, 64L, replace = TRUE) - 1L)
+expect_equal(f_raw_copy(xraw), raw_copy(xraw))
+
+raw_from_int <- function(x) {
+  declare(type(x = integer(NA)))
+  n <- length(x)
+  y <- raw(n)
+  for (i in seq_len(n)) {
+    y[i] <- as.raw(x[i])
+  }
+  y
+}
+
+f_raw_from_int <- tcc_quick(raw_from_int, fallback = "never")
+xint <- sample.int(255L, 64L, replace = TRUE) - 1L
+expect_equal(f_raw_from_int(xint), raw_from_int(xint))

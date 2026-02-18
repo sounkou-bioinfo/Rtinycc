@@ -164,6 +164,13 @@ tccq_lower_expr <- function(e, sc, decl) {
       mode = "logical"
     ))
   }
+  if (length(e) == 1L && is.raw(e)) {
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "const", value = as.integer(e)[[1]], mode = "raw"),
+      mode = "raw"
+    ))
+  }
 
   if (!is.call(e)) {
     return(tccq_lower_result(FALSE, reason = "Unsupported expression node"))
@@ -737,8 +744,8 @@ tccq_lower_expr <- function(e, sc, decl) {
     ))
   }
 
-  # --- Constructors: double(n), integer(n), logical(n) ---
-  if (fname %in% c("double", "integer", "logical") && length(e) == 2L) {
+  # --- Constructors: double(n), integer(n), logical(n), raw(n) ---
+  if (fname %in% c("double", "integer", "logical", "raw") && length(e) == 2L) {
     len <- tccq_lower_expr(e[[2]], sc, decl)
     if (!len$ok) {
       return(len)
@@ -784,15 +791,23 @@ tccq_lower_expr <- function(e, sc, decl) {
     ))
   }
 
-  # --- Casts: as.integer(), as.double(), as.numeric() ---
+  # --- Casts: as.integer(), as.double(), as.numeric(), as.raw() ---
   if (
-    fname %in% c("as.integer", "as.double", "as.numeric") && length(e) == 2L
+    fname %in%
+      c("as.integer", "as.double", "as.numeric", "as.raw") &&
+      length(e) == 2L
   ) {
     x <- tccq_lower_expr(e[[2]], sc, decl)
     if (!x$ok) {
       return(x)
     }
-    target_mode <- if (fname == "as.integer") "integer" else "double"
+    target_mode <- if (fname == "as.integer") {
+      "integer"
+    } else if (fname == "as.raw") {
+      "raw"
+    } else {
+      "double"
+    }
     return(tccq_lower_result(
       TRUE,
       node = list(tag = "cast", x = x$node, target_mode = target_mode),
