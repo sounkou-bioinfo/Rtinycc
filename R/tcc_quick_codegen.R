@@ -24,10 +24,30 @@ tccq_ir_needs_rmath <- function(node) {
     }
     # Recurse into sub-nodes
     for (field in c(
-      "x", "y", "lhs", "rhs", "cond", "yes", "no",
-      "expr", "body", "stmts", "ret", "len_expr",
-      "idx", "value", "row", "col", "from", "to",
-      "nrow", "ncol", "iter", "n", "args", "mask"
+      "x",
+      "y",
+      "lhs",
+      "rhs",
+      "cond",
+      "yes",
+      "no",
+      "expr",
+      "body",
+      "stmts",
+      "ret",
+      "len_expr",
+      "idx",
+      "value",
+      "row",
+      "col",
+      "from",
+      "to",
+      "nrow",
+      "ncol",
+      "iter",
+      "n",
+      "args",
+      "mask"
     )) {
       if (tccq_ir_needs_rmath(node[[field]])) {
         return(TRUE)
@@ -178,6 +198,22 @@ tccq_cg_expr <- function(node) {
     return(node$var_name)
   }
 
+  if (tag == "mean_expr") {
+    return(node$var_name)
+  }
+
+  if (tag == "sd_expr") {
+    return(node$var_name)
+  }
+
+  if (tag == "median_expr") {
+    return(node$var_name)
+  }
+
+  if (tag == "quantile_expr") {
+    return(node$var_name)
+  }
+
   if (tag == "mat_get") {
     arr <- tccq_cg_ident(node$arr)
     row <- tccq_cg_expr(node$row)
@@ -224,7 +260,8 @@ tccq_cg_expr <- function(node) {
     }
     # For scalar extraction: Rf_asReal / Rf_asInteger / Rf_asLogical
     mode <- node$mode %||% "double"
-    extract <- switch(mode,
+    extract <- switch(
+      mode,
       integer = sprintf("Rf_asInteger(%s)", node$var_name),
       logical = sprintf("Rf_asLogical(%s)", node$var_name),
       sprintf("Rf_asReal(%s)", node$var_name)
@@ -261,14 +298,16 @@ tccq_cg_stmt <- function(node, indent) {
         identical(node$expr$tag, "vec_alloc")
     ) {
       alloc_mode <- node$expr$alloc_mode
-      sxp_type <- switch(alloc_mode,
+      sxp_type <- switch(
+        alloc_mode,
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
       len <- tccq_cg_expr(node$expr$len_expr)
-      ptr_fun <- switch(alloc_mode,
+      ptr_fun <- switch(
+        alloc_mode,
         double = "REAL",
         integer = "INTEGER",
         logical = "LOGICAL",
@@ -364,28 +403,59 @@ tccq_cg_stmt <- function(node, indent) {
       ))
     }
 
+    # --- matrix product assignment (BLAS dgemm) ---
+    if (identical(node$shape, "matrix") && identical(node$expr$tag, "matmul")) {
+      return(tccq_cg_matmul_stmt(node$expr, indent, nm))
+    }
+
     # --- scalar assignment ---
     # First handle cumulative ops which need alloc + fill loop
-    if (identical(node$expr$tag, "cumulative") && identical(node$shape, "vector")) {
+    if (
+      identical(node$expr$tag, "cumulative") && identical(node$shape, "vector")
+    ) {
       len_c <- tccq_cg_vec_len(node$expr$expr)
-      sxp_type <- switch(node$mode,
+      sxp_type <- switch(
+        node$mode,
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
-      ptr_fun <- switch(node$mode,
+      ptr_fun <- switch(
+        node$mode,
         integer = "INTEGER",
         logical = "LOGICAL",
         "REAL"
       )
       alloc_lines <- paste0(
-        pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type, ", (R_xlen_t)(", len_c, ")));\n",
-        pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
-        pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
-        pad, "nprotect_++;"
+        pad,
+        "s_",
+        nm,
+        " = PROTECT(Rf_allocVector(",
+        sxp_type,
+        ", (R_xlen_t)(",
+        len_c,
+        ")));\n",
+        pad,
+        "n_",
+        nm,
+        " = XLENGTH(s_",
+        nm,
+        ");\n",
+        pad,
+        "p_",
+        nm,
+        " = ",
+        ptr_fun,
+        "(s_",
+        nm,
+        ");\n",
+        pad,
+        "nprotect_++;"
       )
       cum_lines <- tccq_cg_cumulative_stmt(
-        node$expr, indent, paste0("p_", nm)
+        node$expr,
+        indent,
+        paste0("p_", nm)
       )
       return(paste(c(alloc_lines, cum_lines), collapse = "\n"))
     }
@@ -396,32 +466,61 @@ tccq_cg_stmt <- function(node, indent) {
       rf_lines <- rf_res$lines
       rf_var <- rf_res$var
       if (identical(node$shape, "vector") || identical(node$shape, "matrix")) {
-        sxp_type <- switch(node$mode,
+        sxp_type <- switch(
+          node$mode,
           integer = "INTSXP",
           logical = "LGLSXP",
           "REALSXP"
         )
-        ptr_fun <- switch(node$mode,
+        ptr_fun <- switch(
+          node$mode,
           integer = "INTEGER",
           logical = "LOGICAL",
           "REAL"
         )
         return(paste0(
-          rf_lines, "\n",
-          pad, "s_", nm, " = PROTECT(Rf_coerceVector(", rf_var, ", ", sxp_type, "));\n",
-          pad, "nprotect_++;\n",
-          pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
-          pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");"
+          rf_lines,
+          "\n",
+          pad,
+          "s_",
+          nm,
+          " = PROTECT(Rf_coerceVector(",
+          rf_var,
+          ", ",
+          sxp_type,
+          "));\n",
+          pad,
+          "nprotect_++;\n",
+          pad,
+          "n_",
+          nm,
+          " = XLENGTH(s_",
+          nm,
+          ");\n",
+          pad,
+          "p_",
+          nm,
+          " = ",
+          ptr_fun,
+          "(s_",
+          nm,
+          ");"
         ))
       } else {
-        extract <- switch(node$mode,
+        extract <- switch(
+          node$mode,
           integer = sprintf("Rf_asInteger(%s)", rf_var),
           logical = sprintf("Rf_asLogical(%s)", rf_var),
           sprintf("Rf_asReal(%s)", rf_var)
         )
         return(paste0(
-          rf_lines, "\n",
-          pad, nm, "_ = ", extract, ";"
+          rf_lines,
+          "\n",
+          pad,
+          nm,
+          "_ = ",
+          extract,
+          ";"
         ))
       }
     }
@@ -432,6 +531,13 @@ tccq_cg_stmt <- function(node, indent) {
         identical(node$expr$tag, "vec_mask")
     ) {
       return(tccq_cg_vec_mask_assign(node, indent))
+    }
+
+    if (
+      identical(node$shape, "vector") &&
+        identical(node$expr$tag, "quantile_vec_expr")
+    ) {
+      return(tccq_cg_quantile_vec_stmt(node$expr, indent, nm))
     }
 
     parts <- c()
@@ -449,6 +555,18 @@ tccq_cg_stmt <- function(node, indent) {
       if (rd$tag == "reduce_expr") {
         parts <- c(parts, tccq_cg_reduce_expr_stmt(rd, indent))
       }
+      if (rd$tag == "mean_expr") {
+        parts <- c(parts, tccq_cg_mean_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "sd_expr") {
+        parts <- c(parts, tccq_cg_sd_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "median_expr") {
+        parts <- c(parts, tccq_cg_median_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "quantile_expr") {
+        parts <- c(parts, tccq_cg_quantile_expr_stmt(rd, indent))
+      }
     }
 
     # --- Vector condensation: alloc + element-wise loop ---
@@ -456,30 +574,63 @@ tccq_cg_stmt <- function(node, indent) {
       len_c <- tccq_cg_vec_len(node$expr)
       if (is.null(len_c)) {
         stop(
-          "Cannot determine length for vector assign to '", node$name, "'",
+          "Cannot determine length for vector assign to '",
+          node$name,
+          "'",
           call. = FALSE
         )
       }
       elem_expr <- tccq_cg_vec_elem(node$expr, "zz_")
-      sxp_type <- switch(node$mode,
+      sxp_type <- switch(
+        node$mode,
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
-      ptr_fun <- switch(node$mode,
+      ptr_fun <- switch(
+        node$mode,
         integer = "INTEGER",
         logical = "LOGICAL",
         "REAL"
       )
-      parts <- c(parts, paste0(
-        pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type,
-        ", (R_xlen_t)(", len_c, ")));\n",
-        pad, "n_", nm, " = XLENGTH(s_", nm, ");\n",
-        pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
-        pad, "nprotect_++;\n",
-        pad, "for (R_xlen_t zz_ = 0; zz_ < n_", nm, "; ++zz_) ",
-        "p_", nm, "[zz_] = ", elem_expr, ";"
-      ))
+      parts <- c(
+        parts,
+        paste0(
+          pad,
+          "s_",
+          nm,
+          " = PROTECT(Rf_allocVector(",
+          sxp_type,
+          ", (R_xlen_t)(",
+          len_c,
+          ")));\n",
+          pad,
+          "n_",
+          nm,
+          " = XLENGTH(s_",
+          nm,
+          ");\n",
+          pad,
+          "p_",
+          nm,
+          " = ",
+          ptr_fun,
+          "(s_",
+          nm,
+          ");\n",
+          pad,
+          "nprotect_++;\n",
+          pad,
+          "for (R_xlen_t zz_ = 0; zz_ < n_",
+          nm,
+          "; ++zz_) ",
+          "p_",
+          nm,
+          "[zz_] = ",
+          elem_expr,
+          ";"
+        )
+      )
       return(paste(parts, collapse = "\n"))
     }
 
@@ -505,6 +656,18 @@ tccq_cg_stmt <- function(node, indent) {
       }
       if (rd$tag == "reduce_expr") {
         parts <- c(parts, tccq_cg_reduce_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "mean_expr") {
+        parts <- c(parts, tccq_cg_mean_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "sd_expr") {
+        parts <- c(parts, tccq_cg_sd_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "median_expr") {
+        parts <- c(parts, tccq_cg_median_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "quantile_expr") {
+        parts <- c(parts, tccq_cg_quantile_expr_stmt(rd, indent))
       }
     }
     elem <- tccq_cg_vec_elem(node$expr, "vr_")
@@ -548,6 +711,18 @@ tccq_cg_stmt <- function(node, indent) {
       }
       if (rd$tag == "which_reduce") {
         parts <- c(parts, tccq_cg_which_reduce_stmt(rd, indent))
+      }
+      if (rd$tag == "mean_expr") {
+        parts <- c(parts, tccq_cg_mean_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "sd_expr") {
+        parts <- c(parts, tccq_cg_sd_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "median_expr") {
+        parts <- c(parts, tccq_cg_median_expr_stmt(rd, indent))
+      }
+      if (rd$tag == "quantile_expr") {
+        parts <- c(parts, tccq_cg_quantile_expr_stmt(rd, indent))
       }
     }
     val <- tccq_cg_expr(node$value)
@@ -638,19 +813,43 @@ tccq_cg_stmt <- function(node, indent) {
       v <- paste0(var, "_")
       return(paste0(
         pad,
-        "if ((R_xlen_t)(", from, ") <= (R_xlen_t)(", to, ")) {\n",
+        "if ((R_xlen_t)(",
+        from,
+        ") <= (R_xlen_t)(",
+        to,
+        ")) {\n",
         pad,
-        "  for (R_xlen_t ", v, " = (R_xlen_t)(", from, "); ",
-        v, " <= (R_xlen_t)(", to, "); ++", v, ") {\n",
-        body_c, "\n",
+        "  for (R_xlen_t ",
+        v,
+        " = (R_xlen_t)(",
+        from,
+        "); ",
+        v,
+        " <= (R_xlen_t)(",
+        to,
+        "); ++",
+        v,
+        ") {\n",
+        body_c,
+        "\n",
         pad,
         "  }\n",
         pad,
         "} else {\n",
         pad,
-        "  for (R_xlen_t ", v, " = (R_xlen_t)(", from, "); ",
-        v, " >= (R_xlen_t)(", to, "); --", v, ") {\n",
-        body_c, "\n",
+        "  for (R_xlen_t ",
+        v,
+        " = (R_xlen_t)(",
+        from,
+        "); ",
+        v,
+        " >= (R_xlen_t)(",
+        to,
+        "); --",
+        v,
+        ") {\n",
+        body_c,
+        "\n",
         pad,
         "  }\n",
         pad,
@@ -667,21 +866,43 @@ tccq_cg_stmt <- function(node, indent) {
         pad,
         "{\n",
         pad,
-        "  double seq_by_val_ = (double)(", by, ");\n",
+        "  double seq_by_val_ = (double)(",
+        by,
+        ");\n",
         pad,
         "  if (seq_by_val_ > 0) {\n",
         pad,
-        "    for (double ", v, " = (double)(", from, "); ",
-        v, " <= (double)(", to, "); ", v, " += seq_by_val_) {\n",
-        body_c, "\n",
+        "    for (double ",
+        v,
+        " = (double)(",
+        from,
+        "); ",
+        v,
+        " <= (double)(",
+        to,
+        "); ",
+        v,
+        " += seq_by_val_) {\n",
+        body_c,
+        "\n",
         pad,
         "    }\n",
         pad,
         "  } else if (seq_by_val_ < 0) {\n",
         pad,
-        "    for (double ", v, " = (double)(", from, "); ",
-        v, " >= (double)(", to, "); ", v, " += seq_by_val_) {\n",
-        body_c, "\n",
+        "    for (double ",
+        v,
+        " = (double)(",
+        from,
+        "); ",
+        v,
+        " >= (double)(",
+        to,
+        "); ",
+        v,
+        " += seq_by_val_) {\n",
+        body_c,
+        "\n",
         pad,
         "    }\n",
         pad,
@@ -767,7 +988,10 @@ tccq_cg_stmt <- function(node, indent) {
 
   if (tag == "cumulative") {
     # cumulative as a bare statement requires a target; should go through assign
-    stop("cumulative must appear as right-hand side of an assignment", call. = FALSE)
+    stop(
+      "cumulative must appear as right-hand side of an assignment",
+      call. = FALSE
+    )
   }
 
   # Fallback: bare expression statement
@@ -785,7 +1009,8 @@ tccq_cg_reduce_stmt <- function(node, indent) {
   var <- sprintf("red_%s_%s", op, arr)
 
   c_type <- if (op %in% c("any", "all")) "int" else "double"
-  init <- switch(op,
+  init <- switch(
+    op,
     sum = "0.0",
     prod = "1.0",
     max = sprintf("p_%s[0]", arr),
@@ -794,7 +1019,8 @@ tccq_cg_reduce_stmt <- function(node, indent) {
     all = "1",
     "0.0"
   )
-  update <- switch(op,
+  update <- switch(
+    op,
     sum = sprintf("%s += p_%s[ri_];", var, arr),
     prod = sprintf("%s *= p_%s[ri_];", var, arr),
     max = sprintf("if (p_%s[ri_] > %s) %s = p_%s[ri_];", arr, var, var, arr),
@@ -805,10 +1031,25 @@ tccq_cg_reduce_stmt <- function(node, indent) {
   )
   start <- if (op %in% c("max", "min")) "1" else "0"
   paste0(
-    pad, c_type, " ", var, " = ", init, ";\n",
-    pad, "for (R_xlen_t ri_ = ", start, "; ri_ < n_", arr, "; ++ri_) {\n",
-    pad, "  ", update, "\n",
-    pad, "}"
+    pad,
+    c_type,
+    " ",
+    var,
+    " = ",
+    init,
+    ";\n",
+    pad,
+    "for (R_xlen_t ri_ = ",
+    start,
+    "; ri_ < n_",
+    arr,
+    "; ++ri_) {\n",
+    pad,
+    "  ",
+    update,
+    "\n",
+    pad,
+    "}"
   )
 }
 
@@ -872,9 +1113,17 @@ tccq_reduce_expr_next_id <- function() {
 tccq_rfcall_counter_ <- new.env(parent = emptyenv())
 tccq_rfcall_counter_$n <- 0L
 
+tccq_stat_expr_counter_ <- new.env(parent = emptyenv())
+tccq_stat_expr_counter_$n <- 0L
+
 tccq_rfcall_next_id <- function() {
   tccq_rfcall_counter_$n <- tccq_rfcall_counter_$n + 1L
   tccq_rfcall_counter_$n
+}
+
+tccq_stat_expr_next_id <- function() {
+  tccq_stat_expr_counter_$n <- tccq_stat_expr_counter_$n + 1L
+  tccq_stat_expr_counter_$n
 }
 
 tccq_cg_reduce_expr_stmt <- function(node, indent) {
@@ -897,7 +1146,8 @@ tccq_cg_reduce_expr_stmt <- function(node, indent) {
   elem <- tccq_cg_vec_elem(node$expr, idx)
 
   c_type <- if (op %in% c("any", "all")) "int" else "double"
-  init <- switch(op,
+  init <- switch(
+    op,
     sum = "0.0",
     prod = "1.0",
     max = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
@@ -906,7 +1156,8 @@ tccq_cg_reduce_expr_stmt <- function(node, indent) {
     all = "1",
     "0.0"
   )
-  update <- switch(op,
+  update <- switch(
+    op,
     sum = sprintf("%s += %s;", var, elem),
     prod = sprintf("%s *= %s;", var, elem),
     max = sprintf("{ double v_ = %s; if (v_ > %s) %s = v_; }", elem, var, var),
@@ -917,11 +1168,955 @@ tccq_cg_reduce_expr_stmt <- function(node, indent) {
   )
   start <- if (op %in% c("max", "min")) "1" else "0"
   paste0(
-    pad, c_type, " ", var, " = ", init, ";\n",
-    pad, "for (R_xlen_t ", idx, " = ", start, "; ",
-    idx, " < (R_xlen_t)(", len_c, "); ++", idx, ") {\n",
-    pad, "  ", update, "\n",
-    pad, "}"
+    pad,
+    c_type,
+    " ",
+    var,
+    " = ",
+    init,
+    ";\n",
+    pad,
+    "for (R_xlen_t ",
+    idx,
+    " = ",
+    start,
+    "; ",
+    idx,
+    " < (R_xlen_t)(",
+    len_c,
+    "); ++",
+    idx,
+    ") {\n",
+    pad,
+    "  ",
+    update,
+    "\n",
+    pad,
+    "}"
+  )
+}
+
+tccq_cg_mean_expr_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  if (is.null(node$var_name)) {
+    node$var_name <- sprintf("mexpr_%d", tccq_stat_expr_next_id())
+  }
+  var <- node$var_name
+  len_c <- tccq_cg_vec_len(node$expr)
+  if (is.null(len_c)) {
+    stop("Cannot determine length for mean_expr", call. = FALSE)
+  }
+  na_rm <- isTRUE(node$na_rm)
+  idx <- sprintf("mx%d_", tccq_stat_expr_counter_$n)
+  elem <- tccq_cg_vec_elem(node$expr, idx)
+  if (!na_rm) {
+    return(paste0(
+      pad,
+      "double ",
+      var,
+      " = NA_REAL;\n",
+      pad,
+      "R_xlen_t ",
+      var,
+      "_n = (R_xlen_t)(",
+      len_c,
+      ");\n",
+      pad,
+      "if (",
+      var,
+      "_n > 0) {\n",
+      pad,
+      "  double ",
+      var,
+      "_sum = 0.0;\n",
+      pad,
+      "  int ",
+      var,
+      "_has_na = 0;\n",
+      pad,
+      "  for (R_xlen_t ",
+      idx,
+      " = 0; ",
+      idx,
+      " < ",
+      var,
+      "_n; ++",
+      idx,
+      ") {\n",
+      pad,
+      "    double ",
+      var,
+      "_v = (double)(",
+      elem,
+      ");\n",
+      pad,
+      "    if (ISNAN(",
+      var,
+      "_v)) { ",
+      var,
+      "_has_na = 1; break; }\n",
+      pad,
+      "    ",
+      var,
+      "_sum += ",
+      var,
+      "_v;\n",
+      pad,
+      "  }\n",
+      pad,
+      "  if (!",
+      var,
+      "_has_na) ",
+      var,
+      " = ",
+      var,
+      "_sum / (double)",
+      var,
+      "_n;\n",
+      pad,
+      "}"
+    ))
+  }
+  paste0(
+    pad,
+    "double ",
+    var,
+    " = NA_REAL;\n",
+    pad,
+    "R_xlen_t ",
+    var,
+    "_n = 0;\n",
+    pad,
+    "double ",
+    var,
+    "_sum = 0.0;\n",
+    pad,
+    "for (R_xlen_t ",
+    idx,
+    " = 0; ",
+    idx,
+    " < (R_xlen_t)(",
+    len_c,
+    "); ++",
+    idx,
+    ") {\n",
+    pad,
+    "  double ",
+    var,
+    "_v = (double)(",
+    elem,
+    ");\n",
+    pad,
+    "  if (ISNAN(",
+    var,
+    "_v)) continue;\n",
+    pad,
+    "  ",
+    var,
+    "_sum += ",
+    var,
+    "_v;\n",
+    pad,
+    "  ",
+    var,
+    "_n++;\n",
+    pad,
+    "}\n",
+    pad,
+    "if (",
+    var,
+    "_n > 0) ",
+    var,
+    " = ",
+    var,
+    "_sum / (double)",
+    var,
+    "_n;"
+  )
+}
+
+tccq_cg_sd_expr_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  if (is.null(node$var_name)) {
+    node$var_name <- sprintf("sdexpr_%d", tccq_stat_expr_next_id())
+  }
+  var <- node$var_name
+  len_c <- tccq_cg_vec_len(node$expr)
+  if (is.null(len_c)) {
+    stop("Cannot determine length for sd_expr", call. = FALSE)
+  }
+  na_rm <- isTRUE(node$na_rm)
+  idx1 <- sprintf("sx%d_", tccq_stat_expr_counter_$n)
+  idx2 <- sprintf("sy%d_", tccq_stat_expr_counter_$n)
+  elem1 <- tccq_cg_vec_elem(node$expr, idx1)
+  elem2 <- tccq_cg_vec_elem(node$expr, idx2)
+  if (!na_rm) {
+    return(paste0(
+      pad,
+      "double ",
+      var,
+      " = NA_REAL;\n",
+      pad,
+      "R_xlen_t ",
+      var,
+      "_n = (R_xlen_t)(",
+      len_c,
+      ");\n",
+      pad,
+      "if (",
+      var,
+      "_n > 1) {\n",
+      pad,
+      "  double ",
+      var,
+      "_sum = 0.0;\n",
+      pad,
+      "  int ",
+      var,
+      "_has_na = 0;\n",
+      pad,
+      "  for (R_xlen_t ",
+      idx1,
+      " = 0; ",
+      idx1,
+      " < ",
+      var,
+      "_n; ++",
+      idx1,
+      ") {\n",
+      pad,
+      "    double ",
+      var,
+      "_v = (double)(",
+      elem1,
+      ");\n",
+      pad,
+      "    if (ISNAN(",
+      var,
+      "_v)) { ",
+      var,
+      "_has_na = 1; break; }\n",
+      pad,
+      "    ",
+      var,
+      "_sum += ",
+      var,
+      "_v;\n",
+      pad,
+      "  }\n",
+      pad,
+      "  if (!",
+      var,
+      "_has_na) {\n",
+      pad,
+      "    double ",
+      var,
+      "_mean = ",
+      var,
+      "_sum / (double)",
+      var,
+      "_n;\n",
+      pad,
+      "    double ",
+      var,
+      "_ss = 0.0;\n",
+      pad,
+      "    for (R_xlen_t ",
+      idx2,
+      " = 0; ",
+      idx2,
+      " < ",
+      var,
+      "_n; ++",
+      idx2,
+      ") {\n",
+      pad,
+      "      double ",
+      var,
+      "_d = ((double)(",
+      elem2,
+      ")) - ",
+      var,
+      "_mean;\n",
+      pad,
+      "      ",
+      var,
+      "_ss += ",
+      var,
+      "_d * ",
+      var,
+      "_d;\n",
+      pad,
+      "    }\n",
+      pad,
+      "    ",
+      var,
+      " = sqrt(",
+      var,
+      "_ss / (double)(",
+      var,
+      "_n - 1));\n",
+      pad,
+      "  }\n",
+      pad,
+      "}"
+    ))
+  }
+  paste0(
+    pad,
+    "double ",
+    var,
+    " = NA_REAL;\n",
+    pad,
+    "R_xlen_t ",
+    var,
+    "_n = 0;\n",
+    pad,
+    "  double ",
+    var,
+    "_sum = 0.0;\n",
+    pad,
+    "  for (R_xlen_t ",
+    idx1,
+    " = 0; ",
+    idx1,
+    " < (R_xlen_t)(",
+    len_c,
+    "); ++",
+    idx1,
+    ") {\n",
+    pad,
+    "    double ",
+    var,
+    "_v = (double)(",
+    elem1,
+    ");\n",
+    pad,
+    "    if (ISNAN(",
+    var,
+    "_v)) continue;\n",
+    pad,
+    "    ",
+    var,
+    "_sum += ",
+    var,
+    "_v;\n",
+    pad,
+    "    ",
+    var,
+    "_n++;\n",
+    pad,
+    "  }\n",
+    pad,
+    "  if (",
+    var,
+    "_n > 1) {\n",
+    pad,
+    "    double ",
+    var,
+    "_mean = ",
+    var,
+    "_sum / (double)",
+    var,
+    "_n;\n",
+    pad,
+    "    double ",
+    var,
+    "_ss = 0.0;\n",
+    pad,
+    "    for (R_xlen_t ",
+    idx2,
+    " = 0; ",
+    idx2,
+    " < (R_xlen_t)(",
+    len_c,
+    "); ++",
+    idx2,
+    ") {\n",
+    pad,
+    "      double ",
+    var,
+    "_v = (double)(",
+    elem2,
+    ");\n",
+    pad,
+    "      if (ISNAN(",
+    var,
+    "_v)) continue;\n",
+    pad,
+    "      double ",
+    var,
+    "_d = ",
+    var,
+    "_v - ",
+    var,
+    "_mean;\n",
+    pad,
+    "      ",
+    var,
+    "_ss += ",
+    var,
+    "_d * ",
+    var,
+    "_d;\n",
+    pad,
+    "    }\n",
+    pad,
+    "    ",
+    var,
+    " = sqrt(",
+    var,
+    "_ss / (double)(",
+    var,
+    "_n - 1));\n",
+    pad,
+    "  }"
+  )
+}
+
+tccq_cg_median_expr_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  if (is.null(node$var_name)) {
+    node$var_name <- sprintf("medexpr_%d", tccq_stat_expr_next_id())
+  }
+  var <- node$var_name
+  len_c <- tccq_cg_vec_len(node$expr)
+  if (is.null(len_c)) {
+    stop("Cannot determine length for median_expr", call. = FALSE)
+  }
+  idx <- sprintf("md%d_", tccq_stat_expr_counter_$n)
+  elem <- tccq_cg_vec_elem(node$expr, idx)
+  na_rm <- isTRUE(node$na_rm)
+  paste0(
+    pad,
+    "double ",
+    var,
+    " = NA_REAL;\n",
+    pad,
+    "R_xlen_t ",
+    var,
+    "_n = (R_xlen_t)(",
+    len_c,
+    ");\n",
+    pad,
+    "double *",
+    var,
+    "_tmp = (double *)R_alloc((size_t)",
+    var,
+    "_n, sizeof(double));\n",
+    pad,
+    "R_xlen_t ",
+    var,
+    "_k = 0;\n",
+    pad,
+    "for (R_xlen_t ",
+    idx,
+    " = 0; ",
+    idx,
+    " < ",
+    var,
+    "_n; ++",
+    idx,
+    ") {\n",
+    pad,
+    "  double ",
+    var,
+    "_v = (double)(",
+    elem,
+    ");\n",
+    if (na_rm) {
+      paste0(pad, "  if (ISNAN(", var, "_v)) continue;\n")
+    } else {
+      paste0(
+        pad,
+        "  if (ISNAN(",
+        var,
+        "_v)) { ",
+        var,
+        "_k = 0; goto ",
+        var,
+        "_done; }\n"
+      )
+    },
+    pad,
+    "  ",
+    var,
+    "_tmp[",
+    var,
+    "_k++] = ",
+    var,
+    "_v;\n",
+    pad,
+    "}\n",
+    pad,
+    "if (",
+    var,
+    "_k > 0) {\n",
+    pad,
+    "  R_rsort(",
+    var,
+    "_tmp, (int)",
+    var,
+    "_k);\n",
+    pad,
+    "  if ((",
+    var,
+    "_k & 1) == 1) {\n",
+    pad,
+    "    ",
+    var,
+    " = ",
+    var,
+    "_tmp[",
+    var,
+    "_k / 2];\n",
+    pad,
+    "  } else {\n",
+    pad,
+    "    R_xlen_t ",
+    var,
+    "_j = ",
+    var,
+    "_k / 2;\n",
+    pad,
+    "    ",
+    var,
+    " = (",
+    var,
+    "_tmp[",
+    var,
+    "_j - 1] + ",
+    var,
+    "_tmp[",
+    var,
+    "_j]) / 2.0;\n",
+    pad,
+    "  }\n",
+    pad,
+    "}\n",
+    pad,
+    var,
+    "_done: ;"
+  )
+}
+
+tccq_cg_quantile_expr_stmt <- function(node, indent) {
+  pad <- strrep("  ", indent)
+  if (is.null(node$var_name)) {
+    node$var_name <- sprintf("qexpr_%d", tccq_stat_expr_next_id())
+  }
+  var <- node$var_name
+  len_c <- tccq_cg_vec_len(node$expr)
+  if (is.null(len_c)) {
+    stop("Cannot determine length for quantile_expr", call. = FALSE)
+  }
+  idx <- sprintf("qx%d_", tccq_stat_expr_counter_$n)
+  elem <- tccq_cg_vec_elem(node$expr, idx)
+  pexpr <- tccq_cg_expr(node$prob)
+  na_rm <- isTRUE(node$na_rm)
+  paste0(
+    pad,
+    "double ",
+    var,
+    " = NA_REAL;\n",
+    pad,
+    "double ",
+    var,
+    "_p = (double)(",
+    pexpr,
+    ");\n",
+    pad,
+    "R_xlen_t ",
+    var,
+    "_n_raw = (R_xlen_t)(",
+    len_c,
+    ");\n",
+    pad,
+    "if (!ISNAN(",
+    var,
+    "_p) && ",
+    var,
+    "_n_raw > 0) {\n",
+    pad,
+    "  if (",
+    var,
+    "_p < 0.0 || ",
+    var,
+    "_p > 1.0) Rf_error(\"quantile probs must be in [0, 1]\");\n",
+    pad,
+    "  double *",
+    var,
+    "_tmp = (double *)R_alloc((size_t)",
+    var,
+    "_n_raw, sizeof(double));\n",
+    pad,
+    "  R_xlen_t ",
+    var,
+    "_n = 0;\n",
+    pad,
+    "  for (R_xlen_t ",
+    idx,
+    " = 0; ",
+    idx,
+    " < ",
+    var,
+    "_n_raw; ++",
+    idx,
+    ") {\n",
+    pad,
+    "    double ",
+    var,
+    "_v = (double)(",
+    elem,
+    ");\n",
+    if (na_rm) {
+      paste0(pad, "    if (ISNAN(", var, "_v)) continue;\n")
+    } else {
+      paste0(pad, "    if (ISNAN(", var, "_v)) goto ", var, "_done;\n")
+    },
+    pad,
+    "    ",
+    var,
+    "_tmp[",
+    var,
+    "_n++] = ",
+    var,
+    "_v;\n",
+    pad,
+    "  }\n",
+    pad,
+    "  if (",
+    var,
+    "_n == 0) goto ",
+    var,
+    "_done;\n",
+    pad,
+    "  R_rsort(",
+    var,
+    "_tmp, (int)",
+    var,
+    "_n);\n",
+    pad,
+    "  if (",
+    var,
+    "_n == 1) {\n",
+    pad,
+    "    ",
+    var,
+    " = ",
+    var,
+    "_tmp[0];\n",
+    pad,
+    "  } else {\n",
+    pad,
+    "    double ",
+    var,
+    "_h = (double)(",
+    var,
+    "_n - 1) * ",
+    var,
+    "_p + 1.0;\n",
+    pad,
+    "    double ",
+    var,
+    "_hf = floor(",
+    var,
+    "_h);\n",
+    pad,
+    "    double ",
+    var,
+    "_hc = ceil(",
+    var,
+    "_h);\n",
+    pad,
+    "    int ",
+    var,
+    "_i = (int)",
+    var,
+    "_hf;\n",
+    pad,
+    "    int ",
+    var,
+    "_j = (int)",
+    var,
+    "_hc;\n",
+    pad,
+    "    double ",
+    var,
+    "_x0 = ",
+    var,
+    "_tmp[",
+    var,
+    "_i - 1];\n",
+    pad,
+    "    double ",
+    var,
+    "_x1 = ",
+    var,
+    "_tmp[",
+    var,
+    "_j - 1];\n",
+    pad,
+    "    ",
+    var,
+    " = ",
+    var,
+    "_x0 + (",
+    var,
+    "_h - ",
+    var,
+    "_hf) * (",
+    var,
+    "_x1 - ",
+    var,
+    "_x0);\n",
+    pad,
+    "  }\n",
+    pad,
+    "}\n",
+    pad,
+    var,
+    "_done: ;"
+  )
+}
+
+tccq_cg_quantile_vec_stmt <- function(node, indent, out_name) {
+  pad <- strrep("  ", indent)
+  out <- tccq_cg_ident(out_name)
+  len_x <- tccq_cg_vec_len(node$expr)
+  len_p <- tccq_cg_vec_len(node$probs)
+  if (is.null(len_x) || is.null(len_p)) {
+    stop("Cannot determine length for quantile_vec_expr", call. = FALSE)
+  }
+  idx_x <- sprintf("qvx%d_", tccq_stat_expr_counter_$n)
+  idx_p <- sprintf("qvp%d_", tccq_stat_expr_counter_$n)
+  x_elem <- tccq_cg_vec_elem(node$expr, idx_x)
+  p_elem <- tccq_cg_vec_elem(node$probs, idx_p)
+  na_rm <- isTRUE(node$na_rm)
+
+  paste0(
+    pad,
+    "R_xlen_t qv_nx_raw_ = (R_xlen_t)(",
+    len_x,
+    ");\n",
+    pad,
+    "R_xlen_t qv_np_ = (R_xlen_t)(",
+    len_p,
+    ");\n",
+    pad,
+    "s_",
+    out,
+    " = PROTECT(Rf_allocVector(REALSXP, qv_np_));\n",
+    pad,
+    "nprotect_++;\n",
+    pad,
+    "n_",
+    out,
+    " = qv_np_;\n",
+    pad,
+    "p_",
+    out,
+    " = REAL(s_",
+    out,
+    ");\n",
+    pad,
+    "for (R_xlen_t ",
+    idx_p,
+    " = 0; ",
+    idx_p,
+    " < qv_np_; ++",
+    idx_p,
+    ") p_",
+    out,
+    "[",
+    idx_p,
+    "] = NA_REAL;\n",
+    pad,
+    "double *qv_x_ = (double *)R_alloc((size_t)qv_nx_raw_, sizeof(double));\n",
+    pad,
+    "R_xlen_t qv_nx_ = 0;\n",
+    pad,
+    "for (R_xlen_t ",
+    idx_x,
+    " = 0; ",
+    idx_x,
+    " < qv_nx_raw_; ++",
+    idx_x,
+    ") {\n",
+    pad,
+    "  double v_ = (double)(",
+    x_elem,
+    ");\n",
+    if (na_rm) {
+      paste0(pad, "  if (ISNAN(v_)) continue;\n")
+    } else {
+      paste0(pad, "  if (ISNAN(v_)) goto qv_done_", out, ";\n")
+    },
+    pad,
+    "  qv_x_[qv_nx_++] = v_;\n",
+    pad,
+    "}\n",
+    pad,
+    "if (qv_nx_ > 0) {\n",
+    pad,
+    "  R_rsort(qv_x_, (int)qv_nx_);\n",
+    pad,
+    "  for (R_xlen_t ",
+    idx_p,
+    " = 0; ",
+    idx_p,
+    " < qv_np_; ++",
+    idx_p,
+    ") {\n",
+    pad,
+    "    double p_ = (double)(",
+    p_elem,
+    ");\n",
+    pad,
+    "    if (ISNAN(p_) || p_ < 0.0 || p_ > 1.0) continue;\n",
+    pad,
+    "    if (qv_nx_ == 1) { p_",
+    out,
+    "[",
+    idx_p,
+    "] = qv_x_[0]; continue; }\n",
+    pad,
+    "    double h_ = (double)(qv_nx_ - 1) * p_ + 1.0;\n",
+    pad,
+    "    double hf_ = floor(h_);\n",
+    pad,
+    "    double hc_ = ceil(h_);\n",
+    pad,
+    "    int i_ = (int)hf_;\n",
+    pad,
+    "    int j_ = (int)hc_;\n",
+    pad,
+    "    double x0_ = qv_x_[i_ - 1];\n",
+    pad,
+    "    double x1_ = qv_x_[j_ - 1];\n",
+    pad,
+    "    p_",
+    out,
+    "[",
+    idx_p,
+    "] = x0_ + (h_ - hf_) * (x1_ - x0_);\n",
+    pad,
+    "  }\n",
+    pad,
+    "}\n",
+    pad,
+    "qv_done_",
+    out,
+    ": ;"
+  )
+}
+
+tccq_cg_matmul_stmt <- function(node, indent, out_name) {
+  pad <- strrep("  ", indent)
+  a <- tccq_cg_ident(node$a)
+  b <- tccq_cg_ident(node$b)
+  out <- tccq_cg_ident(out_name)
+  ta <- isTRUE(node$trans_a)
+  tb <- isTRUE(node$trans_b)
+  trans_a <- if (ta) "T" else "N"
+  trans_b <- if (tb) "T" else "N"
+
+  m_expr <- if (ta) sprintf("ncol_%s", a) else sprintf("nrow_%s", a)
+  k_expr <- if (ta) sprintf("nrow_%s", a) else sprintf("ncol_%s", a)
+  kb_expr <- if (tb) sprintf("ncol_%s", b) else sprintf("nrow_%s", b)
+  n_expr <- if (tb) sprintf("nrow_%s", b) else sprintf("ncol_%s", b)
+
+  paste0(
+    pad,
+    "if ((int)(",
+    k_expr,
+    ") != (int)(",
+    kb_expr,
+    ")) Rf_error(\"matrix product dimension mismatch\");\n",
+    pad,
+    "nrow_",
+    out,
+    " = (int)(",
+    m_expr,
+    ");\n",
+    pad,
+    "ncol_",
+    out,
+    " = (int)(",
+    n_expr,
+    ");\n",
+    pad,
+    "s_",
+    out,
+    " = PROTECT(Rf_allocMatrix(REALSXP, nrow_",
+    out,
+    ", ncol_",
+    out,
+    "));\n",
+    pad,
+    "nprotect_++;\n",
+    pad,
+    "n_",
+    out,
+    " = (R_xlen_t)nrow_",
+    out,
+    " * (R_xlen_t)ncol_",
+    out,
+    ";\n",
+    pad,
+    "p_",
+    out,
+    " = REAL(s_",
+    out,
+    ");\n",
+    pad,
+    "{\n",
+    pad,
+    "  const char transa_ = '",
+    trans_a,
+    "';\n",
+    pad,
+    "  const char transb_ = '",
+    trans_b,
+    "';\n",
+    pad,
+    "  const int m_ = nrow_",
+    out,
+    ";\n",
+    pad,
+    "  const int n_ = ncol_",
+    out,
+    ";\n",
+    pad,
+    "  const int k_ = (int)(",
+    k_expr,
+    ");\n",
+    pad,
+    "  const double alpha_ = 1.0;\n",
+    pad,
+    "  const double beta_ = 0.0;\n",
+    pad,
+    "  const int lda_ = nrow_",
+    a,
+    ";\n",
+    pad,
+    "  const int ldb_ = nrow_",
+    b,
+    ";\n",
+    pad,
+    "  const int ldc_ = nrow_",
+    out,
+    ";\n",
+    pad,
+    "  F77_CALL(dgemm)(&transa_, &transb_, &m_, &n_, &k_, &alpha_, p_",
+    a,
+    ", &lda_, p_",
+    b,
+    ", &ldb_, &beta_, p_",
+    out,
+    ", &ldc_ FCONE FCONE);\n",
+    pad,
+    "}"
   )
 }
 
@@ -935,24 +2130,68 @@ tccq_cg_cumulative_stmt <- function(node, indent, target_ptr) {
   elem_i <- tccq_cg_vec_elem(node$expr, idx)
   len_c <- tccq_cg_vec_len(node$expr)
 
-  update <- switch(op,
-    cumsum = sprintf("%s[%s] = %s[%s - 1] + %s;", target_ptr, idx, target_ptr, idx, elem_i),
-    cumprod = sprintf("%s[%s] = %s[%s - 1] * %s;", target_ptr, idx, target_ptr, idx, elem_i),
+  update <- switch(
+    op,
+    cumsum = sprintf(
+      "%s[%s] = %s[%s - 1] + %s;",
+      target_ptr,
+      idx,
+      target_ptr,
+      idx,
+      elem_i
+    ),
+    cumprod = sprintf(
+      "%s[%s] = %s[%s - 1] * %s;",
+      target_ptr,
+      idx,
+      target_ptr,
+      idx,
+      elem_i
+    ),
     cummax = sprintf(
       "{ double v_ = %s; %s[%s] = v_ > %s[%s - 1] ? v_ : %s[%s - 1]; }",
-      elem_i, target_ptr, idx, target_ptr, idx, target_ptr, idx
+      elem_i,
+      target_ptr,
+      idx,
+      target_ptr,
+      idx,
+      target_ptr,
+      idx
     ),
     cummin = sprintf(
       "{ double v_ = %s; %s[%s] = v_ < %s[%s - 1] ? v_ : %s[%s - 1]; }",
-      elem_i, target_ptr, idx, target_ptr, idx, target_ptr, idx
+      elem_i,
+      target_ptr,
+      idx,
+      target_ptr,
+      idx,
+      target_ptr,
+      idx
     ),
     ""
   )
   paste0(
-    pad, target_ptr, "[0] = ", elem0, ";\n",
-    pad, "for (R_xlen_t ", idx, " = 1; ", idx, " < (R_xlen_t)(", len_c, "); ++", idx, ") {\n",
-    pad, "  ", update, "\n",
-    pad, "}"
+    pad,
+    target_ptr,
+    "[0] = ",
+    elem0,
+    ";\n",
+    pad,
+    "for (R_xlen_t ",
+    idx,
+    " = 1; ",
+    idx,
+    " < (R_xlen_t)(",
+    len_c,
+    "); ++",
+    idx,
+    ") {\n",
+    pad,
+    "  ",
+    update,
+    "\n",
+    pad,
+    "}"
   )
 }
 
@@ -995,7 +2234,8 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       # Scalar variable — re-wrap from C scalar to SEXP
       c_nm <- tccq_cg_ident(a$name)
       a_mode <- a$mode %||% "double"
-      wrap <- switch(a_mode,
+      wrap <- switch(
+        a_mode,
         integer = sprintf("Rf_ScalarInteger(%s_)", c_nm),
         logical = sprintf("Rf_ScalarLogical(%s_)", c_nm),
         sprintf("Rf_ScalarReal(%s_)", c_nm)
@@ -1008,7 +2248,8 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       # Scalar expression — wrap as SEXP
       val <- tccq_cg_expr(a)
       mode <- a$mode %||% "double"
-      wrap <- switch(mode,
+      wrap <- switch(
+        mode,
         integer = sprintf("Rf_ScalarInteger((int)(%s))", val),
         logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", val),
         sprintf("Rf_ScalarReal((double)(%s))", val)
@@ -1029,7 +2270,10 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
     lines <- c(
       lines,
       paste0(
-        pad, "SEXP ", var, " = PROTECT(Rf_eval(PROTECT(",
+        pad,
+        "SEXP ",
+        var,
+        " = PROTECT(Rf_eval(PROTECT(",
         sprintf("Rf_lang%d(%s)", lang_n, lang_args),
         "), R_GlobalEnv));"
       ),
@@ -1056,7 +2300,10 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
     lines <- c(
       lines,
       paste0(
-        pad, "SEXP ", var, " = PROTECT(Rf_eval(rfcall_e_, R_GlobalEnv));"
+        pad,
+        "SEXP ",
+        var,
+        " = PROTECT(Rf_eval(rfcall_e_, R_GlobalEnv));"
       ),
       paste0(pad, "nprotect_++;")
     )
@@ -1079,35 +2326,79 @@ tccq_cg_vec_mask_assign <- function(node, indent) {
   }
   mask <- tccq_cg_ident(mask_node$name)
 
-  sxp_type <- switch(node$mode,
+  sxp_type <- switch(
+    node$mode,
     integer = "INTSXP",
     logical = "LGLSXP",
     "REALSXP"
   )
-  ptr_fun <- switch(node$mode,
-    integer = "INTEGER",
-    logical = "LOGICAL",
-    "REAL"
-  )
+  ptr_fun <- switch(node$mode, integer = "INTEGER", logical = "LOGICAL", "REAL")
 
   paste0(
-    pad, "// vec_mask: ", nm, " = ", arr, "[", mask, "]\n",
-    pad, "R_xlen_t vm_cnt_ = 0;\n",
-    pad, "for (R_xlen_t vm_ = 0; vm_ < n_", mask, "; ++vm_) {\n",
-    pad, "  if (p_", mask, "[vm_]) vm_cnt_++;\n",
-    pad, "}\n",
-    pad, "s_", nm, " = PROTECT(Rf_allocVector(", sxp_type, ", vm_cnt_));\n",
-    pad, "nprotect_++;\n",
-    pad, "n_", nm, " = vm_cnt_;\n",
-    pad, "p_", nm, " = ", ptr_fun, "(s_", nm, ");\n",
-    pad, "{\n",
-    pad, "  R_xlen_t vm_j_ = 0;\n",
-    pad, "  for (R_xlen_t vm_ = 0; vm_ < n_", mask, "; ++vm_) {\n",
-    pad, "    if (p_", mask, "[vm_]) {\n",
-    pad, "      p_", nm, "[vm_j_++] = p_", arr, "[vm_];\n",
-    pad, "    }\n",
-    pad, "  }\n",
-    pad, "}"
+    pad,
+    "// vec_mask: ",
+    nm,
+    " = ",
+    arr,
+    "[",
+    mask,
+    "]\n",
+    pad,
+    "R_xlen_t vm_cnt_ = 0;\n",
+    pad,
+    "for (R_xlen_t vm_ = 0; vm_ < n_",
+    mask,
+    "; ++vm_) {\n",
+    pad,
+    "  if (p_",
+    mask,
+    "[vm_]) vm_cnt_++;\n",
+    pad,
+    "}\n",
+    pad,
+    "s_",
+    nm,
+    " = PROTECT(Rf_allocVector(",
+    sxp_type,
+    ", vm_cnt_));\n",
+    pad,
+    "nprotect_++;\n",
+    pad,
+    "n_",
+    nm,
+    " = vm_cnt_;\n",
+    pad,
+    "p_",
+    nm,
+    " = ",
+    ptr_fun,
+    "(s_",
+    nm,
+    ");\n",
+    pad,
+    "{\n",
+    pad,
+    "  R_xlen_t vm_j_ = 0;\n",
+    pad,
+    "  for (R_xlen_t vm_ = 0; vm_ < n_",
+    mask,
+    "; ++vm_) {\n",
+    pad,
+    "    if (p_",
+    mask,
+    "[vm_]) {\n",
+    pad,
+    "      p_",
+    nm,
+    "[vm_j_++] = p_",
+    arr,
+    "[vm_];\n",
+    pad,
+    "    }\n",
+    pad,
+    "  }\n",
+    pad,
+    "}"
   )
 }
 
@@ -1117,7 +2408,18 @@ tccq_collect_reductions <- function(node) {
   }
 
   out <- list()
-  if (node$tag %in% c("reduce", "which_reduce", "reduce_expr")) {
+  if (
+    node$tag %in%
+      c(
+        "reduce",
+        "which_reduce",
+        "reduce_expr",
+        "mean_expr",
+        "sd_expr",
+        "median_expr",
+        "quantile_expr"
+      )
+  ) {
     out <- list(node)
   }
 
@@ -1150,32 +2452,45 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
     if (is.null(len_c)) {
       stop("Cannot determine length for cumulative return", call. = FALSE)
     }
-    sxp_type <- switch(ir$ret_mode,
+    sxp_type <- switch(
+      ir$ret_mode,
       integer = "INTSXP",
       logical = "LGLSXP",
       "REALSXP"
     )
-    ptr_fun <- switch(ir$ret_mode,
+    ptr_fun <- switch(
+      ir$ret_mode,
       integer = "INTEGER",
       logical = "LOGICAL",
       "REAL"
     )
     alloc_lines <- paste0(
-      pad, "R_xlen_t ret_len_ = (R_xlen_t)(", len_c, ");\n",
-      pad, "SEXP ret_ = PROTECT(Rf_allocVector(", sxp_type, ", ret_len_));\n",
-      pad, "nprotect_++;\n",
-      pad, switch(ir$ret_mode,
-        integer = "int",
-        logical = "int",
-        "double"
-      ),
-      " *p_ret_ = ", ptr_fun, "(ret_);"
+      pad,
+      "R_xlen_t ret_len_ = (R_xlen_t)(",
+      len_c,
+      ");\n",
+      pad,
+      "SEXP ret_ = PROTECT(Rf_allocVector(",
+      sxp_type,
+      ", ret_len_));\n",
+      pad,
+      "nprotect_++;\n",
+      pad,
+      switch(ir$ret_mode, integer = "int", logical = "int", "double"),
+      " *p_ret_ = ",
+      ptr_fun,
+      "(ret_);"
     )
     cum_lines <- tccq_cg_cumulative_stmt(ir$ret, indent, "p_ret_")
     return(paste0(
-      alloc_lines, "\n", cum_lines, "\n",
-      pad, "UNPROTECT(nprotect_);\n",
-      pad, "return ret_;"
+      alloc_lines,
+      "\n",
+      cum_lines,
+      "\n",
+      pad,
+      "UNPROTECT(nprotect_);\n",
+      pad,
+      "return ret_;"
     ))
   }
 
@@ -1185,19 +2500,22 @@ tccq_cg_vec_expr_return <- function(ir, indent) {
   }
   elem_expr <- tccq_cg_vec_elem(ir$ret, "ei_")
 
-  sxp_type <- switch(ir$ret_mode,
+  sxp_type <- switch(
+    ir$ret_mode,
     double = "REALSXP",
     integer = "INTSXP",
     logical = "LGLSXP",
     "REALSXP"
   )
-  ptr_fun <- switch(ir$ret_mode,
+  ptr_fun <- switch(
+    ir$ret_mode,
     double = "REAL",
     integer = "INTEGER",
     logical = "LOGICAL",
     "REAL"
   )
-  c_type <- switch(ir$ret_mode,
+  c_type <- switch(
+    ir$ret_mode,
     double = "double",
     integer = "int",
     logical = "int",
@@ -1265,6 +2583,9 @@ tccq_cg_vec_len <- function(node) {
   }
   if (tag == "cumulative") {
     return(tccq_cg_vec_len(node$expr))
+  }
+  if (tag == "quantile_vec_expr") {
+    return(tccq_cg_vec_len(node$probs))
   }
   if (tag == "if") {
     return(tccq_cg_vec_len(node$yes) %||% tccq_cg_vec_len(node$no))
@@ -1370,7 +2691,10 @@ tccq_cg_vec_elem <- function(node, idx_var) {
 
   if (tag == "rev") {
     len <- tccq_cg_vec_len(node$expr)
-    inner <- tccq_cg_vec_elem(node$expr, sprintf("((%s) - 1 - %s)", len, idx_var))
+    inner <- tccq_cg_vec_elem(
+      node$expr,
+      sprintf("((%s) - 1 - %s)", len, idx_var)
+    )
     return(inner)
   }
 
@@ -1397,7 +2721,9 @@ tccq_assign_rf_call_names <- function(node, counter_env = NULL) {
   if (node$tag == "rf_call" && is.null(node$var_name)) {
     counter_env$n <- counter_env$n + 1L
     node$var_name <- sprintf(
-      "rfcall_%s_%d_", tccq_cg_ident(node$fun), counter_env$n
+      "rfcall_%s_%d_",
+      tccq_cg_ident(node$fun),
+      counter_env$n
     )
   }
 
@@ -1468,6 +2794,43 @@ tccq_assign_reduce_expr_names <- function(node, counter_env = NULL) {
   node
 }
 
+tccq_assign_stat_expr_names <- function(node, counter_env = NULL) {
+  if (is.null(counter_env)) {
+    counter_env <- new.env(parent = emptyenv())
+    counter_env$n <- 0L
+  }
+  if (is.null(node) || !is.list(node)) {
+    return(node)
+  }
+  if (is.null(node$tag)) {
+    return(lapply(node, tccq_assign_stat_expr_names, counter_env))
+  }
+
+  if (
+    node$tag %in%
+      c("mean_expr", "sd_expr", "median_expr", "quantile_expr") &&
+      is.null(node$var_name)
+  ) {
+    counter_env$n <- counter_env$n + 1L
+    prefix <- switch(
+      node$tag,
+      mean_expr = "mexpr",
+      sd_expr = "sdexpr",
+      median_expr = "medexpr",
+      "qexpr"
+    )
+    node$var_name <- sprintf("%s_%d", prefix, counter_env$n)
+  }
+
+  for (nm in names(node)) {
+    child <- node[[nm]]
+    if (is.list(child)) {
+      node[[nm]] <- tccq_assign_stat_expr_names(child, counter_env)
+    }
+  }
+  node
+}
+
 # ---------------------------------------------------------------------------
 # Top-level fn_body codegen → complete C source
 # ---------------------------------------------------------------------------
@@ -1479,6 +2842,7 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
   # Pre-pass: assign stable variable names
   ir <- tccq_assign_rf_call_names(ir)
   ir <- tccq_assign_reduce_expr_names(ir)
+  ir <- tccq_assign_stat_expr_names(ir)
   tccq_cg_fn_body(ir, fn_name)
 }
 
@@ -1492,6 +2856,11 @@ tccq_cg_fn_body <- function(ir, fn_name) {
   lines <- c(
     "#include <R.h>",
     "#include <Rinternals.h>",
+    "#include <R_ext/BLAS.h>",
+    "#include <R_ext/Lapack.h>",
+    "#ifndef FCONE",
+    "# define FCONE",
+    "#endif",
     "#include <math.h>",
     if (needs_rmath) "#include <Rmath.h>",
     "",
@@ -1506,35 +2875,40 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     cnm <- tccq_cg_ident(nm)
     is_mutated <- nm %in% mutated
     if (isTRUE(spec$is_scalar)) {
-      extract <- switch(spec$mode,
+      extract <- switch(
+        spec$mode,
         double = sprintf("  double %s_ = Rf_asReal(%s);", cnm, nm),
         integer = sprintf("  int %s_ = Rf_asInteger(%s);", cnm, nm),
         logical = sprintf("  int %s_ = Rf_asLogical(%s);", cnm, nm)
       )
       lines <- c(lines, extract)
     } else {
-      sxp_type <- switch(spec$mode,
+      sxp_type <- switch(
+        spec$mode,
         double = "REALSXP",
         integer = "INTSXP",
         logical = "LGLSXP",
         "REALSXP"
       )
       ptr_fun <- if (is_mutated) {
-        switch(spec$mode,
+        switch(
+          spec$mode,
           double = "REAL",
           integer = "INTEGER",
           logical = "LOGICAL",
           "REAL"
         )
       } else {
-        switch(spec$mode,
+        switch(
+          spec$mode,
           double = "REAL_RO",
           integer = "INTEGER_RO",
           logical = "LOGICAL_RO",
           "REAL_RO"
         )
       }
-      c_type <- switch(spec$mode,
+      c_type <- switch(
+        spec$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -1547,7 +2921,9 @@ tccq_cg_fn_body <- function(ir, fn_name) {
           lines,
           sprintf(
             "  SEXP s_%s = PROTECT(Rf_coerceVector(Rf_duplicate(%s), %s));",
-            cnm, nm, sxp_type
+            cnm,
+            nm,
+            sxp_type
           ),
           "  nprotect_++;",
           sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
@@ -1558,13 +2934,19 @@ tccq_cg_fn_body <- function(ir, fn_name) {
           lines,
           sprintf(
             "  SEXP s_%s = PROTECT(Rf_coerceVector(%s, %s));",
-            cnm, nm, sxp_type
+            cnm,
+            nm,
+            sxp_type
           ),
           "  nprotect_++;",
           sprintf("  R_xlen_t n_%s = XLENGTH(s_%s);", cnm, cnm),
           sprintf(
             "  %s%s *p_%s = %s(s_%s);",
-            const_q, c_type, cnm, ptr_fun, cnm
+            const_q,
+            c_type,
+            cnm,
+            ptr_fun,
+            cnm
           )
         )
       }
@@ -1583,7 +2965,8 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     info <- ir$locals[[nm]]
     cnm <- tccq_cg_ident(nm)
     if (info$shape == "scalar") {
-      c_type <- switch(info$mode,
+      c_type <- switch(
+        info$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -1591,7 +2974,8 @@ tccq_cg_fn_body <- function(ir, fn_name) {
       )
       lines <- c(lines, sprintf("  %s %s_ = 0;", c_type, cnm))
     } else {
-      c_type <- switch(info$mode,
+      c_type <- switch(
+        info$mode,
         double = "double",
         integer = "int",
         logical = "int",
@@ -1634,12 +3018,22 @@ tccq_cg_fn_body <- function(ir, fn_name) {
     if (rd$tag == "reduce_expr") {
       lines <- c(lines, tccq_cg_reduce_expr_stmt(rd, 1))
     }
+    if (rd$tag == "mean_expr") {
+      lines <- c(lines, tccq_cg_mean_expr_stmt(rd, 1))
+    }
+    if (rd$tag == "sd_expr") {
+      lines <- c(lines, tccq_cg_sd_expr_stmt(rd, 1))
+    }
+    if (rd$tag == "median_expr") {
+      lines <- c(lines, tccq_cg_median_expr_stmt(rd, 1))
+    }
+    if (rd$tag == "quantile_expr") {
+      lines <- c(lines, tccq_cg_quantile_expr_stmt(rd, 1))
+    }
   }
 
   # --- Return ---
-  if (
-    !is.null(ir$ret$tag) && ir$ret$tag == "rf_call"
-  ) {
+  if (!is.null(ir$ret$tag) && ir$ret$tag == "rf_call") {
     # rf_call return: emit the call and return the SEXP
     rf_res <- tccq_cg_rf_call_stmt(ir$ret, 1)
     lines <- c(lines, rf_res$lines)
@@ -1661,13 +3055,50 @@ tccq_cg_fn_body <- function(ir, fn_name) {
       "  UNPROTECT(nprotect_);",
       sprintf("  return s_%s;", ret_nm)
     )
+  } else if (
+    ir$ret_shape == "matrix" &&
+      !is.null(ir$ret$tag) &&
+      ir$ret$tag == "matmul"
+  ) {
+    lines <- c(
+      lines,
+      "  SEXP s_ret = R_NilValue;",
+      "  R_xlen_t n_ret = 0;",
+      "  double *p_ret = NULL;",
+      "  int nrow_ret = 0;",
+      "  int ncol_ret = 0;"
+    )
+    lines <- c(lines, tccq_cg_matmul_stmt(ir$ret, 1, "ret"))
+    lines <- c(
+      lines,
+      "  UNPROTECT(nprotect_);",
+      "  return s_ret;"
+    )
+  } else if (
+    ir$ret_shape == "vector" &&
+      !is.null(ir$ret$tag) &&
+      ir$ret$tag == "quantile_vec_expr"
+  ) {
+    lines <- c(
+      lines,
+      "  SEXP s_ret = R_NilValue;",
+      "  R_xlen_t n_ret = 0;",
+      "  double *p_ret = NULL;"
+    )
+    lines <- c(lines, tccq_cg_quantile_vec_stmt(ir$ret, 1, "ret"))
+    lines <- c(
+      lines,
+      "  UNPROTECT(nprotect_);",
+      "  return s_ret;"
+    )
   } else if (ir$ret_shape %in% c("vector", "matrix")) {
     # Materialize a vector expression element-wise
     lines <- c(lines, tccq_cg_vec_expr_return(ir, 1))
   } else {
     # Scalar return
     ret_expr <- tccq_cg_expr(ir$ret)
-    wrap <- switch(ir$ret_mode,
+    wrap <- switch(
+      ir$ret_mode,
       double = sprintf("Rf_ScalarReal((double)(%s))", ret_expr),
       integer = sprintf("Rf_ScalarInteger((int)(%s))", ret_expr),
       logical = sprintf("Rf_ScalarLogical((%s) ? 1 : 0)", ret_expr),

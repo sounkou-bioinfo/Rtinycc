@@ -659,10 +659,9 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     tcc_add_library(state, lib)
   }
 
-  # On Windows, link against R.dll so TCC can resolve R API symbols
-  if (.Platform$OS.type == "windows") {
-    tcc_add_library(state, "R")
-  }
+  # Always link against R's shared library so TCC can resolve
+  # R API symbols (and any symbols R itself exports).
+  tcc_add_library(state, "R")
 
   # Compile the generated code
   result <- tcc_compile_string(state, c_code)
@@ -1706,10 +1705,9 @@ tcc_link <- function(
     tcc_add_library(state, lib)
   }
 
-  # On Windows, link against R.dll so TCC can resolve R API symbols
-  if (.Platform$OS.type == "windows") {
-    tcc_add_library(state, "R")
-  }
+  # Always link against R's shared library so TCC can resolve
+  # R API symbols (and any symbols R itself exports).
+  tcc_add_library(state, "R")
 
   # Compile the generated code
   result <- tcc_compile_string(state, c_code)

@@ -41,11 +41,15 @@ tcc_ir_c_api_registry <- function() {
     digamma = list(c_fun = "digamma", arity = 1L, header = "Rmath.h"),
     trigamma = list(c_fun = "trigamma", arity = 1L, header = "Rmath.h"),
     factorial = list(
-      c_fun = "gammafn", arity = 1L, header = "Rmath.h",
+      c_fun = "gammafn",
+      arity = 1L,
+      header = "Rmath.h",
       transform = "x+1"
     ),
     lfactorial = list(
-      c_fun = "lgammafn", arity = 1L, header = "Rmath.h",
+      c_fun = "lgammafn",
+      arity = 1L,
+      header = "Rmath.h",
       transform = "x+1"
     ),
     # --- Rmath.h (arity 2) ---
@@ -62,4 +66,92 @@ tcc_ir_c_api_registry <- function() {
 tcc_ir_registry_lookup <- function(fname) {
   reg <- tcc_ir_c_api_registry()
   reg[[fname]]
+}
+
+# Load exported R API symbol table bundled in inst/RAPI/API.csv
+tcc_rapi_table <- function() {
+  p <- system.file("RAPI", "API.csv", package = "Rtinycc")
+  if (!nzchar(p) || !file.exists(p)) {
+    return(data.frame(
+      name = character(0),
+      type = character(0),
+      apitype = character(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+  utils::read.csv(p, stringsAsFactors = FALSE)
+}
+
+tcc_rapi_has <- function(sym) {
+  tab <- tcc_rapi_table()
+  any(tab$name == sym)
+}
+
+tcc_rapi_summary <- function() {
+  tab <- tcc_rapi_table()
+  if (nrow(tab) == 0L) {
+    return(data.frame(
+      category = character(0),
+      count = integer(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  classify <- function(nm) {
+    if (
+      grepl(
+        "^(d|s|z|c).*(gemm|gemv|trsm|trmm|syrk|potrf|gesv|getrf|getri)$",
+        nm
+      )
+    ) {
+      return("BLAS/LAPACK")
+    }
+    if (
+      grepl("_rand$|^GetRNGstate$|^PutRNGstate$|^R_unif_index$|^rmultinom$", nm)
+    ) {
+      return("RNG")
+    }
+    if (
+      nm %in%
+        c(
+          "gammafn",
+          "lgammafn",
+          "digamma",
+          "trigamma",
+          "beta",
+          "lbeta",
+          "choose",
+          "lchoose",
+          "R_pow",
+          "R_pow_di",
+          "log1p",
+          "expm1",
+          "sinpi",
+          "cospi",
+          "tanpi"
+        )
+    ) {
+      return("Rmath")
+    }
+    if (
+      nm %in%
+        c(
+          "R_rsort",
+          "R_qsort",
+          "R_qsort_I",
+          "rsort_with_index",
+          "R_orderVector",
+          "R_orderVector1"
+        )
+    ) {
+      return("Sorting")
+    }
+    "Other"
+  }
+
+  cats <- vapply(tab$name, classify, character(1))
+  out <- as.data.frame(table(cats), stringsAsFactors = FALSE)
+  names(out) <- c("category", "count")
+  out$count <- as.integer(out$count)
+  out[order(out$category), , drop = FALSE]
 }

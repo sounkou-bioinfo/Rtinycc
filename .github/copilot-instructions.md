@@ -137,6 +137,7 @@ R's `parallel::mclapply` uses `fork()` which does not exist on Windows. Fork-rel
 - tcc_quick pipeline: `R/tcc_quick.R` (API), `R/tcc_quick_declare.R` (declarations), `R/tcc_quick_walk.R` (codetools-style walker), `R/tcc_quick_lower.R` (AST → IR), `R/tcc_quick_codegen.R` (IR → C), `R/tcc_quick_cache.R` (digest cache)
 - IR: `R/tcc_ir.R` (node constructors), `R/tcc_ir_registry.R` (R→C function mapping)
 - IR design: `docs/ir_design.md` (authoritative design doc, SSA roadmap)
+- R2C architecture plan: `docs/r2c_architecture_plan.md` (determinism, fallback policy, R API mapping)
 - Tests: `inst/tinytest/`
 - Docs: `README.Rmd`, `NEWS.md`
 

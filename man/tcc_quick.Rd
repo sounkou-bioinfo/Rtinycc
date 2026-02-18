@@ -6,7 +6,7 @@
 \usage{
 tcc_quick(
   fn,
-  fallback = c("auto", "always", "never"),
+  fallback = c("auto", "soft", "hard", "always", "never"),
   mode = c("compile", "code"),
   debug = FALSE
 )
@@ -14,7 +14,8 @@ tcc_quick(
 \arguments{
 \item{fn}{Function to compile.}
 
-\item{fallback}{One of \code{"auto"}, \code{"always"}, or \code{"never"}.}
+\item{fallback}{One of \code{"auto"}, \code{"soft"}, \code{"hard"}.
+Legacy aliases \code{"always"} and \code{"never"} map to \code{"soft"} and \code{"hard"}.}
 
 \item{mode}{One of \code{"compile"} (default) or \code{"code"}. Use \code{"code"}
 to return generated C source without compiling.}
