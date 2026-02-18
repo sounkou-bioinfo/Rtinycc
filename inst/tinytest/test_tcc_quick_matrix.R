@@ -49,57 +49,61 @@ expect_equal(f_msum(A), sum(A))
 
 # --- BLAS-backed matrix products ---
 
-mat_ops <- function(A, B) {
-  declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
-  A %*% B
+is_windows <- identical(tolower(Sys.info()[["sysname"]]), "windows")
+
+if (!is_windows) {
+  mat_ops <- function(A, B) {
+    declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
+    A %*% B
+  }
+
+  f_matops <- tcc_quick(mat_ops, fallback = "never")
+  A2 <- matrix(runif(12), 3, 4)
+  B2 <- matrix(runif(20), 4, 5)
+  expect_equal(f_matops(A2, B2), A2 %*% B2, tolerance = 1e-10)
+
+  cp_ops <- function(A, B) {
+    declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
+    crossprod(A, B)
+  }
+
+  f_cp <- tcc_quick(cp_ops, fallback = "never")
+  A3 <- matrix(runif(15), 5, 3)
+  B3 <- matrix(runif(20), 5, 4)
+  expect_equal(f_cp(A3, B3), crossprod(A3, B3), tolerance = 1e-10)
+
+  tcp_ops <- function(A, B) {
+    declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
+    tcrossprod(A, B)
+  }
+
+  f_tcp <- tcc_quick(tcp_ops, fallback = "never")
+  A4 <- matrix(runif(12), 3, 4)
+  B4 <- matrix(runif(20), 5, 4)
+  expect_equal(f_tcp(A4, B4), tcrossprod(A4, B4), tolerance = 1e-10)
+
+  # --- matrix product dimension mismatch errors ---
+
+  expect_error(
+    f_matops(matrix(runif(6), 2, 3), matrix(runif(8), 4, 2)),
+    pattern = "dimension mismatch"
+  )
+
+  # --- one-arg crossprod/tcrossprod ---
+
+  cp1 <- function(A) {
+    declare(type(A = double(NA, NA)))
+    crossprod(A)
+  }
+
+  tcp1 <- function(A) {
+    declare(type(A = double(NA, NA)))
+    tcrossprod(A)
+  }
+
+  f_cp1 <- tcc_quick(cp1, fallback = "never")
+  f_tcp1 <- tcc_quick(tcp1, fallback = "never")
+  A5 <- matrix(runif(15), 5, 3)
+  expect_equal(f_cp1(A5), crossprod(A5), tolerance = 1e-10)
+  expect_equal(f_tcp1(A5), tcrossprod(A5), tolerance = 1e-10)
 }
-
-f_matops <- tcc_quick(mat_ops, fallback = "never")
-A2 <- matrix(runif(12), 3, 4)
-B2 <- matrix(runif(20), 4, 5)
-expect_equal(f_matops(A2, B2), A2 %*% B2, tolerance = 1e-10)
-
-cp_ops <- function(A, B) {
-  declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
-  crossprod(A, B)
-}
-
-f_cp <- tcc_quick(cp_ops, fallback = "never")
-A3 <- matrix(runif(15), 5, 3)
-B3 <- matrix(runif(20), 5, 4)
-expect_equal(f_cp(A3, B3), crossprod(A3, B3), tolerance = 1e-10)
-
-tcp_ops <- function(A, B) {
-  declare(type(A = double(NA, NA)), type(B = double(NA, NA)))
-  tcrossprod(A, B)
-}
-
-f_tcp <- tcc_quick(tcp_ops, fallback = "never")
-A4 <- matrix(runif(12), 3, 4)
-B4 <- matrix(runif(20), 5, 4)
-expect_equal(f_tcp(A4, B4), tcrossprod(A4, B4), tolerance = 1e-10)
-
-# --- matrix product dimension mismatch errors ---
-
-expect_error(
-  f_matops(matrix(runif(6), 2, 3), matrix(runif(8), 4, 2)),
-  pattern = "dimension mismatch"
-)
-
-# --- one-arg crossprod/tcrossprod ---
-
-cp1 <- function(A) {
-  declare(type(A = double(NA, NA)))
-  crossprod(A)
-}
-
-tcp1 <- function(A) {
-  declare(type(A = double(NA, NA)))
-  tcrossprod(A)
-}
-
-f_cp1 <- tcc_quick(cp1, fallback = "never")
-f_tcp1 <- tcc_quick(tcp1, fallback = "never")
-A5 <- matrix(runif(15), 5, 3)
-expect_equal(f_cp1(A5), crossprod(A5), tolerance = 1e-10)
-expect_equal(f_tcp1(A5), tcrossprod(A5), tolerance = 1e-10)

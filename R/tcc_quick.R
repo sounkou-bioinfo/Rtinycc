@@ -105,7 +105,7 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 
   ffi <- tcc_ffi() |>
     tcc_source(src)
-  ffi <- do.call(tcc_bind, c(list(ffi), setNames(list(spec), entry)))
+  ffi <- do.call(tcc_bind, c(list(ffi), stats::setNames(list(spec), entry)))
   compiled <- tcc_compile(ffi)
 
   list(

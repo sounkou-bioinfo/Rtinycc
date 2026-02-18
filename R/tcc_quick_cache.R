@@ -10,7 +10,7 @@ tcc_quick_cache_key <- function(fn, decl) {
     deparse(formals(fn), width.cutoff = 500L),
     collapse = "\n"
   )
-  decl_txt <- paste(capture.output(str(decl)), collapse = "\n")
+  decl_txt <- paste(utils::capture.output(utils::str(decl)), collapse = "\n")
   paste(body_txt, formals_txt, decl_txt, sep = "\n----\n")
 }
 
