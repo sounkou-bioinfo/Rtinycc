@@ -58,6 +58,35 @@ tccq_ir_has_tag <- function(node, tag_name) {
   FALSE
 }
 
+tccq_runtime_library_available <- function(name) {
+  roots <- unique(normalizePath(
+    c(
+      file.path(R.home("lib")),
+      file.path(R.home("bin")),
+      file.path(R.home("bin"), .Platform$r_arch)
+    ),
+    winslash = "/",
+    mustWork = FALSE
+  ))
+  patterns <- c(
+    paste0("^", name, "\\.dll$"),
+    paste0("^lib", name, "\\.dll$"),
+    paste0("^lib", name, "\\.so(\\..*)?$"),
+    paste0("^lib", name, "\\.dylib$"),
+    paste0("^lib", name, "\\.a$")
+  )
+  for (root in roots) {
+    if (!dir.exists(root)) {
+      next
+    }
+    files <- list.files(root, all.files = FALSE, no.. = TRUE)
+    if (any(vapply(patterns, function(p) any(grepl(p, files)), logical(1)))) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
 tccq_validate_ir <- function(ir, fallback = c("auto", "soft", "hard")) {
   fallback <- match.arg(fallback)
 
@@ -136,6 +165,7 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   entry <- "tcc_quick_entry"
   src <- tcc_quick_codegen(ir, decl, fn_name = entry)
   has_matmul <- isTRUE(tccq_ir_has_tag(ir, "matmul"))
+  has_solve <- isTRUE(tccq_ir_has_tag(ir, "solve_lin"))
 
   if (isTRUE(debug)) {
     message("tcc_quick generated C source:\n", src)
@@ -150,13 +180,16 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   ffi <- tcc_ffi() |>
     tcc_source(src)
 
-  # Matrix products lower to BLAS dgemm. On Windows this symbol typically
-  # lives in Rblas.dll (not R.dll), so add Rblas explicitly when needed.
-  if (
-    identical(.Platform$OS.type, "windows") &&
-      has_matmul
-  ) {
+  add_rblas <- has_matmul && tccq_runtime_library_available("Rblas")
+  add_rlapack <- has_solve && tccq_runtime_library_available("Rlapack")
+
+  # Link runtime BLAS/LAPACK libraries when lowered matrix kernels need them
+  # and those runtime libraries are present on this platform.
+  if (add_rblas) {
     ffi <- tcc_library(ffi, "Rblas")
+  }
+  if (add_rlapack) {
+    ffi <- tcc_library(ffi, "Rlapack")
   }
 
   if (isTRUE(debug)) {
@@ -166,6 +199,12 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
       .Platform$OS.type,
       ", has_matmul=",
       has_matmul,
+      ", has_solve=",
+      has_solve,
+      ", add_rblas=",
+      add_rblas,
+      ", add_rlapack=",
+      add_rlapack,
       ", ffi_libraries=[",
       paste(ffi$libraries, collapse = ","),
       "]",

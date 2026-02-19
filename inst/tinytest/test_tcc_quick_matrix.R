@@ -111,6 +111,23 @@ solve_vec <- function(A, b) {
   solve(A, b)
 }
 
+decl_solve_dbg <- Rtinycc:::tcc_quick_parse_declare(solve_vec)
+ir_solve_dbg <- Rtinycc:::tcc_quick_lower(solve_vec, decl_solve_dbg)
+solve_dbg <- capture.output(
+  invisible(
+    Rtinycc:::tcc_quick_compile(
+      solve_vec,
+      decl_solve_dbg,
+      ir_solve_dbg,
+      debug = TRUE
+    )
+  ),
+  type = "message"
+)
+has_rlapack <- Rtinycc:::tccq_runtime_library_available("Rlapack")
+adds_rlapack <- any(grepl("ffi_libraries=\\[[^\\]]*Rlapack", solve_dbg))
+expect_identical(adds_rlapack, has_rlapack)
+
 f_solve_vec <- tcc_quick(solve_vec, fallback = "never")
 A6 <- crossprod(matrix(rnorm(36), 6, 6)) + diag(6) * 0.5
 b6 <- rnorm(6)
