@@ -1190,10 +1190,17 @@ tcc_quick_try_lower_kernels <- function(exprs, decl) {
 }
 
 tcc_quick_lower <- function(fn, decl) {
+    # Pipeline: Lex -> Normalize -> Typecheck -> Lower -> Verify
+    # This function orchestrates the lowering of R functions to typed IR.
+    # Returns either a valid IR node or a fallback IR with reason.
+    
+    # Extract function body expressions (without the leading declare() call)
     exprs <- tcc_quick_body_without_declare(fn)
+    
+    # Lexical analysis: scan for constructs, loop depth, etc.
     lex <- tcc_quick_lex_exprs(exprs)
     
-    # Validate loop depth is reasonable
+    # Validate loop depth is reasonable (prevents pathological code generation)
     if (!is.null(lex$max_loop_depth) && lex$max_loop_depth > 10L) {
         return(tcc_quick_fallback_ir(
             sprintf(
@@ -1203,8 +1210,10 @@ tcc_quick_lower <- function(fn, decl) {
         ))
     }
     
+    # Normalization pass (currently a no-op, placeholder for future work)
     exprs <- tcc_quick_normalize_exprs(exprs, lex)
 
+    # Type checking pass (expression-level checks happen in lowerers)
     checked <- tcc_quick_typecheck_exprs(exprs, decl)
     if (!isTRUE(checked$ok)) {
         reason <- checked$reason
@@ -1215,6 +1224,7 @@ tcc_quick_lower <- function(fn, decl) {
     }
     exprs <- checked$exprs
 
+    # Try kernel matchers first (specialized patterns like nested loops)
     kernel <- tcc_quick_try_lower_kernels(exprs, decl)
     if (!is.null(kernel)) {
         return(tcc_quick_verify_ir(kernel))
