@@ -165,7 +165,10 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
     if (!is.call(e)) {
         return(tcc_quick_lower_result(
             FALSE,
-            reason = "Unsupported expression node"
+            reason = sprintf(
+                "Unsupported expression type: %s (expected call, symbol, or literal)",
+                class(e)[1]
+            )
         ))
     }
 

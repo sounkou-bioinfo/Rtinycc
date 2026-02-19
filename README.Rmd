@@ -886,9 +886,71 @@ timings_roll_mean <- bench::mark(
   min_time = 1
 )
 timings_roll_mean
-
+890. 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+### tcc_quick optimization guide
+
+`tcc_quick()` targets a restricted subset of R for fast compilation. Understanding what's supported and what falls back to R evaluation helps you write efficient compiled functions.
+
+**Supported subset:**
+
+- Scalar arithmetic: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`
+- Comparisons: `<`, `<=`, `>`, `>=`, `==`, `!=`
+- Logical operators: `&&`, `||`, `&`, `|`, `!`
+- Conditionals: `if (cond) yes else no`, `ifelse(cond, yes, no)`
+- Switch expressions: `switch(sel, case1, case2, ...)` (numeric selector only)
+- Math functions: `abs`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `log`, `log10`, `floor`, `ceiling`, `trunc`, `tanh`
+- Nested loops with array indexing: `for (i in seq_along(x))` with `x[i]` access
+- Local scalar assignments: `a <- expr`
+
+**Fallback behavior:**
+
+Functions outside the supported subset can be handled three ways:
+
+1. `fallback = "auto"` (default): Falls back to the original R function when boundary calls like `.Call`, `.Internal`, `.Primitive`, or unsupported constructs are detected.
+2. `fallback = "always"`: Always returns the original function without attempting compilation.
+3. `fallback = "never"`: Raises an error if the function is outside the supported subset.
+
+For calls that are not directly lowered (e.g., `max(x, y)`, `pmax(a, b, c)`), `tcc_quick` generates C code that builds a call pairlist and evaluates it via `Rf_eval()`. This preserves R's semantics but is slower than direct arithmetic.
+
+**Performance tips:**
+
+- Use scalar `double`/`integer`/`logical` declarations where possible; mixed types incur conversion overhead.
+- Minimize calls outside the core arithmetic/math subset. Each fallback to `Rf_eval()` adds overhead.
+- For loops, prefer nested `for (i in seq_along(x))` patterns. These compile to indexed array kernels.
+- Cache compiled functions; `tcc_quick()` memoizes based on function body and declarations, so repeated calls with the same function are fast.
+- Use `debug = TRUE` to inspect generated C code and identify unexpected fallbacks.
+- Use `mode = "code"` to preview generated C without compilation.
+
+**Example: optimizing a function**
+
+```r
+# Slow: uses unsupported constructs
+slow_fn <- function(x, y) {
+  declare(type(x = double(1)), type(y = double(1)))
+  result <- abs(x - y)
+  if (result > 100) {
+    log(result)  # fallback
+  } else {
+    sqrt(result)  # fallback
+  }
+}
+
+# Fast: uses only supported constructs
+fast_fn <- function(x, y) {
+  declare(type(x = double(1)), type(y = double(1)))
+  diff <- if (x > y) x - y else y - x  # inline abs
+  if (diff > 100) {
+    # log is supported
+    log(diff)
+  } else {
+    # sqrt is supported
+    sqrt(diff)
+  }
+}
 ```
 
 ## Known limitations

@@ -5,13 +5,21 @@
 tcc_quick_cache_env <- new.env(parent = emptyenv())
 
 tcc_quick_cache_key <- function(fn, decl) {
-  body_txt <- paste(deparse(body(fn), width.cutoff = 500L), collapse = "\n")
-  formals_txt <- paste(
-    deparse(formals(fn), width.cutoff = 500L),
-    collapse = "\n"
+  # Use serialization for stable key generation
+  # This avoids deparse() formatting inconsistencies
+  key_data <- list(
+    body = body(fn),
+    formals = formals(fn),
+    decl = decl
   )
-  decl_txt <- paste(capture.output(str(decl)), collapse = "\n")
-  paste(body_txt, formals_txt, decl_txt, sep = "\n----\n")
+  raw_bytes <- serialize(key_data, connection = NULL, ascii = FALSE)
+  # Use a simple FNV-1a-like hash for fixed-length key
+  hash <- 0L
+  for (i in seq_along(raw_bytes)) {
+    hash <- bitwXor(hash, as.integer(raw_bytes[i]))
+    hash <- bitwAnd(hash * 16777619L, 2147483647L)
+  }
+  sprintf("tccq_%08x", hash)
 }
 
 tcc_quick_cache_get <- function(key) {
