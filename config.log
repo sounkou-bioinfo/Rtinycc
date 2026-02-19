@@ -1,0 +1,56 @@
+Unpacking tinycc tarball to /home/runner/work/Rtinycc/Rtinycc/src/tinycc ...
+Created tinycc installation directory at /home/runner/work/Rtinycc/Rtinycc/inst/tinycc
+Configuring and building tinycc ...
+    LDFLAGS += -flat_namespace
+Running make (shared + static libtcc) ...
+Detected non-macOS platform, using libtcc.so for shared library
+make[1]: Entering directory '/home/runner/work/Rtinycc/Rtinycc/src/tinycc'
+gcc -o libtcc.o -c libtcc.c -I. -DONE_SOURCE=0 -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -DC2STR conftest.c -o c2str.exe
+./c2str.exe include/tccdefs.h tccdefs_.h
+gcc -o tccpp.o -c tccpp.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o tccgen.o -c tccgen.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o tccdbg.o -c tccdbg.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o tccelf.o -c tccelf.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o tccasm.o -c tccasm.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o tccrun.o -c tccrun.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o x86_64-gen.o -c x86_64-gen.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o x86_64-link.o -c x86_64-link.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o i386-asm.o -c i386-asm.c -I. -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+ar rcs libtcc.a libtcc.o tccpp.o tccgen.o tccdbg.o tccelf.o tccasm.o tccrun.o x86_64-gen.o x86_64-link.o i386-asm.o
+gcc -shared -Wl,-soname,libtcc.so -o libtcc.so libtcc.o tccpp.o tccgen.o tccdbg.o tccelf.o tccasm.o tccrun.o x86_64-gen.o x86_64-link.o i386-asm.o -lm -ldl -lpthread -Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,-z,relro -g -fPIC
+gcc -o tcc.o -c tcc.c -I. -DONE_SOURCE=0 -DTCC_GITHASH="\"2026-02-19 copilot/review-rjit-branch@5db3ab8\"" -fPIC -Wdeclaration-after-statement -Wno-unused-result -g
+gcc -o tcc tcc.o libtcc.so -lm -ldl -lpthread -Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,-z,relro -g -Wl,-rpath,"/home/runner/work/Rtinycc/Rtinycc/inst/tinycc/lib"
+make[2]: Entering directory '/home/runner/work/Rtinycc/Rtinycc/src/tinycc/lib'
+../tcc -c libtcc1.c -o libtcc1.o -B.. -I..
+../tcc -c stdatomic.c -o stdatomic.o -B.. -I..
+../tcc -c atomic.S -o atomic.o -B.. -I..
+../tcc -c builtin.c -o builtin.o -B.. -I..
+../tcc -c alloca.S -o alloca.o -B.. -I..
+../tcc -c alloca-bt.S -o alloca-bt.o -B.. -I..
+../tcc -c tcov.c -o tcov.o -B.. -I..
+../tcc -c dsohandle.c -o dsohandle.o -B.. -I..
+../tcc -ar rcs ../libtcc1.a libtcc1.o stdatomic.o atomic.o builtin.o alloca.o alloca-bt.o tcov.o dsohandle.o
+../tcc -c runmain.c -o ../runmain.o -B.. -I..
+../tcc -c run_nostdlib.c -o ../run_nostdlib.o -B.. -I..
+../tcc -c bt-exe.c -o ../bt-exe.o -B.. -I..
+../tcc -c bt-log.c -o ../bt-log.o -B.. -I..
+../tcc -c bcheck.c -o ../bcheck.o -B.. -I.. -bt
+make[2]: Leaving directory '/home/runner/work/Rtinycc/Rtinycc/src/tinycc/lib'
+make[1]: 'tcc' is up to date.
+make[1]: Leaving directory '/home/runner/work/Rtinycc/Rtinycc/src/tinycc'
+Running make install ...
+make[1]: Entering directory '/home/runner/work/Rtinycc/Rtinycc/src/tinycc'
+-> /home/runner/work/Rtinycc/Rtinycc/inst/tinycc/bin : tcc
+-> /home/runner/work/Rtinycc/Rtinycc/inst/tinycc/lib/tcc : libtcc1.a runmain.o run_nostdlib.o bt-exe.o bt-log.o bcheck.o
+-> /home/runner/work/Rtinycc/Rtinycc/inst/tinycc/lib/tcc/include : ./include/*.h ./tcclib.h
+-> /home/runner/work/Rtinycc/Rtinycc/inst/tinycc/lib : libtcc.a
+-> /home/runner/work/Rtinycc/Rtinycc/inst/tinycc/include : ./libtcc.h
+make[1]: Leaving directory '/home/runner/work/Rtinycc/Rtinycc/src/tinycc'
+tinycc built and installed to /home/runner/work/Rtinycc/Rtinycc/inst/tinycc
+
+=== Running minimal TCC JIT test (tools/tcc_minimal_test.c) ===
+forty_two() = 42
+Minimal TCC JIT test exit code: 0
+Minimal TCC JIT test succeeded
+=== End minimal TCC JIT test ===
