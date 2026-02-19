@@ -72,3 +72,12 @@ for (i in seq_along(strings)) {
   read_back <- tcc_read_cstring(ptr)
   expect_equal(read_back, strings[i])
 }
+
+# owned flag is reserved but should not error
+owned_obj <- Rtinycc:::tcc_cstring_object(
+  tcc_cstring("owned"),
+  clone = TRUE,
+  owned = TRUE
+)
+expect_true(inherits(owned_obj, "tcc_cstring"))
+expect_equal(as.character(owned_obj), "owned")

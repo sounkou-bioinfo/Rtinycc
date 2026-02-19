@@ -937,12 +937,12 @@ tcc_quick <- function(
   }
 
   cache_key <- tcc_quick_cache_key(fn, decl)
-  cache_hit <- tcc_quick_cache_get(cache_key)
-  if (!is.null(cache_hit)) {
-    return(cache_hit)
+  built <- tcc_quick_cache_get(cache_key)
+  if (is.null(built)) {
+    built <- tcc_quick_compile(fn, decl, ir, debug = debug)
+    tcc_quick_cache_set(cache_key, built)
   }
 
-  built <- tcc_quick_compile(fn, decl, ir, debug = debug)
   wrapped <- tcc_quick_make_wrapper(
     built$callable,
     formals(fn),
@@ -950,6 +950,5 @@ tcc_quick <- function(
     fn,
     compiled_ptr = built$call_ptr
   )
-  tcc_quick_cache_set(cache_key, wrapped)
   wrapped
 }

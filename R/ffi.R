@@ -1097,6 +1097,10 @@ tcc_compiled_object <- function(
 
   # Create environment with callable functions
   env <- new.env(parent = emptyenv())
+  bind_failures <- character(0)
+  add_bind_failure <- function(msg) {
+    bind_failures <<- c(bind_failures, msg)
+  }
 
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
@@ -1127,25 +1131,29 @@ tcc_compiled_object <- function(
               {
                 fn_ptr <- tcc_get_symbol(state, wrapper_name)
                 if (!tcc_symbol_is_valid(fn_ptr)) {
-                  warning(
-                    "Symbol '",
-                    sym_name,
-                    "' returned invalid pointer for '",
-                    wrapper_name,
-                    "'"
+                  add_bind_failure(
+                    paste0(
+                      "Symbol '",
+                      sym_name,
+                      "' returned invalid pointer for '",
+                      wrapper_name,
+                      "'"
+                    )
                   )
                   next
                 }
                 fn_ptrs[[key]] <- fn_ptr
               },
               error = function(e) {
-                warning(
-                  "Could not bind symbol '",
-                  sym_name,
-                  "' wrapper '",
-                  wrapper_name,
-                  "': ",
-                  conditionMessage(e)
+                add_bind_failure(
+                  paste0(
+                    "Could not bind symbol '",
+                    sym_name,
+                    "' wrapper '",
+                    wrapper_name,
+                    "': ",
+                    conditionMessage(e)
+                  )
                 )
               }
             )
@@ -1165,25 +1173,29 @@ tcc_compiled_object <- function(
             {
               fn_ptr <- tcc_get_symbol(state, wrapper_name)
               if (!tcc_symbol_is_valid(fn_ptr)) {
-                warning(
-                  "Symbol '",
-                  sym_name,
-                  "' returned invalid pointer for '",
-                  wrapper_name,
-                  "'"
+                add_bind_failure(
+                  paste0(
+                    "Symbol '",
+                    sym_name,
+                    "' returned invalid pointer for '",
+                    wrapper_name,
+                    "'"
+                  )
                 )
                 next
               }
               fn_ptrs[[as.character(n_varargs)]] <- fn_ptr
             },
             error = function(e) {
-              warning(
-                "Could not bind symbol '",
-                sym_name,
-                "' wrapper '",
-                wrapper_name,
-                "': ",
-                conditionMessage(e)
+              add_bind_failure(
+                paste0(
+                  "Could not bind symbol '",
+                  sym_name,
+                  "' wrapper '",
+                  wrapper_name,
+                  "': ",
+                  conditionMessage(e)
+                )
               )
             }
           )
@@ -1191,10 +1203,12 @@ tcc_compiled_object <- function(
       }
 
       if (length(fn_ptrs) == 0) {
-        warning(
-          "Could not bind any variadic wrappers for symbol '",
-          sym_name,
-          "'"
+        add_bind_failure(
+          paste0(
+            "Could not bind any variadic wrappers for symbol '",
+            sym_name,
+            "'"
+          )
         )
         next
       }
@@ -1210,19 +1224,28 @@ tcc_compiled_object <- function(
 
         # Validate the pointer before creating callable
         if (!tcc_symbol_is_valid(fn_ptr)) {
-          warning(
-            "Symbol '",
-            sym_name,
-            "' returned invalid pointer for '",
-            wrapper_name,
-            "'"
+          add_bind_failure(
+            paste0(
+              "Symbol '",
+              sym_name,
+              "' returned invalid pointer for '",
+              wrapper_name,
+              "'"
+            )
           )
           next
         }
         env[[sym_name]] <- make_callable(fn_ptr, sym, state)
       },
       error = function(e) {
-        warning("Could not bind symbol '", sym_name, "': ", conditionMessage(e))
+        add_bind_failure(
+          paste0(
+            "Could not bind symbol '",
+            sym_name,
+            "': ",
+            conditionMessage(e)
+          )
+        )
       }
     )
   }
@@ -1231,7 +1254,7 @@ tcc_compiled_object <- function(
     wrapper_name <- paste0("R_wrap_", sym_name)
     sym <- helper_specs[[sym_name]]
     if (is.null(sym)) {
-      warning("Unknown helper symbol '", sym_name, "'")
+      add_bind_failure(paste0("Unknown helper symbol '", sym_name, "'"))
       next
     }
     sym$name <- sym_name
@@ -1241,12 +1264,14 @@ tcc_compiled_object <- function(
         fn_ptr <- tcc_get_symbol(state, wrapper_name)
 
         if (!tcc_symbol_is_valid(fn_ptr)) {
-          warning(
-            "Symbol '",
-            sym_name,
-            "' returned invalid pointer for '",
-            wrapper_name,
-            "'"
+          add_bind_failure(
+            paste0(
+              "Symbol '",
+              sym_name,
+              "' returned invalid pointer for '",
+              wrapper_name,
+              "'"
+            )
           )
           next
         }
@@ -1254,8 +1279,23 @@ tcc_compiled_object <- function(
         env[[sym_name]] <- make_callable(fn_ptr, sym, state)
       },
       error = function(e) {
-        warning("Could not bind symbol '", sym_name, "': ", conditionMessage(e))
+        add_bind_failure(
+          paste0(
+            "Could not bind symbol '",
+            sym_name,
+            "': ",
+            conditionMessage(e)
+          )
+        )
       }
+    )
+  }
+
+  if (length(bind_failures) > 0) {
+    stop(
+      "Failed to bind compiled wrapper symbols:\n  - ",
+      paste(unique(bind_failures), collapse = "\n  - "),
+      call. = FALSE
     )
   }
 
@@ -1830,15 +1870,8 @@ tcc_cstring_object <- function(ptr, clone = TRUE, owned = FALSE) {
     }
   }
 
-  # Register finalizer if owned
-  if (owned) {
-    reg.finalizer(obj, function(x) {
-      if (!is.null(x$ptr)) {
-        # Free C memory
-        # This would need a C helper to call free()
-      }
-    })
-  }
+  # owned is currently reserved; the pointer itself may already carry
+  # ownership/finalizer semantics (for example via tcc_cstring()).
 
   class(obj) <- "tcc_cstring"
   obj

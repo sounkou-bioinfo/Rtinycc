@@ -835,7 +835,7 @@ Fallback behavior is explicit:
 - `fallback = "soft"`: allow mixed compiled + delegated `Rf_eval` execution.
 - `fallback = "auto"`: compatibility mode (default behavior).
 
-When delegated calls are used, `Rf_eval` now runs in the compiled wrapper call
+When delegated calls are used, `Rf_eval`  runs in the compiled wrapper call
 environment (`environment()`), not a fixed global environment, so lexical
 lookups are consistent with normal function calls.
 
@@ -1089,7 +1089,7 @@ plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 ### Matrix algebra, BLAS, and delegation
 
-`tcc_quick` now emits native BLAS/LAPACK-backed paths for `%*%`, `crossprod`,
+`tcc_quick`  emits native BLAS/LAPACK-backed paths for `%*%`, `crossprod`,
 `tcrossprod` (matrix/matrix cases, `F77_CALL(dgemm)`) and `solve(A, b)` /
 `solve(A, B)` (`F77_CALL(dgesv)`) through R headers. This keeps behavior
 portable across platforms while still using R's linked BLAS/LAPACK stack.
@@ -1161,7 +1161,7 @@ plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 ### Native statistics lowering
 
-`tcc_quick` now lowers common statistics directly (`mean`, `sd`, `median`,
+`tcc_quick`  lowers common statistics directly (`mean`, `sd`, `median`,
 `quantile`) including `na.rm = TRUE` and vector `probs` for `quantile`.
 
 That means this example runs as native generated loops (plus sorting for
@@ -1199,7 +1199,7 @@ plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 
 ### Typed `sapply` / `apply` subset
 
-`tcc_quick` now supports a typed subset of mapping helpers:
+`tcc_quick`  supports a typed subset of mapping helpers:
 
 - `sapply(x, FUN)` where `FUN` is a symbol in the supported subset (for example
   unary math intrinsics, `identity`, and scalar casts such as `as.raw`).

@@ -189,3 +189,25 @@ expect_error(
   tcc_quick(rank3_decl, fallback = "hard"),
   pattern = "Rank-3\\+ array declarations"
 )
+
+# --- cache should not capture wrong lexical environment across same-body funcs ---
+
+rm(list = ls(envir = Rtinycc:::tcc_quick_cache_env), envir = Rtinycc:::tcc_quick_cache_env)
+
+make_is_na_quick <- function(flag) {
+  local({
+    `is.na` <- function(x) rep(flag, length(x))
+    fn <- function(x) {
+      declare(type(x = double(NA)))
+      is.na(x)
+    }
+    tcc_quick(fn, fallback = "soft")
+  })
+}
+
+is_na_true <- make_is_na_quick(TRUE)
+is_na_false <- make_is_na_quick(FALSE)
+probe <- c(1, NA_real_, 3)
+
+expect_identical(is_na_true(probe), c(TRUE, TRUE, TRUE))
+expect_identical(is_na_false(probe), c(FALSE, FALSE, FALSE))
