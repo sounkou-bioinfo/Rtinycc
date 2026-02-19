@@ -13,6 +13,7 @@ tcc_ffi_object <- function() {
       symbols = list(),
       headers = character(0),
       c_code = character(0),
+      options = character(0),
       libraries = character(0),
       lib_paths = character(0),
       include_paths = character(0),
@@ -78,6 +79,40 @@ tcc_library_path <- function(ffi, path) {
     stop("Expected tcc_ffi object", call. = FALSE)
   }
   ffi$lib_paths <- c(ffi$lib_paths, path)
+  ffi
+}
+
+#' Add TinyCC compiler options to FFI context
+#'
+#' Append raw options that are passed to `tcc_set_options()` before compiling
+#' generated wrappers (for example `"-O2"` or `"-Wall"`).
+#'
+#' @param ffi A tcc_ffi object
+#' @param options Character vector of option fragments
+#' @return Updated tcc_ffi object (for chaining)
+#' @export
+tcc_options <- function(ffi, options) {
+  if (!inherits(ffi, "tcc_ffi")) {
+    stop("Expected tcc_ffi object", call. = FALSE)
+  }
+  if (missing(options)) {
+    stop("`options` must be provided", call. = FALSE)
+  }
+  if (is.null(options)) {
+    ffi$options <- character(0)
+    return(ffi)
+  }
+
+  opts <- as.character(options)
+  if (!length(opts)) {
+    stop("`options` must not be empty", call. = FALSE)
+  }
+  opts <- trimws(opts)
+  if (any(!nzchar(opts))) {
+    stop("`options` entries must be non-empty strings", call. = FALSE)
+  }
+
+  ffi$options <- c(ffi$options, opts)
   ffi
 }
 
@@ -648,6 +683,13 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     ),
     lib_path = c(tcc_lib_paths(), ffi$lib_paths, r_lib_paths)
   )
+
+  if (!is.null(ffi$options) && length(ffi$options) > 0) {
+    rc <- tcc_set_options(state, paste(ffi$options, collapse = " "))
+    if (rc < 0) {
+      stop("Failed to apply TinyCC compiler options", call. = FALSE)
+    }
+  }
 
   # Add library paths
   for (lib_path in ffi$lib_paths) {

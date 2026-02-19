@@ -6,24 +6,36 @@ tcc_quick_make_wrapper <- function(
   compiled_callable,
   formals_template,
   compiled_obj,
-  fn
+  fn,
+  compiled_ptr = NULL
 ) {
   out <- function() NULL
   formals(out) <- formals_template
 
   arg_syms <- lapply(names(formals_template), as.name)
-  call_expr <- as.call(c(
-    as.name(".compiled_callable"),
-    arg_syms,
-    quote(environment())
-  ))
+  if (!is.null(compiled_ptr) && identical(typeof(compiled_ptr), "externalptr")) {
+    call_expr <- as.call(c(
+      as.name(".rtinycc_call"),
+      as.name(".compiled_ptr"),
+      arg_syms,
+      quote(environment())
+    ))
+  } else {
+    call_expr <- as.call(c(
+      as.name(".compiled_callable"),
+      arg_syms,
+      quote(environment())
+    ))
+  }
   body(out) <- call_expr
 
   environment(out) <- list2env(
     list(
       .compiled_callable = compiled_callable,
+      .compiled_ptr = compiled_ptr,
       .compiled_obj = compiled_obj,
-      .original_fn = fn
+      .original_fn = fn,
+      .rtinycc_call = .RtinyccCall
     ),
     parent = environment(fn)
   )
@@ -38,8 +50,7 @@ tccq_ir_has_tag <- function(node, tag_name) {
   if (!is.null(node$tag) && identical(node$tag, tag_name)) {
     return(TRUE)
   }
-  for (nm in names(node)) {
-    child <- node[[nm]]
+  for (child in unname(node)) {
     if (is.list(child) && tccq_ir_has_tag(child, tag_name)) {
       return(TRUE)
     }
@@ -110,8 +121,7 @@ tccq_validate_ir <- function(ir, fallback = c("auto", "soft", "hard")) {
       }
     }
 
-    for (nm in names(node)) {
-      child <- node[[nm]]
+    for (child in unname(node)) {
       if (is.list(child)) {
         walk(child)
       }
@@ -167,10 +177,19 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 
   ffi <- do.call(tcc_bind, c(list(ffi), stats::setNames(list(spec), entry)))
   compiled <- tcc_compile(ffi)
+  callable <- compiled[[entry]]
+  call_ptr <- NULL
+  if (is.function(callable)) {
+    ptr <- tryCatch(environment(callable)$.fn_ptr, error = function(e) NULL)
+    if (!is.null(ptr) && identical(typeof(ptr), "externalptr")) {
+      call_ptr <- ptr
+    }
+  }
 
   list(
-    callable = compiled[[entry]],
-    compiled = compiled
+    callable = callable,
+    compiled = compiled,
+    call_ptr = call_ptr
   )
 }
 
@@ -339,14 +358,14 @@ tcc_quick_ops <- function() {
     data.frame(
       category = "reduction",
       r = "median(x)",
-      c = "sort + midpoint",
+      c = "partial select + midpoint",
       vectorized = FALSE,
       stringsAsFactors = FALSE
     ),
     data.frame(
       category = "reduction",
       r = "quantile(x, p)",
-      c = "sort + type7 (scalar p)",
+      c = "partial select + type7 (scalar p)",
       vectorized = FALSE,
       stringsAsFactors = FALSE
     ),
@@ -798,7 +817,8 @@ tcc_quick <- function(
     built$callable,
     formals(fn),
     built$compiled,
-    fn
+    fn,
+    compiled_ptr = built$call_ptr
   )
   tcc_quick_cache_set(cache_key, wrapped)
   wrapped

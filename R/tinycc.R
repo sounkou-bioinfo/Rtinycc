@@ -184,6 +184,21 @@ tcc_add_library <- function(state, library) {
   .Call(RC_libtcc_add_library, state, library)
 }
 
+#' Apply raw TinyCC options to a libtcc state
+#'
+#' Passes options directly to `tcc_set_options()` for the given state.
+#'
+#' @param state A `tcc_state`.
+#' @param options Character scalar of options (for example `"-O2 -Wall"`).
+#' @return Integer status code (`0` on success; negative on parse error).
+#' @export
+tcc_set_options <- function(state, options) {
+  if (!is.character(options) || length(options) != 1 || !nzchar(trimws(options))) {
+    stop("`options` must be a non-empty character scalar", call. = FALSE)
+  }
+  .Call(RC_libtcc_set_options, state, options)
+}
+
 #' Compile C code from a character string
 #' @param state A `tcc_state`.
 #' @param code C source code string.

@@ -25,6 +25,9 @@ tccq_make_walker <- function(
   ...,
   handler = function(v, w) NULL,
   call = function(e, w) {
+    if (typeof(e[[1]]) == "language") {
+      tccq_walk(e[[1]], w)
+    }
     for (ee in as.list(e)[-1]) {
       if (!missing(ee)) tccq_walk(ee, w)
     }
@@ -55,6 +58,9 @@ tccq_has_boundary <- function(e, boundary = tccq_boundary_calls()) {
     },
     call = function(e, w) {
       if (!found) {
+        if (typeof(e[[1]]) == "language") {
+          tccq_walk(e[[1]], w)
+        }
         for (ee in as.list(e)[-1]) {
           if (!missing(ee)) {
             tccq_walk(ee, w)
@@ -79,6 +85,9 @@ tccq_collect_subset_arrays <- function(e) {
         function(e, w) {
           if (length(e) == 3L && is.symbol(e[[2]])) {
             arrays <<- unique(c(arrays, as.character(e[[2]])))
+          }
+          if (typeof(e[[1]]) == "language") {
+            tccq_walk(e[[1]], w)
           }
           for (ee in as.list(e)[-1]) {
             if (!missing(ee)) tccq_walk(ee, w)
@@ -116,6 +125,9 @@ tccq_scan_constructs <- function(exprs) {
     call = function(e, w) {
       if (is.symbol(e[[1]])) {
         calls <<- unique(c(calls, as.character(e[[1]])))
+      }
+      if (typeof(e[[1]]) == "language") {
+        tccq_walk(e[[1]], w)
       }
       for (ee in as.list(e)[-1]) {
         if (!missing(ee)) tccq_walk(ee, w)

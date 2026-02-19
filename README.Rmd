@@ -242,6 +242,44 @@ timings_ffi_vec <- bench::mark(
 timings_ffi_vec
 ```
 
+### Compiler options
+
+Use `tcc_options()` to pass raw TinyCC options in the high-level FFI pipeline.
+For low-level states, use `tcc_set_options()` directly.
+
+```{r ffi-options}
+ffi_opt_off <- tcc_ffi() |>
+  tcc_options("-O0") |>
+  tcc_source('
+    int opt_macro() {
+    #ifdef __OPTIMIZE__
+      return 1;
+    #else
+      return 0;
+    #endif
+    }
+  ') |>
+  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
+  tcc_compile()
+
+ffi_opt_on <- tcc_ffi() |>
+  tcc_options(c("-Wall", "-O2")) |>
+  tcc_source('
+    int opt_macro() {
+    #ifdef __OPTIMIZE__
+      return 1;
+    #else
+      return 0;
+    #endif
+    }
+  ') |>
+  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
+  tcc_compile()
+
+ffi_opt_off$opt_macro()
+ffi_opt_on$opt_macro()
+```
+
 ### Variadic calls (e.g. `Rprintf` style)
 
 Rtinycc supports two ways to bind variadic tails. The legacy approach uses
@@ -680,7 +718,7 @@ ffi$global_global_counter_get()
 
 `CSV` parser using [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) on linux
 
-```{r io_uring-demo}
+```{r io_uring-demo, eval=FALSE}
 if (Sys.info()[["sysname"]] == "Linux") {
   c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
 
@@ -820,6 +858,69 @@ snapshot, grouped by category:
 
 ```{r tcc-quick-ops-table}
 knitr::kable(tcc_quick_ops(), row.names = FALSE)
+```
+
+### Performance expectations
+
+`tcc_quick()` can beat base R for some data-heavy loops, but it is not
+guaranteed to be faster in every case.
+
+- TinyCC (`libtcc`) is a fast compiler frontend/JIT but not a heavy optimizing
+  compiler (in bundled TinyCC, `-O` mostly toggles `__OPTIMIZE__`).
+- Small functions are sensitive to call overhead and may be faster in base R.
+- Delegated `rf_call` paths (`fallback = "soft"/"auto"`) pay extra overhead.
+- Native-lowered loops over large vectors/matrices are the main win scenario.
+
+### Maintenance: coverage and fallback tables
+
+Use these helpers to regenerate coverage snapshots and delegated fallback
+contract tables during development:
+
+```{r maintenance-coverage-fallback, eval=FALSE}
+rtinycc_file_coverage <- function(path = ".") {
+  cov <- covr::package_coverage(path)
+  df <- as.data.frame(cov)
+  df$key <- paste(
+    df$first_line, df$last_line, df$first_column, df$last_column, sep = ":"
+  )
+  expr <- aggregate(value ~ filename + key, data = df, FUN = max)
+  out <- aggregate(
+    value ~ filename,
+    data = expr,
+    FUN = function(x) 100 * mean(x > 0)
+  )
+  names(out)[2] <- "coverage_pct"
+  out[order(out$coverage_pct, out$filename), ]
+}
+
+rtinycc_fallback_contracts_table <- function() {
+  allow <- sort(unique(Rtinycc:::tcc_quick_rf_call_allowlist()))
+  contracts <- Rtinycc:::tcc_quick_rf_call_contracts()
+  quiet <- Rtinycc:::tcc_quick_rf_call_quiet()
+
+  data.frame(
+    function_name = allow,
+    has_contract = allow %in% names(contracts),
+    mode = vapply(
+      allow,
+      function(fn) if (is.null(contracts[[fn]])) NA_character_ else contracts[[fn]]$mode,
+      character(1)
+    ),
+    shape = vapply(
+      allow,
+      function(fn) if (is.null(contracts[[fn]])) NA_character_ else contracts[[fn]]$shape,
+      character(1)
+    ),
+    quiet = allow %in% quiet,
+    stringsAsFactors = FALSE
+  )
+}
+
+# Coverage snapshot (same metric style used in README status checks)
+rtinycc_file_coverage(".")
+
+# Delegated fallback contract table
+knitr::kable(rtinycc_fallback_contracts_table(), row.names = FALSE)
 ```
 
 ### Codegen-only mode
