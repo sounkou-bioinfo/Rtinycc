@@ -822,6 +822,20 @@ snapshot, grouped by category:
 knitr::kable(tcc_quick_ops(), row.names = FALSE)
 ```
 
+### Codegen-only mode
+
+Use `mode = "code"` when you want the generated C source without compiling:
+
+```{r tcc-quick-code-only}
+add_one <- function(x) {
+  declare(type(x = double(1)))
+  x + 1
+}
+
+c_src <- tcc_quick(add_one, fallback = "hard", mode = "code")
+head(strsplit(c_src, "\n")[[1]], 20)
+```
+
 ### Convolution benchmark
 
 This example benchmarks the classic convolution routine written in plain C (no manual
