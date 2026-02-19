@@ -8,13 +8,16 @@ scalar math functions, and scalar
 `if (cond) a else b`/`ifelse(cond, a, b)`) over declared scalar
 `double`/`integer`/`logical` arguments. Simple statement blocks with
 scalar `<-` assignments before the final expression are supported.
+Rank-3+ declarations (for example `double(NA, NA, NA)`) are accepted at
+parse time but currently reserved for upcoming multidimensional array
+support; they fallback in `soft`/`auto` and error in `hard` mode.
 
 ## Usage
 
 ``` r
 tcc_quick(
   fn,
-  fallback = c("auto", "always", "never"),
+  fallback = c("auto", "soft", "hard", "always", "never"),
   mode = c("compile", "code"),
   debug = FALSE
 )
@@ -28,7 +31,8 @@ tcc_quick(
 
 - fallback:
 
-  One of `"auto"`, `"always"`, or `"never"`.
+  One of `"auto"`, `"soft"`, `"hard"`. Legacy aliases `"always"` and
+  `"never"` map to `"soft"` and `"hard"`.
 
 - mode:
 

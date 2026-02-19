@@ -11,6 +11,13 @@ of assuming behavior. We also generate `<package>.llm.txt` files for R
 package docs; for example, treesitter.c docs can be found in
 `treesitter.c.llm.txt`.
 
+The `.sync` directory also contains reference implementations that
+inform the `tcc_quick` compiler design: `codetools` (walker/handler),
+`quickr` (handler registry, scope tracking), `spy` (typed C AST,
+codegen), and `Stdlib` (the SaC standard library from the SacBase
+project — array primitives, reductions, transforms, and with-loop
+patterns that inform our condensation/ψ-reduction architecture).
+
 ## What this package does
 
 Rtinycc embeds TinyCC and exposes both CLI and libtcc APIs to R. It
@@ -61,6 +68,53 @@ is tracked and enforced in `RC_free` and
   for local installs, `make check` for CRAN-style checks, and `make rdm`
   to regenerate README. Always add or update tinytests for behavior
   changes.
+
+## Maintenance helpers (dev-only)
+
+Use these helper functions in development sessions to regenerate
+coverage snapshots and delegated fallback contract tables. Keep them out
+of user-facing README content.
+
+``` r
+rtinycc_file_coverage <- function(path = ".") {
+  cov <- covr::package_coverage(path)
+  df <- as.data.frame(cov)
+  df$key <- paste(
+    df$first_line, df$last_line, df$first_column, df$last_column, sep = ":"
+  )
+  expr <- aggregate(value ~ filename + key, data = df, FUN = max)
+  out <- aggregate(
+    value ~ filename,
+    data = expr,
+    FUN = function(x) 100 * mean(x > 0)
+  )
+  names(out)[2] <- "coverage_pct"
+  out[order(out$coverage_pct, out$filename), ]
+}
+
+rtinycc_fallback_contracts_table <- function() {
+  allow <- sort(unique(Rtinycc:::tcc_quick_rf_call_allowlist()))
+  contracts <- Rtinycc:::tcc_quick_rf_call_contracts()
+  quiet <- Rtinycc:::tcc_quick_rf_call_quiet()
+
+  data.frame(
+    function_name = allow,
+    has_contract = allow %in% names(contracts),
+    mode = vapply(
+      allow,
+      function(fn) if (is.null(contracts[[fn]])) NA_character_ else contracts[[fn]]$mode,
+      character(1)
+    ),
+    shape = vapply(
+      allow,
+      function(fn) if (is.null(contracts[[fn]])) NA_character_ else contracts[[fn]]$shape,
+      character(1)
+    ),
+    quiet = allow %in% quiet,
+    stringsAsFactors = FALSE
+  )
+}
+```
 
 ## Editing rules
 
@@ -241,311 +295,205 @@ uses `fork()` which does not exist on Windows. Fork-related tests in
 
 - R API: `R/ffi.R`, `R/ffi_types.R`, `R/ffi_codegen.R`, `R/tinycc.R`
 - C API: `src/RC_libtcc.c`, `src/init.c`
+- tcc_quick pipeline: `R/tcc_quick.R` (API), `R/tcc_quick_declare.R`
+  (declarations), `R/tcc_quick_walk.R` (codetools-style walker),
+  `R/tcc_quick_lower.R` (AST → IR), `R/tcc_quick_codegen.R` (IR → C),
+  `R/tcc_quick_cache.R` (digest cache)
+- IR: `R/tcc_ir.R` (node constructors), `R/tcc_ir_registry.R` (R→C
+  function mapping)
+- IR design: `docs/ir_design.md` (authoritative design doc, SSA roadmap)
+- R2C architecture plan: `docs/r2c_architecture_plan.md` (determinism,
+  fallback policy, R API mapping)
 - Tests: `inst/tinytest/`
 - Docs: `README.Rmd`, `NEWS.md`
 
-## Roadmap: declare-based R-\>C JIT (quickr-like)
+## Roadmap: declare-based R→C JIT (`tcc_quick`)
 
-This is a planned extension: compile a strict subset of R functions to C
-via TinyCC, with optional fallback to R C API calls when an operation is
-not yet lowered directly.
+[`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
+compiles a [`declare()`](https://rdrr.io/r/base/declare.html)-annotated
+R subset to C via TinyCC, with optional fallback to R C API calls when
+an operation is not yet lowered directly. See `docs/ir_design.md` for
+the full IR design and SSA roadmap.
 
-### Goal and positioning
+### Architecture
 
-We do not target full R semantics. We target a high-value subset for
-numeric code with explicit `declare(type(...))` contracts, then JIT to
-`.Call` wrappers through existing Rtinycc infrastructure.
+The compiler pipeline draws on four reference implementations in
+`.sync/`:
 
-Primary advantage over prior art in `.sync/quickr` and `.sync/r2c`: we
-already own the JIT + host-symbol pipeline
-([`tcc_compile_string()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile_string.md),
-[`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md),
-[`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md),
-`make_callable()`), so we can interleave:
+- **codetools**: generic `walkCode`/`makeCodeWalker` dispatcher —
+  adopted in `R/tcc_quick_walk.R`.
+- **quickr**: handler registry environment, scope/variable tracking —
+  adopted in `R/tcc_ir_registry.R` and lowering dispatch.
+- **spy**: typed C AST with precedence, `emit()` pattern — informs
+  codegen style.
+- **SaC Stdlib** (SacBase/Stdlib): the standard library for the Single
+  Assignment C language. Provides dimension-independent array primitives
+  (`dim`, `shape`, `sel`, `reshape`, `take`, `drop`, `rotate`, `cat`),
+  element-wise arithmetic (`ArrayArith`), reductions (`ArrayReduce`:
+  `sum`, `prod`, `minval`, `maxval` via `fold`), and transforms
+  (`ArrayTransform`: `transpose`, `where`, `mask`). All built on
+  with-loops (SAC’s genarray/modarray comprehensions) and ψ-reduction
+  (condensation) — the technique of fusing consecutive array operations
+  into single loops that never materialize intermediate arrays.
 
-1.  direct lowered C for hot arithmetic/loops,
-2.  selective fallback to C API calls (`Rf_install`, `Rf_lang*`,
-    `Rf_eval`) for unsupported nodes,
-3.  transparent caching/recompile behavior already used by
-    `tcc_compiled`.
+The pipeline:
+`R AST → declare parse → walk + lower → IR → codegen → TinyCC`.
 
-### MVP subset (phase 1)
+### Condensation / ψ-reduction (critical design principle)
 
-Only compile functions that satisfy all constraints below:
+The core codegen mechanism is `tccq_cg_vec_elem(node, idx_var)`, which
+recursively defines the k-th element of any vector expression tree in
+terms of its children’s k-th elements. This IS ψ-reduction (Mullin 1988)
+/ condensation (Schmittgen 1986) as described in Scholz’s SAC paper:
+consecutive array operations are fused into a single loop body that
+computes each element without materializing intermediates.
 
-- starts with `declare(type(...))` for all arguments;
-- scalar/vector `integer`, `double`, `logical` only;
-- ops: `+ - * /`, comparisons, simple `if`, `for (i in seq_len(n))`,
-  [`length()`](https://rdrr.io/r/base/length.html);
-- indexing: `x[i]` and assignment `x[i] <- expr`;
-- return atomic vector or scalar;
-- no promises, NSE, S3/S4 dispatch, environments, or ALTREP-sensitive
-  behavior.
-
-If any AST node is outside subset, emit a fallback stub in generated C
-that evaluates the original call via `Rf_lang*` + `Rf_eval`.
-
-### Compiler pipeline
-
-Implement a staged pipeline in R:
-
-1.  `capture`: obtain function AST and declaration metadata.
-2.  `normalize`: canonicalize loops and indexing forms.
-3.  `typecheck`: infer/check static type + shape against
-    [`declare()`](https://rdrr.io/r/base/declare.html).
-4.  `lower`: convert AST to a compact typed IR.
-5.  `codegen`: emit C from IR, plus fallback branches.
-6.  `compile`: compile with current
-    [`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md)
-    path.
-7.  `cache`: hash body + decls + platform and reuse compiled callable.
-
-### Bytecode-assisted lowering (optional)
-
-Using R bytecode as an intermediate can help, but should remain optional
-in phase 1.
-
-Why it is attractive:
-
-- normalizes many surface-level AST forms;
-- gives stable control-flow structure (`GOTO`, `BRIFNOT`, etc.);
-- mirrors prior compiler work in `r-svn` and PRL-PRG projects.
-
-Why we should not make it mandatory initially:
-
-- R bytecode instructions are numerous and some dispatch back to the AST
-  interpreter;
-- bytecode has stack-machine semantics and constant-pool indirection,
-  which is harder to map directly to typed C loops than a small custom
-  IR;
-- reproducing exact bytecode behavior is a separate goal from fast
-  subset lowering.
-
-Recommended hybrid strategy:
-
-1.  Keep AST + [`declare()`](https://rdrr.io/r/base/declare.html) as the
-    primary lowering input for MVP.
-2.  Add a debug mode that emits/disassembles bytecode
-    (`compiler`/`rbytecode`) for diagnostics and parity checks.
-3.  Optionally lower a restricted bytecode opcode subset (`LDCONST`,
-    `GETVAR`, arithmetic ops, simple branches/loops) into `tcc_quick_ir`
-    when it is cleaner than AST lowering.
-4.  For unknown opcodes, fallback to generated `Rf_lang*` + `Rf_eval`
-    calls rather than failing hard.
-
-This gives the maintainability benefits of a small typed IR while still
-leveraging bytecode information where useful.
-
-Suggested new files:
-
-- `R/tcc_quick.R` (public user API,
-  e.g. [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md))
-- `R/tcc_quick_declare.R` (parse `declare(type(...))`)
-- `R/tcc_quick_ir.R` (IR node constructors and validators)
-- `R/tcc_quick_lower.R` (AST -\> IR)
-- `R/tcc_quick_codegen.R` (IR -\> C source)
-- `R/tcc_quick_cache.R` (digest key + memo table)
-- `inst/tinytest/test_tcc_quick_basic.R`
-
-### API shape
-
-Expose a narrow API first:
-
-``` r
-tcc_quick <- function(fn, fallback = c("auto", "always", "never"), debug = FALSE) {
-    fallback <- match.arg(fallback)
-    # parse declare(), lower subset, generate C, compile to callable
-    # return R closure with same formal args as fn
-}
-```
-
-and internal compile entrypoint:
-
-``` r
-tcc_quick_compile <- function(fn, decl, fallback, debug = FALSE) {
-    ir <- tcc_quick_lower(fn, decl)
-    c_src <- tcc_quick_codegen(ir, fallback = fallback)
-    # compile via existing tcc_ffi/tcc_source/tcc_bind/tcc_compile
-}
-```
-
-### Fallback strategy (critical)
-
-Fallback must happen inside generated C, not by bouncing back to R
-wrappers repeatedly.
-
-Policy: when lowering encounters `.Internal`, `.External`, or
-`.Primitive`-style nodes, prefer emitting `Rf_lang*` + `Rf_eval` calls
-(e.g. `Rf_lang3`) so R’s own primitive/internal implementation executes,
-rather than re-implementing those semantics in generated C.
-
-Pattern:
+For example, `sum(x[i:(i+n-1)] * weights)` compiles to a single loop:
 
 ``` c
-SEXP tcc_quick_fallback_call(SEXP rho, SEXP sym, SEXP a, SEXP b) {
-    SEXP call = PROTECT(Rf_lang3(sym, a, b));
-    SEXP out  = Rf_eval(call, rho);
-    UNPROTECT(1);
-    return out;
-}
+for (k = 0; k < len; ++k) acc += p_x[(i-1)+k] * p_weights[k];
 ```
 
-Use this only for unsupported subexpressions. Keep hot loops in direct
-C.
+No slice array is allocated, no product array is allocated. The
+composition `reduce(binary(vec_slice, var))` is resolved entirely by
+recursive element access.
 
-When new C helper functions are emitted and referenced by TCC-generated
-code, add host symbol registration in `RC_libtcc_add_host_symbols()`
-(macOS/Windows requirement).
+Correspondence with SAC:
 
-### R API symbol policy using `.sync/API.csv`
+| SAC concept                | Our implementation                |
+|----------------------------|-----------------------------------|
+| Single assignment scoping  | R’s functional semantics (free)   |
+| `with` genarray/modarray   | `vec_alloc` + `for`/`vec_set`     |
+| ψ-reduction (condensation) | `tccq_cg_vec_elem` recursion      |
+| `sel(v, A)` / `A[v]`       | `vec_get`, `mat_get`              |
+| `take`/`drop` (subarray)   | `vec_slice` (range view)          |
+| Element-wise `Op(A, B)`    | `binary` with shape=“vector”      |
+| `fold(fun, neutral)`       | `reduce` / `reduce_expr`          |
+| No intermediate arrays     | Slices are views, not allocations |
 
-Use `.sync/API.csv` as an allowlist source for C API symbols used by
-codegen.
+### Current state
 
-- Build a small parser in `tools/` that extracts permitted function
-  names.
-- Reject codegen that emits non-allowlisted API symbols unless
-  explicitly approved.
-- Prefer stable wrappers (`Rf_*`) in emitted code where available.
+- [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
+  API is exported and working.
+- Declaration parsing (`R/tcc_quick_declare.R`), codetools-style walker
+  (`R/tcc_quick_walk.R`), lowering (`R/tcc_quick_lower.R`), codegen
+  (`R/tcc_quick_codegen.R`), and caching (`R/tcc_quick_cache.R`) are all
+  implemented.
+- IR node constructors are in `R/tcc_ir.R`; R→C function registry in
+  `R/tcc_ir_registry.R` (39 entries covering math.h and Rmath.h).
+- Registry-driven dispatch: the lowerer checks `tcc_ir_c_api_registry()`
+  for any function call and emits `call1` (arity-1) or `call2` (arity-2)
+  IR nodes. Adding a new math function requires one registry entry, no
+  dispatcher or codegen changes.
+- Scalar lowering/codegen: arithmetic, comparisons, logical ops,
+  `if`/`ifelse`, unary math, casts, `stop`.
+- Vector operations: `vec_alloc`, `vec_get`/`vec_set`, `vec_slice`
+  (range view `x[a:b]`), `vec_rewrite` (element-wise in-place
+  reassignment), element-wise binary/unary on vectors, `rev`,
+  `pmin`/`pmax`, and `raw` vectors (`raw(n)`, `as.raw`,
+  `type(... = raw(...))`).
+- Typed mapping subset: `sapply(x, FUN)` for supported symbol `FUN`;
+  `apply(X, MARGIN, FUN)` for matrix `X`, literal `MARGIN` in `{1,2}`,
+  and `FUN` in `{sum, mean}` (native row/col reducers for direct
+  matrix-variable inputs, delegated fallback otherwise).
+- Reductions: `reduce` (named variable), `reduce_expr` (arbitrary vector
+  expression — the condensation path), `which_reduce`, `any`/`all`
+  (short-circuit).
+- Native stats reducers: `mean`, `sd`, `median`, `quantile` (scalar and
+  vector `probs`), including literal `na.rm = TRUE/FALSE` handling.
+- Cumulative operations: `cumsum`, `cumprod`, `cummax`, `cummin`
+  (sequential scan, not condensable).
+- Matrix: `mat_alloc`, `mat_get`, `mat_set`, `nrow`, `ncol`.
+- Native matrix row/col reducers: `rowSums`, `colSums`, `rowMeans`,
+  `colMeans` (including literal `na.rm`).
+- Multidimensional declaration space: rank-3+ types are parsed/tracked
+  as `array` shape but currently reserved (fallback in `soft/auto`, hard
+  error in `hard`).
+- BLAS-backed matrix products: `%*%`, `crossprod`, `tcrossprod` lower to
+  `matmul` and codegen to `F77_CALL(dgemm)` via `R_ext/BLAS.h`.
+- LAPACK-backed linear solve: direct `solve(A, b)` / `solve(A, B)`
+  lowers to `solve_lin` and codegen to `F77_CALL(dgesv)`.
+- Windows BLAS linkage note: when `matmul` is present,
+  `tcc_quick_compile()` links `Rblas` explicitly (in addition to `R`)
+  because `dgemm` often resolves from `Rblas.dll`.
+- Debug diagnostics: `tcc_quick(..., debug = TRUE)` prints compile
+  diagnostics including OS, `has_matmul`, linked libraries, and library
+  paths.
+- Control flow: `for` (seq_along/seq_len/seq_range), `while`, `repeat`,
+  [`break`](https://rdrr.io/r/base/Control.html),
+  [`next`](https://rdrr.io/r/base/Control.html), `if`/`if-else`
+  statements.
+- Boundary detection (`.Call`, `.C`, `.External`, `.Internal`,
+  `.Primitive`) and fallback policy (`auto`/`soft`/`hard`; aliases
+  `always`/`never`).
+- Delegated evaluation environment: `rf_call` evaluates in wrapper call
+  environment
+  ([`environment()`](https://rdrr.io/r/base/environment.html)), not
+  fixed `R_GlobalEnv`.
+- IR validation pass: hard mode rejects any `rf_call` path; malformed IR
+  nodes fail fast.
+- ALTREP-safe codegen: read-only input parameters use
+  `REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` pointer
+  qualifiers. Parameters that are mutated (targeted by
+  `vec_set`/`mat_set`/`vec_rewrite`) are `Rf_duplicate()`d before
+  coercion to avoid corrupting the caller’s objects. Mutation tracking
+  is handled by `tccq_scope_mark_mutated()` in the lowerer and
+  propagated as `ir$mutated_params`.
+- Capability table helpers are available in `R/tcc_ir_registry.R`
+  (`tcc_rapi_table()`, `tcc_rapi_has()`, `tcc_rapi_summary()`,
+  `tcc_quick_rf_call_allowlist()`, `tcc_quick_rf_call_quiet()`).
+- Tests: `test_tcc_quick_scalar.R` (11), `test_tcc_quick_vector.R` (23),
+  `test_tcc_quick_matrix.R` (18), `test_tcc_quick_control.R` (6),
+  `test_tcc_quick_fallback.R` (14), `test_tcc_quick_ops.R` (30). Full
+  package suite currently runs 350 tests.
 
-This reduces accidental dependency on internal/unstable entry points.
+### Remaining work
 
-### IR sketch
+- SSA conversion (Phase 2 in `docs/ir_design.md`): Phi/Upsilon form for
+  scalar values, abstract heaps, optimization passes.
+- SAC-inspired array primitives not yet implemented: `reshape`,
+  `rotate`, `take`, `drop`, `cat`, `transpose`, `where`.
+- Full capability-gated enforcement across all dynamic call sites
+  (beyond `rf_call`) is still future work.
+- Dimension-independent operations (SAC’s `with`-loops over
+  shape-polymorphic arrays) are future work.
 
-Keep IR minimal and typed:
+### API hardening review guardrails (architecture consistency)
 
-``` r
-list(
-    tag = "for",
-    var = "i",
-    start = list(tag = "const_i32", value = 1L),
-    stop = list(tag = "len", x = "a"),
-    body = list(
-        list(tag = "assign_index",
-                 target = "ab",
-                 index = list(tag = "sub", a = "i", b = 1L),
-                 value = list(tag = "add", a = list(tag = "index", x = "ab", i = "i"), b = "tmp"))
-    )
-)
-```
+When working on `tcc_quick` hardening, treat these as required checks:
 
-IR must carry `ctype`, `r_sexp_type`, and length metadata where known.
+- Prefer explicit contracts over heuristics for delegated calls
+  (`rf_call`): mode, shape, and length expectations must be declared and
+  enforced.
+- Avoid README-shaped implementations: do not special-case examples if a
+  generic lowering/codegen rule is possible.
+- Reject run-away slop in tests: add regression tests that validate
+  contract boundaries (type/shape/mode), not only happy-path values.
+- Keep semantics aligned across native and delegated paths (especially
+  reductions, `na.rm`, and logical/integer/double mode behavior).
+- Keep IR state explicit: no hidden state transitions; node
+  `mode`/`shape`/length assumptions should be representable and
+  verifiable.
+- Any fallback or hard rejection must have actionable, deterministic
+  diagnostics tied to policy and capability tables.
+
+### Fallback strategy
+
+In `soft`/`auto`, fallback happens inside generated C via `Rf_lang*` +
+`Rf_eval`, not by bouncing back to R. In `hard`, any `rf_call` in IR is
+rejected before codegen. Any new C helper referenced by TCC-generated
+code must be added to `RC_libtcc_add_host_symbols()` (macOS/Windows
+requirement).
 
 ### Generated C style
 
-Generated C should:
-
-- be explicit with `PROTECT`/`UNPROTECT` counts;
-- coerce once at function boundary when needed;
-- hoist `LENGTH()` outside loops;
-- use raw pointers (`REAL()`, `INTEGER()`, `LOGICAL()`) in hot loops;
-- emit informative `Rf_error` messages for shape/type mismatch.
-
-### Milestones
-
-1.  Parse declarations + validate AST eligibility.
-2.  Lower arithmetic/index loops to IR.
-3.  Emit C for scalar + double vector kernels.
-4.  Add selective fallback nodes with `Rf_lang*`/`Rf_eval`.
-5.  Add caching and invalidation.
-6.  Add docs/demo in README and tinytests for parity vs source R.
-
-### Current implementation progress (rjit branch snapshot)
-
-Status as of this branch:
-
-- [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
-  public API exists and is exported.
-- Declaration parsing is implemented in `R/tcc_quick_declare.R`.
-- Scalar lowering/codegen is implemented for arithmetic, comparisons,
-  logical ops, `if`/`ifelse`, and selected unary math calls.
-- Boundary detection for `.Call`, `.C`, `.External`, `.Internal`,
-  `.Primitive` is implemented.
-- Fallback policy is implemented for out-of-subset expressions, with
-  `fallback = auto|always|never` behavior.
-- A generic nested-loop kernel path exists in `R/tcc_quick_lower.R` +
-  `R/tcc_quick_codegen.R` and now supports dynamic loop depth
-  (non-hardcoded loop nesting).
-- tinytests exist in `inst/tinytest/test_tcc_quick_basic.R`, including
-  convolution parity.
-- README benchmark includes baseline R, `quickr`, `tcc_quick`, and
-  manual C FFI convolution path.
-
-Remaining gaps vs long-term target:
-
-- Lowering is still partly pattern-driven for kernel forms; it is not
-  yet a full statement-level compiler for arbitrary loop/branch
-  combinations.
-- IR is still ad-hoc lists; no dedicated `tcc_quick_ir.R` typed node
-  constructors/validators yet.
-- No bytecode-assisted debug lowering yet.
-- No centralized allowlist enforcement step for emitted R API symbols
-  yet.
-
-### Codetools-style structural improvements (next refactor target)
-
-Use `.sync/codetools/R/codetools.R` and
-`.sync/codetools/noweb/codetools.nw` as architectural inspiration.
-
-Recommended refactor pattern:
-
-1.  Build a generic walker factory (handler dispatch + call fallback +
-    leaf handler), similar in spirit to codetools
-    `walkCode`/`makeCodeWalker`.
-2.  Split lowering into independent passes instead of monolithic pattern
-    checks:
-    - declaration/scope collection,
-    - control-flow normalization,
-    - type+shape inference,
-    - boundary annotation,
-    - IR construction.
-3.  Replace kernel-specific matching with statement handlers (`{`, `<-`,
-    `for`, `while`, `repeat`, `if`, `ifelse`, `[`, `[<-`, calls).
-4.  Represent loops in uniform IR (`for` with iterator metadata and body
-    list), allowing arbitrary nesting depth without special cases.
-5.  Add pass-local context objects (environment, loop stack, symbol
-    table) instead of free-form recursion state.
-6.  Add verifier pass before codegen (required fields, types, ownership,
-    known symbol classes).
-7.  Keep fallback edges explicit in IR (e.g. `tag = "fallback_eval"`) so
-    codegen is straightforward and auditable.
-
-Suggested near-term file split:
-
-- `R/tcc_quick_walk.R` (generic walker + dispatcher)
-- `R/tcc_quick_normalize.R` (surface AST normalization)
-- `R/tcc_quick_typecheck.R` (typed annotations)
-- `R/tcc_quick_ir.R` (constructors/validators)
-- `R/tcc_quick_lower_stmt.R` (statement-level lowering)
-- `R/tcc_quick_lower_expr.R` (expression-level lowering)
-- `R/tcc_quick_codegen_*.R` split by IR families (scalar, loops,
-  fallback)
-
-### Test requirements
-
-Add tinytests for:
-
-- parity on representative kernels (sum/product/convolution-like loop);
-- fallback activation on unsupported calls;
-- error messages for missing or inconsistent
-  [`declare()`](https://rdrr.io/r/base/declare.html);
-- serialization/recompile behavior of compiled quick functions;
-- OS guards for platform-specific library behavior.
-
-### Benchmark requirements
-
-Use `bench::mark()` with warmup and report:
-
-- baseline R function,
-- [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
-  compiled function,
-- existing
-  [`quickr::quick()`](https://rdrr.io/pkg/quickr/man/quick.html) when
-  available (optional comparison),
-- optional hand-written `.Call` reference.
-
-Keep benchmark scripts under `tools/` and avoid heavy runtime in CRAN
-checks.
+Explicit `PROTECT`/`UNPROTECT` counts; coerce once at function boundary;
+hoist `LENGTH()` outside loops; use
+`REAL_RO()`/`INTEGER_RO()`/`LOGICAL_RO()` with `const` for read-only
+inputs, `REAL()`/`INTEGER()`/`LOGICAL()` only for outputs and mutated
+inputs; `Rf_duplicate()` mutated input parameters before coercion;
+conditional `#include <Rmath.h>` when registry entries require it; emit
+informative `Rf_error` messages for shape/type mismatch.
 
 ## README and DOCS Style
 

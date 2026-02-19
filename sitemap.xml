@@ -53,6 +53,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_map_c_type_to_ffi.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_null_ptr.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_options.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_path.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_prefix.html</loc></url>
@@ -63,6 +64,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_set.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_utils.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick_ops.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_cstring.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_f32.html</loc></url>
@@ -79,6 +81,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_recompile.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_run_cli.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_set_options.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_source.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_state.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.html</loc></url>

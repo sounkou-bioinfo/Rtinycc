@@ -2,6 +2,9 @@
 
 ## Rtinycc 0.0.3.9000 (development version)
 
+- `tcc_quick` for transpiling some `R` functions to `C` and compile them
+  in memory
+
 - Add variadic FFI support in
   [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
   with both legacy typed-tail mode (`variadic = TRUE`, `varargs`) and

@@ -36,6 +36,7 @@
 
 <p>This file is the minimum guidance for agentic work on Rtinycc. Read relevant code before changes, keep edits small and focused, and update tests/docs when you change behavior.</p>
 <p>Agents must read actual implementations before guessing. If you need third-party code or headers, check the <code>.sync</code> directory for local copies of libraries we depend on so you can read them directly instead of assuming behavior. We also generate <code>&lt;package&gt;.llm.txt</code> files for R package docs; for example, treesitter.c docs can be found in <code>treesitter.c.llm.txt</code>.</p>
+<p>The <code>.sync</code> directory also contains reference implementations that inform the <code>tcc_quick</code> compiler design: <code>codetools</code> (walker/handler), <code>quickr</code> (handler registry, scope tracking), <code>spy</code> (typed C AST, codegen), and <code>Stdlib</code> (the SaC standard library from the SacBase project — array primitives, reductions, transforms, and with-loop patterns that inform our condensation/ψ-reduction architecture).</p>
 <div class="section level2">
 <h2 id="what-this-package-does">What this package does<a class="anchor" aria-label="anchor" href="#what-this-package-does"></a></h2>
 <p>Rtinycc embeds TinyCC and exposes both CLI and libtcc APIs to R. It provides a Bun-style FFI that generates SEXP wrappers at runtime, compiles them with TinyCC, and calls them via <code>.Call</code>.</p>
@@ -61,6 +62,49 @@
 <li>If the package is not installed locally, load it for interactive/dev checks with <code>devtools::load_all()</code>.</li>
 <li>Development plumbing: run <code>air format</code> after edits, use <code>make install</code> for local installs, <code>make check</code> for CRAN-style checks, and <code>make rdm</code> to regenerate README. Always add or update tinytests for behavior changes.</li>
 </ul></div>
+<div class="section level2">
+<h2 id="maintenance-helpers-dev-only">Maintenance helpers (dev-only)<a class="anchor" aria-label="anchor" href="#maintenance-helpers-dev-only"></a></h2>
+<p>Use these helper functions in development sessions to regenerate coverage snapshots and delegated fallback contract tables. Keep them out of user-facing README content.</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">rtinycc_file_coverage</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">path</span> <span class="op">=</span> <span class="st">"."</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">cov</span> <span class="op">&lt;-</span> <span class="fu">covr</span><span class="fu">::</span><span class="fu">package_coverage</span><span class="op">(</span><span class="va">path</span><span class="op">)</span></span>
+<span>  <span class="va">df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="va">cov</span><span class="op">)</span></span>
+<span>  <span class="va">df</span><span class="op">$</span><span class="va">key</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
+<span>    <span class="va">df</span><span class="op">$</span><span class="va">first_line</span>, <span class="va">df</span><span class="op">$</span><span class="va">last_line</span>, <span class="va">df</span><span class="op">$</span><span class="va">first_column</span>, <span class="va">df</span><span class="op">$</span><span class="va">last_column</span>, sep <span class="op">=</span> <span class="st">":"</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="va">expr</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/aggregate.html" class="external-link">aggregate</a></span><span class="op">(</span><span class="va">value</span> <span class="op">~</span> <span class="va">filename</span> <span class="op">+</span> <span class="va">key</span>, data <span class="op">=</span> <span class="va">df</span>, FUN <span class="op">=</span> <span class="va">max</span><span class="op">)</span></span>
+<span>  <span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/aggregate.html" class="external-link">aggregate</a></span><span class="op">(</span></span>
+<span>    <span class="va">value</span> <span class="op">~</span> <span class="va">filename</span>,</span>
+<span>    data <span class="op">=</span> <span class="va">expr</span>,</span>
+<span>    FUN <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fl">100</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">x</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">out</span><span class="op">)</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"coverage_pct"</span></span>
+<span>  <span class="va">out</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/order.html" class="external-link">order</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">coverage_pct</span>, <span class="va">out</span><span class="op">$</span><span class="va">filename</span><span class="op">)</span>, <span class="op">]</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">rtinycc_fallback_contracts_table</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">allow</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">tcc_quick_rf_call_allowlist</span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">contracts</span> <span class="op">&lt;-</span> <span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">tcc_quick_rf_call_contracts</span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="va">quiet</span> <span class="op">&lt;-</span> <span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">tcc_quick_rf_call_quiet</span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    function_name <span class="op">=</span> <span class="va">allow</span>,</span>
+<span>    has_contract <span class="op">=</span> <span class="va">allow</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">contracts</span><span class="op">)</span>,</span>
+<span>    mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span></span>
+<span>      <span class="va">allow</span>,</span>
+<span>      <span class="kw">function</span><span class="op">(</span><span class="va">fn</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">contracts</span><span class="op">[[</span><span class="va">fn</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="cn">NA_character_</span> <span class="kw">else</span> <span class="va">contracts</span><span class="op">[[</span><span class="va">fn</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">mode</span>,</span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
+<span>    <span class="op">)</span>,</span>
+<span>    shape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span></span>
+<span>      <span class="va">allow</span>,</span>
+<span>      <span class="kw">function</span><span class="op">(</span><span class="va">fn</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">contracts</span><span class="op">[[</span><span class="va">fn</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="cn">NA_character_</span> <span class="kw">else</span> <span class="va">contracts</span><span class="op">[[</span><span class="va">fn</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">shape</span>,</span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
+<span>    <span class="op">)</span>,</span>
+<span>    quiet <span class="op">=</span> <span class="va">allow</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">quiet</span>,</span>
+<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+</div>
 <div class="section level2">
 <h2 id="editing-rules">Editing rules<a class="anchor" aria-label="anchor" href="#editing-rules"></a></h2>
 <ul><li>Use roxygen2 for exported functions and always run <code>make rd</code> after edits.</li>
@@ -146,228 +190,123 @@
 </li>
 <li>C API: <code>src/RC_libtcc.c</code>, <code>src/init.c</code>
 </li>
+<li>tcc_quick pipeline: <code>R/tcc_quick.R</code> (API), <code>R/tcc_quick_declare.R</code> (declarations), <code>R/tcc_quick_walk.R</code> (codetools-style walker), <code>R/tcc_quick_lower.R</code> (AST → IR), <code>R/tcc_quick_codegen.R</code> (IR → C), <code>R/tcc_quick_cache.R</code> (digest cache)</li>
+<li>IR: <code>R/tcc_ir.R</code> (node constructors), <code>R/tcc_ir_registry.R</code> (R→C function mapping)</li>
+<li>IR design: <code>docs/ir_design.md</code> (authoritative design doc, SSA roadmap)</li>
+<li>R2C architecture plan: <code>docs/r2c_architecture_plan.md</code> (determinism, fallback policy, R API mapping)</li>
 <li>Tests: <code>inst/tinytest/</code>
 </li>
 <li>Docs: <code>README.Rmd</code>, <code>NEWS.md</code>
 </li>
 </ul></div>
 <div class="section level2">
-<h2 id="roadmap-declare-based-r-c-jit-quickr-like">Roadmap: declare-based R-&gt;C JIT (quickr-like)<a class="anchor" aria-label="anchor" href="#roadmap-declare-based-r-c-jit-quickr-like"></a></h2>
-<p>This is a planned extension: compile a strict subset of R functions to C via TinyCC, with optional fallback to R C API calls when an operation is not yet lowered directly.</p>
+<h2 id="roadmap-declare-based-rc-jit-tcc_quick">Roadmap: declare-based R→C JIT (<code>tcc_quick</code>)<a class="anchor" aria-label="anchor" href="#roadmap-declare-based-rc-jit-tcc_quick"></a></h2>
+<p><code><a href="reference/tcc_quick.html">tcc_quick()</a></code> compiles a <code><a href="https://rdrr.io/r/base/declare.html" class="external-link">declare()</a></code>-annotated R subset to C via TinyCC, with optional fallback to R C API calls when an operation is not yet lowered directly. See <code>docs/ir_design.md</code> for the full IR design and SSA roadmap.</p>
 <div class="section level3">
-<h3 id="goal-and-positioning">Goal and positioning<a class="anchor" aria-label="anchor" href="#goal-and-positioning"></a></h3>
-<p>We do not target full R semantics. We target a high-value subset for numeric code with explicit <code>declare(type(...))</code> contracts, then JIT to <code>.Call</code> wrappers through existing Rtinycc infrastructure.</p>
-<p>Primary advantage over prior art in <code>.sync/quickr</code> and <code>.sync/r2c</code>: we already own the JIT + host-symbol pipeline (<code><a href="reference/tcc_compile_string.html">tcc_compile_string()</a></code>, <code><a href="reference/tcc_relocate.html">tcc_relocate()</a></code>, <code><a href="reference/tcc_get_symbol.html">tcc_get_symbol()</a></code>, <code>make_callable()</code>), so we can interleave:</p>
-<ol style="list-style-type: decimal"><li>direct lowered C for hot arithmetic/loops,</li>
-<li>selective fallback to C API calls (<code>Rf_install</code>, <code>Rf_lang*</code>, <code>Rf_eval</code>) for unsupported nodes,</li>
-<li>transparent caching/recompile behavior already used by <code>tcc_compiled</code>.</li>
-</ol></div>
-<div class="section level3">
-<h3 id="mvp-subset-phase-1">MVP subset (phase 1)<a class="anchor" aria-label="anchor" href="#mvp-subset-phase-1"></a></h3>
-<p>Only compile functions that satisfy all constraints below:</p>
-<ul><li>starts with <code>declare(type(...))</code> for all arguments;</li>
-<li>scalar/vector <code>integer</code>, <code>double</code>, <code>logical</code> only;</li>
-<li>ops: <code>+ - * /</code>, comparisons, simple <code>if</code>, <code>for (i in seq_len(n))</code>, <code><a href="https://rdrr.io/r/base/length.html" class="external-link">length()</a></code>;</li>
-<li>indexing: <code>x[i]</code> and assignment <code>x[i] &lt;- expr</code>;</li>
-<li>return atomic vector or scalar;</li>
-<li>no promises, NSE, S3/S4 dispatch, environments, or ALTREP-sensitive behavior.</li>
-</ul><p>If any AST node is outside subset, emit a fallback stub in generated C that evaluates the original call via <code>Rf_lang*</code> + <code>Rf_eval</code>.</p>
+<h3 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a></h3>
+<p>The compiler pipeline draws on four reference implementations in <code>.sync/</code>:</p>
+<ul><li>
+<strong>codetools</strong>: generic <code>walkCode</code>/<code>makeCodeWalker</code> dispatcher — adopted in <code>R/tcc_quick_walk.R</code>.</li>
+<li>
+<strong>quickr</strong>: handler registry environment, scope/variable tracking — adopted in <code>R/tcc_ir_registry.R</code> and lowering dispatch.</li>
+<li>
+<strong>spy</strong>: typed C AST with precedence, <code>emit()</code> pattern — informs codegen style.</li>
+<li>
+<strong>SaC Stdlib</strong> (SacBase/Stdlib): the standard library for the Single Assignment C language. Provides dimension-independent array primitives (<code>dim</code>, <code>shape</code>, <code>sel</code>, <code>reshape</code>, <code>take</code>, <code>drop</code>, <code>rotate</code>, <code>cat</code>), element-wise arithmetic (<code>ArrayArith</code>), reductions (<code>ArrayReduce</code>: <code>sum</code>, <code>prod</code>, <code>minval</code>, <code>maxval</code> via <code>fold</code>), and transforms (<code>ArrayTransform</code>: <code>transpose</code>, <code>where</code>, <code>mask</code>). All built on with-loops (SAC’s genarray/modarray comprehensions) and ψ-reduction (condensation) — the technique of fusing consecutive array operations into single loops that never materialize intermediate arrays.</li>
+</ul><p>The pipeline: <code>R AST → declare parse → walk + lower → IR → codegen → TinyCC</code>.</p>
 </div>
 <div class="section level3">
-<h3 id="compiler-pipeline">Compiler pipeline<a class="anchor" aria-label="anchor" href="#compiler-pipeline"></a></h3>
-<p>Implement a staged pipeline in R:</p>
-<ol style="list-style-type: decimal"><li>
-<code>capture</code>: obtain function AST and declaration metadata.</li>
-<li>
-<code>normalize</code>: canonicalize loops and indexing forms.</li>
-<li>
-<code>typecheck</code>: infer/check static type + shape against <code><a href="https://rdrr.io/r/base/declare.html" class="external-link">declare()</a></code>.</li>
-<li>
-<code>lower</code>: convert AST to a compact typed IR.</li>
-<li>
-<code>codegen</code>: emit C from IR, plus fallback branches.</li>
-<li>
-<code>compile</code>: compile with current <code><a href="reference/tcc_ffi.html">tcc_ffi()</a></code> path.</li>
-<li>
-<code>cache</code>: hash body + decls + platform and reuse compiled callable.</li>
-</ol></div>
+<h3 id="condensation--ψ-reduction-critical-design-principle">Condensation / ψ-reduction (critical design principle)<a class="anchor" aria-label="anchor" href="#condensation--%CF%88-reduction-critical-design-principle"></a></h3>
+<p>The core codegen mechanism is <code>tccq_cg_vec_elem(node, idx_var)</code>, which recursively defines the k-th element of any vector expression tree in terms of its children’s k-th elements. This IS ψ-reduction (Mullin 1988) / condensation (Schmittgen 1986) as described in Scholz’s SAC paper: consecutive array operations are fused into a single loop body that computes each element without materializing intermediates.</p>
+<p>For example, <code>sum(x[i:(i+n-1)] * weights)</code> compiles to a single loop:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span>k <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> k <span class="op">&lt;</span> len<span class="op">;</span> <span class="op">++</span>k<span class="op">)</span> acc <span class="op">+=</span> p_x<span class="op">[(</span>i<span class="op">-</span><span class="dv">1</span><span class="op">)+</span>k<span class="op">]</span> <span class="op">*</span> p_weights<span class="op">[</span>k<span class="op">];</span></span></code></pre></div>
+<p>No slice array is allocated, no product array is allocated. The composition <code>reduce(binary(vec_slice, var))</code> is resolved entirely by recursive element access.</p>
+<p>Correspondence with SAC:</p>
+<table class="table"><thead><tr class="header"><th>SAC concept</th>
+<th>Our implementation</th>
+</tr></thead><tbody><tr class="odd"><td>Single assignment scoping</td>
+<td>R’s functional semantics (free)</td>
+</tr><tr class="even"><td>
+<code>with</code> genarray/modarray</td>
+<td>
+<code>vec_alloc</code> + <code>for</code>/<code>vec_set</code>
+</td>
+</tr><tr class="odd"><td>ψ-reduction (condensation)</td>
+<td>
+<code>tccq_cg_vec_elem</code> recursion</td>
+</tr><tr class="even"><td>
+<code>sel(v, A)</code> / <code>A[v]</code>
+</td>
+<td>
+<code>vec_get</code>, <code>mat_get</code>
+</td>
+</tr><tr class="odd"><td>
+<code>take</code>/<code>drop</code> (subarray)</td>
+<td>
+<code>vec_slice</code> (range view)</td>
+</tr><tr class="even"><td>Element-wise <code>Op(A, B)</code>
+</td>
+<td>
+<code>binary</code> with shape=“vector”</td>
+</tr><tr class="odd"><td><code>fold(fun, neutral)</code></td>
+<td>
+<code>reduce</code> / <code>reduce_expr</code>
+</td>
+</tr><tr class="even"><td>No intermediate arrays</td>
+<td>Slices are views, not allocations</td>
+</tr></tbody></table></div>
 <div class="section level3">
-<h3 id="bytecode-assisted-lowering-optional">Bytecode-assisted lowering (optional)<a class="anchor" aria-label="anchor" href="#bytecode-assisted-lowering-optional"></a></h3>
-<p>Using R bytecode as an intermediate can help, but should remain optional in phase 1.</p>
-<p>Why it is attractive:</p>
-<ul><li>normalizes many surface-level AST forms;</li>
-<li>gives stable control-flow structure (<code>GOTO</code>, <code>BRIFNOT</code>, etc.);</li>
-<li>mirrors prior compiler work in <code>r-svn</code> and PRL-PRG projects.</li>
-</ul><p>Why we should not make it mandatory initially:</p>
-<ul><li>R bytecode instructions are numerous and some dispatch back to the AST interpreter;</li>
-<li>bytecode has stack-machine semantics and constant-pool indirection, which is harder to map directly to typed C loops than a small custom IR;</li>
-<li>reproducing exact bytecode behavior is a separate goal from fast subset lowering.</li>
-</ul><p>Recommended hybrid strategy:</p>
-<ol style="list-style-type: decimal"><li>Keep AST + <code><a href="https://rdrr.io/r/base/declare.html" class="external-link">declare()</a></code> as the primary lowering input for MVP.</li>
-<li>Add a debug mode that emits/disassembles bytecode (<code>compiler</code>/<code>rbytecode</code>) for diagnostics and parity checks.</li>
-<li>Optionally lower a restricted bytecode opcode subset (<code>LDCONST</code>, <code>GETVAR</code>, arithmetic ops, simple branches/loops) into <code>tcc_quick_ir</code> when it is cleaner than AST lowering.</li>
-<li>For unknown opcodes, fallback to generated <code>Rf_lang*</code> + <code>Rf_eval</code> calls rather than failing hard.</li>
-</ol><p>This gives the maintainability benefits of a small typed IR while still leveraging bytecode information where useful.</p>
-<p>Suggested new files:</p>
+<h3 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h3>
 <ul><li>
-<code>R/tcc_quick.R</code> (public user API, e.g. <code><a href="reference/tcc_quick.html">tcc_quick()</a></code>)</li>
-<li>
-<code>R/tcc_quick_declare.R</code> (parse <code>declare(type(...))</code>)</li>
-<li>
-<code>R/tcc_quick_ir.R</code> (IR node constructors and validators)</li>
-<li>
-<code>R/tcc_quick_lower.R</code> (AST -&gt; IR)</li>
-<li>
-<code>R/tcc_quick_codegen.R</code> (IR -&gt; C source)</li>
-<li>
-<code>R/tcc_quick_cache.R</code> (digest key + memo table)</li>
-<li><code>inst/tinytest/test_tcc_quick_basic.R</code></li>
+<code><a href="reference/tcc_quick.html">tcc_quick()</a></code> API is exported and working.</li>
+<li>Declaration parsing (<code>R/tcc_quick_declare.R</code>), codetools-style walker (<code>R/tcc_quick_walk.R</code>), lowering (<code>R/tcc_quick_lower.R</code>), codegen (<code>R/tcc_quick_codegen.R</code>), and caching (<code>R/tcc_quick_cache.R</code>) are all implemented.</li>
+<li>IR node constructors are in <code>R/tcc_ir.R</code>; R→C function registry in <code>R/tcc_ir_registry.R</code> (39 entries covering math.h and Rmath.h).</li>
+<li>Registry-driven dispatch: the lowerer checks <code>tcc_ir_c_api_registry()</code> for any function call and emits <code>call1</code> (arity-1) or <code>call2</code> (arity-2) IR nodes. Adding a new math function requires one registry entry, no dispatcher or codegen changes.</li>
+<li>Scalar lowering/codegen: arithmetic, comparisons, logical ops, <code>if</code>/<code>ifelse</code>, unary math, casts, <code>stop</code>.</li>
+<li>Vector operations: <code>vec_alloc</code>, <code>vec_get</code>/<code>vec_set</code>, <code>vec_slice</code> (range view <code>x[a:b]</code>), <code>vec_rewrite</code> (element-wise in-place reassignment), element-wise binary/unary on vectors, <code>rev</code>, <code>pmin</code>/<code>pmax</code>, and <code>raw</code> vectors (<code>raw(n)</code>, <code>as.raw</code>, <code>type(... = raw(...))</code>).</li>
+<li>Typed mapping subset: <code>sapply(x, FUN)</code> for supported symbol <code>FUN</code>; <code>apply(X, MARGIN, FUN)</code> for matrix <code>X</code>, literal <code>MARGIN</code> in <code>{1,2}</code>, and <code>FUN</code> in <code>{sum, mean}</code> (native row/col reducers for direct matrix-variable inputs, delegated fallback otherwise).</li>
+<li>Reductions: <code>reduce</code> (named variable), <code>reduce_expr</code> (arbitrary vector expression — the condensation path), <code>which_reduce</code>, <code>any</code>/<code>all</code> (short-circuit).</li>
+<li>Native stats reducers: <code>mean</code>, <code>sd</code>, <code>median</code>, <code>quantile</code> (scalar and vector <code>probs</code>), including literal <code>na.rm = TRUE/FALSE</code> handling.</li>
+<li>Cumulative operations: <code>cumsum</code>, <code>cumprod</code>, <code>cummax</code>, <code>cummin</code> (sequential scan, not condensable).</li>
+<li>Matrix: <code>mat_alloc</code>, <code>mat_get</code>, <code>mat_set</code>, <code>nrow</code>, <code>ncol</code>.</li>
+<li>Native matrix row/col reducers: <code>rowSums</code>, <code>colSums</code>, <code>rowMeans</code>, <code>colMeans</code> (including literal <code>na.rm</code>).</li>
+<li>Multidimensional declaration space: rank-3+ types are parsed/tracked as <code>array</code> shape but currently reserved (fallback in <code>soft/auto</code>, hard error in <code>hard</code>).</li>
+<li>BLAS-backed matrix products: <code>%*%</code>, <code>crossprod</code>, <code>tcrossprod</code> lower to <code>matmul</code> and codegen to <code>F77_CALL(dgemm)</code> via <code>R_ext/BLAS.h</code>.</li>
+<li>LAPACK-backed linear solve: direct <code>solve(A, b)</code> / <code>solve(A, B)</code> lowers to <code>solve_lin</code> and codegen to <code>F77_CALL(dgesv)</code>.</li>
+<li>Windows BLAS linkage note: when <code>matmul</code> is present, <code>tcc_quick_compile()</code> links <code>Rblas</code> explicitly (in addition to <code>R</code>) because <code>dgemm</code> often resolves from <code>Rblas.dll</code>.</li>
+<li>Debug diagnostics: <code>tcc_quick(..., debug = TRUE)</code> prints compile diagnostics including OS, <code>has_matmul</code>, linked libraries, and library paths.</li>
+<li>Control flow: <code>for</code> (seq_along/seq_len/seq_range), <code>while</code>, <code>repeat</code>, <code><a href="https://rdrr.io/r/base/Control.html" class="external-link">break</a></code>, <code><a href="https://rdrr.io/r/base/Control.html" class="external-link">next</a></code>, <code>if</code>/<code>if-else</code> statements.</li>
+<li>Boundary detection (<code>.Call</code>, <code>.C</code>, <code>.External</code>, <code>.Internal</code>, <code>.Primitive</code>) and fallback policy (<code>auto</code>/<code>soft</code>/<code>hard</code>; aliases <code>always</code>/<code>never</code>).</li>
+<li>Delegated evaluation environment: <code>rf_call</code> evaluates in wrapper call environment (<code><a href="https://rdrr.io/r/base/environment.html" class="external-link">environment()</a></code>), not fixed <code>R_GlobalEnv</code>.</li>
+<li>IR validation pass: hard mode rejects any <code>rf_call</code> path; malformed IR nodes fail fast.</li>
+<li>ALTREP-safe codegen: read-only input parameters use <code>REAL_RO()</code>/<code>INTEGER_RO()</code>/<code>LOGICAL_RO()</code> with <code>const</code> pointer qualifiers. Parameters that are mutated (targeted by <code>vec_set</code>/<code>mat_set</code>/<code>vec_rewrite</code>) are <code>Rf_duplicate()</code>d before coercion to avoid corrupting the caller’s objects. Mutation tracking is handled by <code>tccq_scope_mark_mutated()</code> in the lowerer and propagated as <code>ir$mutated_params</code>.</li>
+<li>Capability table helpers are available in <code>R/tcc_ir_registry.R</code> (<code>tcc_rapi_table()</code>, <code>tcc_rapi_has()</code>, <code>tcc_rapi_summary()</code>, <code>tcc_quick_rf_call_allowlist()</code>, <code>tcc_quick_rf_call_quiet()</code>).</li>
+<li>Tests: <code>test_tcc_quick_scalar.R</code> (11), <code>test_tcc_quick_vector.R</code> (23), <code>test_tcc_quick_matrix.R</code> (18), <code>test_tcc_quick_control.R</code> (6), <code>test_tcc_quick_fallback.R</code> (14), <code>test_tcc_quick_ops.R</code> (30). Full package suite currently runs 350 tests.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="api-shape">API shape<a class="anchor" aria-label="anchor" href="#api-shape"></a></h3>
-<p>Expose a narrow API first:</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">tcc_quick</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fn</span>, <span class="va">fallback</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"always"</span>, <span class="st">"never"</span><span class="op">)</span>, <span class="va">debug</span> <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">fallback</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/match.arg.html" class="external-link">match.arg</a></span><span class="op">(</span><span class="va">fallback</span><span class="op">)</span></span>
-<span>    <span class="co"># parse declare(), lower subset, generate C, compile to callable</span></span>
-<span>    <span class="co"># return R closure with same formal args as fn</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>and internal compile entrypoint:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">tcc_quick_compile</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fn</span>, <span class="va">decl</span>, <span class="va">fallback</span>, <span class="va">debug</span> <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">ir</span> <span class="op">&lt;-</span> <span class="fu">tcc_quick_lower</span><span class="op">(</span><span class="va">fn</span>, <span class="va">decl</span><span class="op">)</span></span>
-<span>    <span class="va">c_src</span> <span class="op">&lt;-</span> <span class="fu">tcc_quick_codegen</span><span class="op">(</span><span class="va">ir</span>, fallback <span class="op">=</span> <span class="va">fallback</span><span class="op">)</span></span>
-<span>    <span class="co"># compile via existing tcc_ffi/tcc_source/tcc_bind/tcc_compile</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-</div>
+<h3 id="remaining-work">Remaining work<a class="anchor" aria-label="anchor" href="#remaining-work"></a></h3>
+<ul><li>SSA conversion (Phase 2 in <code>docs/ir_design.md</code>): Phi/Upsilon form for scalar values, abstract heaps, optimization passes.</li>
+<li>SAC-inspired array primitives not yet implemented: <code>reshape</code>, <code>rotate</code>, <code>take</code>, <code>drop</code>, <code>cat</code>, <code>transpose</code>, <code>where</code>.</li>
+<li>Full capability-gated enforcement across all dynamic call sites (beyond <code>rf_call</code>) is still future work.</li>
+<li>Dimension-independent operations (SAC’s <code>with</code>-loops over shape-polymorphic arrays) are future work.</li>
+</ul></div>
 <div class="section level3">
-<h3 id="fallback-strategy-critical">Fallback strategy (critical)<a class="anchor" aria-label="anchor" href="#fallback-strategy-critical"></a></h3>
-<p>Fallback must happen inside generated C, not by bouncing back to R wrappers repeatedly.</p>
-<p>Policy: when lowering encounters <code>.Internal</code>, <code>.External</code>, or <code>.Primitive</code>-style nodes, prefer emitting <code>Rf_lang*</code> + <code>Rf_eval</code> calls (e.g. <code>Rf_lang3</code>) so R’s own primitive/internal implementation executes, rather than re-implementing those semantics in generated C.</p>
-<p>Pattern:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>SEXP tcc_quick_fallback_call<span class="op">(</span>SEXP rho<span class="op">,</span> SEXP sym<span class="op">,</span> SEXP a<span class="op">,</span> SEXP b<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>    SEXP call <span class="op">=</span> PROTECT<span class="op">(</span>Rf_lang3<span class="op">(</span>sym<span class="op">,</span> a<span class="op">,</span> b<span class="op">));</span></span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>    SEXP out  <span class="op">=</span> Rf_eval<span class="op">(</span>call<span class="op">,</span> rho<span class="op">);</span></span>
-<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>    UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>Use this only for unsupported subexpressions. Keep hot loops in direct C.</p>
-<p>When new C helper functions are emitted and referenced by TCC-generated code, add host symbol registration in <code>RC_libtcc_add_host_symbols()</code> (macOS/Windows requirement).</p>
-</div>
+<h3 id="api-hardening-review-guardrails-architecture-consistency">API hardening review guardrails (architecture consistency)<a class="anchor" aria-label="anchor" href="#api-hardening-review-guardrails-architecture-consistency"></a></h3>
+<p>When working on <code>tcc_quick</code> hardening, treat these as required checks:</p>
+<ul><li>Prefer explicit contracts over heuristics for delegated calls (<code>rf_call</code>): mode, shape, and length expectations must be declared and enforced.</li>
+<li>Avoid README-shaped implementations: do not special-case examples if a generic lowering/codegen rule is possible.</li>
+<li>Reject run-away slop in tests: add regression tests that validate contract boundaries (type/shape/mode), not only happy-path values.</li>
+<li>Keep semantics aligned across native and delegated paths (especially reductions, <code>na.rm</code>, and logical/integer/double mode behavior).</li>
+<li>Keep IR state explicit: no hidden state transitions; node <code>mode</code>/<code>shape</code>/length assumptions should be representable and verifiable.</li>
+<li>Any fallback or hard rejection must have actionable, deterministic diagnostics tied to policy and capability tables.</li>
+</ul></div>
 <div class="section level3">
-<h3 id="r-api-symbol-policy-using-syncapicsv">R API symbol policy using <code>.sync/API.csv</code>
-<a class="anchor" aria-label="anchor" href="#r-api-symbol-policy-using-syncapicsv"></a></h3>
-<p>Use <code>.sync/API.csv</code> as an allowlist source for C API symbols used by codegen.</p>
-<ul><li>Build a small parser in <code>tools/</code> that extracts permitted function names.</li>
-<li>Reject codegen that emits non-allowlisted API symbols unless explicitly approved.</li>
-<li>Prefer stable wrappers (<code>Rf_*</code>) in emitted code where available.</li>
-</ul><p>This reduces accidental dependency on internal/unstable entry points.</p>
-</div>
-<div class="section level3">
-<h3 id="ir-sketch">IR sketch<a class="anchor" aria-label="anchor" href="#ir-sketch"></a></h3>
-<p>Keep IR minimal and typed:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    tag <span class="op">=</span> <span class="st">"for"</span>,</span>
-<span>    var <span class="op">=</span> <span class="st">"i"</span>,</span>
-<span>    start <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tag <span class="op">=</span> <span class="st">"const_i32"</span>, value <span class="op">=</span> <span class="fl">1L</span><span class="op">)</span>,</span>
-<span>    stop <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tag <span class="op">=</span> <span class="st">"len"</span>, x <span class="op">=</span> <span class="st">"a"</span><span class="op">)</span>,</span>
-<span>    body <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tag <span class="op">=</span> <span class="st">"assign_index"</span>,</span>
-<span>                 target <span class="op">=</span> <span class="st">"ab"</span>,</span>
-<span>                 index <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tag <span class="op">=</span> <span class="st">"sub"</span>, a <span class="op">=</span> <span class="st">"i"</span>, b <span class="op">=</span> <span class="fl">1L</span><span class="op">)</span>,</span>
-<span>                 value <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tag <span class="op">=</span> <span class="st">"add"</span>, a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tag <span class="op">=</span> <span class="st">"index"</span>, x <span class="op">=</span> <span class="st">"ab"</span>, i <span class="op">=</span> <span class="st">"i"</span><span class="op">)</span>, b <span class="op">=</span> <span class="st">"tmp"</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="op">)</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<p>IR must carry <code>ctype</code>, <code>r_sexp_type</code>, and length metadata where known.</p>
+<h3 id="fallback-strategy">Fallback strategy<a class="anchor" aria-label="anchor" href="#fallback-strategy"></a></h3>
+<p>In <code>soft</code>/<code>auto</code>, fallback happens inside generated C via <code>Rf_lang*</code> + <code>Rf_eval</code>, not by bouncing back to R. In <code>hard</code>, any <code>rf_call</code> in IR is rejected before codegen. Any new C helper referenced by TCC-generated code must be added to <code>RC_libtcc_add_host_symbols()</code> (macOS/Windows requirement).</p>
 </div>
 <div class="section level3">
 <h3 id="generated-c-style">Generated C style<a class="anchor" aria-label="anchor" href="#generated-c-style"></a></h3>
-<p>Generated C should:</p>
-<ul><li>be explicit with <code>PROTECT</code>/<code>UNPROTECT</code> counts;</li>
-<li>coerce once at function boundary when needed;</li>
-<li>hoist <code>LENGTH()</code> outside loops;</li>
-<li>use raw pointers (<code>REAL()</code>, <code>INTEGER()</code>, <code>LOGICAL()</code>) in hot loops;</li>
-<li>emit informative <code>Rf_error</code> messages for shape/type mismatch.</li>
-</ul></div>
-<div class="section level3">
-<h3 id="milestones">Milestones<a class="anchor" aria-label="anchor" href="#milestones"></a></h3>
-<ol style="list-style-type: decimal"><li>Parse declarations + validate AST eligibility.</li>
-<li>Lower arithmetic/index loops to IR.</li>
-<li>Emit C for scalar + double vector kernels.</li>
-<li>Add selective fallback nodes with <code>Rf_lang*</code>/<code>Rf_eval</code>.</li>
-<li>Add caching and invalidation.</li>
-<li>Add docs/demo in README and tinytests for parity vs source R.</li>
-</ol></div>
-<div class="section level3">
-<h3 id="current-implementation-progress-rjit-branch-snapshot">Current implementation progress (rjit branch snapshot)<a class="anchor" aria-label="anchor" href="#current-implementation-progress-rjit-branch-snapshot"></a></h3>
-<p>Status as of this branch:</p>
-<ul><li>
-<code><a href="reference/tcc_quick.html">tcc_quick()</a></code> public API exists and is exported.</li>
-<li>Declaration parsing is implemented in <code>R/tcc_quick_declare.R</code>.</li>
-<li>Scalar lowering/codegen is implemented for arithmetic, comparisons, logical ops, <code>if</code>/<code>ifelse</code>, and selected unary math calls.</li>
-<li>Boundary detection for <code>.Call</code>, <code>.C</code>, <code>.External</code>, <code>.Internal</code>, <code>.Primitive</code> is implemented.</li>
-<li>Fallback policy is implemented for out-of-subset expressions, with <code>fallback = auto|always|never</code> behavior.</li>
-<li>A generic nested-loop kernel path exists in <code>R/tcc_quick_lower.R</code> + <code>R/tcc_quick_codegen.R</code> and now supports dynamic loop depth (non-hardcoded loop nesting).</li>
-<li>tinytests exist in <code>inst/tinytest/test_tcc_quick_basic.R</code>, including convolution parity.</li>
-<li>README benchmark includes baseline R, <code>quickr</code>, <code>tcc_quick</code>, and manual C FFI convolution path.</li>
-</ul><p>Remaining gaps vs long-term target:</p>
-<ul><li>Lowering is still partly pattern-driven for kernel forms; it is not yet a full statement-level compiler for arbitrary loop/branch combinations.</li>
-<li>IR is still ad-hoc lists; no dedicated <code>tcc_quick_ir.R</code> typed node constructors/validators yet.</li>
-<li>No bytecode-assisted debug lowering yet.</li>
-<li>No centralized allowlist enforcement step for emitted R API symbols yet.</li>
-</ul></div>
-<div class="section level3">
-<h3 id="codetools-style-structural-improvements-next-refactor-target">Codetools-style structural improvements (next refactor target)<a class="anchor" aria-label="anchor" href="#codetools-style-structural-improvements-next-refactor-target"></a></h3>
-<p>Use <code>.sync/codetools/R/codetools.R</code> and <code>.sync/codetools/noweb/codetools.nw</code> as architectural inspiration.</p>
-<p>Recommended refactor pattern:</p>
-<ol style="list-style-type: decimal"><li>Build a generic walker factory (handler dispatch + call fallback + leaf handler), similar in spirit to codetools <code>walkCode</code>/<code>makeCodeWalker</code>.</li>
-<li>Split lowering into independent passes instead of monolithic pattern checks:
-<ul><li>declaration/scope collection,</li>
-<li>control-flow normalization,</li>
-<li>type+shape inference,</li>
-<li>boundary annotation,</li>
-<li>IR construction.</li>
-</ul></li>
-<li>Replace kernel-specific matching with statement handlers (<code>{</code>, <code>&lt;-</code>, <code>for</code>, <code>while</code>, <code>repeat</code>, <code>if</code>, <code>ifelse</code>, <code>[</code>, <code>[&lt;-</code>, calls).</li>
-<li>Represent loops in uniform IR (<code>for</code> with iterator metadata and body list), allowing arbitrary nesting depth without special cases.</li>
-<li>Add pass-local context objects (environment, loop stack, symbol table) instead of free-form recursion state.</li>
-<li>Add verifier pass before codegen (required fields, types, ownership, known symbol classes).</li>
-<li>Keep fallback edges explicit in IR (e.g. <code>tag = "fallback_eval"</code>) so codegen is straightforward and auditable.</li>
-</ol><p>Suggested near-term file split:</p>
-<ul><li>
-<code>R/tcc_quick_walk.R</code> (generic walker + dispatcher)</li>
-<li>
-<code>R/tcc_quick_normalize.R</code> (surface AST normalization)</li>
-<li>
-<code>R/tcc_quick_typecheck.R</code> (typed annotations)</li>
-<li>
-<code>R/tcc_quick_ir.R</code> (constructors/validators)</li>
-<li>
-<code>R/tcc_quick_lower_stmt.R</code> (statement-level lowering)</li>
-<li>
-<code>R/tcc_quick_lower_expr.R</code> (expression-level lowering)</li>
-<li>
-<code>R/tcc_quick_codegen_*.R</code> split by IR families (scalar, loops, fallback)</li>
-</ul></div>
-<div class="section level3">
-<h3 id="test-requirements">Test requirements<a class="anchor" aria-label="anchor" href="#test-requirements"></a></h3>
-<p>Add tinytests for:</p>
-<ul><li>parity on representative kernels (sum/product/convolution-like loop);</li>
-<li>fallback activation on unsupported calls;</li>
-<li>error messages for missing or inconsistent <code><a href="https://rdrr.io/r/base/declare.html" class="external-link">declare()</a></code>;</li>
-<li>serialization/recompile behavior of compiled quick functions;</li>
-<li>OS guards for platform-specific library behavior.</li>
-</ul></div>
-<div class="section level3">
-<h3 id="benchmark-requirements">Benchmark requirements<a class="anchor" aria-label="anchor" href="#benchmark-requirements"></a></h3>
-<p>Use <code>bench::mark()</code> with warmup and report:</p>
-<ul><li>baseline R function,</li>
-<li>
-<code><a href="reference/tcc_quick.html">tcc_quick()</a></code> compiled function,</li>
-<li>existing <code><a href="https://rdrr.io/pkg/quickr/man/quick.html" class="external-link">quickr::quick()</a></code> when available (optional comparison),</li>
-<li>optional hand-written <code>.Call</code> reference.</li>
-</ul><p>Keep benchmark scripts under <code>tools/</code> and avoid heavy runtime in CRAN checks.</p>
+<p>Explicit <code>PROTECT</code>/<code>UNPROTECT</code> counts; coerce once at function boundary; hoist <code>LENGTH()</code> outside loops; use <code>REAL_RO()</code>/<code>INTEGER_RO()</code>/<code>LOGICAL_RO()</code> with <code>const</code> for read-only inputs, <code>REAL()</code>/<code>INTEGER()</code>/<code>LOGICAL()</code> only for outputs and mutated inputs; <code>Rf_duplicate()</code> mutated input parameters before coercion; conditional <code>#include &lt;Rmath.h&gt;</code> when registry entries require it; emit informative <code>Rf_error</code> messages for shape/type mismatch.</p>
 </div>
 </div>
 <div class="section level2">

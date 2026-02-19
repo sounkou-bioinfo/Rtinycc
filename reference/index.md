@@ -144,6 +144,9 @@
 - [`tcc_null_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_null_ptr.md)
   : Create a NULL pointer
 
+- [`tcc_options()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_options.md)
+  : Add TinyCC compiler options to FFI context
+
 - [`tcc_output()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output.md)
   : Set output type for FFI compilation
 
@@ -180,6 +183,9 @@
 
 - [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
   : Compile a small declare()-annotated R subset with TinyCC
+
+- [`tcc_quick_ops()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick_ops.md)
+  : Supported operations table for tcc_quick
 
 - [`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md)
   : Read raw bytes from a pointer
@@ -228,6 +234,9 @@
 
 - [`tcc_run_cli()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_run_cli.md)
   : Run the tinycc CLI
+
+- [`tcc_set_options()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_set_options.md)
+  : Apply raw TinyCC options to a libtcc state
 
 - [`tcc_source()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_source.md)
   : Add C source code
