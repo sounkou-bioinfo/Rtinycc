@@ -901,35 +901,11 @@ plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NUL
 
 `tcc_quick()` targets a restricted subset of R for fast compilation. Understanding what's supported and what falls back to R evaluation helps you write efficient compiled functions.
 
-**Supported subset:**
+The current implementation supports scalar arithmetic operations (`+`, `-`, `*`, `/`, `^`, `%%`, `%/%`), comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`), and logical operators (`&&`, `||`, `&`, `|`, `!`). Conditionals work through `if (cond) yes else no` or `ifelse(cond, yes, no)`, and numeric switch expressions are supported with `switch(sel, case1, case2, ...)`. Common math functions like `abs`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `log`, `log10`, `floor`, `ceiling`, `trunc`, and `tanh` are available. For more complex patterns, nested loops with array indexing using `for (i in seq_along(x))` and `x[i]` access are recognized, along with local scalar assignments like `a <- expr`.
 
-- Scalar arithmetic: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`
-- Comparisons: `<`, `<=`, `>`, `>=`, `==`, `!=`
-- Logical operators: `&&`, `||`, `&`, `|`, `!`
-- Conditionals: `if (cond) yes else no`, `ifelse(cond, yes, no)`
-- Switch expressions: `switch(sel, case1, case2, ...)` (numeric selector only)
-- Math functions: `abs`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `log`, `log10`, `floor`, `ceiling`, `trunc`, `tanh`
-- Nested loops with array indexing: `for (i in seq_along(x))` with `x[i]` access
-- Local scalar assignments: `a <- expr`
+Functions outside the supported subset can be handled through different fallback modes. The default `fallback = "auto"` falls back to the original R function when boundary calls like `.Call`, `.Internal`, `.Primitive`, or unsupported constructs are detected. Setting `fallback = "always"` returns the original function without attempting compilation, while `fallback = "never"` raises an error if the function is outside the supported subset. For calls that are not directly lowered (such as `max(x, y)` or `pmax(a, b, c)`), `tcc_quick` generates C code that builds a call pairlist and evaluates it via `Rf_eval()`, which preserves R's semantics but is slower than direct arithmetic.
 
-**Fallback behavior:**
-
-Functions outside the supported subset can be handled three ways:
-
-1. `fallback = "auto"` (default): Falls back to the original R function when boundary calls like `.Call`, `.Internal`, `.Primitive`, or unsupported constructs are detected.
-2. `fallback = "always"`: Always returns the original function without attempting compilation.
-3. `fallback = "never"`: Raises an error if the function is outside the supported subset.
-
-For calls that are not directly lowered (e.g., `max(x, y)`, `pmax(a, b, c)`), `tcc_quick` generates C code that builds a call pairlist and evaluates it via `Rf_eval()`. This preserves R's semantics but is slower than direct arithmetic.
-
-**Performance tips:**
-
-- Use scalar `double`/`integer`/`logical` declarations where possible; mixed types incur conversion overhead.
-- Minimize calls outside the core arithmetic/math subset. Each fallback to `Rf_eval()` adds overhead.
-- For loops, prefer nested `for (i in seq_along(x))` patterns. These compile to indexed array kernels.
-- Cache compiled functions; `tcc_quick()` memoizes based on function body and declarations, so repeated calls with the same function are fast.
-- Use `debug = TRUE` to inspect generated C code and identify unexpected fallbacks.
-- Use `mode = "code"` to preview generated C without compilation.
+To achieve optimal performance, use scalar `double`/`integer`/`logical` declarations where possible since mixed types incur conversion overhead. Minimize calls outside the core arithmetic/math subset as each fallback to `Rf_eval()` adds overhead. For loops, prefer nested `for (i in seq_along(x))` patterns that compile to indexed array kernels. The system memoizes based on function body and declarations, so repeated calls with the same function are fast. When debugging, use `debug = TRUE` to inspect generated C code and identify unexpected fallbacks, or use `mode = "code"` to preview generated C without compilation.
 
 **Example: optimizing a function**
 
@@ -961,11 +937,7 @@ fast_fn <- function(x, y) {
 
 ### Formal verification
 
-`tcc_quick()` includes a formal verification system (enabled by default with `verify = TRUE`) that checks:
-
-1. **IR Invariants**: All variables referenced in the intermediate representation are declared, types are consistent, no use-before-definition
-2. **C Code Properties**: Generated C has balanced PROTECT/UNPROTECT, includes required headers, validates bounds before allocation
-3. **Codegen Correctness**: Function signatures match expectations, memory management is correct
+`tcc_quick()` includes a formal verification system (enabled by default with `verify = TRUE`) that performs comprehensive correctness checks. The system validates IR invariants to ensure all variables referenced in the intermediate representation are declared, types are consistent, and there's no use-before-definition. It also checks C code properties, verifying that generated C has balanced PROTECT/UNPROTECT calls, includes required headers, and validates bounds before allocation. Finally, it confirms codegen correctness by checking that function signatures match expectations and memory management is correct.
 
 When verification detects issues, warnings are emitted but compilation proceeds. Use `verify = FALSE` to disable.
 
@@ -1122,10 +1094,5 @@ GPL-3
 
 ## References
 
-- [TinyCC](https://github.com/TinyCC/tinycc)
-- [Bun's FFI](https://bun.com/docs/runtime/ffi)
-- [CFFI](https://cffi.readthedocs.io/)
-- [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
-- [CSlug](https://cslug.readthedocs.io/en/latest/)
-- [quickr](https://github.com/t-kalinowski/quickr)
+This work builds on [TinyCC](https://github.com/TinyCC/tinycc) and draws inspiration from [Bun's FFI](https://bun.com/docs/runtime/ffi), [CFFI](https://cffi.readthedocs.io/), [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme), [CSlug](https://cslug.readthedocs.io/en/latest/), and [quickr](https://github.com/t-kalinowski/quickr).
 
