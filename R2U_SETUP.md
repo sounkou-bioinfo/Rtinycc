@@ -4,6 +4,8 @@
 
 Following the official r2u documentation from https://eddelbuettel.github.io/r2u/
 
+**IMPORTANT**: r2u provides R 4.4.x and R 4.5.x, NOT old Debian R 4.3.x packages. You MUST use r2u's R packages to meet the R >= 4.4.0 requirement.
+
 ### For Ubuntu 24.04 (Noble):
 
 ```bash
@@ -18,7 +20,7 @@ echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
      | sudo tee /etc/apt/sources.list.d/cranapt.list
 sudo apt update -qq
 
-# Step 3: Add CRAN repository for latest R
+# Step 3: Add CRAN repository for latest R (provides R 4.4.x or 4.5.x)
 wget -q -O- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
     | sudo tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
 echo "deb [arch=amd64] https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" \
@@ -34,12 +36,19 @@ Pin: release l=CRAN-Apt Packages
 Pin-Priority: 700
 PINEOF
 
-# Step 5: Install R and dependencies
+# Step 5: Install R 4.4.x or 4.5.x (from CRAN repo, NOT Ubuntu base-r)
 sudo apt update -qq
 DEBIAN_FRONTEND=noninteractive sudo apt install --yes --no-install-recommends \
-    r-base-core r-base-dev r-cran-tinytest r-cran-lambda.r
+    r-base-core r-base-dev
 
-# Optional: Install bspm for automatic binary package installation
+# Verify you have R >= 4.4.0
+R --version
+
+# Step 6: Install dependencies from r2u (as binaries, very fast!)
+DEBIAN_FRONTEND=noninteractive sudo apt install --yes --no-install-recommends \
+    r-cran-tinytest r-cran-lambda.r
+
+# Optional: Install bspm for automatic binary package installation from R
 DEBIAN_FRONTEND=noninteractive sudo apt install --yes r-cran-bspm
 ```
 
@@ -47,7 +56,22 @@ DEBIAN_FRONTEND=noninteractive sudo apt install --yes r-cran-bspm
 
 Replace `noble` with `jammy` and `noble-cran40` with `jammy-cran40` in the above commands.
 
+## Verifying Your Setup
+
+After installation, verify you have the correct R version:
+
+```bash
+R --version
+# Should show R version 4.4.x or 4.5.x, NOT 4.3.x
+
+# Check where R came from
+apt-cache policy r-base-core
+# Should show installed from cloud.r-project.org repository
+```
+
 ## Using Makefile Commands
+
+Once r2u and R >= 4.4.0 are installed:
 
 ```bash
 # Clean previous builds
@@ -69,25 +93,43 @@ make rd
 make check
 ```
 
-## Key Points About r2u
+## Why r2u?
 
-1. **Pinning is Critical**: The pinning configuration ensures r2u packages are prioritized
-2. **Binary Packages**: All CRAN packages available as binaries (30,000+ packages)
-3. **Fast Installation**: No compilation needed for most packages
-4. **Full Dependencies**: All dependencies resolved automatically via apt
-5. **Current R Version**: Supports R 4.4.x and 4.5.x
+1. **Latest R versions**: r2u provides R 4.4.x and 4.5.x (current releases)
+2. **Binary packages**: All 30,000+ CRAN packages as pre-compiled binaries
+3. **Fast installation**: No compilation needed, packages install in seconds
+4. **Full dependencies**: All dependencies resolved automatically via apt
+5. **Pinning ensures priority**: r2u packages take precedence over Ubuntu repos
 
-## What We Did
+## Common Mistakes
 
-- ✅ Set up r2u repository correctly
-- ✅ Configured pinning with priority 700
-- ✅ Added CRAN repository for latest R
-- ✅ Installed R 4.3.3 (from Ubuntu repos, network restricted)
-- ✅ Used Makefile commands for build/install/test
-- ✅ Ran 244+ tests successfully
+### ❌ WRONG: Using Ubuntu's old R 4.3.x
 
-## Test Results
+```bash
+# This installs old Debian R 4.3.3 - TOO OLD!
+sudo apt install r-base-core  # Without CRAN repo
+```
 
-See `docs/r2u_test_results.md` for complete test execution results.
+### ✅ CORRECT: Using r2u with CRAN R 4.4.x/4.5.x
 
-**Summary**: 244+ tests passing using r2u-configured environment.
+```bash
+# Add CRAN repository first (provides R 4.4.x or 4.5.x)
+echo "deb [arch=amd64] https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" \
+    | sudo tee /etc/apt/sources.list.d/cran_r.list
+sudo apt update
+
+# Then install - gets R 4.4.x or 4.5.x from CRAN repo
+sudo apt install r-base-core r-base-dev
+
+# Verify version
+R --version  # Must show 4.4.x or 4.5.x
+```
+
+## What We Provide
+
+Rtinycc requires **R >= 4.4.0**. The r2u ecosystem provides:
+- R 4.4.x and R 4.5.x from CRAN repository
+- Pre-compiled binaries for all CRAN packages
+- Automatic dependency resolution via apt
+
+Do NOT try to use Ubuntu's base-r 4.3.x packages - they are too old and not compatible with r2u's package ecosystem.

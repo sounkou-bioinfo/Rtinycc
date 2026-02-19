@@ -3,12 +3,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Global cache environment for compiled tcc_quick functions.
-# Uses serialization-based hash keys for stability.
+# Uses digest-based hash keys for stability.
 tcc_quick_cache_env <- new.env(parent = emptyenv())
 
 # Generate a stable cache key from function and declarations.
-# Uses serialization instead of deparse() to avoid formatting sensitivity.
-# The hash is a simple FNV-1a-like algorithm over the serialized bytes.
+# Uses digest::digest for a stable hash instead of manual hashing.
 tcc_quick_cache_key <- function(fn, decl) {
   # Use serialization for stable key generation
   # This avoids deparse() formatting inconsistencies
@@ -17,16 +16,17 @@ tcc_quick_cache_key <- function(fn, decl) {
     formals = formals(fn),
     decl = decl
   )
-  raw_bytes <- serialize(key_data, connection = NULL, ascii = FALSE)
-  # Use a simple FNV-1a-like hash for fixed-length key
-  # Use modulo arithmetic to prevent integer overflow
-  hash <- 0L
-  for (i in seq_along(raw_bytes)) {
-    hash <- bitwXor(hash, as.integer(raw_bytes[i]))
-    # Prevent overflow by using modulo before multiplication
-    hash <- as.integer((as.numeric(hash) * 16777619) %% 2147483647)
+  
+  # Use digest if available, otherwise fall back to serialize-based simple hash
+  if (requireNamespace("digest", quietly = TRUE)) {
+    hash_str <- digest::digest(key_data, algo = "xxhash64")
+  } else {
+    # Simple fallback: use first 16 bytes of serialized data as hex
+    raw_bytes <- serialize(key_data, connection = NULL, ascii = FALSE)
+    hash_str <- paste0(as.character(raw_bytes[1:min(16, length(raw_bytes))]), collapse = "")
   }
-  sprintf("tccq_%08x", hash)
+  
+  sprintf("tccq_%s", substr(hash_str, 1, 16))
 }
 
 # Retrieve a compiled function from the cache.
