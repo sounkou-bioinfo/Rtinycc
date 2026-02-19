@@ -99,6 +99,82 @@ expect_error(
   pattern = "outside the current tcc_quick subset|na.rm must be literal"
 )
 
+# --- unsupported optional args must not be silently ignored ---
+
+mean_trim <- function(x) {
+  declare(type(x = double(NA)))
+  mean(x, trim = 0.25)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(mean_trim, fallback = "soft")),
+  mean_trim
+))
+expect_error(
+  tcc_quick(mean_trim, fallback = "hard"),
+  pattern = "unsupported argument 'trim'|outside the current tcc_quick subset"
+)
+
+quantile_type <- function(x, p) {
+  declare(type(x = double(NA)), type(p = double(NA)))
+  quantile(x, probs = p, type = 1)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(quantile_type, fallback = "soft")),
+  quantile_type
+))
+expect_error(
+  tcc_quick(quantile_type, fallback = "hard"),
+  pattern = "unsupported argument 'type'|outside the current tcc_quick subset"
+)
+
+# --- which.max/min must not lower non-variable or scalar inputs ---
+
+which_max_expr <- function(x) {
+  declare(type(x = double(NA)))
+  which.max(x + 1)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(which_max_expr, fallback = "soft")),
+  which_max_expr
+))
+expect_error(
+  tcc_quick(which_max_expr, fallback = "hard"),
+  pattern = "named vector variable|outside the current tcc_quick subset"
+)
+
+which_max_scalar <- function(x) {
+  declare(type(x = double(1)))
+  which.max(x)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(which_max_scalar, fallback = "soft")),
+  which_max_scalar
+))
+expect_error(
+  tcc_quick(which_max_scalar, fallback = "hard"),
+  pattern = "requires a vector argument|outside the current tcc_quick subset"
+)
+
+# --- seq_len requires scalar length (vector input should fallback) ---
+
+seq_len_vector <- function(x) {
+  declare(type(x = double(NA)))
+  seq_len(x)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(seq_len_vector, fallback = "soft")),
+  seq_len_vector
+))
+expect_error(
+  tcc_quick(seq_len_vector, fallback = "hard"),
+  pattern = "scalar length argument|outside the current tcc_quick subset"
+)
+
 # --- rf_call allowlist enforcement ---
 
 not_allowlisted_call <- function(x) {
