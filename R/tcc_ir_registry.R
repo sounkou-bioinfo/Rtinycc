@@ -145,6 +145,16 @@ tcc_quick_rf_call_quiet <- function() {
   c("%*%", "crossprod", "tcrossprod")
 }
 
+tcc_quick_rf_call_should_message <- function(fname) {
+  if (fname %in% tcc_quick_rf_call_quiet()) {
+    return(FALSE)
+  }
+  isTRUE(getOption(
+    "rtinycc.tcc_quick.rf_call_messages",
+    default = interactive()
+  ))
+}
+
 # Explicit delegated contracts for rf_call fallback nodes.
 # Only functions listed here are eligible for delegated lowering.
 # Missing entries force deterministic fallback/error based on policy.

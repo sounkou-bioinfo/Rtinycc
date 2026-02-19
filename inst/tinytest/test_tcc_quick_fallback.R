@@ -75,6 +75,18 @@ is_na_reduce_soft <- tcc_quick(is_na_reduce, fallback = "soft")
 x_na <- c(1, NA, 3, NA)
 expect_equal(is_na_reduce_soft(x_na), is_na_reduce(x_na), tolerance = 1e-12)
 
+# --- delegated diagnostics can be toggled explicitly ---
+
+{
+  opts_old <- options(rtinycc.tcc_quick.rf_call_messages = TRUE)
+  on.exit(options(opts_old), add = TRUE)
+  expect_true(Rtinycc:::tcc_quick_rf_call_should_message("c"))
+  expect_false(Rtinycc:::tcc_quick_rf_call_should_message("%*%"))
+
+  options(rtinycc.tcc_quick.rf_call_messages = FALSE)
+  expect_false(Rtinycc:::tcc_quick_rf_call_should_message("c"))
+}
+
 # --- IR validation: non-literal na.rm rejected in hard mode ---
 
 bad_na_rm <- function(x, flag) {

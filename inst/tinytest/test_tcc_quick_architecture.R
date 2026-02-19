@@ -109,3 +109,29 @@ for (fn in native_templates) {
   src <- tcc_quick(fn, fallback = "hard", mode = "code")
   expect_false(grepl("Rf_eval\\(", src))
 }
+
+# ---------------------------------------------------------------------------
+# Generality check 4: lexical env arg is only emitted for delegated paths
+# ---------------------------------------------------------------------------
+
+native_env_probe <- function(x) {
+  declare(type(x = double(NA)))
+  x + 1
+}
+decl_native <- Rtinycc:::tcc_quick_parse_declare(native_env_probe)
+ir_native <- Rtinycc:::tcc_quick_lower(native_env_probe, decl_native)
+built_native <- Rtinycc:::tcc_quick_compile(native_env_probe, decl_native, ir_native)
+expect_false(isTRUE(built_native$needs_env))
+src_native <- tcc_quick(native_env_probe, fallback = "hard", mode = "code")
+expect_false(grepl("SEXP tccq_env", src_native, fixed = TRUE))
+
+rf_env_probe <- function(x) {
+  declare(type(x = double(NA)))
+  is.na(x)
+}
+decl_rf <- Rtinycc:::tcc_quick_parse_declare(rf_env_probe)
+ir_rf <- Rtinycc:::tcc_quick_lower(rf_env_probe, decl_rf)
+built_rf <- Rtinycc:::tcc_quick_compile(rf_env_probe, decl_rf, ir_rf)
+expect_true(isTRUE(built_rf$needs_env))
+src_rf <- tcc_quick(rf_env_probe, fallback = "soft", mode = "code")
+expect_true(grepl("SEXP tccq_env", src_rf, fixed = TRUE))

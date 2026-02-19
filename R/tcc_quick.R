@@ -7,24 +7,28 @@ tcc_quick_make_wrapper <- function(
   formals_template,
   compiled_obj,
   fn,
-  compiled_ptr = NULL
+  compiled_ptr = NULL,
+  needs_env = TRUE
 ) {
   out <- function() NULL
   formals(out) <- formals_template
 
   arg_syms <- lapply(names(formals_template), as.name)
+  call_args <- if (isTRUE(needs_env)) {
+    c(arg_syms, list(quote(environment())))
+  } else {
+    arg_syms
+  }
   if (!is.null(compiled_ptr) && identical(typeof(compiled_ptr), "externalptr")) {
     call_expr <- as.call(c(
       as.name(".rtinycc_call"),
       as.name(".compiled_ptr"),
-      arg_syms,
-      quote(environment())
+      call_args
     ))
   } else {
     call_expr <- as.call(c(
       as.name(".compiled_callable"),
-      arg_syms,
-      quote(environment())
+      call_args
     ))
   }
   body(out) <- call_expr
@@ -180,13 +184,14 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   src <- tcc_quick_codegen(ir, decl, fn_name = entry)
   has_matmul <- isTRUE(tccq_ir_has_tag(ir, "matmul"))
   has_solve <- isTRUE(tccq_ir_has_tag(ir, "solve_lin"))
+  needs_env <- isTRUE(tccq_ir_has_tag(ir, "rf_call"))
 
   if (isTRUE(debug)) {
     message("tcc_quick generated C source:\n", src)
   }
 
   spec <- list(
-    args = rep("sexp", length(decl$formal_names) + 1L),
+    args = rep("sexp", length(decl$formal_names) + if (needs_env) 1L else 0L),
     returns = "sexp"
   )
   names(spec$args) <- NULL
@@ -215,6 +220,8 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
       has_matmul,
       ", has_solve=",
       has_solve,
+      ", needs_env=",
+      needs_env,
       ", add_rblas=",
       add_rblas,
       ", add_rlapack=",
@@ -242,7 +249,8 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
   list(
     callable = callable,
     compiled = compiled,
-    call_ptr = call_ptr
+    call_ptr = call_ptr,
+    needs_env = needs_env
   )
 }
 
@@ -948,7 +956,8 @@ tcc_quick <- function(
     formals(fn),
     built$compiled,
     fn,
-    compiled_ptr = built$call_ptr
+    compiled_ptr = built$call_ptr,
+    needs_env = isTRUE(built$needs_env)
   )
   wrapped
 }

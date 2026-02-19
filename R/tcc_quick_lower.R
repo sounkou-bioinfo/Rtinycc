@@ -1523,7 +1523,7 @@ tccq_lower_expr <- function(e, sc, decl) {
     ))
   }
 
-  if (!fname %in% tcc_quick_rf_call_quiet()) {
+  if (tcc_quick_rf_call_should_message(fname)) {
     message(
       "[tcc_quick] '",
       fname,

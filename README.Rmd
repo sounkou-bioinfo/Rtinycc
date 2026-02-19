@@ -187,6 +187,13 @@ Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `i
 
 Pointer types include `ptr` (opaque external pointer), `sexp` (pass a `SEXP` directly), and callback signatures like `callback:double(double)`.
 
+Variadic functions are supported in two forms: typed prefix tails (`varargs`) and
+bounded dynamic tails (`varargs_types` + `varargs_min`/`varargs_max`). Prefix
+mode is the cheaper runtime path because dispatch is by tail arity only;
+bounded dynamic mode adds per-call scalar type inference to select a compatible
+wrapper. For hot loops, prefer fixed arity first, then prefix variadics with a
+tight maximum tail size.
+
 
 Array returns use `returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to copy the result into a new R vector. The `length_arg` is the 1-based index of the C argument that carries the array length. Set `free = TRUE` when the C function returns a `malloc`-owned buffer.
 
@@ -205,7 +212,6 @@ ffi$add(5L, 3L)
 # Compare to the R builtin `+` in a tight loop.
 # Each FFI call boxes the return value into a fresh SEXP.
 # In tight scalar loops this creates allocation churn, so GC pressure is expected.
-# Note: custom arena allocators can help temporary C buffers, but cannot replace
 # R's allocator for SEXP arguments/returns at the R<->C boundary.
 r_p <- sample(10000)
 timings_ffi_scalar <- bench::mark(
@@ -225,7 +231,7 @@ ffi_vec <- tcc_ffi() |>
   tcc_bind(add_vec = list(args = list("integer_array", "i32"), returns = "void")) |>
   tcc_compile()
 
-x <- sample(10000)
+x <- sample(100000)
 timings_ffi_vec <- bench::mark(
   Rtinycc_vec = {
     y <- as.integer(x)
@@ -242,43 +248,7 @@ timings_ffi_vec <- bench::mark(
 timings_ffi_vec
 ```
 
-### Compiler options
 
-Use `tcc_options()` to pass raw TinyCC options in the high-level FFI pipeline.
-For low-level states, use `tcc_set_options()` directly.
-
-```{r ffi-options}
-ffi_opt_off <- tcc_ffi() |>
-  tcc_options("-O0") |>
-  tcc_source('
-    int opt_macro() {
-    #ifdef __OPTIMIZE__
-      return 1;
-    #else
-      return 0;
-    #endif
-    }
-  ') |>
-  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
-  tcc_compile()
-
-ffi_opt_on <- tcc_ffi() |>
-  tcc_options(c("-Wall", "-O2")) |>
-  tcc_source('
-    int opt_macro() {
-    #ifdef __OPTIMIZE__
-      return 1;
-    #else
-      return 0;
-    #endif
-    }
-  ') |>
-  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
-  tcc_compile()
-
-ffi_opt_off$opt_macro()
-ffi_opt_on$opt_macro()
-```
 
 ### Variadic calls (e.g. `Rprintf` style)
 
@@ -353,7 +323,43 @@ math$floor(3.7)
 
 
 ```
+### Compiler options
 
+Use `tcc_options()` to pass raw TinyCC options in the high-level FFI pipeline.
+For low-level states, use `tcc_set_options()` directly.
+
+```{r ffi-options}
+ffi_opt_off <- tcc_ffi() |>
+  tcc_options("-O0") |>
+  tcc_source('
+    int opt_macro() {
+    #ifdef __OPTIMIZE__
+      return 1;
+    #else
+      return 0;
+    #endif
+    }
+  ') |>
+  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
+  tcc_compile()
+
+ffi_opt_on <- tcc_ffi() |>
+  tcc_options(c("-Wall", "-O2")) |>
+  tcc_source('
+    int opt_macro() {
+    #ifdef __OPTIMIZE__
+      return 1;
+    #else
+      return 0;
+    #endif
+    }
+  ') |>
+  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
+  tcc_compile()
+
+ffi_opt_off$opt_macro()
+ffi_opt_on$opt_macro()
+```
 ### Working with arrays
 
 R vectors are passed to C with zero copy. Mutations in C are visible in R.

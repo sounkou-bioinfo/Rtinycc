@@ -60,6 +60,16 @@ expect_equal(result, 8L)
 
 result <- ffi$add(10L, 20L)
 expect_equal(result, 30L)
+expect_error(
+  ffi$add(1L),
+  "Expected 2 arguments, got 1",
+  info = "Fixed-arity wrappers enforce under-arity with stable error text"
+)
+expect_error(
+  ffi$add(1L, 2L, 3L),
+  "Expected 2 arguments, got 3",
+  info = "Fixed-arity wrappers enforce over-arity with stable error text"
+)
 
 # Test 5: Compile and call function with double arguments
 ffi <- tcc_ffi() |>

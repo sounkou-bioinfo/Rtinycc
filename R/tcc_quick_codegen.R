@@ -3654,12 +3654,17 @@ tcc_quick_codegen <- function(ir, decl, fn_name = "tcc_quick_entry") {
   ir <- tccq_assign_rf_call_names(ir)
   ir <- tccq_assign_reduce_expr_names(ir)
   ir <- tccq_assign_stat_expr_names(ir)
-  tccq_cg_fn_body(ir, fn_name)
+  needs_env <- isTRUE(tccq_ir_has_tag(ir, "rf_call"))
+  tccq_cg_fn_body(ir, fn_name, needs_env = needs_env)
 }
 
-tccq_cg_fn_body <- function(ir, fn_name) {
+tccq_cg_fn_body <- function(ir, fn_name, needs_env = TRUE) {
   formal_names <- ir$formal_names
-  c_arg_names <- c(formal_names, "tccq_env")
+  c_arg_names <- if (isTRUE(needs_env)) {
+    c(formal_names, "tccq_env")
+  } else {
+    formal_names
+  }
   c_args <- paste(sprintf("SEXP %s", c_arg_names), collapse = ", ")
 
   # Determine needed headers by scanning IR for Rmath calls

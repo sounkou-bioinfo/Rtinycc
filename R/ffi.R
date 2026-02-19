@@ -1327,6 +1327,7 @@ make_callable <- function(fn_ptr, sym, state) {
   vararg_types_allowed <- sym$varargs_types %||% list()
   variadic <- isTRUE(sym$variadic)
   vararg_mode <- if (variadic) sym$varargs_mode %||% "prefix" else NULL
+  fixed_n <- length(arg_types)
   varargs_min <- if (variadic) {
     sym$varargs_min %||% length(vararg_types)
   } else {
@@ -1337,76 +1338,143 @@ make_callable <- function(fn_ptr, sym, state) {
   } else {
     0L
   }
+  min_n <- fixed_n + varargs_min
+  max_n <- fixed_n + varargs_max
+  fn_ptr_is_map <- is.list(fn_ptr)
+  prefix_ptr_by_tail <- NULL
+  types_ptr_env <- NULL
+  if (variadic && fn_ptr_is_map) {
+    if (identical(vararg_mode, "prefix")) {
+      ptr_names <- suppressWarnings(as.integer(names(fn_ptr)))
+      if (
+        length(ptr_names) == length(fn_ptr) &&
+          length(ptr_names) > 0L &&
+          all(!is.na(ptr_names))
+      ) {
+        prefix_ptr_by_tail <- vector("list", varargs_max + 1L)
+        for (i in seq_along(fn_ptr)) {
+          tail_n <- ptr_names[[i]]
+          if (!is.na(tail_n) && tail_n >= 0L && tail_n <= varargs_max) {
+            prefix_ptr_by_tail[[tail_n + 1L]] <- fn_ptr[[i]]
+          }
+        }
+      }
+    } else if (identical(vararg_mode, "types")) {
+      ptr_keys <- names(fn_ptr)
+      if (!is.null(ptr_keys) && length(ptr_keys) == length(fn_ptr)) {
+        types_ptr_env <- list2env(fn_ptr, hash = TRUE, parent = emptyenv())
+      }
+    }
+  }
   sym_name <- sym$name
+
+  if (!variadic) {
+    expected_n <- fixed_n
+    dot_syms <- if (expected_n > 0L) {
+      lapply(seq_len(expected_n), function(i) as.name(paste0("..", i)))
+    } else {
+      list()
+    }
+    call_expr <- as.call(c(as.name(".RtinyccCall"), as.name(".call_ptr"), dot_syms))
+    body_expr <- bquote({
+      n_args <- nargs()
+      if (n_args != .(expected_n)) {
+        stop(
+          "Expected ",
+          .(expected_n),
+          " arguments, got ",
+          n_args,
+          call. = FALSE
+        )
+      }
+      if (!tcc_symbol_is_valid(.call_ptr)) {
+        stop(
+          "Function pointer for '",
+          .(sym_name),
+          "' is no longer valid",
+          call. = FALSE
+        )
+      }
+      .(call_expr)
+    })
+    f <- eval(
+      call("function", as.pairlist(alist(... = )), body_expr),
+      envir = list2env(
+        list(
+          .call_ptr = fn_ptr,
+          .RtinyccCall = .RtinyccCall,
+          tcc_symbol_is_valid = tcc_symbol_is_valid
+        ),
+        parent = baseenv()
+      )
+    )
+
+    # Store the pointer in the function's environment to prevent GC
+    environment(f)$.fn_ptr <- fn_ptr
+    environment(f)$.state <- state
+    environment(f)$.arg_types <- arg_types
+    environment(f)$.sym_name <- sym_name
+
+    return(f)
+  }
 
   # Create function that calls the wrapper via .Call()
   f <- function(...) {
     args <- list(...)
     n_args <- length(args)
+    if (n_args < min_n || n_args > max_n) {
+      stop(
+        "Expected between ",
+        min_n,
+        " and ",
+        max_n,
+        " arguments, got ",
+        n_args,
+        call. = FALSE
+      )
+    }
+    n_tail <- n_args - fixed_n
 
-    if (variadic) {
-      min_n <- length(arg_types) + varargs_min
-      max_n <- length(arg_types) + varargs_max
-      if (n_args < min_n || n_args > max_n) {
-        stop(
-          "Expected between ",
-          min_n,
-          " and ",
-          max_n,
-          " arguments, got ",
-          n_args,
-          call. = FALSE
-        )
-      }
-      n_tail <- n_args - length(arg_types)
-
-      if (identical(vararg_mode, "types")) {
-        tail_args <- if (n_tail > 0) {
-          args[seq.int(length(arg_types) + 1L, n_args)]
-        } else {
-          list()
-        }
-
-        inferred_types <- if (length(tail_args) > 0) {
-          vapply(
-            tail_args,
-            infer_variadic_arg_type,
-            character(1),
-            allowed_types = vararg_types_allowed
+    if (identical(vararg_mode, "types")) {
+      inferred_types <- character(n_tail)
+      if (n_tail > 0L) {
+        for (i in seq_len(n_tail)) {
+          inferred_types[[i]] <- infer_variadic_arg_type(
+            args[[fixed_n + i]],
+            vararg_types_allowed
           )
-        } else {
-          character(0)
-        }
-        key <- variadic_signature_key(as.list(inferred_types))
-        call_ptr <- if (is.list(fn_ptr)) fn_ptr[[key]] else fn_ptr
-      } else {
-        call_ptr <- if (is.list(fn_ptr)) {
-          fn_ptr[[as.character(n_tail)]]
-        } else {
-          fn_ptr
         }
       }
-
-      if (is.null(call_ptr)) {
-        stop(
-          "No compiled variadic wrapper for symbol '",
-          sym_name,
-          "' and the provided argument shape",
-          call. = FALSE
-        )
+      key <- variadic_signature_key(inferred_types)
+      if (!is.null(types_ptr_env)) {
+        call_ptr <- if (exists(key, envir = types_ptr_env, inherits = FALSE)) {
+          types_ptr_env[[key]]
+        } else {
+          NULL
+        }
+      } else {
+        call_ptr <- if (fn_ptr_is_map) fn_ptr[[key]] else fn_ptr
       }
     } else {
-      expected_n <- length(arg_types)
-      if (n_args != expected_n) {
-        stop(
-          "Expected ",
-          expected_n,
-          " arguments, got ",
-          n_args,
-          call. = FALSE
-        )
+      if (!is.null(prefix_ptr_by_tail)) {
+        idx <- n_tail + 1L
+        call_ptr <- if (idx > 0L && idx <= length(prefix_ptr_by_tail)) {
+          prefix_ptr_by_tail[[idx]]
+        } else {
+          NULL
+        }
+      } else {
+        call_ptr <- if (fn_ptr_is_map) fn_ptr[[as.character(n_tail)]] else fn_ptr
       }
-      call_ptr <- fn_ptr
+    }
+
+    if (is.null(call_ptr)) {
+      stop(
+        "No compiled variadic wrapper for symbol '",
+        sym_name,
+        "' and the provided argument shape",
+        call. = FALSE
+      )
     }
 
     # Validate pointer is still valid before calling
@@ -1420,7 +1488,7 @@ make_callable <- function(fn_ptr, sym, state) {
     }
 
     # R's .Call() can invoke external pointers as functions.
-    rtinycc_call(as.integer(n_args), call_ptr, args)
+    rtinycc_call(n_args, call_ptr, args)
   }
 
   # Store the pointer in the function's environment to prevent GC
