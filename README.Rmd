@@ -18,8 +18,12 @@ knitr::opts_chunk$set(
  Builds `TinyCC` `Cli` and Library For `C` Scripting in `R`
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)[![Rtinycc status badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rtinycc)
+[![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)
+[![r2u-test](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/r2u-test.yml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/r2u-test.yml)
+[![Rtinycc status badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rtinycc)
 <!-- badges: end -->
+
+**Requirements**: R >= 4.4.0 (see [TESTING.md](TESTING.md) for r2u installation)
 
 ## Abstract
 

@@ -1,0 +1,92 @@
+name: Test with R >= 4.4.0 via r2u
+
+on:
+  push:
+    branches: [ main, master, rjit, copilot/review-rjit-branch ]
+  pull_request:
+    branches: [ main, master, rjit ]
+  workflow_dispatch:
+
+jobs:
+  test-r2u:
+    runs-on: ubuntu-24.04
+    
+    name: R ${{ matrix.r-version }} on Ubuntu 24.04 with r2u
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        r-version: ['4.4.2', '4.5.0']
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up r2u
+        run: |
+          # Add r2u repository
+          wget -q -O- https://eddelbuettel.github.io/r2u/assets/dirk_eddelbuettel_key.asc \
+            | sudo tee -a /etc/apt/trusted.gpg.d/cranapt_key.asc
+          echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
+            | sudo tee /etc/apt/sources.list.d/cranapt.list
+          
+          # Add CRAN repository for R ${{ matrix.r-version }}
+          wget -q -O- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
+            | sudo tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
+          echo "deb [arch=amd64] https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" \
+            | sudo tee /etc/apt/sources.list.d/cran_r.list
+          
+          # Set up pinning
+          sudo tee /etc/apt/preferences.d/99cranapt > /dev/null << 'PINEOF'
+          Package: *
+          Pin: release o=CRAN-Apt Project
+          Pin: release l=CRAN-Apt Packages
+          Pin-Priority: 700
+          PINEOF
+          
+          sudo apt-get update -qq
+      
+      - name: Install R and dependencies
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            r-base-core \
+            r-base-dev \
+            r-cran-tinytest \
+            r-cran-lambda.r
+          
+          # Verify R version
+          R --version
+          R_VERSION=$(R --version | head -1 | grep -oP 'R version \K[0-9]+\.[0-9]+\.[0-9]+')
+          echo "Installed R version: $R_VERSION"
+          
+          # Check if version meets requirement
+          if [ "$(printf '%s\n' "4.4.0" "$R_VERSION" | sort -V | head -n1)" != "4.4.0" ]; then
+            echo "ERROR: R version $R_VERSION does not meet requirement >= 4.4.0"
+            exit 1
+          fi
+          echo "✓ R version $R_VERSION meets requirement >= 4.4.0"
+      
+      - name: Build package
+        run: |
+          make clean
+          R CMD build .
+          echo "Package built successfully"
+      
+      - name: Install package
+        run: |
+          PKG_FILE=$(ls -1 Rtinycc_*.tar.gz | head -1)
+          sudo R CMD INSTALL "$PKG_FILE"
+          echo "Package installed successfully"
+      
+      - name: Run tests
+        run: |
+          R -e "tinytest::test_package('Rtinycc', testdir = 'inst/tinytest', ncpus = 1L)"
+      
+      - name: Test summary
+        if: always()
+        run: |
+          echo "=== Test Summary ==="
+          echo "R Version: $(R --version | head -1)"
+          echo "OS: Ubuntu 24.04"
+          echo "Installation method: r2u"
+          echo "===================="
