@@ -48,6 +48,26 @@ f_rsum <- tcc_quick(rolling_sum, fallback = "never")
 x <- c(1, 2, 3, 4, 5)
 expect_equal(f_rsum(x), cumsum(x))
 
+# --- seq_len / : as vector expressions ---
+
+make_seq_len <- function(n) {
+  declare(type(n = integer(1)))
+  out <- seq_len(n)
+  out
+}
+
+f_make_seq_len <- tcc_quick(make_seq_len, fallback = "never")
+expect_equal(f_make_seq_len(6L), seq_len(6L))
+
+make_seq_range <- function(a, b) {
+  declare(type(a = integer(1)), type(b = integer(1)))
+  a:b
+}
+
+f_make_seq_range <- tcc_quick(make_seq_range, fallback = "never")
+expect_equal(f_make_seq_range(2L, 7L), 2L:7L)
+expect_equal(f_make_seq_range(7L, 2L), 7L:2L)
+
 # --- Element-wise vector ops (return expression) ---
 
 vec_add <- function(a, b) {
@@ -129,7 +149,7 @@ expect_equal(
 )
 
 # quantile invalid prob should error in compiled path
-expect_error(f_median_q(x3, 1.5), pattern = "probs must be in")
+expect_error(f_median_q(x3, 1.5), pattern = "outside \\[0,1\\]|probs must be in")
 
 # sd length-1 edge case: should return NA_real_
 sd_len1 <- function(x) {
@@ -180,6 +200,39 @@ expect_equal(
   as.numeric(quantile(c(x3, NA), p4, na.rm = TRUE)),
   tolerance = 1e-12
 )
+
+# quantile probs semantics: out-of-range errors; NA/NaN probs preserved
+expect_error(
+  f_quant_vec(x3, c(0.5, 1.2)),
+  pattern = "outside \\[0,1\\]"
+)
+
+q_nan <- f_quant_vec(x3, c(NA_real_, NaN, 0.5))
+expect_true(is.na(q_nan[[1]]) && !is.nan(q_nan[[1]]))
+expect_true(is.nan(q_nan[[2]]))
+expect_equal(q_nan[[3]], as.numeric(quantile(x3, 0.5)), tolerance = 1e-12)
+
+quant_scalar <- function(x, p) {
+  declare(type(x = double(NA)), type(p = double(1)))
+  quantile(x, p)
+}
+
+f_quant_scalar <- tcc_quick(quant_scalar, fallback = "never")
+expect_error(
+  f_quant_scalar(c(1, NA_real_, 3), 0.5),
+  pattern = "missing values and NaN's not allowed"
+)
+expect_true(is.nan(f_quant_scalar(c(1, 2, 3), NaN)))
+
+# mean should preserve NaN/NA behavior (without na.rm)
+mean_plain <- function(x) {
+  declare(type(x = double(NA)))
+  mean(x)
+}
+
+f_mean_plain <- tcc_quick(mean_plain, fallback = "never")
+expect_true(is.nan(f_mean_plain(c(NaN, 1))))
+expect_true(is.na(f_mean_plain(c(NA_real_, NaN))))
 
 # raw vectors
 raw_copy <- function(x) {

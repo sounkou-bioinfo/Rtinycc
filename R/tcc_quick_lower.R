@@ -240,6 +240,56 @@ tccq_parse_na_rm <- function(e) {
   list(ok = FALSE, reason = "na.rm must be literal TRUE/FALSE")
 }
 
+tccq_call_names <- function(e) {
+  nms <- names(e)
+  if (is.null(nms)) {
+    nms <- rep("", length(e))
+  }
+  nms[is.na(nms)] <- ""
+  nms
+}
+
+tccq_validate_call_args <- function(
+  e,
+  fname,
+  allowed_named,
+  allowed_positional
+) {
+  nms <- tccq_call_names(e)
+  if (length(e) < 2L) {
+    return(list(ok = FALSE, reason = paste0(fname, "() requires arguments")))
+  }
+  for (i in seq.int(2L, length(e))) {
+    nm <- nms[[i]]
+    if (!nzchar(nm)) {
+      if (!(i %in% allowed_positional)) {
+        return(list(
+          ok = FALSE,
+          reason = paste0(
+            fname,
+            "() unsupported positional argument ",
+            i - 1L,
+            " in current subset"
+          )
+        ))
+      }
+      next
+    }
+    if (!(nm %in% allowed_named)) {
+      return(list(
+        ok = FALSE,
+        reason = paste0(
+          fname,
+          "() unsupported argument '",
+          nm,
+          "' in current subset"
+        )
+      ))
+    }
+  }
+  list(ok = TRUE, names = nms)
+}
+
 tccq_parse_literal_int <- function(x) {
   if (length(x) == 1L && is.integer(x) && !is.na(x)) {
     return(as.integer(x)[[1]])
@@ -681,6 +731,15 @@ tccq_lower_expr <- function(e, sc, decl) {
       c("rowSums", "colSums", "rowMeans", "colMeans") &&
       length(e) >= 2L
   ) {
+    sig <- tccq_validate_call_args(
+      e,
+      fname,
+      allowed_named = c("x", "na.rm"),
+      allowed_positional = c(2L)
+    )
+    if (!sig$ok) {
+      return(tccq_lower_result(FALSE, reason = sig$reason))
+    }
     na <- tccq_parse_na_rm(e)
     if (!na$ok) {
       return(tccq_lower_result(FALSE, reason = na$reason))
@@ -711,6 +770,15 @@ tccq_lower_expr <- function(e, sc, decl) {
 
   # --- apply(X, MARGIN, FUN): typed delegated subset ---
   if (fname == "apply" && length(e) >= 4L) {
+    sig <- tccq_validate_call_args(
+      e,
+      fname,
+      allowed_named = c("X", "MARGIN", "FUN", "na.rm"),
+      allowed_positional = c(2L, 3L, 4L)
+    )
+    if (!sig$ok) {
+      return(tccq_lower_result(FALSE, reason = sig$reason))
+    }
     x <- tccq_lower_expr(e[[2]], sc, decl)
     if (!x$ok) {
       return(x)
@@ -851,6 +919,15 @@ tccq_lower_expr <- function(e, sc, decl) {
 
   # --- mean(x) ---
   if (fname == "mean" && length(e) >= 2L) {
+    sig <- tccq_validate_call_args(
+      e,
+      fname,
+      allowed_named = c("x", "na.rm"),
+      allowed_positional = c(2L)
+    )
+    if (!sig$ok) {
+      return(tccq_lower_result(FALSE, reason = sig$reason))
+    }
     na_info <- tccq_parse_na_rm(e)
     if (!na_info$ok) {
       return(tccq_lower_result(FALSE, reason = na_info$reason))
@@ -875,6 +952,15 @@ tccq_lower_expr <- function(e, sc, decl) {
 
   # --- median(x) ---
   if (fname == "median" && length(e) >= 2L) {
+    sig <- tccq_validate_call_args(
+      e,
+      fname,
+      allowed_named = c("x", "na.rm"),
+      allowed_positional = c(2L)
+    )
+    if (!sig$ok) {
+      return(tccq_lower_result(FALSE, reason = sig$reason))
+    }
     na_info <- tccq_parse_na_rm(e)
     if (!na_info$ok) {
       return(tccq_lower_result(FALSE, reason = na_info$reason))
@@ -898,10 +984,41 @@ tccq_lower_expr <- function(e, sc, decl) {
 
   # --- quantile(x, probs) scalar probs path ---
   if (fname == "quantile" && length(e) >= 3L) {
-    nms <- names(e)
-    p_idx <- 3L
-    if (!is.null(nms) && any(nms == "probs")) {
-      p_idx <- which(nms == "probs")[1]
+    sig <- tccq_validate_call_args(
+      e,
+      fname,
+      allowed_named = c("x", "probs", "na.rm"),
+      allowed_positional = c(2L, 3L)
+    )
+    if (!sig$ok) {
+      return(tccq_lower_result(FALSE, reason = sig$reason))
+    }
+    nms <- sig$names
+    if (nzchar(nms[[2L]]) && !identical(nms[[2L]], "x")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "quantile() requires first argument to be x in current subset"
+      ))
+    }
+    probs_idx <- which(nms == "probs")
+    if (length(probs_idx) > 1L) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "quantile() received duplicate 'probs' arguments"
+      ))
+    }
+    p_idx <- if (length(probs_idx) == 1L) {
+      probs_idx[[1]]
+    } else if (!nzchar(nms[[3L]])) {
+      3L
+    } else {
+      NA_integer_
+    }
+    if (is.na(p_idx) || p_idx == 2L) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "quantile() requires a probs argument in current subset"
+      ))
     }
     na_info <- tccq_parse_na_rm(e)
     if (!na_info$ok) {
@@ -1093,6 +1210,15 @@ tccq_lower_expr <- function(e, sc, decl) {
 
   # --- sd(x) ---
   if (fname == "sd" && length(e) >= 2L) {
+    sig <- tccq_validate_call_args(
+      e,
+      fname,
+      allowed_named = c("x", "na.rm"),
+      allowed_positional = c(2L)
+    )
+    if (!sig$ok) {
+      return(tccq_lower_result(FALSE, reason = sig$reason))
+    }
     na_info <- tccq_parse_na_rm(e)
     if (!na_info$ok) {
       return(tccq_lower_result(FALSE, reason = na_info$reason))
@@ -1119,6 +1245,21 @@ tccq_lower_expr <- function(e, sc, decl) {
     x <- tccq_lower_expr(e[[2]], sc, decl)
     if (!x$ok) {
       return(x)
+    }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, " requires a vector argument")
+      ))
+    }
+    if (!identical(x$node$tag, "var")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(
+          fname,
+          " currently requires a named vector variable in this subset"
+        )
+      ))
     }
     return(tccq_lower_result(
       TRUE,
@@ -1305,6 +1446,18 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!x$ok) {
       return(x)
     }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "seq_along requires a vector argument"
+      ))
+    }
+    if (!identical(x$node$tag, "var")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "seq_along currently requires a named vector variable"
+      ))
+    }
     return(tccq_lower_result(
       TRUE,
       node = list(tag = "seq_along", target = x$node$name),
@@ -1316,6 +1469,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     x <- tccq_lower_expr(e[[2]], sc, decl)
     if (!x$ok) {
       return(x)
+    }
+    if (x$shape != "scalar") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "seq_len currently requires a scalar length argument"
+      ))
     }
     return(tccq_lower_result(
       TRUE,
@@ -1334,6 +1493,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     }
     if (!to$ok) {
       return(to)
+    }
+    if (from$shape != "scalar" || to$shape != "scalar") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "':' currently requires scalar endpoints"
+      ))
     }
     return(tccq_lower_result(
       TRUE,
@@ -1354,6 +1519,12 @@ tccq_lower_expr <- function(e, sc, decl) {
       }
       if (!to$ok) {
         return(to)
+      }
+      if (from$shape != "scalar" || to$shape != "scalar") {
+        return(tccq_lower_result(
+          FALSE,
+          reason = "seq(from, to) currently requires scalar endpoints"
+        ))
       }
       return(tccq_lower_result(
         TRUE,
@@ -1386,6 +1557,16 @@ tccq_lower_expr <- function(e, sc, decl) {
       }
       if (!by$ok) {
         return(by)
+      }
+      if (
+        from$shape != "scalar" ||
+          to$shape != "scalar" ||
+          by$shape != "scalar"
+      ) {
+        return(tccq_lower_result(
+          FALSE,
+          reason = "seq(from, to, by) currently requires scalar arguments"
+        ))
       }
       return(tccq_lower_result(
         TRUE,
