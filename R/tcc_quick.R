@@ -27,9 +27,44 @@ tcc_quick_make_wrapper <- function(
   out
 }
 
-tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
+tcc_quick_compile <- function(fn, decl, ir, debug = FALSE, verify = TRUE) {
   entry <- "tcc_quick_entry"
+  
+  # Formal verification of IR (if enabled)
+  if (isTRUE(verify)) {
+    ir_check <- tcc_quick_verify_ir_invariants(ir, decl)
+    if (!ir_check$ok) {
+      warning(
+        "IR verification failed:\n  ",
+        paste(ir_check$violations, collapse = "\n  "),
+        call. = FALSE
+      )
+    }
+  }
+  
   src <- tcc_quick_codegen(ir, decl, fn_name = entry)
+  
+  # Formal verification of generated C (if enabled)
+  if (isTRUE(verify)) {
+    c_check <- tcc_quick_validate_generated_c(src, ir, decl)
+    if (!c_check$ok) {
+      warning(
+        "Generated C validation failed:\n  ",
+        paste(c_check$violations, collapse = "\n  "),
+        call. = FALSE
+      )
+    }
+    
+    # Property testing
+    prop_check <- tcc_quick_test_codegen_properties(ir, decl, src)
+    if (!prop_check$ok) {
+      warning(
+        "Codegen property violations:\n  ",
+        paste(prop_check$violations, collapse = "\n  "),
+        call. = FALSE
+      )
+    }
+  }
 
   if (isTRUE(debug)) {
     message("tcc_quick generated C source:\n", src)
@@ -75,6 +110,9 @@ tcc_quick_compile <- function(fn, decl, ir, debug = FALSE) {
 #' @param mode One of `"compile"` (default) or `"code"`. Use `"code"`
 #'   to return generated C source without compiling.
 #' @param debug Print generated C source and lowering diagnostics.
+#' @param verify Enable formal verification of IR and generated C code (default TRUE).
+#'   When enabled, checks IR invariants, C code properties, and emits warnings
+#'   if violations are detected.
 #' @return A function with the same formals as `fn`, or `fn` itself when
 #'   fallback is used. When `mode = "code"`, returns a character string
 #'   containing generated C source.
@@ -83,7 +121,8 @@ tcc_quick <- function(
   fn,
   fallback = c("auto", "always", "never"),
   mode = c("compile", "code"),
-  debug = FALSE
+  debug = FALSE,
+  verify = TRUE
 ) {
   if (!is.function(fn)) {
     stop("fn must be a function", call. = FALSE)
@@ -125,7 +164,7 @@ tcc_quick <- function(
     return(cache_hit)
   }
 
-  built <- tcc_quick_compile(fn, decl, ir, debug = debug)
+  built <- tcc_quick_compile(fn, decl, ir, debug = debug, verify = verify)
   wrapped <- tcc_quick_make_wrapper(
     built$callable,
     formals(fn),

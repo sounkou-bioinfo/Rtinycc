@@ -783,6 +783,12 @@ if (Sys.info()[["sysname"]] == "Linux") {
 declared subset of R code into C and executes it via TinyCC, while preserving a
 safe fallback route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
 
+**Important Limitation**: The current implementation uses pattern-matching "kernel matchers" 
+that are hardcoded to recognize specific loop structures (nested loops, rolling windows). 
+These matchers are brittle - adding intermediate variables or reordering statements can 
+cause compilation to fall back to the R interpreter, even if the code is semantically 
+equivalent. See the verification section below for details on formal checking.
+
 ### Convolution benchmark
 
 This example benchmarks the classic convolution routine written in plain C (no manual
@@ -952,6 +958,69 @@ fast_fn <- function(x, y) {
   }
 }
 ```
+
+### Formal verification
+
+`tcc_quick()` includes a formal verification system (enabled by default with `verify = TRUE`) that checks:
+
+1. **IR Invariants**: All variables referenced in the intermediate representation are declared, types are consistent, no use-before-definition
+2. **C Code Properties**: Generated C has balanced PROTECT/UNPROTECT, includes required headers, validates bounds before allocation
+3. **Codegen Correctness**: Function signatures match expectations, memory management is correct
+
+When verification detects issues, warnings are emitted but compilation proceeds. Use `verify = FALSE` to disable.
+
+```r
+# Enable verification (default)
+fn_safe <- tcc_quick(my_function, verify = TRUE)
+
+# Disable for production (not recommended)
+fn_fast <- tcc_quick(my_function, verify = FALSE)
+```
+
+The verification system can also perform property-based testing:
+
+```r
+# Test semantic equivalence between R and compiled versions
+source("R/tcc_quick_verify.R")
+equivalence <- tcc_quick_test_equivalence(
+  my_function,
+  tcc_quick(my_function),
+  tcc_quick_parse_declare(my_function),
+  n_tests = 100
+)
+print(equivalence)
+```
+
+**Kernel matcher brittleness**: The current loop kernel matchers (`tcc_quick_try_lower_nested_loop_kernel`, `tcc_quick_try_lower_roll_mean_kernel`) are hardcoded pattern matchers, not general lowering. They require exact statement counts and structures. For example:
+
+```r
+# ✓ This compiles (matches kernel pattern)
+convolve_exact <- function(a, b) {
+  declare(type(a = double(NA)), type(b = double(NA)))
+  ab <- double(length(a) + length(b) - 1)
+  for (i in seq_along(a)) {
+    for (j in seq_along(b)) {
+      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
+    }
+  }
+  ab
+}
+
+# ✗ This falls back (added intermediate variable)
+convolve_variant <- function(a, b) {
+  declare(type(a = double(NA)), type(b = double(NA)))
+  n_out <- length(a) + length(b) - 1  # Extra statement breaks matcher
+  ab <- double(n_out)
+  for (i in seq_along(a)) {
+    for (j in seq_along(b)) {
+      ab[i + j - 1] <- ab[i + j - 1] + a[i] * b[j]
+    }
+  }
+  ab
+}
+```
+
+This is a known limitation documented in `docs/rjit_critical_analysis.md`. Future work will replace kernel matchers with general statement-level lowering.
 
 ## Known limitations
 
