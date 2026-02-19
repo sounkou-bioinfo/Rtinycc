@@ -718,7 +718,7 @@ ffi$global_global_counter_get()
 
 `CSV` parser using [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) on linux
 
-```{r io_uring-demo, eval=FALSE}
+```{r io_uring-demo, eval=TRUE}
 if (Sys.info()[["sysname"]] == "Linux") {
   c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
 
