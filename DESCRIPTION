@@ -12,7 +12,7 @@ Description: Builds 'TinyCC' (Tiny 'C' Compiler) 'cli' and library for R package
     'TinyCC' is a small and fast 'C' compiler that can be used for various purposes, including preprocessing of headers, just-in-time compilation 'C' code in 'R' for
     'C' "scripting".
 License: GPL (>= 3)
-Depends: R (>= 4.4.0)
+Depends: R (>= 4.3.0)
 Imports:
     lambda.r
 Suggests:

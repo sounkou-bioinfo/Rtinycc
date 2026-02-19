@@ -19,10 +19,12 @@ tcc_quick_cache_key <- function(fn, decl) {
   )
   raw_bytes <- serialize(key_data, connection = NULL, ascii = FALSE)
   # Use a simple FNV-1a-like hash for fixed-length key
+  # Use modulo arithmetic to prevent integer overflow
   hash <- 0L
   for (i in seq_along(raw_bytes)) {
     hash <- bitwXor(hash, as.integer(raw_bytes[i]))
-    hash <- bitwAnd(hash * 16777619L, 2147483647L)
+    # Prevent overflow by using modulo before multiplication
+    hash <- as.integer((as.numeric(hash) * 16777619) %% 2147483647)
   }
   sprintf("tccq_%08x", hash)
 }
