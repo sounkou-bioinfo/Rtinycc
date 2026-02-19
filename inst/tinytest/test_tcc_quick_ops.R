@@ -202,3 +202,20 @@ tq_atan2_vec <- tcc_quick(function(y, x) {
 y_vals <- c(1, 0, -1)
 x_vals <- c(0, 1, 0)
 expect_equal(tq_atan2_vec(y_vals, x_vals), atan2(y_vals, x_vals))
+
+# ---------------------------------------------------------------------------
+# Ops table should reflect actual lowered subset
+# ---------------------------------------------------------------------------
+
+ops_tbl <- tcc_quick_ops()
+expect_true(any(ops_tbl$r == "solve(A, b)"))
+expect_true(any(ops_tbl$r == "solve(A, B)"))
+expect_true(any(ops_tbl$r == "t(A)"))
+expect_true(any(ops_tbl$r == "rowSums(A)"))
+expect_true(any(ops_tbl$r == "colSums(A)"))
+expect_true(any(ops_tbl$r == "rowMeans(A)"))
+expect_true(any(ops_tbl$r == "colMeans(A)"))
+expect_true(any(ops_tbl$r == "apply(A, 1/2, sum/mean)"))
+expect_true(any(ops_tbl$r == "raw(n)"))
+expect_true(any(ops_tbl$r == "as.raw(x)"))
+expect_true(any(ops_tbl$r == "quantile(x, probs)"))

@@ -1,5 +1,7 @@
 # Rtinycc 0.0.3.9000 (development version)
 
+- `tcc_quick` for transpiling some `R` functions to `C` and compile them in memory
+
 - Add variadic FFI support in `tcc_bind()` with both legacy typed-tail mode (`variadic = TRUE`, `varargs`) and bounded dynamic-tail mode (`variadic = TRUE`, `varargs_types`, `varargs_min`, `varargs_max`).
 
 - Refactor FFI codegen and callbacks to use lambda.r guard rules instead of long `if`/`else` or `switch` chains. This keeps type-mapping logic centralized in `R/aaa_ffi_codegen_rules.R`, makes behavior easier to extend, and reduces duplication across codegen sites.

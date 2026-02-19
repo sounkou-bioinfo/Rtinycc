@@ -34,6 +34,53 @@ Pointers: `ptr` and `sexp` are exposed as external pointers; ownership is tracke
 - If the package is not installed locally, load it for interactive/dev checks with `devtools::load_all()`.
 - Development plumbing: run `air format` after edits, use `make install` for local installs, `make check` for CRAN-style checks, and `make rdm` to regenerate README. Always add or update tinytests for behavior changes.
 
+## Maintenance helpers (dev-only)
+
+Use these helper functions in development sessions to regenerate coverage
+snapshots and delegated fallback contract tables. Keep them out of user-facing
+README content.
+
+```r
+rtinycc_file_coverage <- function(path = ".") {
+  cov <- covr::package_coverage(path)
+  df <- as.data.frame(cov)
+  df$key <- paste(
+    df$first_line, df$last_line, df$first_column, df$last_column, sep = ":"
+  )
+  expr <- aggregate(value ~ filename + key, data = df, FUN = max)
+  out <- aggregate(
+    value ~ filename,
+    data = expr,
+    FUN = function(x) 100 * mean(x > 0)
+  )
+  names(out)[2] <- "coverage_pct"
+  out[order(out$coverage_pct, out$filename), ]
+}
+
+rtinycc_fallback_contracts_table <- function() {
+  allow <- sort(unique(Rtinycc:::tcc_quick_rf_call_allowlist()))
+  contracts <- Rtinycc:::tcc_quick_rf_call_contracts()
+  quiet <- Rtinycc:::tcc_quick_rf_call_quiet()
+
+  data.frame(
+    function_name = allow,
+    has_contract = allow %in% names(contracts),
+    mode = vapply(
+      allow,
+      function(fn) if (is.null(contracts[[fn]])) NA_character_ else contracts[[fn]]$mode,
+      character(1)
+    ),
+    shape = vapply(
+      allow,
+      function(fn) if (is.null(contracts[[fn]])) NA_character_ else contracts[[fn]]$shape,
+      character(1)
+    ),
+    quiet = allow %in% quiet,
+    stringsAsFactors = FALSE
+  )
+}
+```
+
 ## Editing rules
 
 - Use roxygen2 for exported functions and always run `make rd` after edits.

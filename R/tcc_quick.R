@@ -59,6 +59,20 @@ tccq_ir_has_tag <- function(node, tag_name) {
 }
 
 tccq_runtime_library_available <- function(name) {
+  if (identical(name, "Rblas") || identical(name, "Rlapack")) {
+    info <- tryCatch(blas_lapack_info(), error = function(e) NULL)
+    if (is.list(info)) {
+      has_flag <- if (identical(name, "Rblas")) {
+        isTRUE(info$has_rblas)
+      } else {
+        isTRUE(info$has_rlapack)
+      }
+      if (has_flag) {
+        return(TRUE)
+      }
+    }
+  }
+
   roots <- unique(normalizePath(
     c(
       file.path(R.home("lib")),
@@ -410,6 +424,13 @@ tcc_quick_ops <- function() {
     ),
     data.frame(
       category = "reduction",
+      r = "quantile(x, probs)",
+      c = "looped type7 over probs vector",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "reduction",
       r = "which.min(x)",
       c = "argmin loop",
       vectorized = FALSE,
@@ -534,6 +555,13 @@ tcc_quick_ops <- function() {
       c = "Rf_allocVector",
       vectorized = FALSE,
       stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "vector",
+      r = "raw(n)",
+      c = "Rf_allocVector",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
     )
   )
   vec_df <- do.call(rbind, vec_rows)
@@ -593,6 +621,62 @@ tcc_quick_ops <- function() {
       category = "matrix",
       r = "tcrossprod(A, B)",
       c = "BLAS dgemm (A B^T)",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "t(A)",
+      c = "native transpose loop",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "solve(A, b)",
+      c = "LAPACK dgesv",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "solve(A, B)",
+      c = "LAPACK dgesv",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "rowSums(A)",
+      c = "native reducer loop",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "colSums(A)",
+      c = "native reducer loop",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "rowMeans(A)",
+      c = "native reducer loop",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "colMeans(A)",
+      c = "native reducer loop",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "matrix",
+      r = "apply(A, 1/2, sum/mean)",
+      c = "lowered to row/col reducers (subset)",
       vectorized = FALSE,
       stringsAsFactors = FALSE
     )
@@ -715,6 +799,13 @@ tcc_quick_ops <- function() {
       category = "cast",
       r = "as.numeric(x)",
       c = "(double)(x)",
+      vectorized = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      category = "cast",
+      r = "as.raw(x)",
+      c = "(raw)(x)",
       vectorized = FALSE,
       stringsAsFactors = FALSE
     )
