@@ -180,3 +180,46 @@ expect_error(
   tcc_quick(code_mode_test, mode = "code", fallback = "never"),
   pattern = "No code generated"
 )
+
+# Test excessive loop depth (should fall back)
+# Note: This is a pathological case; real code rarely nests this deeply
+deep_loop <- function(a) {
+  declare(type(a = double(NA)))
+  result <- 0.0
+  # Deliberately create 11 nested loops to exceed limit
+  for (i1 in seq_along(a)) {
+    for (i2 in seq_along(a)) {
+      for (i3 in seq_along(a)) {
+        for (i4 in seq_along(a)) {
+          for (i5 in seq_along(a)) {
+            for (i6 in seq_along(a)) {
+              for (i7 in seq_along(a)) {
+                for (i8 in seq_along(a)) {
+                  for (i9 in seq_along(a)) {
+                    for (i10 in seq_along(a)) {
+                      for (i11 in seq_along(a)) {
+                        result <- result + a[i1]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  result
+}
+
+# Should fall back with auto due to excessive depth
+deep_fallback <- tcc_quick(deep_loop, fallback = "auto")
+expect_true(identical(deep_fallback, deep_loop))
+
+# Should error with never
+expect_error(
+  tcc_quick(deep_loop, fallback = "never"),
+  pattern = "Loop nesting depth"
+)
+

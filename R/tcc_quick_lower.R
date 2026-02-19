@@ -14,8 +14,13 @@ tcc_quick_promote_mode <- function(lhs, rhs) {
     if (lhs == rhs) {
         return(lhs)
     }
+    # Numeric types promote to double
     if (lhs %in% c("double", "integer") && rhs %in% c("double", "integer")) {
         return("double")
+    }
+    # Logical can stay logical when both sides are logical
+    if (lhs == "logical" && rhs == "logical") {
+        return("logical")
     }
     NULL
 }
@@ -215,9 +220,6 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
             ))
         }
         out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
-        if (is.null(out_mode) && yes$mode == no$mode && yes$mode == "logical") {
-            out_mode <- "logical"
-        }
         if (is.null(out_mode)) {
             return(tcc_quick_lower_result(
                 FALSE,
@@ -267,9 +269,6 @@ tcc_quick_lower_expr <- function(e, decl, locals = list()) {
             ))
         }
         out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
-        if (is.null(out_mode) && yes$mode == no$mode && yes$mode == "logical") {
-            out_mode <- "logical"
-        }
         if (is.null(out_mode)) {
             return(tcc_quick_lower_result(
                 FALSE,
@@ -1193,6 +1192,17 @@ tcc_quick_try_lower_kernels <- function(exprs, decl) {
 tcc_quick_lower <- function(fn, decl) {
     exprs <- tcc_quick_body_without_declare(fn)
     lex <- tcc_quick_lex_exprs(exprs)
+    
+    # Validate loop depth is reasonable
+    if (!is.null(lex$max_loop_depth) && lex$max_loop_depth > 10L) {
+        return(tcc_quick_fallback_ir(
+            sprintf(
+                "Loop nesting depth (%d) exceeds limit (10)",
+                lex$max_loop_depth
+            )
+        ))
+    }
+    
     exprs <- tcc_quick_normalize_exprs(exprs, lex)
 
     checked <- tcc_quick_typecheck_exprs(exprs, decl)
