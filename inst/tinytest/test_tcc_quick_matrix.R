@@ -134,6 +134,39 @@ expect_error(
   pattern = "square matrix"
 )
 
+# solve native lowering is currently for direct variable inputs only
+solve_nested <- function(A, b) {
+  declare(type(A = double(NA, NA)), type(b = double(NA)))
+  solve(crossprod(A), b)
+}
+
+expect_error(
+  tcc_quick(solve_nested, fallback = "hard"),
+  pattern = "outside the current tcc_quick subset|hard fallback mode forbids Rf_eval"
+)
+
+# mixed solve delegation + native matmul path used in README OLS chunk
+ols_soft_mixed <- function(X, y) {
+  declare(type(X = double(NA, NA)), type(y = double(NA)))
+  coef <- solve(crossprod(X), crossprod(X, y))
+  pred <- X %*% coef
+  n <- nrow(X)
+  k <- ncol(X)
+  s2 <- 0.0
+  for (i in seq_len(n)) {
+    r <- y[i] - pred[i]
+    s2 <- s2 + r * r
+  }
+  s2 / as.double(n - k)
+}
+
+f_ols_soft_mixed <- tcc_quick(ols_soft_mixed, fallback = "soft")
+set.seed(123)
+Xols <- cbind(1, matrix(rnorm(400), ncol = 4))
+yols <- as.numeric(Xols %*% c(1, 2, -1, 0.5, 3) + rnorm(nrow(Xols)))
+expect_equal(f_ols_soft_mixed(Xols, yols), ols_soft_mixed(Xols, yols), tolerance = 1e-10)
+expect_false(identical(f_ols_soft_mixed, ols_soft_mixed))
+
 # --- native transpose t(A) ---
 
 t_mat <- function(A) {

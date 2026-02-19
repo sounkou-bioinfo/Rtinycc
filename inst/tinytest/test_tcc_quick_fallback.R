@@ -61,7 +61,19 @@ expect_error(
   pattern = "hard fallback mode forbids Rf_eval"
 )
 
-expect_true(is.function(tcc_quick(needs_rf_call, fallback = "soft")))
+needs_rf_call_soft <- tcc_quick(needs_rf_call, fallback = "soft")
+expect_true(is.function(needs_rf_call_soft))
+expect_true(!identical(needs_rf_call_soft, needs_rf_call))
+expect_equal(needs_rf_call_soft(2), needs_rf_call(2), tolerance = 1e-12)
+
+is_na_reduce <- function(x) {
+  declare(type(x = double(NA)))
+  sum(is.na(x))
+}
+
+is_na_reduce_soft <- tcc_quick(is_na_reduce, fallback = "soft")
+x_na <- c(1, NA, 3, NA)
+expect_equal(is_na_reduce_soft(x_na), is_na_reduce(x_na), tolerance = 1e-12)
 
 # --- IR validation: non-literal na.rm rejected in hard mode ---
 
@@ -95,6 +107,60 @@ expect_warning(
 expect_error(
   tcc_quick(not_allowlisted_call, fallback = "hard"),
   pattern = "outside the current tcc_quick subset|Unsupported function call"
+)
+
+# --- allowlisted call without explicit delegated contract ---
+
+no_contract_allowlisted <- function(x) {
+  declare(type(x = double(1)))
+  Sys.time()
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(no_contract_allowlisted, fallback = "soft")),
+  no_contract_allowlisted
+))
+
+expect_warning(
+  tcc_quick(no_contract_allowlisted, fallback = "soft"),
+  pattern = "Delegated call contract unavailable"
+)
+
+expect_error(
+  tcc_quick(no_contract_allowlisted, fallback = "hard"),
+  pattern = "outside the current tcc_quick subset|Delegated call contract unavailable"
+)
+
+# --- delegated shape contract keeps scalar is.na scalar ---
+
+is_na_scalar <- function(x) {
+  declare(type(x = double(1)))
+  is.na(x)
+}
+
+is_na_scalar_soft <- tcc_quick(is_na_scalar, fallback = "soft")
+expect_equal(is_na_scalar_soft(NA_real_), TRUE)
+expect_equal(is_na_scalar_soft(1.0), FALSE)
+
+# --- matrix operands in elementwise ops should fallback, not crash codegen ---
+
+matrix_vec_minus <- function(X, y, b) {
+  declare(
+    type(X = double(NA, NA)),
+    type(y = double(NA)),
+    type(b = double(NA, NA))
+  )
+  y - X %*% b
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(matrix_vec_minus, fallback = "soft")),
+  matrix_vec_minus
+))
+
+expect_error(
+  tcc_quick(matrix_vec_minus, fallback = "hard"),
+  pattern = "outside the current tcc_quick subset|Matrix operand for operator '-'"
 )
 
 # raw arithmetic is intentionally disallowed; use bitw* helpers or explicit casts

@@ -31,6 +31,101 @@ tcc_quick_promote_mode <- function(lhs, rhs) {
   NULL
 }
 
+tccq_promote_mode_chain <- function(modes) {
+  modes <- unique(modes)
+  if (!length(modes)) {
+    return("double")
+  }
+  rank_mode <- function(mode) {
+    switch(
+      mode,
+      raw = 1L,
+      logical = 2L,
+      integer = 3L,
+      double = 4L,
+      5L
+    )
+  }
+  ordered <- c("raw", "logical", "integer", "double")
+  if (all(modes %in% ordered)) {
+    return(ordered[max(vapply(modes, rank_mode, integer(1)))])
+  }
+  "double"
+}
+
+tccq_rf_contract_resolve <- function(fname, rf_args) {
+  specs <- tcc_quick_rf_call_contracts()
+  spec <- specs[[fname]]
+  if (is.null(spec)) {
+    return(list(
+      ok = FALSE,
+      reason = paste0("No delegated contract registered for: ", fname)
+    ))
+  }
+
+  first_arg <- if (length(rf_args)) rf_args[[1L]] else NULL
+  mode <- switch(
+    spec$mode %||% "double",
+    promote_args = tccq_promote_mode_chain(
+      vapply(rf_args, function(a) a$mode %||% "double", character(1))
+    ),
+    arg1_mode = first_arg$mode %||% "double",
+    spec$mode %||% "double"
+  )
+  shape <- switch(
+    spec$shape %||% "scalar",
+    arg1_shape = first_arg$shape %||% "scalar",
+    solve_shape = if (length(rf_args) >= 2L) {
+      rf_args[[2L]]$shape %||% "vector"
+    } else {
+      "matrix"
+    },
+    spec$shape %||% "scalar"
+  )
+
+  if (!mode %in% c("double", "integer", "logical", "raw")) {
+    return(list(
+      ok = FALSE,
+      reason = paste0("Unsupported delegated mode '", mode, "' for: ", fname)
+    ))
+  }
+  if (!shape %in% c("scalar", "vector", "matrix")) {
+    return(list(
+      ok = FALSE,
+      reason = paste0("Unsupported delegated shape '", shape, "' for: ", fname)
+    ))
+  }
+
+  list(
+    ok = TRUE,
+    mode = mode,
+    shape = shape,
+    contract = list(
+      name = fname,
+      length_rule = spec$length_rule %||% "none"
+    )
+  )
+}
+
+tccq_reduce_output_mode <- function(op, arg_mode) {
+  if (op == "prod") {
+    return("double")
+  }
+  if (op == "sum") {
+    if (arg_mode %in% c("logical", "integer")) {
+      return("integer")
+    }
+    return("double")
+  }
+  if (op %in% c("max", "min")) {
+    if (arg_mode %in% c("logical", "integer")) {
+      return("integer")
+    }
+    return("double")
+  }
+  arg_mode
+}
+
 tcc_quick_numeric_unary_funs <- function() {
   reg <- tcc_ir_c_api_registry()
   names(Filter(function(e) e$arity == 1L, reg))
@@ -49,7 +144,27 @@ tcc_quick_body_without_declare <- function(fn) {
 tcc_quick_verify_ir <- function(ir) {
   if (identical(ir$tag, "fallback")) {
     if (is.null(ir$edge)) ir$edge <- "fallback_eval"
+    return(ir)
   }
+
+  walk <- function(node) {
+    if (is.null(node) || !is.list(node)) {
+      return(invisible(NULL))
+    }
+    if (!is.null(node$tag) && identical(node$tag, "rf_call")) {
+      if (is.null(node$mode) || is.null(node$shape) || is.null(node$contract)) {
+        stop("rf_call node is missing mode/shape/contract", call. = FALSE)
+      }
+    }
+    for (nm in names(node)) {
+      child <- node[[nm]]
+      if (is.list(child)) {
+        walk(child)
+      }
+    }
+    invisible(NULL)
+  }
+  walk(ir)
   ir
 }
 
@@ -136,6 +251,10 @@ tccq_parse_literal_int <- function(x) {
     }
   }
   NA_integer_
+}
+
+tccq_matrix_in_shapes <- function(...) {
+  any(unlist(list(...), use.names = FALSE) == "matrix")
 }
 
 # ---------------------------------------------------------------------------
@@ -344,6 +463,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!x$ok) {
       return(x)
     }
+    if (identical(x$shape, "matrix")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Matrix unary operator '", fname, "' is not in subset")
+      ))
+    }
     return(tccq_lower_result(
       TRUE,
       node = list(tag = "unary", op = fname, x = x$node),
@@ -355,6 +480,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     x <- tccq_lower_expr(e[[2]], sc, decl)
     if (!x$ok) {
       return(x)
+    }
+    if (identical(x$shape, "matrix")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "Matrix logical negation is not in subset"
+      ))
     }
     return(tccq_lower_result(
       TRUE,
@@ -433,6 +564,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!x$ok) {
       return(x)
     }
+    if (identical(x$shape, "matrix")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Matrix call to ", fname, "() is not in subset")
+      ))
+    }
     entry <- tcc_ir_registry_lookup(fname)
     node <- list(tag = "call1", fun = fname, x = x$node)
     if (!is.null(entry$transform) && entry$transform == "x+1") {
@@ -462,6 +599,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     }
     if (!y$ok) {
       return(y)
+    }
+    if (tccq_matrix_in_shapes(x$shape, y$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Matrix call to ", fname, "() is not in subset")
+      ))
     }
     out_shape <- if (x$shape == "vector" || y$shape == "vector") {
       "vector"
@@ -636,17 +779,25 @@ tccq_lower_expr <- function(e, sc, decl) {
           shape = "scalar"
         )
       }
+      contract <- tccq_rf_contract_resolve(
+        delegated,
+        lapply(args, function(a) list(mode = a$mode, shape = a$shape))
+      )
+      if (!isTRUE(contract$ok)) {
+        return(tccq_lower_result(FALSE, reason = contract$reason))
+      }
       return(tccq_lower_result(
         TRUE,
         node = list(
           tag = "rf_call",
           fun = delegated,
           args = args,
-          mode = "double",
-          shape = "vector"
+          mode = contract$mode,
+          shape = contract$shape,
+          contract = contract$contract
         ),
-        mode = "double",
-        shape = "vector"
+        mode = contract$mode,
+        shape = contract$shape
       ))
     }
     return(tccq_lower_result(
@@ -661,20 +812,38 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!x$ok) {
       return(x)
     }
+    out_mode <- tccq_reduce_output_mode(fname, x$mode)
     if (x$shape == "vector" && identical(x$node$tag, "var")) {
       # Simple case: reduce a named variable (existing optimized path)
       return(tccq_lower_result(
         TRUE,
-        node = list(tag = "reduce", op = fname, arr = x$node$name),
-        mode = x$mode
+        node = list(
+          tag = "reduce",
+          op = fname,
+          arr = x$node$name,
+          mode = out_mode
+        ),
+        mode = out_mode
       ))
     }
     if (x$shape == "vector") {
       # General case: reduce any vector expression (composition)
       return(tccq_lower_result(
         TRUE,
-        node = list(tag = "reduce_expr", op = fname, expr = x$node),
-        mode = x$mode
+        node = list(
+          tag = "reduce_expr",
+          op = fname,
+          expr = x$node,
+          mode = out_mode
+        ),
+        mode = out_mode
+      ))
+    }
+    if (!identical(out_mode, x$mode)) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "cast", x = x$node, target_mode = out_mode),
+        mode = out_mode
       ))
     }
     return(tccq_lower_result(TRUE, node = x$node, mode = x$mode))
@@ -974,6 +1143,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!rhs$ok) {
       return(rhs)
     }
+    if (tccq_matrix_in_shapes(lhs$shape, rhs$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, " does not support matrix operands in subset")
+      ))
+    }
     if (!lhs$mode %in% c("integer") || !rhs$mode %in% c("integer")) {
       return(tccq_lower_result(
         FALSE,
@@ -1002,6 +1177,16 @@ tccq_lower_expr <- function(e, sc, decl) {
     }
     if (!rhs$ok) {
       return(rhs)
+    }
+    if (tccq_matrix_in_shapes(lhs$shape, rhs$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(
+          "Matrix operand for operator '",
+          fname,
+          "' is not in subset"
+        )
+      ))
     }
     if (lhs$mode == "raw" || rhs$mode == "raw") {
       if (fname %in% cmp_ops) {
@@ -1250,6 +1435,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!y$ok) {
       return(y)
     }
+    if (tccq_matrix_in_shapes(x$shape, y$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, "() does not support matrix operands in subset")
+      ))
+    }
     out_shape <- if (x$shape == "vector" || y$shape == "vector") {
       "vector"
     } else {
@@ -1348,6 +1539,19 @@ tccq_lower_expr <- function(e, sc, decl) {
         reason = paste0("Cannot lower argument ", ai, " of ", fname)
       ))
     }
+    if (
+      a$shape %in% c("vector", "matrix") &&
+        !a$node$tag %in% c("var", "rf_call", "matmul")
+    ) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(
+          "Delegated call ",
+          fname,
+          " requires named vector/matrix arguments in current subset"
+        )
+      ))
+    }
     rf_args[[ai]] <- a
   }
   rf_arg_nodes <- lapply(rf_args, function(a) {
@@ -1356,25 +1560,31 @@ tccq_lower_expr <- function(e, sc, decl) {
     nd$mode <- a$mode
     nd
   })
-  # Determine output shape heuristically: if any arg is vector/matrix,
-  # result is likely vector (e.g. %*%, t()).  For scalars, assume scalar.
-  out_shape <- "scalar"
-  for (a in rf_args) {
-    if (a$shape %in% c("vector", "matrix")) {
-      out_shape <- "vector"
-      break
-    }
+  contract <- tccq_rf_contract_resolve(fname, rf_args)
+  if (!isTRUE(contract$ok)) {
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0(
+        "Delegated call contract unavailable for ",
+        fname,
+        ": ",
+        contract$reason
+      )
+    ))
   }
+  out_mode <- contract$mode
+  out_shape <- contract$shape
   tccq_lower_result(
     TRUE,
     node = list(
       tag = "rf_call",
       fun = fname,
       args = rf_arg_nodes,
-      mode = "double",
-      shape = out_shape
+      mode = out_mode,
+      shape = out_shape,
+      contract = contract$contract
     ),
-    mode = "double",
+    mode = out_mode,
     shape = out_shape
   )
 }

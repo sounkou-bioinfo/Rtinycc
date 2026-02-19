@@ -62,6 +62,17 @@ tccq_validate_ir <- function(ir, fallback = c("auto", "soft", "hard")) {
           call. = FALSE
         )
       }
+      if (tag == "rf_call") {
+        if (is.null(node$mode) || is.null(node$shape) || is.null(node$contract)) {
+          stop("rf_call missing mode/shape/contract", call. = FALSE)
+        }
+        if (!node$mode %in% c("double", "integer", "logical", "raw")) {
+          stop("rf_call has unsupported mode: ", node$mode, call. = FALSE)
+        }
+        if (!node$shape %in% c("scalar", "vector", "matrix")) {
+          stop("rf_call has unsupported shape: ", node$shape, call. = FALSE)
+        }
+      }
       if (tag %in% c("mean_expr", "sd_expr", "median_expr")) {
         if (is.null(node$expr)) {
           stop(tag, " missing expr", call. = FALSE)

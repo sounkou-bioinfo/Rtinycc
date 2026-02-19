@@ -24,11 +24,9 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an experimental R-to-C transpiler (`tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr)) that compiles `declare()`-annotated R functions to C via TinyCC. The package runs on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an experimental R-to-C transpiler `tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr) that compiles `declare()`-annotated R functions to C via TinyCC. The package runs on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
 
-<!--
-Where quickr generates Fortran and relies on the Fortran compiler to fuse array temporaries, we generate C with guaranteed fusion at codegen time — we have to, because TinyCC is a single-pass compiler that does no optimization. The mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz, SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector expression tree, so `sum(x[a:b] * w)` compiles to a single accumulator loop with inline index arithmetic — no slice array, no product array, no intermediates. Slices are pointer offsets, element-wise ops are inline expressions, and reductions wrap the whole thing in one loop body.
--->
+
 ## How it works
 
 When you call `tcc_compile()`, Rtinycc generates C wrapper functions whose
@@ -786,7 +784,7 @@ if (Sys.info()[["sysname"]] == "Linux") {
 
 ## tcc_quick
 
-`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc, inspired by
+`tcc_quick()` is an experimental and limited in scope R-to-C transpiler path in Rtinycc, inspired by
 [quickr](https://github.com/t-kalinowski/quickr). It compiles a `declare()`-annotated
 subset of R into C and executes it via TinyCC, while preserving a safe fallback
 route to R evaluation through `Rf_lang*` + `Rf_eval` for an explicit allowlist
@@ -807,12 +805,13 @@ rank-3+ declarations (for example `double(NA, NA, NA)`) are parsed and tracked,
 but currently treated as outside the native subset pending full shape-polymorphic
 array lowering. In practice: `soft`/`auto` fall back, `hard` errors.
 
-
+<!--
 The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz,
 SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector
 expression tree, fusing slices, element-wise ops, and reductions into single
 tight loops with zero intermediate allocations. Vector slices (`x[a:b]`) are
 views (pointer + offset), never copies.
+-->
 
 ### Supported operations
 
@@ -1059,12 +1058,13 @@ fast_ols <- function(X, y) {
     type(y = double(NA))
   )
   coef <- solve(crossprod(X), crossprod(X, y))
-  resid <- y - X %*% coef
+  pred <- X %*% coef
   n <- nrow(X)
   k <- ncol(X)
   s2 <- 0.0
   for (i in seq_len(n)) {
-    s2 <- s2 + resid[i] * resid[i]
+    r <- y[i] - pred[i]
+    s2 <- s2 + r * r
   }
   s2 <- s2 / as.double(n - k)
   s2
@@ -1074,7 +1074,7 @@ quick_ols <- tcc_quick(fast_ols, fallback = "soft")
 
 set.seed(42)
 X <- cbind(1, matrix(rnorm(5000 * 4), ncol = 4))
-y <- X %*% c(1, 2, -1, 0.5, 3) + rnorm(5000)
+y <- as.numeric(X %*% c(1, 2, -1, 0.5, 3) + rnorm(5000))
 
 stopifnot(all.equal(fast_ols(X, y), quick_ols(X, y), tolerance = 1e-10))
 

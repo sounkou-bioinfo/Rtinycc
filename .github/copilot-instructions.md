@@ -213,6 +213,17 @@ Correspondence with SAC:
 - Full capability-gated enforcement across all dynamic call sites (beyond `rf_call`) is still future work.
 - Dimension-independent operations (SAC's `with`-loops over shape-polymorphic arrays) are future work.
 
+### API hardening review guardrails (architecture consistency)
+
+When working on `tcc_quick` hardening, treat these as required checks:
+
+- Prefer explicit contracts over heuristics for delegated calls (`rf_call`): mode, shape, and length expectations must be declared and enforced.
+- Avoid README-shaped implementations: do not special-case examples if a generic lowering/codegen rule is possible.
+- Reject run-away slop in tests: add regression tests that validate contract boundaries (type/shape/mode), not only happy-path values.
+- Keep semantics aligned across native and delegated paths (especially reductions, `na.rm`, and logical/integer/double mode behavior).
+- Keep IR state explicit: no hidden state transitions; node `mode`/`shape`/length assumptions should be representable and verifiable.
+- Any fallback or hard rejection must have actionable, deterministic diagnostics tied to policy and capability tables.
+
 ### Fallback strategy
 
 In `soft`/`auto`, fallback happens inside generated C via `Rf_lang*` + `Rf_eval`, not by bouncing back to R. In `hard`, any `rf_call` in IR is rejected before codegen. Any new C helper referenced by TCC-generated code must be added to `RC_libtcc_add_host_symbols()` (macOS/Windows requirement).

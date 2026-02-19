@@ -145,6 +145,58 @@ tcc_quick_rf_call_quiet <- function() {
   c("%*%", "crossprod", "tcrossprod")
 }
 
+# Explicit delegated contracts for rf_call fallback nodes.
+# Only functions listed here are eligible for delegated lowering.
+# Missing entries force deterministic fallback/error based on policy.
+tcc_quick_rf_call_contracts <- function() {
+  list(
+    `%*%` = list(mode = "double", shape = "matrix"),
+    crossprod = list(mode = "double", shape = "matrix"),
+    tcrossprod = list(mode = "double", shape = "matrix"),
+    t = list(mode = "double", shape = "matrix"),
+    solve = list(mode = "double", shape = "solve_shape"),
+    rowSums = list(mode = "double", shape = "vector"),
+    colSums = list(mode = "double", shape = "vector"),
+    rowMeans = list(mode = "double", shape = "vector"),
+    colMeans = list(mode = "double", shape = "vector"),
+    dim = list(mode = "integer", shape = "vector"),
+    c = list(mode = "promote_args", shape = "vector", length_rule = "sum_args"),
+    `is.na` = list(
+      mode = "logical",
+      shape = "arg1_shape",
+      length_rule = "arg1"
+    ),
+    `is.finite` = list(
+      mode = "logical",
+      shape = "arg1_shape",
+      length_rule = "arg1"
+    ),
+    `is.infinite` = list(
+      mode = "logical",
+      shape = "arg1_shape",
+      length_rule = "arg1"
+    ),
+    `is.nan` = list(
+      mode = "logical",
+      shape = "arg1_shape",
+      length_rule = "arg1"
+    ),
+    duplicated = list(
+      mode = "logical",
+      shape = "arg1_shape",
+      length_rule = "arg1"
+    ),
+    which = list(mode = "integer", shape = "vector"),
+    tabulate = list(mode = "integer", shape = "vector"),
+    match = list(mode = "integer", shape = "vector", length_rule = "arg1"),
+    order = list(mode = "integer", shape = "vector"),
+    nchar = list(mode = "integer", shape = "vector"),
+    sort = list(mode = "arg1_mode", shape = "vector"),
+    rank = list(mode = "double", shape = "vector"),
+    unique = list(mode = "arg1_mode", shape = "vector")
+  )
+}
+
 # Load exported R API symbol table bundled in inst/RAPI/API.csv
 tcc_rapi_table <- function() {
   p <- system.file("RAPI", "API.csv", package = "Rtinycc")

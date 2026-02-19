@@ -74,6 +74,26 @@ tccq_cg_c_fun <- function(r_fun) {
   r_fun
 }
 
+tccq_cg_sexp_type <- function(mode) {
+  switch(
+    mode %||% "double",
+    integer = "INTSXP",
+    logical = "LGLSXP",
+    raw = "RAWSXP",
+    "REALSXP"
+  )
+}
+
+tccq_cg_scalar_extract <- function(mode, sexp_var) {
+  switch(
+    mode %||% "double",
+    integer = sprintf("INTEGER(%s)[0]", sexp_var),
+    logical = sprintf("LOGICAL(%s)[0]", sexp_var),
+    raw = sprintf("RAW(%s)[0]", sexp_var),
+    sprintf("REAL(%s)[0]", sexp_var)
+  )
+}
+
 # ---------------------------------------------------------------------------
 # Expression codegen
 # ---------------------------------------------------------------------------
@@ -279,16 +299,8 @@ tccq_cg_expr <- function(node) {
     if (is.null(node$var_name)) {
       stop("rf_call missing var_name - pre-pass not run?", call. = FALSE)
     }
-    # For scalar extraction: Rf_asReal / Rf_asInteger / Rf_asLogical
-    mode <- node$mode %||% "double"
-    extract <- switch(
-      mode,
-      integer = sprintf("Rf_asInteger(%s)", node$var_name),
-      logical = sprintf("Rf_asLogical(%s)", node$var_name),
-      raw = sprintf("((unsigned char)Rf_asInteger(%s))", node$var_name),
-      sprintf("Rf_asReal(%s)", node$var_name)
-    )
-    return(extract)
+    # Delegated result was already runtime-validated; extract directly.
+    return(tccq_cg_scalar_extract(node$mode, node$var_name))
   }
 
   stop(paste0("tccq_cg_expr: unsupported tag '", tag, "'"), call. = FALSE)
@@ -522,13 +534,6 @@ tccq_cg_stmt <- function(node, indent) {
       rf_lines <- rf_res$lines
       rf_var <- rf_res$var
       if (identical(node$shape, "vector") || identical(node$shape, "matrix")) {
-        sxp_type <- switch(
-          node$mode,
-          integer = "INTSXP",
-          logical = "LGLSXP",
-          raw = "RAWSXP",
-          "REALSXP"
-        )
         ptr_fun <- switch(
           node$mode,
           integer = "INTEGER",
@@ -536,25 +541,42 @@ tccq_cg_stmt <- function(node, indent) {
           raw = "RAW",
           "REAL"
         )
+        dims <- if (identical(node$shape, "matrix")) {
+          paste0(
+            "\n",
+            pad,
+            "nrow_",
+            nm,
+            " = Rf_nrows(s_",
+            nm,
+            ");\n",
+            pad,
+            "ncol_",
+            nm,
+            " = Rf_ncols(s_",
+            nm,
+            ");"
+          )
+        } else {
+          ""
+        }
         return(paste0(
           rf_lines,
           "\n",
           pad,
           "s_",
           nm,
-          " = PROTECT(Rf_coerceVector(",
+          " = ",
           rf_var,
-          ", ",
-          sxp_type,
-          "));\n",
-          pad,
-          "nprotect_++;\n",
+          ";\n",
           pad,
           "n_",
           nm,
           " = XLENGTH(s_",
           nm,
-          ");\n",
+          ");",
+          dims,
+          "\n",
           pad,
           "p_",
           nm,
@@ -565,20 +587,13 @@ tccq_cg_stmt <- function(node, indent) {
           ");"
         ))
       } else {
-        extract <- switch(
-          node$mode,
-          integer = sprintf("Rf_asInteger(%s)", rf_var),
-          logical = sprintf("Rf_asLogical(%s)", rf_var),
-          raw = sprintf("((unsigned char)Rf_asInteger(%s))", rf_var),
-          sprintf("Rf_asReal(%s)", rf_var)
-        )
         return(paste0(
           rf_lines,
           "\n",
           pad,
           nm,
           "_ = ",
-          extract,
+          tccq_cg_scalar_extract(node$mode, rf_var),
           ";"
         ))
       }
@@ -1069,10 +1084,17 @@ tccq_cg_reduce_stmt <- function(node, indent) {
   op <- node$op
   var <- sprintf("red_%s_%s", op, arr)
 
-  c_type <- if (op %in% c("any", "all")) "int" else "double"
+  out_mode <- node$mode %||% "double"
+  c_type <- if (op %in% c("any", "all")) {
+    "int"
+  } else if (out_mode == "integer") {
+    "int"
+  } else {
+    "double"
+  }
   init <- switch(
     op,
-    sum = "0.0",
+    sum = if (c_type == "int") "0" else "0.0",
     prod = "1.0",
     max = sprintf("p_%s[0]", arr),
     min = sprintf("p_%s[0]", arr),
@@ -1206,10 +1228,17 @@ tccq_cg_reduce_expr_stmt <- function(node, indent) {
   idx <- sprintf("rx%d_", tccq_reduce_expr_counter_$n)
   elem <- tccq_cg_vec_elem(node$expr, idx)
 
-  c_type <- if (op %in% c("any", "all")) "int" else "double"
+  out_mode <- node$mode %||% "double"
+  c_type <- if (op %in% c("any", "all")) {
+    "int"
+  } else if (out_mode == "integer") {
+    "int"
+  } else {
+    "double"
+  }
   init <- switch(
     op,
-    sum = "0.0",
+    sum = if (c_type == "int") "0" else "0.0",
     prod = "1.0",
     max = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
     min = paste0("(", tccq_cg_vec_elem(node$expr, "0"), ")"),
@@ -1221,8 +1250,20 @@ tccq_cg_reduce_expr_stmt <- function(node, indent) {
     op,
     sum = sprintf("%s += %s;", var, elem),
     prod = sprintf("%s *= %s;", var, elem),
-    max = sprintf("{ double v_ = %s; if (v_ > %s) %s = v_; }", elem, var, var),
-    min = sprintf("{ double v_ = %s; if (v_ < %s) %s = v_; }", elem, var, var),
+    max = sprintf(
+      "{ %s v_ = %s; if (v_ > %s) %s = v_; }",
+      c_type,
+      elem,
+      var,
+      var
+    ),
+    min = sprintf(
+      "{ %s v_ = %s; if (v_ < %s) %s = v_; }",
+      c_type,
+      elem,
+      var,
+      var
+    ),
     any = sprintf("if (%s) { %s = 1; break; }", elem, var),
     all = sprintf("if (!(%s)) { %s = 0; break; }", elem, var),
     ""
@@ -2655,6 +2696,133 @@ tccq_cg_cumulative_stmt <- function(node, indent, target_ptr) {
 # rf_call: emit Rf_lang + Rf_eval to call R function from generated C
 # ---------------------------------------------------------------------------
 
+tccq_cg_rf_arg_len <- function(arg, arg_sexp) {
+  shape <- arg$shape %||% "scalar"
+  if (shape == "scalar") {
+    return("1")
+  }
+  if (shape %in% c("vector", "matrix")) {
+    return(sprintf("XLENGTH(%s)", arg_sexp))
+  }
+  tccq_cg_vec_len(arg) %||% "1"
+}
+
+tccq_cg_rf_contract_checks <- function(node, var, arg_len_c, indent) {
+  pad <- strrep("  ", indent)
+  fun <- node$fun %||% "<unknown>"
+  mode <- node$mode %||% "double"
+  shape <- node$shape %||% "scalar"
+  sxp_type <- tccq_cg_sexp_type(mode)
+  lines <- c()
+
+  type_msg <- sprintf(
+    "tcc_quick delegated call '%s' expected %s/%s result, got TYPEOF=%%d",
+    fun,
+    shape,
+    mode
+  )
+  lines <- c(
+    lines,
+    paste0(
+      pad,
+      "if (TYPEOF(",
+      var,
+      ") != ",
+      sxp_type,
+      ") Rf_error(\"",
+      type_msg,
+      "\", TYPEOF(",
+      var,
+      "));"
+    )
+  )
+
+  if (shape == "scalar") {
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "if (Rf_isMatrix(",
+        var,
+        ") || XLENGTH(",
+        var,
+        ") != 1) Rf_error(\"tcc_quick delegated call '",
+        fun,
+        "' expected scalar result\");"
+      )
+    )
+  } else if (shape == "vector") {
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "if (Rf_isMatrix(",
+        var,
+        ")) Rf_error(\"tcc_quick delegated call '",
+        fun,
+        "' expected vector result\");"
+      )
+    )
+  } else if (shape == "matrix") {
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "if (!Rf_isMatrix(",
+        var,
+        ")) Rf_error(\"tcc_quick delegated call '",
+        fun,
+        "' expected matrix result\");"
+      )
+    )
+  }
+
+  length_rule <- node$contract$length_rule %||% "none"
+  if (length_rule == "arg1" && length(arg_len_c) >= 1L) {
+    expect_len <- arg_len_c[[1L]]
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "if (XLENGTH(",
+        var,
+        ") != (R_xlen_t)(",
+        expect_len,
+        ")) Rf_error(\"tcc_quick delegated call '",
+        fun,
+        "' length mismatch: expected %lld got %lld\", ",
+        "(long long)(",
+        expect_len,
+        "), (long long)XLENGTH(",
+        var,
+        "));"
+      )
+    )
+  } else if (length_rule == "sum_args" && length(arg_len_c) >= 1L) {
+    expect_len <- paste(sprintf("((R_xlen_t)(%s))", arg_len_c), collapse = " + ")
+    lines <- c(
+      lines,
+      paste0(
+        pad,
+        "if (XLENGTH(",
+        var,
+        ") != (R_xlen_t)(",
+        expect_len,
+        ")) Rf_error(\"tcc_quick delegated call '",
+        fun,
+        "' length mismatch: expected %lld got %lld\", ",
+        "(long long)(",
+        expect_len,
+        "), (long long)XLENGTH(",
+        var,
+        "));"
+      )
+    )
+  }
+
+  lines
+}
+
 tccq_cg_rf_call_stmt <- function(node, indent) {
   pad <- strrep("  ", indent)
   fun <- node$fun
@@ -2673,6 +2841,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
   # Build the argument SEXPs - scalars need wrapping, vectors use s_name.
   # Nested rf_calls are recursively emitted first.
   arg_c <- character(n)
+  arg_len_c <- character(n)
   for (i in seq_len(n)) {
     a <- args[[i]]
     a_shape <- a$shape %||% "scalar"
@@ -2683,6 +2852,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       child <- tccq_cg_rf_call_stmt(a, indent)
       lines <- c(lines, child$lines)
       arg_c[i] <- child$var
+      arg_len_c[i] <- tccq_cg_rf_arg_len(a, child$var)
     } else if (a_tag == "matmul") {
       # Matrix expression used as argument to an R call: materialize first
       tmpm <- sprintf("rfmat_%s_%d_%d", tccq_cg_ident(fun), uid, i)
@@ -2696,9 +2866,11 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       )
       lines <- c(lines, tccq_cg_matmul_stmt(a, indent, tmpm))
       arg_c[i] <- sprintf("s_%s", tmpm)
+      arg_len_c[i] <- sprintf("n_%s", tmpm)
     } else if (a_tag == "var" && a_shape %in% c("vector", "matrix")) {
       # Vector / matrix variable - pass the SEXP directly
       arg_c[i] <- sprintf("s_%s", tccq_cg_ident(a$name))
+      arg_len_c[i] <- tccq_cg_rf_arg_len(a, arg_c[i])
     } else if (a_tag == "var" && a_shape == "scalar") {
       # Scalar variable - re-wrap from C scalar to SEXP
       c_nm <- tccq_cg_ident(a$name)
@@ -2714,6 +2886,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       lines <- c(lines, paste0(pad, "SEXP ", tmp, " = PROTECT(", wrap, ");"))
       lines <- c(lines, paste0(pad, "nprotect_++;"))
       arg_c[i] <- tmp
+      arg_len_c[i] <- "1"
     } else {
       # Scalar expression - wrap as SEXP
       val <- tccq_cg_expr(a)
@@ -2729,6 +2902,7 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       lines <- c(lines, paste0(pad, "SEXP ", tmp, " = PROTECT(", wrap, ");"))
       lines <- c(lines, paste0(pad, "nprotect_++;"))
       arg_c[i] <- tmp
+      arg_len_c[i] <- "1"
     }
   }
 
@@ -2780,6 +2954,8 @@ tccq_cg_rf_call_stmt <- function(node, indent) {
       paste0(pad, "nprotect_++;")
     )
   }
+
+  lines <- c(lines, tccq_cg_rf_contract_checks(node, var, arg_len_c, indent))
 
   list(lines = paste(lines, collapse = "\n"), var = var)
 } # ---------------------------------------------------------------------------
@@ -3207,8 +3383,18 @@ tccq_cg_vec_elem <- function(node, idx_var) {
   }
 
   if (tag == "rf_call") {
-    # Hoisted rf_call result - access element via REAL(var_name)[idx]
+    # Hoisted rf_call result - access element via typed pointer.
     if (!is.null(node$var_name)) {
+      mode <- node$mode %||% "double"
+      if (mode == "integer") {
+        return(sprintf("INTEGER(%s)[%s]", node$var_name, idx_var))
+      }
+      if (mode == "logical") {
+        return(sprintf("LOGICAL(%s)[%s]", node$var_name, idx_var))
+      }
+      if (mode == "raw") {
+        return(sprintf("RAW(%s)[%s]", node$var_name, idx_var))
+      }
       return(sprintf("REAL(%s)[%s]", node$var_name, idx_var))
     }
     stop("rf_call in vec_elem without var_name", call. = FALSE)
