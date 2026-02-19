@@ -2,6 +2,9 @@
 
 ## All functions
 
+- [`blas_lapack_info()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/blas_lapack_info.md)
+  : Report active BLAS/LAPACK runtime information from R
+
 - [`` `$`( ``*`<tcc_compiled>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/cash-.tcc_compiled.md)
   : Access a compiled FFI symbol
 

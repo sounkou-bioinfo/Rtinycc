@@ -1849,9 +1849,9 @@ views (pointer + offset), never copies.
 <h3 id="matrix-algebra-blas-and-delegation">Matrix algebra, BLAS, and delegation<a class="anchor" aria-label="anchor" href="#matrix-algebra-blas-and-delegation"></a>
 </h3>
 <p><code>tcc_quick</code> emits native BLAS/LAPACK-backed paths for <code>%*%</code>, <code>crossprod</code>, <code>tcrossprod</code> (matrix/matrix cases, <code>F77_CALL(dgemm)</code>) and <code>solve(A, b)</code> / <code>solve(A, B)</code> (<code>F77_CALL(dgesv)</code>) through R headers. This keeps behavior portable across platforms while still using R’s linked BLAS/LAPACK stack.</p>
-<p>Runtime note: BLAS/LAPACK linkage depends on your R build (OpenBLAS, MKL, Accelerate, reference BLAS, etc.). Use <code>blas_lapack_info()</code> to inspect what R is currently using. <code>tcc_quick</code> links <code>Rblas</code>/<code>Rlapack</code> for lowered matrix kernels when those runtime libraries are available.</p>
+<p>Runtime note: BLAS/LAPACK linkage depends on your R build (OpenBLAS, MKL, Accelerate, reference BLAS, etc.). Use <code><a href="reference/blas_lapack_info.html">blas_lapack_info()</a></code> to inspect what R is currently using. <code>tcc_quick</code> links <code>Rblas</code>/<code>Rlapack</code> for lowered matrix kernels when those runtime libraries are available.</p>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="fu">blas_lapack_info</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="fu"><a href="reference/blas_lapack_info.html">blas_lapack_info</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; List of 5</span></span>
 <span><span class="co">#&gt;  $ blas_path  : chr "/usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3"</span></span>
 <span><span class="co">#&gt;  $ lapack_path: chr "/usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so"</span></span>

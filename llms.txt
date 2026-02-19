@@ -1457,9 +1457,11 @@ This keeps behavior portable across platforms while still using R’s
 linked BLAS/LAPACK stack.
 
 Runtime note: BLAS/LAPACK linkage depends on your R build (OpenBLAS,
-MKL, Accelerate, reference BLAS, etc.). Use `blas_lapack_info()` to
-inspect what R is currently using. `tcc_quick` links `Rblas`/`Rlapack`
-for lowered matrix kernels when those runtime libraries are available.
+MKL, Accelerate, reference BLAS, etc.). Use
+[`blas_lapack_info()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/blas_lapack_info.md)
+to inspect what R is currently using. `tcc_quick` links
+`Rblas`/`Rlapack` for lowered matrix kernels when those runtime
+libraries are available.
 
 ``` r
 str(blas_lapack_info())
@@ -1769,6 +1771,9 @@ GPL-3
 # Package index
 
 ## All functions
+
+- [`blas_lapack_info()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/blas_lapack_info.md)
+  : Report active BLAS/LAPACK runtime information from R
 
 - [`` `$`( ``*`<tcc_compiled>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/cash-.tcc_compiled.md)
   : Access a compiled FFI symbol
