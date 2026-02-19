@@ -6,7 +6,7 @@
 \usage{
 tcc_quick(
   fn,
-  fallback = c("auto", "always", "never"),
+  fallback = c("auto", "soft", "hard", "always", "never"),
   mode = c("compile", "code"),
   debug = FALSE
 )
@@ -14,7 +14,8 @@ tcc_quick(
 \arguments{
 \item{fn}{Function to compile.}
 
-\item{fallback}{One of \code{"auto"}, \code{"always"}, or \code{"never"}.}
+\item{fallback}{One of \code{"auto"}, \code{"soft"}, \code{"hard"}.
+Legacy aliases \code{"always"} and \code{"never"} map to \code{"soft"} and \code{"hard"}.}
 
 \item{mode}{One of \code{"compile"} (default) or \code{"code"}. Use \code{"code"}
 to return generated C source without compiling.}
@@ -34,6 +35,9 @@ operators, unary operators, selected scalar math functions, and scalar
 \code{if (cond) a else b}/\code{ifelse(cond, a, b)}) over declared scalar
 \code{double}/\code{integer}/\code{logical} arguments. Simple statement blocks with
 scalar \verb{<-} assignments before the final expression are supported.
+Rank-3+ declarations (for example \code{double(NA, NA, NA)}) are accepted at
+parse time but currently reserved for upcoming multidimensional array
+support; they fallback in \code{soft}/\code{auto} and error in \code{hard} mode.
 }
 \details{
 For non-arithmetic symbol calls (e.g. \code{max(x, y)} or \code{pmax(a, b, c, d, e)}),

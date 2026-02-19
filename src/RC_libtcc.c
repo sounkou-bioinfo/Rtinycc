@@ -12,6 +12,7 @@
 #include <R_ext/Parse.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 
 // ============================================================================
@@ -78,6 +79,7 @@ SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_library(SEXP ext, SEXP library);
+SEXP RC_libtcc_set_options(SEXP ext, SEXP options);
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code);
 SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
 SEXP RC_libtcc_relocate(SEXP ext);
@@ -276,6 +278,12 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
 
     /* Route libtcc diagnostics through R (stdout, sink-able) */
     tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) Rprintf);
+    /* Optional libtcc options via env var (e.g. RTINYCC_TCC_OPTIONS="-Wall"). */
+    /* Note: in bundled TinyCC, -O mainly toggles __OPTIMIZE__ preprocessor state. */
+    const char *rtinycc_opts = getenv("RTINYCC_TCC_OPTIONS");
+    if (rtinycc_opts && rtinycc_opts[0]) {
+        tcc_set_options(s, rtinycc_opts);
+    }
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
@@ -398,6 +406,19 @@ SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
     TCCState *s = RC_tcc_state(ext);
     const char *lib = Rf_translateCharUTF8(STRING_ELT(library, 0));
     int rc = tcc_add_library(s, lib);
+    return Rf_ScalarInteger(rc);
+}
+
+/**
+ * Apply raw compiler options to an existing TCC state (tcc_set_options).
+ * Ownership: none.
+ * Allocation: handled by TCC.
+ * Protection: none.
+ */
+SEXP RC_libtcc_set_options(SEXP ext, SEXP options) {
+    TCCState *s = RC_tcc_state(ext);
+    const char *opt = Rf_translateCharUTF8(STRING_ELT(options, 0));
+    int rc = tcc_set_options(s, opt);
     return Rf_ScalarInteger(rc);
 }
 

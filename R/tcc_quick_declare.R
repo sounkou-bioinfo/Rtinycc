@@ -35,9 +35,9 @@ tcc_quick_parse_type_spec <- function(spec) {
   type_name <- as.character(spec[[1]])
   type_name <- switch(type_name, numeric = "double", type_name)
 
-  if (!type_name %in% c("double", "integer", "logical")) {
+  if (!type_name %in% c("double", "integer", "logical", "raw")) {
     stop(
-      "tcc_quick current subset supports only double/integer/logical declarations",
+      "tcc_quick current subset supports only double/integer/logical/raw declarations",
       call. = FALSE
     )
   }
@@ -52,7 +52,10 @@ tcc_quick_parse_type_spec <- function(spec) {
   list(
     mode = type_name,
     dims = dims,
-    is_scalar = length(dims) == 1L && !is.na(dims[[1]]) && dims[[1]] == 1L
+    rank = length(dims),
+    is_scalar = length(dims) == 1L && !is.na(dims[[1]]) && dims[[1]] == 1L,
+    is_matrix = length(dims) == 2L,
+    is_array = length(dims) > 2L
   )
 }
 

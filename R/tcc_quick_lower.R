@@ -2,1210 +2,1998 @@
 # Copyright (C) 2025-2026 Sounkou Mahamane Toure
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# Unified lowerer for tcc_quick.
+#
+# Produces IR tag = "fn_body": typed parameter declarations, local variable
+# declarations, a list of statement nodes, and a return node.  Scalar-only
+# functions are the simple case: fn_body with zero statements and a scalar
+# return expression.
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 tcc_quick_fallback_ir <- function(reason) {
-    list(tag = "fallback", edge = "fallback_eval", reason = reason)
+  list(tag = "fallback", edge = "fallback_eval", reason = reason)
 }
 
 tcc_quick_boundary_calls <- function() {
-    c(".Call", ".C", ".External", ".Internal", ".Primitive")
+  c(".Call", ".C", ".External", ".Internal", ".Primitive")
 }
 
 tcc_quick_promote_mode <- function(lhs, rhs) {
-    if (lhs == rhs) {
-        return(lhs)
-    }
-    if (lhs %in% c("double", "integer") && rhs %in% c("double", "integer")) {
-        return("double")
-    }
-    NULL
+  if (lhs == rhs) {
+    return(lhs)
+  }
+  if (lhs %in% c("double", "integer") && rhs %in% c("double", "integer")) {
+    return("double")
+  }
+  NULL
 }
 
-tcc_quick_promote_many <- function(modes) {
-    if (length(modes) < 1L) {
-        return(NULL)
-    }
-    out <- modes[[1]]
-    if (length(modes) == 1L) {
-        return(out)
-    }
-    for (m in modes[-1]) {
-        out2 <- tcc_quick_promote_mode(out, m)
-        if (!is.null(out2)) {
-            out <- out2
-            next
-        }
-        if (identical(out, m) && identical(out, "logical")) {
-            out <- "logical"
-            next
-        }
-        return(NULL)
-    }
-    out
+tccq_promote_mode_chain <- function(modes) {
+  modes <- unique(modes)
+  if (!length(modes)) {
+    return("double")
+  }
+  rank_mode <- function(mode) {
+    switch(
+      mode,
+      raw = 1L,
+      logical = 2L,
+      integer = 3L,
+      double = 4L,
+      5L
+    )
+  }
+  ordered <- c("raw", "logical", "integer", "double")
+  if (all(modes %in% ordered)) {
+    return(ordered[max(vapply(modes, rank_mode, integer(1)))])
+  }
+  "double"
 }
 
-tcc_quick_symbol_mode <- function(sym_name, decl) {
-    if (!sym_name %in% names(decl$args)) {
-        return(NULL)
-    }
-    spec <- decl$args[[sym_name]]
-    if (!isTRUE(spec$is_scalar)) {
-        return(NULL)
-    }
-    spec$mode
+tccq_rf_contract_resolve <- function(fname, rf_args) {
+  specs <- tcc_quick_rf_call_contracts()
+  spec <- specs[[fname]]
+  if (is.null(spec)) {
+    return(list(
+      ok = FALSE,
+      reason = paste0("No delegated contract registered for: ", fname)
+    ))
+  }
+
+  first_arg <- if (length(rf_args)) rf_args[[1L]] else NULL
+  mode <- switch(
+    spec$mode %||% "double",
+    promote_args = tccq_promote_mode_chain(
+      vapply(rf_args, function(a) a$mode %||% "double", character(1))
+    ),
+    arg1_mode = first_arg$mode %||% "double",
+    spec$mode %||% "double"
+  )
+  shape <- switch(
+    spec$shape %||% "scalar",
+    arg1_shape = first_arg$shape %||% "scalar",
+    solve_shape = if (length(rf_args) >= 2L) {
+      rf_args[[2L]]$shape %||% "vector"
+    } else {
+      "matrix"
+    },
+    spec$shape %||% "scalar"
+  )
+
+  if (!mode %in% c("double", "integer", "logical", "raw")) {
+    return(list(
+      ok = FALSE,
+      reason = paste0("Unsupported delegated mode '", mode, "' for: ", fname)
+    ))
+  }
+  if (!shape %in% c("scalar", "vector", "matrix")) {
+    return(list(
+      ok = FALSE,
+      reason = paste0("Unsupported delegated shape '", shape, "' for: ", fname)
+    ))
+  }
+
+  list(
+    ok = TRUE,
+    mode = mode,
+    shape = shape,
+    contract = list(
+      name = fname,
+      length_rule = spec$length_rule %||% "none"
+    )
+  )
 }
 
-tcc_quick_lower_result <- function(
-  ok,
-  node = NULL,
-  mode = NULL,
-  reason = NULL,
-  boundary = NULL
-) {
-    list(ok = ok, node = node, mode = mode, reason = reason, boundary = boundary)
+tccq_reduce_output_mode <- function(op, arg_mode) {
+  if (op == "prod") {
+    return("double")
+  }
+  if (op == "sum") {
+    if (arg_mode %in% c("logical", "integer")) {
+      return("integer")
+    }
+    return("double")
+  }
+  if (op %in% c("max", "min")) {
+    if (arg_mode %in% c("logical", "integer")) {
+      return("integer")
+    }
+    return("double")
+  }
+  arg_mode
 }
 
 tcc_quick_numeric_unary_funs <- function() {
-    c(
-        "abs",
-        "sqrt",
-        "sin",
-        "cos",
-        "tan",
-        "asin",
-        "acos",
-        "atan",
-        "exp",
-        "log",
-        "log10",
-        "floor",
-        "ceiling",
-        "trunc",
-        "tanh"
-    )
+  reg <- tcc_ir_c_api_registry()
+  names(Filter(function(e) e$arity == 1L, reg))
 }
 
-tcc_quick_binary_arith_ops <- function() {
-    c("+", "-", "*", "/", "^", "%%", "%/%")
-}
-
-tcc_quick_compare_ops <- function() {
-    c("<", "<=", ">", ">=", "==", "!=")
-}
-
-tcc_quick_logical_ops <- function() {
-    c("&&", "||", "&", "|")
-}
-
-tcc_quick_special_heads <- function() {
-    c("if", "ifelse", "switch", "(")
-}
-
-tcc_quick_non_fallback_heads <- function() {
-    unique(c(
-        tcc_quick_binary_arith_ops(),
-        tcc_quick_compare_ops(),
-        tcc_quick_logical_ops(),
-        "!",
-        tcc_quick_special_heads(),
-        tcc_quick_numeric_unary_funs()
-    ))
-}
-
-tcc_quick_lower_expr <- function(e, decl, locals = list()) {
-    if (is.symbol(e)) {
-        nm <- as.character(e)
-        if (nm %in% names(locals)) {
-            loc <- locals[[nm]]
-            return(tcc_quick_lower_result(TRUE, node = loc$node, mode = loc$mode))
-        }
-        mode <- tcc_quick_symbol_mode(nm, decl)
-        if (is.null(mode)) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = paste0("Undeclared or non-scalar symbol: ", nm)
-            ))
-        }
-        if (mode == "logical") {
-            # logical is supported for conditions and logical ops
-            return(tcc_quick_lower_result(
-                TRUE,
-                node = list(tag = "var", name = nm),
-                mode = "logical"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "var", name = nm),
-            mode = mode
-        ))
-    }
-
-    if (length(e) == 1L && is.integer(e)) {
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "const", value = as.integer(e)[[1]], mode = "integer"),
-            mode = "integer"
-        ))
-    }
-    if (length(e) == 1L && is.double(e)) {
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "const", value = as.double(e)[[1]], mode = "double"),
-            mode = "double"
-        ))
-    }
-    if (length(e) == 1L && is.logical(e) && !is.na(e)) {
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "const", value = isTRUE(e), mode = "logical"),
-            mode = "logical"
-        ))
-    }
-
-    if (!is.call(e)) {
-        return(tcc_quick_lower_result(
-            FALSE,
-            reason = "Unsupported expression node"
-        ))
-    }
-
-    fun <- e[[1]]
-    if (!is.symbol(fun)) {
-        return(tcc_quick_lower_result(
-            FALSE,
-            reason = "Only symbol calls are supported"
-        ))
-    }
-
-    fname <- as.character(fun)
-    if (fname %in% tcc_quick_boundary_calls()) {
-        return(tcc_quick_lower_result(
-            FALSE,
-            reason = paste0("Boundary call encountered: ", fname),
-            boundary = fname
-        ))
-    }
-
-    if (fname == "if") {
-        if (length(e) != 4L) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "if() requires condition, then, else in current subset"
-            ))
-        }
-        cond <- tcc_quick_lower_expr(e[[2]], decl, locals)
-        yes <- tcc_quick_lower_expr(e[[3]], decl, locals)
-        no <- tcc_quick_lower_expr(e[[4]], decl, locals)
-        if (!cond$ok) {
-            return(cond)
-        }
-        if (!yes$ok) {
-            return(yes)
-        }
-        if (!no$ok) {
-            return(no)
-        }
-        if (!cond$mode %in% c("logical", "integer", "double")) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "if() condition must be scalar logical/numeric"
-            ))
-        }
-        out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
-        if (is.null(out_mode) && yes$mode == no$mode && yes$mode == "logical") {
-            out_mode <- "logical"
-        }
-        if (is.null(out_mode)) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "if() branches must have compatible scalar types"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "if", cond = cond$node, yes = yes$node, no = no$node),
-            mode = out_mode
-        ))
-    }
-
-    if (fname == "(") {
-        if (length(e) != 2L) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "Parenthesized expression must have one argument"
-            ))
-        }
-        return(tcc_quick_lower_expr(e[[2]], decl, locals))
-    }
-
-    if (fname == "ifelse") {
-        if (length(e) != 4L) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "ifelse() requires cond, yes, no in current subset"
-            ))
-        }
-        cond <- tcc_quick_lower_expr(e[[2]], decl, locals)
-        yes <- tcc_quick_lower_expr(e[[3]], decl, locals)
-        no <- tcc_quick_lower_expr(e[[4]], decl, locals)
-        if (!cond$ok) {
-            return(cond)
-        }
-        if (!yes$ok) {
-            return(yes)
-        }
-        if (!no$ok) {
-            return(no)
-        }
-        if (!cond$mode %in% c("logical", "integer", "double")) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "ifelse() condition must be scalar logical/numeric"
-            ))
-        }
-        out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
-        if (is.null(out_mode) && yes$mode == no$mode && yes$mode == "logical") {
-            out_mode <- "logical"
-        }
-        if (is.null(out_mode)) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "ifelse() branches must have compatible scalar types"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "if", cond = cond$node, yes = yes$node, no = no$node),
-            mode = out_mode
-        ))
-    }
-
-    if (fname == "switch") {
-        # Current subset switch support: numeric selector
-        # switch(sel, case1, case2, ...)
-        # Out-of-range selectors return NULL.
-        if (length(e) < 3L) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "switch() requires selector and at least one case in current subset"
-            ))
-        }
-
-        arg_names <- names(as.list(e)[-1])
-        if (!is.null(arg_names) && any(nzchar(arg_names))) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "switch() named arms are not supported in current subset"
-            ))
-        }
-
-        selector <- tcc_quick_lower_expr(e[[2]], decl, locals)
-        if (!selector$ok) {
-            return(selector)
-        }
-        if (!selector$mode %in% c("integer", "double", "logical")) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "switch() selector must be scalar numeric/logical in current subset"
-            ))
-        }
-
-        arm_exprs <- as.list(e)[-c(1, 2)]
-        if (length(arm_exprs) < 1L) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "switch() requires at least one case"
-            ))
-        }
-
-        lowered_arms <- lapply(arm_exprs, function(a) {
-            tcc_quick_lower_expr(a, decl, locals)
-        })
-        bad <- which(!vapply(lowered_arms, function(x) isTRUE(x$ok), logical(1)))
-        if (length(bad) > 0L) {
-            return(lowered_arms[[bad[[1]]]])
-        }
-
-        arm_modes <- vapply(lowered_arms, function(x) x$mode, character(1))
-        out_mode <- tcc_quick_promote_many(arm_modes)
-        if (is.null(out_mode)) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "switch() arms must have compatible scalar types"
-            ))
-        }
-
-        case_nodes <- lapply(lowered_arms, function(x) x$node)
-
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(
-                tag = "switch_num",
-                selector = selector$node,
-                cases = case_nodes,
-                result_mode = out_mode
-            ),
-            mode = "sexp"
-        ))
-    }
-
-    if (fname %in% tcc_quick_numeric_unary_funs() && length(e) == 2L) {
-        x <- tcc_quick_lower_expr(e[[2]], decl, locals)
-        if (!x$ok) {
-            return(x)
-        }
-        if (!x$mode %in% c("double", "integer")) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = paste0(fname, "() requires numeric scalar")
-            ))
-        }
-        out_mode <- if (fname %in% c("floor", "ceiling", "trunc")) {
-            "double"
-        } else {
-            tcc_quick_promote_mode(x$mode, "double")
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "call1", fun = fname, x = x$node),
-            mode = out_mode
-        ))
-    }
-
-    # Generic fallback call path: use pairlist call construction + Rf_eval
-    # for non-operator symbol calls with symbol arguments.
-    if (!fname %in% tcc_quick_non_fallback_heads()) {
-        args <- as.list(e)[-1]
-        if (length(args) >= 1L && all(vapply(args, is.symbol, logical(1)))) {
-            arg_names <- vapply(args, as.character, character(1))
-            ok_args <- all(vapply(
-                arg_names,
-                function(a) {
-                    !is.null(tcc_quick_symbol_mode(a, decl)) && !a %in% names(locals)
-                },
-                logical(1)
-            ))
-            if (ok_args) {
-                return(tcc_quick_lower_result(
-                    TRUE,
-                    node = list(tag = "rf_lang_call", fun = fname, args = arg_names),
-                    mode = "sexp"
-                ))
-            }
-        }
-    }
-
-    if (fname %in% c("+", "-") && length(e) == 2L) {
-        x <- tcc_quick_lower_expr(e[[2]], decl, locals)
-        if (!x$ok) {
-            return(x)
-        }
-        if (!x$mode %in% c("double", "integer")) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "Unary +/- require numeric scalar"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "unary", op = fname, x = x$node),
-            mode = x$mode
-        ))
-    }
-
-    if (fname == "!" && length(e) == 2L) {
-        x <- tcc_quick_lower_expr(e[[2]], decl, locals)
-        if (!x$ok) {
-            return(x)
-        }
-        if (!x$mode %in% c("logical", "integer", "double")) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "Unary ! requires logical/numeric scalar"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "unary", op = "!", x = x$node),
-            mode = "logical"
-        ))
-    }
-
-    if (length(e) != 3L) {
-        return(tcc_quick_lower_result(
-            FALSE,
-            reason = "Unsupported call arity in current subset"
-        ))
-    }
-
-    lhs <- tcc_quick_lower_expr(e[[2]], decl, locals)
-    rhs <- tcc_quick_lower_expr(e[[3]], decl, locals)
-    if (!lhs$ok) {
-        return(lhs)
-    }
-    if (!rhs$ok) {
-        return(rhs)
-    }
-
-    if (fname %in% tcc_quick_binary_arith_ops()) {
-        if (
-            !lhs$mode %in% c("double", "integer") ||
-                !rhs$mode %in% c("double", "integer")
-        ) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "Arithmetic operators require numeric scalars"
-            ))
-        }
-        out_mode <- if (fname %in% c("/", "^", "%%", "%/%")) {
-            "double"
-        } else {
-            tcc_quick_promote_mode(lhs$mode, rhs$mode)
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "binary", op = fname, lhs = lhs$node, rhs = rhs$node),
-            mode = out_mode
-        ))
-    }
-
-    if (fname %in% tcc_quick_compare_ops()) {
-        if (
-            !lhs$mode %in% c("double", "integer", "logical") ||
-                !rhs$mode %in% c("double", "integer", "logical")
-        ) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "Comparison operators require scalar operands"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "binary", op = fname, lhs = lhs$node, rhs = rhs$node),
-            mode = "logical"
-        ))
-    }
-
-    if (fname %in% tcc_quick_logical_ops()) {
-        if (
-            !lhs$mode %in% c("logical", "integer", "double") ||
-                !rhs$mode %in% c("logical", "integer", "double")
-        ) {
-            return(tcc_quick_lower_result(
-                FALSE,
-                reason = "Logical operators require scalar logical/numeric operands"
-            ))
-        }
-        return(tcc_quick_lower_result(
-            TRUE,
-            node = list(tag = "binary", op = fname, lhs = lhs$node, rhs = rhs$node),
-            mode = "logical"
-        ))
-    }
-
-    tcc_quick_lower_result(
-        FALSE,
-        reason = paste0("Operator not in current subset: ", fname)
-    )
+tcc_quick_numeric_binary_funs <- function() {
+  reg <- tcc_ir_c_api_registry()
+  names(Filter(function(e) e$arity == 2L, reg))
 }
 
 tcc_quick_body_without_declare <- function(fn) {
-    exprs <- tcc_quick_extract_exprs(fn)
-    exprs[-1]
-}
-
-tcc_quick_is_sym <- function(x, nm = NULL) {
-    ok <- is.symbol(x)
-    if (!ok) {
-        return(FALSE)
-    }
-    if (is.null(nm)) {
-        return(TRUE)
-    }
-    identical(as.character(x), nm)
-}
-
-tcc_quick_is_call_sym <- function(x, nm) {
-    is.call(x) && length(x) >= 1L && tcc_quick_is_sym(x[[1]], nm)
-}
-
-tcc_quick_parse_subset <- function(x) {
-    if (!tcc_quick_is_call_sym(x, "[") || length(x) != 3L) {
-        return(NULL)
-    }
-    if (!is.symbol(x[[2]])) {
-        return(NULL)
-    }
-    list(arr = as.character(x[[2]]), idx = x[[3]])
-}
-
-tcc_quick_expr_has_boundary <- function(e) {
-    w <- tccq_make_boundary_walker(tcc_quick_boundary_calls())
-    tccq_visit(w, e)
-    tccq_boundary_found(w)
-}
-
-tcc_quick_collect_subset_arrays <- function(e) {
-    w <- tccq_make_subset_walker()
-    tccq_visit(w, e)
-    tccq_subset_arrays(w)
-}
-
-tcc_quick_validate_len_expr <- function(e, decl) {
-    if (length(e) == 1L && (is.integer(e) || is.double(e))) {
-        return(TRUE)
-    }
-
-    if (!is.call(e)) {
-        return(FALSE)
-    }
-
-    if (is.symbol(e[[1]]) && identical(as.character(e[[1]]), "(")) {
-        return(length(e) == 2L && tcc_quick_validate_len_expr(e[[2]], decl))
-    }
-
-    if (is.symbol(e[[1]]) && identical(as.character(e[[1]]), "length")) {
-        if (length(e) != 2L || !is.symbol(e[[2]])) {
-            return(FALSE)
-        }
-        nm <- as.character(e[[2]])
-        if (!nm %in% names(decl$args)) {
-            return(FALSE)
-        }
-        return(!isTRUE(decl$args[[nm]]$is_scalar))
-    }
-
-    if (!is.symbol(e[[1]])) {
-        return(FALSE)
-    }
-    fn <- as.character(e[[1]])
-
-    if (fn %in% c("+", "-") && length(e) == 2L) {
-        return(tcc_quick_validate_len_expr(e[[2]], decl))
-    }
-
-    if (fn %in% c("+", "-", "*", "/") && length(e) == 3L) {
-        return(
-            tcc_quick_validate_len_expr(e[[2]], decl) &&
-                tcc_quick_validate_len_expr(e[[3]], decl)
-        )
-    }
-
-    FALSE
-}
-
-tcc_quick_parse_for_chain <- function(x) {
-    loops <- list()
-    cur <- x
-    repeat {
-        if (
-            !tcc_quick_is_call_sym(cur, "for") ||
-                length(cur) != 4L ||
-                !is.symbol(cur[[2]])
-        ) {
-            return(NULL)
-        }
-        iter_var <- as.character(cur[[2]])
-        iter_expr <- cur[[3]]
-        if (
-            tcc_quick_is_call_sym(iter_expr, "seq_along") &&
-                length(iter_expr) == 2L &&
-                is.symbol(iter_expr[[2]])
-        ) {
-            iter_kind <- "seq_along"
-            iter_target <- as.character(iter_expr[[2]])
-        } else if (
-            tcc_quick_is_call_sym(iter_expr, "seq_len") && length(iter_expr) == 2L
-        ) {
-            iter_kind <- "seq_len"
-            iter_target <- iter_expr[[2]]
-        } else {
-            return(NULL)
-        }
-
-        loops[[length(loops) + 1L]] <- list(
-            var = iter_var,
-            kind = iter_kind,
-            target = iter_target
-        )
-
-        body <- cur[[4]]
-        if (tcc_quick_is_call_sym(body, "{") && length(body) == 2L) {
-            body <- body[[2]]
-        }
-        if (tcc_quick_is_call_sym(body, "for")) {
-            cur <- body
-            next
-        }
-        return(list(loops = loops, terminal = body))
-    }
-}
-
-tcc_quick_unwrap_parens <- function(e) {
-    cur <- e
-    while (
-        is.call(cur) &&
-            is.symbol(cur[[1]]) &&
-            identical(as.character(cur[[1]]), "(") &&
-            length(cur) == 2L
-    ) {
-        cur <- cur[[2]]
-    }
-    cur
-}
-
-tcc_quick_unwrap_single_brace <- function(e) {
-    cur <- e
-    while (
-        is.call(cur) &&
-            is.symbol(cur[[1]]) &&
-            identical(as.character(cur[[1]]), "{") &&
-            length(cur) == 2L
-    ) {
-        cur <- cur[[2]]
-    }
-    cur
-}
-
-tcc_quick_match_i_plus_n_minus_one <- function(e, i_var, n_var) {
-    x <- tcc_quick_unwrap_parens(e)
-    if (!is.call(x) || !is.symbol(x[[1]]) || as.character(x[[1]]) != "-") {
-        return(FALSE)
-    }
-    if (
-        length(x) != 3L ||
-            !(length(x[[3]]) == 1L && is.numeric(x[[3]]) && as.integer(x[[3]]) == 1L)
-    ) {
-        return(FALSE)
-    }
-    lhs <- tcc_quick_unwrap_parens(x[[2]])
-    if (
-        !is.call(lhs) ||
-            !is.symbol(lhs[[1]]) ||
-            as.character(lhs[[1]]) != "+" ||
-            length(lhs) != 3L
-    ) {
-        return(FALSE)
-    }
-    left_ok <- is.symbol(lhs[[2]]) && identical(as.character(lhs[[2]]), i_var)
-    right_ok <- is.symbol(lhs[[3]]) && identical(as.character(lhs[[3]]), n_var)
-    left_ok && right_ok
-}
-
-tcc_quick_try_lower_roll_mean_kernel <- function(exprs, decl) {
-    # Exact quickr README rolling mean shape:
-    # out <- double(length(x) - length(weights) + 1)
-    # n <- length(weights)
-    # if (normalize) weights <- weights / sum(weights) * length(weights)
-    # for (i in seq_along(out)) out[i] <- sum(x[i:(i+n-1)] * weights) / length(weights)
-    # out
-    if (length(exprs) != 5L) {
-        return(NULL)
-    }
-
-    s1 <- exprs[[1]]
-    s2 <- exprs[[2]]
-    s3 <- exprs[[3]]
-    s4 <- exprs[[4]]
-    s5 <- exprs[[5]]
-
-    if (
-        !tcc_quick_is_call_sym(s1, "<-") || length(s1) != 3L || !is.symbol(s1[[2]])
-    ) {
-        return(NULL)
-    }
-    out_name <- as.character(s1[[2]])
-    if (!tcc_quick_is_call_sym(s1[[3]], "double") || length(s1[[3]]) != 2L) {
-        return(NULL)
-    }
-    out_len_expr <- s1[[3]][[2]]
-    if (!tcc_quick_validate_len_expr(out_len_expr, decl)) {
-        return(NULL)
-    }
-
-    if (
-        !tcc_quick_is_call_sym(s2, "<-") || length(s2) != 3L || !is.symbol(s2[[2]])
-    ) {
-        return(NULL)
-    }
-    n_name <- as.character(s2[[2]])
-    if (
-        !tcc_quick_is_call_sym(s2[[3]], "length") ||
-            length(s2[[3]]) != 2L ||
-            !is.symbol(s2[[3]][[2]])
-    ) {
-        return(NULL)
-    }
-    weights_name <- as.character(s2[[3]][[2]])
-
-    if (
-        !tcc_quick_is_call_sym(s3, "if") ||
-            length(s3) != 3L ||
-            !is.symbol(s3[[2]]) ||
-            !is.call(s3[[3]])
-    ) {
-        return(NULL)
-    }
-    normalize_name <- as.character(s3[[2]])
-    if (
-        !normalize_name %in% names(decl$args) ||
-            !identical(decl$args[[normalize_name]]$mode, "logical") ||
-            !isTRUE(decl$args[[normalize_name]]$is_scalar)
-    ) {
-        return(NULL)
-    }
-    norm_then <- tcc_quick_unwrap_single_brace(s3[[3]])
-    if (
-        !tcc_quick_is_call_sym(norm_then, "<-") ||
-            length(norm_then) != 3L ||
-            !is.symbol(norm_then[[2]]) ||
-            !identical(as.character(norm_then[[2]]), weights_name)
-    ) {
-        return(NULL)
-    }
-
-    if (
-        !tcc_quick_is_call_sym(s4, "for") || length(s4) != 4L || !is.symbol(s4[[2]])
-    ) {
-        return(NULL)
-    }
-    i_name <- as.character(s4[[2]])
-    if (
-        !tcc_quick_is_call_sym(s4[[3]], "seq_along") ||
-            length(s4[[3]]) != 2L ||
-            !is.symbol(s4[[3]][[2]]) ||
-            !identical(as.character(s4[[3]][[2]]), out_name)
-    ) {
-        return(NULL)
-    }
-
-    body <- s4[[4]]
-    if (tcc_quick_is_call_sym(body, "{") && length(body) == 2L) {
-        body <- body[[2]]
-    }
-    if (!tcc_quick_is_call_sym(body, "<-") || length(body) != 3L) {
-        return(NULL)
-    }
-    lhs <- tcc_quick_parse_subset(body[[2]])
-    if (
-        is.null(lhs) ||
-            !identical(lhs$arr, out_name) ||
-            !is.symbol(lhs$idx) ||
-            !identical(as.character(lhs$idx), i_name)
-    ) {
-        return(NULL)
-    }
-
-    rhs <- body[[3]]
-    if (!tcc_quick_is_call_sym(rhs, "/") || length(rhs) != 3L) {
-        return(NULL)
-    }
-    if (
-        !tcc_quick_is_call_sym(rhs[[3]], "length") ||
-            length(rhs[[3]]) != 2L ||
-            !is.symbol(rhs[[3]][[2]]) ||
-            !identical(as.character(rhs[[3]][[2]]), weights_name)
-    ) {
-        return(NULL)
-    }
-    if (!tcc_quick_is_call_sym(rhs[[2]], "sum") || length(rhs[[2]]) != 2L) {
-        return(NULL)
-    }
-
-    prod_expr <- tcc_quick_unwrap_parens(rhs[[2]][[2]])
-    if (
-        !is.call(prod_expr) ||
-            !is.symbol(prod_expr[[1]]) ||
-            as.character(prod_expr[[1]]) != "*" ||
-            length(prod_expr) != 3L
-    ) {
-        return(NULL)
-    }
-
-    get_x_subset <- function(a, b) {
-        if (is.symbol(a) && identical(as.character(a), weights_name)) {
-            return(tcc_quick_parse_subset(b))
-        }
-        if (is.symbol(b) && identical(as.character(b), weights_name)) {
-            return(tcc_quick_parse_subset(a))
-        }
-        NULL
-    }
-    x_sub <- get_x_subset(prod_expr[[2]], prod_expr[[3]])
-    if (
-        is.null(x_sub) ||
-            !is.call(x_sub$idx) ||
-            !is.symbol(x_sub$idx[[1]]) ||
-            as.character(x_sub$idx[[1]]) != ":" ||
-            length(x_sub$idx) != 3L
-    ) {
-        return(NULL)
-    }
-
-    start_ok <- is.symbol(x_sub$idx[[2]]) &&
-        identical(as.character(x_sub$idx[[2]]), i_name)
-    end_ok <- tcc_quick_match_i_plus_n_minus_one(x_sub$idx[[3]], i_name, n_name)
-    if (!start_ok || !end_ok) {
-        return(NULL)
-    }
-
-    x_name <- x_sub$arr
-
-    if (!is.symbol(s5) || !identical(as.character(s5), out_name)) {
-        return(NULL)
-    }
-
-    if (!x_name %in% names(decl$args) || !weights_name %in% names(decl$args)) {
-        return(NULL)
-    }
-    x_spec <- decl$args[[x_name]]
-    w_spec <- decl$args[[weights_name]]
-    if (
-        !identical(x_spec$mode, "double") ||
-            !identical(w_spec$mode, "double") ||
-            isTRUE(x_spec$is_scalar) ||
-            isTRUE(w_spec$is_scalar)
-    ) {
-        return(NULL)
-    }
-
-    list(
-        tag = "loop_kernel",
-        kind = "window_weighted_sum",
-        out = out_name,
-        x = x_name,
-        weights = weights_name,
-        normalize = normalize_name,
-        n_var = n_name,
-        i_var = i_name,
-        out_len_expr = out_len_expr
-    )
-}
-
-tcc_quick_try_lower_nested_loop_kernel <- function(exprs, decl) {
-    if (length(exprs) != 3L) {
-        return(NULL)
-    }
-
-    s1 <- exprs[[1]]
-    s2 <- exprs[[2]]
-    s3 <- exprs[[3]]
-
-    if (
-        !tcc_quick_is_call_sym(s1, "<-") || length(s1) != 3L || !is.symbol(s1[[2]])
-    ) {
-        return(NULL)
-    }
-    out_name <- as.character(s1[[2]])
-    init_rhs <- s1[[3]]
-    if (!tcc_quick_is_call_sym(init_rhs, "double") || length(init_rhs) != 2L) {
-        return(NULL)
-    }
-    out_len_expr <- init_rhs[[2]]
-    if (!tcc_quick_validate_len_expr(out_len_expr, decl)) {
-        return(NULL)
-    }
-
-    vector_double_args <- names(Filter(
-        function(x) identical(x$mode, "double") && !isTRUE(x$is_scalar),
-        decl$args
-    ))
-
-    chain <- tcc_quick_parse_for_chain(s2)
-    if (is.null(chain) || length(chain$loops) < 1L) {
-        return(NULL)
-    }
-
-    for (lp in chain$loops) {
-        if (!identical(lp$kind, "seq_along")) {
-            return(NULL)
-        }
-        if (!lp$target %in% vector_double_args) {
-            return(NULL)
-        }
-    }
-    loop_vars <- vapply(chain$loops, function(x) x$var, character(1))
-    if (anyDuplicated(loop_vars) > 0L) {
-        return(NULL)
-    }
-
-    upd <- chain$terminal
-    if (!tcc_quick_is_call_sym(upd, "<-") || length(upd) != 3L) {
-        return(NULL)
-    }
-
-    lhs_sub <- tcc_quick_parse_subset(upd[[2]])
-    if (is.null(lhs_sub) || !identical(lhs_sub$arr, out_name)) {
-        return(NULL)
-    }
-
-    # Reject kernel if any boundary call appears in indexing or RHS.
-    if (tcc_quick_expr_has_boundary(lhs_sub$idx)) {
-        return(NULL)
-    }
-    rhs <- upd[[3]]
-    if (tcc_quick_expr_has_boundary(rhs)) {
-        return(NULL)
-    }
-
-    arr_refs <- unique(c(
-        tcc_quick_collect_subset_arrays(lhs_sub$idx),
-        tcc_quick_collect_subset_arrays(rhs)
-    ))
-    arr_refs <- setdiff(arr_refs, out_name)
-    if (length(arr_refs) > 0L && !all(arr_refs %in% vector_double_args)) {
-        return(NULL)
-    }
-
-    input_arrays <- unique(c(
-        vapply(chain$loops, function(x) x$target, character(1)),
-        arr_refs
-    ))
-    input_arrays <- setdiff(input_arrays, out_name)
-    if (length(input_arrays) < 1L) {
-        return(NULL)
-    }
-
-    if (!is.symbol(s3) || !identical(as.character(s3), out_name)) {
-        return(NULL)
-    }
-
-    list(
-        tag = "loop_kernel",
-        kind = "indexed_store",
-        out = out_name,
-        out_len_expr = out_len_expr,
-        input_arrays = input_arrays,
-        loop_vars = loop_vars,
-        loops = chain$loops,
-        out_idx = lhs_sub$idx,
-        rhs = rhs
-    )
-}
-
-tcc_quick_lower_block <- function(exprs, decl) {
-    if (length(exprs) < 1L) {
-        return(tcc_quick_fallback_ir("Empty body after declare()"))
-    }
-
-    locals <- list()
-    if (length(exprs) > 1L) {
-        for (i in seq_len(length(exprs) - 1L)) {
-            step <- tcc_quick_lower_stmt(exprs[[i]], decl, locals)
-            if (!isTRUE(step$ok)) {
-                return(step$ir)
-            }
-            locals <- step$locals
-        }
-    }
-
-    lowered <- tcc_quick_lower_expr(exprs[[length(exprs)]], decl, locals)
-    if (!isTRUE(lowered$ok)) {
-        if (!is.null(lowered$boundary)) {
-            return(tcc_quick_fallback_ir(
-                paste0(
-                    "Boundary call encountered (",
-                    lowered$boundary,
-                    ") - prefer Rf_lang*/Rf_eval path here"
-                )
-            ))
-        }
-        reason <- lowered$reason
-        if (is.null(reason)) {
-            reason <- "Unsupported expression"
-        }
-        return(tcc_quick_fallback_ir(reason))
-    }
-
-    if (identical(lowered$node$tag, "rf_lang_call")) {
-        return(lowered$node)
-    }
-
-    if (identical(lowered$node$tag, "switch_num")) {
-        return(list(
-            tag = "switch_num_expr",
-            switch = lowered$node,
-            arg_modes = vapply(
-                decl$args[decl$formal_names],
-                function(x) x$mode,
-                character(1)
-            )
-        ))
-    }
-
-    if (!lowered$mode %in% c("double", "integer", "logical")) {
-        return(tcc_quick_fallback_ir(
-            "Lowered expression has unsupported result type"
-        ))
-    }
-
-    list(
-        tag = "scalar_expr",
-        expr = lowered$node,
-        result_mode = lowered$mode,
-        arg_modes = vapply(
-            decl$args[decl$formal_names],
-            function(x) x$mode,
-            character(1)
-        )
-    )
-}
-
-tcc_quick_stmt_handlers <- function() {
-    list(
-        `<-` = tcc_quick_lower_stmt_assign
-    )
-}
-
-tcc_quick_lower_stmt <- function(stmt, decl, locals) {
-    if (!is.call(stmt) || !is.symbol(stmt[[1]])) {
-        return(list(
-            ok = FALSE,
-            ir = tcc_quick_fallback_ir(
-                "Only calls are supported as pre-final statements"
-            )
-        ))
-    }
-
-    head <- as.character(stmt[[1]])
-    handlers <- tcc_quick_stmt_handlers()
-    if (!head %in% names(handlers)) {
-        return(list(
-            ok = FALSE,
-            ir = tcc_quick_fallback_ir(
-                paste0("Statement head not in current subset: ", head)
-            )
-        ))
-    }
-
-    handlers[[head]](stmt, decl, locals)
-}
-
-tcc_quick_lower_stmt_assign <- function(stmt, decl, locals) {
-    if (length(stmt) != 3L || !is.symbol(stmt[[2]])) {
-        return(list(
-            ok = FALSE,
-            ir = tcc_quick_fallback_ir("Malformed <- assignment in block")
-        ))
-    }
-
-    name <- as.character(stmt[[2]])
-    rhs <- tcc_quick_lower_expr(stmt[[3]], decl, locals)
-    if (!isTRUE(rhs$ok)) {
-        if (!is.null(rhs$boundary)) {
-            return(list(
-                ok = FALSE,
-                ir = tcc_quick_fallback_ir(
-                    paste0(
-                        "Boundary call encountered (",
-                        rhs$boundary,
-                        ") - prefer Rf_lang*/Rf_eval path here"
-                    )
-                )
-            ))
-        }
-        reason <- rhs$reason
-        if (is.null(reason)) {
-            reason <- "Unsupported assignment RHS"
-        }
-        return(list(ok = FALSE, ir = tcc_quick_fallback_ir(reason)))
-    }
-
-    locals[[name]] <- list(node = rhs$node, mode = rhs$mode)
-    list(ok = TRUE, locals = locals)
-}
-
-tcc_quick_scan_constructs <- function(exprs) {
-    w <- tccq_make_construct_walker()
-    for (e in exprs) {
-        tccq_visit(w, e)
-    }
-    tccq_constructs(w)
-}
-
-tcc_quick_lex_exprs <- function(exprs) {
-    tcc_quick_scan_constructs(exprs)
-}
-
-tcc_quick_lex_function <- function(fn) {
-    exprs <- tcc_quick_body_without_declare(fn)
-    tcc_quick_lex_exprs(exprs)
-}
-
-tcc_quick_normalize_exprs <- function(exprs, lex) {
-    # Placeholder normalization pass. Keep semantic tree unchanged for now.
-    # Future work: canonicalize seq forms, brace wrapping, and indexing shapes.
-    exprs
-}
-
-tcc_quick_typecheck_exprs <- function(exprs, decl) {
-    # Placeholder pass boundary. Expression-level type checks happen in lowerers.
-    list(ok = TRUE, exprs = exprs, decl = decl)
+  exprs <- tcc_quick_extract_exprs(fn)
+  exprs[-1]
 }
 
 tcc_quick_verify_ir <- function(ir) {
-    if (identical(ir$tag, "fallback")) {
-        if (is.null(ir$edge)) {
-            ir$edge <- "fallback_eval"
-        }
-        return(ir)
+  if (identical(ir$tag, "fallback")) {
+    if (is.null(ir$edge)) ir$edge <- "fallback_eval"
+    return(ir)
+  }
+
+  walk <- function(node) {
+    if (is.null(node) || !is.list(node)) {
+      return(invisible(NULL))
     }
-    ir
+    if (!is.null(node$tag) && identical(node$tag, "rf_call")) {
+      if (is.null(node$mode) || is.null(node$shape) || is.null(node$contract)) {
+        stop("rf_call node is missing mode/shape/contract", call. = FALSE)
+      }
+    }
+    for (nm in names(node)) {
+      child <- node[[nm]]
+      if (is.list(child)) {
+        walk(child)
+      }
+    }
+    invisible(NULL)
+  }
+  walk(ir)
+  ir
 }
 
-tcc_quick_kernel_matchers <- function() {
-    env <- environment(tcc_quick_kernel_matchers)
-    matcher_names <- ls(
-        envir = env,
-        pattern = "^tcc_quick_try_lower_.*_kernel$",
-        all.names = TRUE
+# ---------------------------------------------------------------------------
+# Scope tracking
+# ---------------------------------------------------------------------------
+# A scope is an environment mapping variable names → info lists:
+#   list(kind = "param"|"local"|"loop_var", mode, shape = "scalar"|"vector"|"matrix")
+
+tccq_scope_new <- function(decl) {
+  sc <- new.env(parent = emptyenv())
+  for (nm in names(decl$args)) {
+    spec <- decl$args[[nm]]
+    shape <- if (isTRUE(spec$is_scalar)) {
+      "scalar"
+    } else if (isTRUE(spec$is_array)) {
+      "array"
+    } else if (isTRUE(spec$is_matrix)) {
+      "matrix"
+    } else {
+      "vector"
+    }
+    sc[[nm]] <- list(
+      kind = "param",
+      mode = spec$mode,
+      shape = shape,
+      spec = spec
     )
-    matcher_names <- sort(matcher_names)
-
-    if (length(matcher_names) < 1L) {
-        return(list())
-    }
-
-    lapply(matcher_names, function(nm) {
-        get(nm, envir = env, inherits = FALSE)
-    })
+  }
+  sc
 }
 
-tcc_quick_try_lower_kernels <- function(exprs, decl) {
-    profile <- tcc_quick_lex_exprs(exprs)
-    if (!isTRUE(profile$has_for)) {
-        return(NULL)
+tccq_scope_has_array <- function(sc) {
+  nms <- ls(sc, all.names = TRUE)
+  for (nm in nms) {
+    info <- tccq_scope_get(sc, nm)
+    if (!is.null(info) && identical(info$shape, "array")) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+tccq_scope_get <- function(sc, name) {
+  if (exists(name, envir = sc, inherits = FALSE)) {
+    return(get(name, envir = sc, inherits = FALSE))
+  }
+  NULL
+}
+
+tccq_scope_set <- function(sc, name, info) {
+  assign(name, info, envir = sc)
+}
+
+tccq_scope_mark_mutated <- function(sc, name) {
+  info <- tccq_scope_get(sc, name)
+  if (!is.null(info) && info$kind == "param") {
+    info$mutated <- TRUE
+    tccq_scope_set(sc, name, info)
+  }
+}
+
+tccq_parse_na_rm <- function(e) {
+  nms <- names(e)
+  if (is.null(nms) || !"na.rm" %in% nms) {
+    return(list(ok = TRUE, value = FALSE))
+  }
+  idx <- which(nms == "na.rm")[1]
+  v <- e[[idx]]
+  if (is.logical(v) && length(v) == 1L && !is.na(v)) {
+    return(list(ok = TRUE, value = isTRUE(v)))
+  }
+  list(ok = FALSE, reason = "na.rm must be literal TRUE/FALSE")
+}
+
+tccq_parse_literal_int <- function(x) {
+  if (length(x) == 1L && is.integer(x) && !is.na(x)) {
+    return(as.integer(x)[[1]])
+  }
+  if (length(x) == 1L && is.double(x) && !is.na(x)) {
+    v <- as.integer(x)
+    if (!is.na(v) && as.double(v) == as.double(x)) {
+      return(v[[1]])
+    }
+  }
+  NA_integer_
+}
+
+tccq_matrix_in_shapes <- function(...) {
+  any(unlist(list(...), use.names = FALSE) == "matrix")
+}
+
+# ---------------------------------------------------------------------------
+# Expression lowering — returns list(ok, node, mode, shape, reason)
+# ---------------------------------------------------------------------------
+
+tccq_lower_result <- function(
+  ok,
+  node = NULL,
+  mode = NULL,
+  shape = "scalar",
+  reason = NULL
+) {
+  list(ok = ok, node = node, mode = mode, shape = shape, reason = reason)
+}
+
+tccq_lower_expr <- function(e, sc, decl) {
+  # --- Symbols ---
+  if (is.symbol(e)) {
+    nm <- as.character(e)
+    info <- tccq_scope_get(sc, nm)
+    if (is.null(info)) {
+      return(tccq_lower_result(FALSE, reason = paste0("Unknown symbol: ", nm)))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "var", name = nm),
+      mode = info$mode,
+      shape = info$shape
+    ))
+  }
+
+  # --- Constants ---
+  if (length(e) == 1L && is.integer(e)) {
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "const", value = as.integer(e)[[1]], mode = "integer"),
+      mode = "integer"
+    ))
+  }
+  if (length(e) == 1L && is.double(e)) {
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "const", value = as.double(e)[[1]], mode = "double"),
+      mode = "double"
+    ))
+  }
+  if (length(e) == 1L && is.logical(e) && !is.na(e)) {
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "const", value = isTRUE(e), mode = "logical"),
+      mode = "logical"
+    ))
+  }
+  if (length(e) == 1L && is.raw(e)) {
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "const", value = as.integer(e)[[1]], mode = "raw"),
+      mode = "raw"
+    ))
+  }
+
+  if (!is.call(e)) {
+    return(tccq_lower_result(FALSE, reason = "Unsupported expression node"))
+  }
+
+  fun <- e[[1]]
+  if (!is.symbol(fun)) {
+    return(tccq_lower_result(FALSE, reason = "Only symbol calls supported"))
+  }
+  fname <- as.character(fun)
+
+  # --- Boundary calls ---
+  if (fname %in% tcc_quick_boundary_calls()) {
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Boundary call encountered: ", fname)
+    ))
+  }
+
+  # --- Parentheses ---
+  if (fname == "(") {
+    return(tccq_lower_expr(e[[2]], sc, decl))
+  }
+
+  # --- length() ---
+  if (fname == "length" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape == "scalar") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "const", value = 1L, mode = "integer"),
+        mode = "integer"
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "length", arr = x$node$name),
+      mode = "integer"
+    ))
+  }
+
+  # --- nrow / ncol ---
+  if (fname == "nrow" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "nrow", arr = x$node$name),
+      mode = "integer"
+    ))
+  }
+  if (fname == "ncol" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "ncol", arr = x$node$name),
+      mode = "integer"
+    ))
+  }
+
+  # --- 1D subscript: x[i], x[a:b], or x[mask] ---
+  if (fname == "[" && length(e) == 3L) {
+    arr <- tccq_lower_expr(e[[2]], sc, decl)
+    idx <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!arr$ok) {
+      return(arr)
+    }
+    if (!idx$ok) {
+      return(idx)
+    }
+    if (arr$shape == "scalar") {
+      return(tccq_lower_result(FALSE, reason = "Cannot subscript a scalar"))
+    }
+    # Range subscript → vec_slice (view, no copy)
+    if (idx$shape == "vector" && identical(idx$node$tag, "seq_range")) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "vec_slice",
+          arr = arr$node$name,
+          from = idx$node$from,
+          to = idx$node$to
+        ),
+        mode = arr$mode,
+        shape = "vector"
+      ))
+    }
+    # Logical mask subscript → vec_mask (count + fill)
+    if (idx$shape == "vector" && idx$mode == "logical") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "vec_mask",
+          arr = arr$node$name,
+          mask = idx$node
+        ),
+        mode = arr$mode,
+        shape = "vector"
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "vec_get", arr = arr$node$name, idx = idx$node),
+      mode = arr$mode
+    ))
+  }
+
+  # --- 2D subscript: x[i, j] ---
+  if (fname == "[" && length(e) == 4L) {
+    arr <- tccq_lower_expr(e[[2]], sc, decl)
+    row <- tccq_lower_expr(e[[3]], sc, decl)
+    col <- tccq_lower_expr(e[[4]], sc, decl)
+    if (!arr$ok) {
+      return(arr)
+    }
+    if (!row$ok) {
+      return(row)
+    }
+    if (!col$ok) {
+      return(col)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "mat_get",
+        arr = arr$node$name,
+        row = row$node,
+        col = col$node
+      ),
+      mode = arr$mode
+    ))
+  }
+
+  # --- Unary ops ---
+  if (fname %in% c("+", "-") && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (identical(x$shape, "matrix")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Matrix unary operator '", fname, "' is not in subset")
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "unary", op = fname, x = x$node),
+      mode = x$mode,
+      shape = x$shape
+    ))
+  }
+  if (fname == "!" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (identical(x$shape, "matrix")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "Matrix logical negation is not in subset"
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "unary", op = "!", x = x$node),
+      mode = "logical",
+      shape = x$shape
+    ))
+  }
+
+  # --- if expression (ternary) ---
+  if (fname == "if" && length(e) == 4L) {
+    cond <- tccq_lower_expr(e[[2]], sc, decl)
+    yes <- tccq_lower_expr(e[[3]], sc, decl)
+    no <- tccq_lower_expr(e[[4]], sc, decl)
+    if (!cond$ok) {
+      return(cond)
+    }
+    if (!yes$ok) {
+      return(yes)
+    }
+    if (!no$ok) {
+      return(no)
+    }
+    out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
+    if (is.null(out_mode)) {
+      out_mode <- yes$mode
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "if",
+        cond = cond$node,
+        yes = yes$node,
+        no = no$node
+      ),
+      mode = out_mode,
+      shape = yes$shape
+    ))
+  }
+
+  # --- ifelse(cond, yes, no) → same as if/else ---
+  if (fname == "ifelse" && length(e) == 4L) {
+    cond <- tccq_lower_expr(e[[2]], sc, decl)
+    yes <- tccq_lower_expr(e[[3]], sc, decl)
+    no <- tccq_lower_expr(e[[4]], sc, decl)
+    if (!cond$ok) {
+      return(cond)
+    }
+    if (!yes$ok) {
+      return(yes)
+    }
+    if (!no$ok) {
+      return(no)
+    }
+    out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
+    if (is.null(out_mode)) {
+      out_mode <- yes$mode
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "if",
+        cond = cond$node,
+        yes = yes$node,
+        no = no$node
+      ),
+      mode = out_mode,
+      shape = yes$shape
+    ))
+  }
+
+  # --- Math intrinsics (arity 1, data-driven from registry) ---
+  math_funs <- tcc_quick_numeric_unary_funs()
+  if (fname %in% math_funs && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (identical(x$shape, "matrix")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Matrix call to ", fname, "() is not in subset")
+      ))
+    }
+    entry <- tcc_ir_registry_lookup(fname)
+    node <- list(tag = "call1", fun = fname, x = x$node)
+    if (!is.null(entry$transform) && entry$transform == "x+1") {
+      # factorial(n) → gamma(n+1)
+      node$x <- list(
+        tag = "binary",
+        op = "+",
+        lhs = x$node,
+        rhs = list(tag = "const", value = 1.0, mode = "double")
+      )
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = node,
+      mode = "double",
+      shape = x$shape
+    ))
+  }
+
+  # --- Math intrinsics (arity 2, data-driven from registry) ---
+  math_funs2 <- tcc_quick_numeric_binary_funs()
+  if (fname %in% math_funs2 && length(e) == 3L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    y <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (!y$ok) {
+      return(y)
+    }
+    if (tccq_matrix_in_shapes(x$shape, y$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Matrix call to ", fname, "() is not in subset")
+      ))
+    }
+    out_shape <- if (x$shape == "vector" || y$shape == "vector") {
+      "vector"
+    } else {
+      "scalar"
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "call2", fun = fname, x = x$node, y = y$node),
+      mode = "double",
+      shape = out_shape
+    ))
+  }
+
+  # --- sapply(x, FUN): typed subset (symbol FUN only) ---
+  if (fname == "sapply" && length(e) == 3L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "sapply() currently requires vector input"
+      ))
+    }
+    fun_e <- e[[3]]
+    if (!is.symbol(fun_e)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "sapply() FUN must be a symbol in current subset"
+      ))
+    }
+    fun_name <- as.character(fun_e)
+
+    if (fun_name %in% math_funs) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "call1", fun = fun_name, x = x$node),
+        mode = "double",
+        shape = "vector"
+      ))
     }
 
-    matchers <- tcc_quick_kernel_matchers()
-    for (matcher in matchers) {
-        ir <- matcher(exprs, decl)
-        if (!is.null(ir)) {
-            return(ir)
+    if (fun_name %in% c("as.integer", "as.double", "as.numeric", "as.raw")) {
+      target_mode <- if (fun_name == "as.integer") {
+        "integer"
+      } else if (fun_name == "as.raw") {
+        "raw"
+      } else {
+        "double"
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "cast", x = x$node, target_mode = target_mode),
+        mode = target_mode,
+        shape = "vector"
+      ))
+    }
+
+    if (fun_name == "identity") {
+      return(x)
+    }
+
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Unsupported sapply FUN in current subset: ", fun_name)
+    ))
+  }
+
+  # --- row/col reducers on matrices ---
+  if (
+    fname %in%
+      c("rowSums", "colSums", "rowMeans", "colMeans") &&
+      length(e) >= 2L
+  ) {
+    na <- tccq_parse_na_rm(e)
+    if (!na$ok) {
+      return(tccq_lower_result(FALSE, reason = na$reason))
+    }
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (
+      x$shape == "matrix" &&
+        identical(x$node$tag, "var") &&
+        x$mode %in% c("double", "integer", "logical")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "mat_reduce",
+          op = fname,
+          arr = x$node$name,
+          arr_mode = x$mode,
+          na_rm = na$value
+        ),
+        mode = "double",
+        shape = "vector"
+      ))
+    }
+  }
+
+  # --- apply(X, MARGIN, FUN): typed delegated subset ---
+  if (fname == "apply" && length(e) >= 4L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape != "matrix") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "apply() currently requires matrix input"
+      ))
+    }
+
+    margin <- tccq_parse_literal_int(e[[3]])
+    if (!margin %in% c(1L, 2L)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "apply() MARGIN must be literal 1 or 2"
+      ))
+    }
+    fun_e <- e[[4]]
+    if (!is.symbol(fun_e)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "apply() FUN must be a symbol in current subset"
+      ))
+    }
+    fun_name <- as.character(fun_e)
+
+    if (fun_name %in% c("sum", "mean")) {
+      na <- tccq_parse_na_rm(e)
+      if (!na$ok) {
+        return(tccq_lower_result(FALSE, reason = na$reason))
+      }
+      if (
+        identical(x$node$tag, "var") &&
+          x$mode %in% c("double", "integer", "logical")
+      ) {
+        op <- if (fun_name == "sum") {
+          if (margin == 1L) "rowSums" else "colSums"
+        } else {
+          if (margin == 1L) "rowMeans" else "colMeans"
         }
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "mat_reduce",
+            op = op,
+            arr = x$node$name,
+            arr_mode = x$mode,
+            na_rm = na$value
+          ),
+          mode = "double",
+          shape = "vector"
+        ))
+      }
+      delegated <- if (fun_name == "sum") {
+        if (margin == 1L) "rowSums" else "colSums"
+      } else {
+        if (margin == 1L) "rowMeans" else "colMeans"
+      }
+      args <- list(c(x$node, list(mode = x$mode, shape = x$shape)))
+      if (isTRUE(na$value)) {
+        args[[length(args) + 1L]] <- list(
+          tag = "const",
+          value = TRUE,
+          mode = "logical",
+          shape = "scalar"
+        )
+      }
+      contract <- tccq_rf_contract_resolve(
+        delegated,
+        lapply(args, function(a) list(mode = a$mode, shape = a$shape))
+      )
+      if (!isTRUE(contract$ok)) {
+        return(tccq_lower_result(FALSE, reason = contract$reason))
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "rf_call",
+          fun = delegated,
+          args = args,
+          mode = contract$mode,
+          shape = contract$shape,
+          contract = contract$contract
+        ),
+        mode = contract$mode,
+        shape = contract$shape
+      ))
     }
-    NULL
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Unsupported apply FUN in current subset: ", fun_name)
+    ))
+  }
+
+  # --- Reductions: sum, prod, max, min ---
+  if (fname %in% c("sum", "prod", "max", "min") && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    out_mode <- tccq_reduce_output_mode(fname, x$mode)
+    if (x$shape == "vector" && identical(x$node$tag, "var")) {
+      # Simple case: reduce a named variable (existing optimized path)
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "reduce",
+          op = fname,
+          arr = x$node$name,
+          mode = out_mode
+        ),
+        mode = out_mode
+      ))
+    }
+    if (x$shape == "vector") {
+      # General case: reduce any vector expression (composition)
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "reduce_expr",
+          op = fname,
+          expr = x$node,
+          mode = out_mode
+        ),
+        mode = out_mode
+      ))
+    }
+    if (!identical(out_mode, x$mode)) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "cast", x = x$node, target_mode = out_mode),
+        mode = out_mode
+      ))
+    }
+    return(tccq_lower_result(TRUE, node = x$node, mode = x$mode))
+  }
+
+  # --- mean(x) ---
+  if (fname == "mean" && length(e) >= 2L) {
+    na_info <- tccq_parse_na_rm(e)
+    if (!na_info$ok) {
+      return(tccq_lower_result(FALSE, reason = na_info$reason))
+    }
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape == "vector") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "mean_expr", expr = x$node, na_rm = na_info$value),
+        mode = "double"
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "cast", x = x$node, target_mode = "double"),
+      mode = "double"
+    ))
+  }
+
+  # --- median(x) ---
+  if (fname == "median" && length(e) >= 2L) {
+    na_info <- tccq_parse_na_rm(e)
+    if (!na_info$ok) {
+      return(tccq_lower_result(FALSE, reason = na_info$reason))
+    }
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape == "vector") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "median_expr", expr = x$node, na_rm = na_info$value),
+        mode = "double"
+      ))
+    }
+    return(tccq_lower_result(
+      FALSE,
+      reason = "median requires a vector argument"
+    ))
+  }
+
+  # --- quantile(x, probs) scalar probs path ---
+  if (fname == "quantile" && length(e) >= 3L) {
+    nms <- names(e)
+    p_idx <- 3L
+    if (!is.null(nms) && any(nms == "probs")) {
+      p_idx <- which(nms == "probs")[1]
+    }
+    na_info <- tccq_parse_na_rm(e)
+    if (!na_info$ok) {
+      return(tccq_lower_result(FALSE, reason = na_info$reason))
+    }
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    p <- tccq_lower_expr(e[[p_idx]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (!p$ok) {
+      return(p)
+    }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "quantile requires a vector first argument"
+      ))
+    }
+    if (p$shape == "scalar") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "quantile_expr",
+          expr = x$node,
+          prob = p$node,
+          na_rm = na_info$value
+        ),
+        mode = "double"
+      ))
+    }
+    if (p$shape == "vector") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "quantile_vec_expr",
+          expr = x$node,
+          probs = p$node,
+          na_rm = na_info$value
+        ),
+        mode = "double",
+        shape = "vector"
+      ))
+    }
+    return(tccq_lower_result(
+      FALSE,
+      reason = "quantile probs must be scalar or vector"
+    ))
+  }
+
+  # --- BLAS-backed matrix products ---
+  if (fname == "%*%" && length(e) == 3L) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    b <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!a$ok) {
+      return(a)
+    }
+    if (!b$ok) {
+      return(b)
+    }
+    if (
+      a$shape == "matrix" &&
+        b$shape == "matrix" &&
+        identical(a$node$tag, "var") &&
+        identical(b$node$tag, "var")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "matmul",
+          a = a$node$name,
+          b = b$node$name,
+          trans_a = FALSE,
+          trans_b = FALSE
+        ),
+        mode = "double",
+        shape = "matrix"
+      ))
+    }
+  }
+
+  if (fname == "crossprod" && (length(e) == 2L || length(e) == 3L)) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    b <- if (length(e) == 3L) tccq_lower_expr(e[[3]], sc, decl) else a
+    if (!a$ok) {
+      return(a)
+    }
+    if (!b$ok) {
+      return(b)
+    }
+    if (
+      a$shape == "matrix" &&
+        b$shape == "matrix" &&
+        identical(a$node$tag, "var") &&
+        identical(b$node$tag, "var")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "matmul",
+          a = a$node$name,
+          b = b$node$name,
+          trans_a = TRUE,
+          trans_b = FALSE
+        ),
+        mode = "double",
+        shape = "matrix"
+      ))
+    }
+  }
+
+  if (fname == "tcrossprod" && (length(e) == 2L || length(e) == 3L)) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    b <- if (length(e) == 3L) tccq_lower_expr(e[[3]], sc, decl) else a
+    if (!a$ok) {
+      return(a)
+    }
+    if (!b$ok) {
+      return(b)
+    }
+    if (
+      a$shape == "matrix" &&
+        b$shape == "matrix" &&
+        identical(a$node$tag, "var") &&
+        identical(b$node$tag, "var")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "matmul",
+          a = a$node$name,
+          b = b$node$name,
+          trans_a = FALSE,
+          trans_b = TRUE
+        ),
+        mode = "double",
+        shape = "matrix"
+      ))
+    }
+  }
+
+  # --- matrix transpose: t(A) ---
+  if (fname == "t" && length(e) == 2L) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!a$ok) {
+      return(a)
+    }
+    if (a$shape == "matrix" && identical(a$node$tag, "var")) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "transpose", a = a$node$name),
+        mode = a$mode,
+        shape = "matrix"
+      ))
+    }
+  }
+
+  # --- LAPACK-backed linear solve: solve(A, b) ---
+  if (fname == "solve" && length(e) == 3L) {
+    a <- tccq_lower_expr(e[[2]], sc, decl)
+    b <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!a$ok) {
+      return(a)
+    }
+    if (!b$ok) {
+      return(b)
+    }
+    if (
+      a$shape == "matrix" &&
+        b$shape %in% c("vector", "matrix") &&
+        identical(a$node$tag, "var") &&
+        identical(b$node$tag, "var") &&
+        identical(a$mode, "double") &&
+        identical(b$mode, "double")
+    ) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "solve_lin",
+          a = a$node$name,
+          b = b$node$name,
+          b_shape = b$shape
+        ),
+        mode = "double",
+        shape = b$shape
+      ))
+    }
+  }
+
+  # --- sd(x) ---
+  if (fname == "sd" && length(e) >= 2L) {
+    na_info <- tccq_parse_na_rm(e)
+    if (!na_info$ok) {
+      return(tccq_lower_result(FALSE, reason = na_info$reason))
+    }
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape == "vector") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "sd_expr", expr = x$node, na_rm = na_info$value),
+        mode = "double"
+      ))
+    }
+    return(tccq_lower_result(
+      FALSE,
+      reason = "sd requires a vector argument"
+    ))
+  }
+
+  # --- which.max / which.min ---
+  if (fname %in% c("which.max", "which.min") && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "which_reduce", op = fname, arr = x$node$name),
+      mode = "integer"
+    ))
+  }
+
+  # --- Binary ops: arithmetic, comparison, logical ---
+  arith_ops <- c("+", "-", "*", "/", "^", "%%", "%/%")
+  cmp_ops <- c("<", "<=", ">", ">=", "==", "!=")
+  log_ops <- c("&&", "||", "&", "|")
+
+  # --- Bitwise functions: integer subset ---
+  bitw_funs <- c("bitwAnd", "bitwOr", "bitwXor", "bitwShiftL", "bitwShiftR")
+  if (fname %in% bitw_funs && length(e) == 3L) {
+    lhs <- tccq_lower_expr(e[[2]], sc, decl)
+    rhs <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!lhs$ok) {
+      return(lhs)
+    }
+    if (!rhs$ok) {
+      return(rhs)
+    }
+    if (tccq_matrix_in_shapes(lhs$shape, rhs$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, " does not support matrix operands in subset")
+      ))
+    }
+    if (!lhs$mode %in% c("integer") || !rhs$mode %in% c("integer")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, " requires integer arguments")
+      ))
+    }
+    out_shape <- if (lhs$shape == "vector" || rhs$shape == "vector") {
+      "vector"
+    } else {
+      "scalar"
+    }
+    out_mode <- "integer"
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "call2", fun = fname, x = lhs$node, y = rhs$node),
+      mode = out_mode,
+      shape = out_shape
+    ))
+  }
+
+  if (fname %in% c(arith_ops, cmp_ops, log_ops) && length(e) == 3L) {
+    lhs <- tccq_lower_expr(e[[2]], sc, decl)
+    rhs <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!lhs$ok) {
+      return(lhs)
+    }
+    if (!rhs$ok) {
+      return(rhs)
+    }
+    if (tccq_matrix_in_shapes(lhs$shape, rhs$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(
+          "Matrix operand for operator '",
+          fname,
+          "' is not in subset"
+        )
+      ))
+    }
+    if (lhs$mode == "raw" || rhs$mode == "raw") {
+      if (fname %in% cmp_ops) {
+        # raw comparisons are allowed and produce logical results.
+      } else {
+        return(tccq_lower_result(
+          FALSE,
+          reason = paste0(
+            "raw mode is not supported for operator '",
+            fname,
+            "'; use bitw* helpers or explicit cast"
+          )
+        ))
+      }
+    }
+    out_mode <- if (fname %in% cmp_ops || fname %in% log_ops) {
+      "logical"
+    } else if (fname %in% c("/", "^", "%%", "%/%")) {
+      "double"
+    } else {
+      tcc_quick_promote_mode(lhs$mode, rhs$mode) %||% "double"
+    }
+    out_shape <- if (lhs$shape == "vector" || rhs$shape == "vector") {
+      "vector"
+    } else {
+      "scalar"
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "binary",
+        op = fname,
+        lhs = lhs$node,
+        rhs = rhs$node
+      ),
+      mode = out_mode,
+      shape = out_shape
+    ))
+  }
+
+  # --- Constructors: double(n), integer(n), logical(n), raw(n) ---
+  if (fname %in% c("double", "integer", "logical", "raw") && length(e) == 2L) {
+    len <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!len$ok) {
+      return(len)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "vec_alloc",
+        len_expr = len$node,
+        alloc_mode = fname
+      ),
+      mode = fname,
+      shape = "vector"
+    ))
+  }
+
+  # --- matrix(fill, nrow, ncol) ---
+  if (fname == "matrix" && length(e) >= 4L) {
+    data_expr <- e[[2]]
+    nr <- tccq_lower_expr(e[[3]], sc, decl)
+    nc <- tccq_lower_expr(e[[4]], sc, decl)
+    if (!nr$ok) {
+      return(nr)
+    }
+    if (!nc$ok) {
+      return(nc)
+    }
+    fill_val <- 0
+    if (length(data_expr) == 1L && is.numeric(data_expr)) {
+      fill_val <- as.double(data_expr)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "mat_alloc",
+        nrow = nr$node,
+        ncol = nc$node,
+        fill = fill_val,
+        alloc_mode = "double"
+      ),
+      mode = "double",
+      shape = "matrix"
+    ))
+  }
+
+  # --- Casts: as.integer(), as.double(), as.numeric(), as.raw() ---
+  if (
+    fname %in%
+      c("as.integer", "as.double", "as.numeric", "as.raw") &&
+      length(e) == 2L
+  ) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    target_mode <- if (fname == "as.integer") {
+      "integer"
+    } else if (fname == "as.raw") {
+      "raw"
+    } else {
+      "double"
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "cast", x = x$node, target_mode = target_mode),
+      mode = target_mode,
+      shape = x$shape
+    ))
+  }
+
+  # --- seq_along / seq_len ---
+  if (fname == "seq_along" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "seq_along", target = x$node$name),
+      mode = "integer",
+      shape = "vector"
+    ))
+  }
+  if (fname == "seq_len" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "seq_len", n = x$node),
+      mode = "integer",
+      shape = "vector"
+    ))
+  }
+
+  # --- Colon operator: a:b ---
+  if (fname == ":" && length(e) == 3L) {
+    from <- tccq_lower_expr(e[[2]], sc, decl)
+    to <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!from$ok) {
+      return(from)
+    }
+    if (!to$ok) {
+      return(to)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "seq_range", from = from$node, to = to$node),
+      mode = "integer",
+      shape = "vector"
+    ))
+  }
+
+  # --- seq(from, to) and seq(from, to, by) ---
+  if (fname == "seq") {
+    # seq(from, to) → same as from:to
+    if (length(e) == 3L) {
+      from <- tccq_lower_expr(e[[2]], sc, decl)
+      to <- tccq_lower_expr(e[[3]], sc, decl)
+      if (!from$ok) {
+        return(from)
+      }
+      if (!to$ok) {
+        return(to)
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "seq_range",
+          from = from$node,
+          to = to$node
+        ),
+        mode = "integer",
+        shape = "vector"
+      ))
+    }
+    # seq(from, to, by) — positional or named `by=`
+    if (length(e) == 4L) {
+      nms <- names(e)
+      by_pos <- 4L
+      if (!is.null(nms) && any(nms == "by")) {
+        by_pos <- which(nms == "by")
+      }
+      # Determine from/to positions (everything that isn't by)
+      positional <- setdiff(2:4, by_pos)
+      from <- tccq_lower_expr(e[[positional[1]]], sc, decl)
+      to <- tccq_lower_expr(e[[positional[2]]], sc, decl)
+      by <- tccq_lower_expr(e[[by_pos]], sc, decl)
+      if (!from$ok) {
+        return(from)
+      }
+      if (!to$ok) {
+        return(to)
+      }
+      if (!by$ok) {
+        return(by)
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "seq_by",
+          from = from$node,
+          to = to$node,
+          by = by$node
+        ),
+        mode = "double",
+        shape = "vector"
+      ))
+    }
+  }
+
+  # --- any / all reductions (logical) ---
+  if (fname %in% c("any", "all") && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape == "vector" && identical(x$node$tag, "var")) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "reduce", op = fname, arr = x$node$name),
+        mode = "logical"
+      ))
+    }
+    if (x$shape == "vector") {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "reduce_expr", op = fname, expr = x$node),
+        mode = "logical"
+      ))
+    }
+    # scalar: any/all of a scalar is just the value
+    return(tccq_lower_result(TRUE, node = x$node, mode = "logical"))
+  }
+
+  # --- pmin / pmax (element-wise binary) ---
+  if (fname %in% c("pmin", "pmax") && length(e) == 3L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    y <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (!y$ok) {
+      return(y)
+    }
+    if (tccq_matrix_in_shapes(x$shape, y$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, "() does not support matrix operands in subset")
+      ))
+    }
+    out_shape <- if (x$shape == "vector" || y$shape == "vector") {
+      "vector"
+    } else {
+      "scalar"
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "call2", fun = fname, x = x$node, y = y$node),
+      mode = tcc_quick_promote_mode(x$mode, y$mode) %||% "double",
+      shape = out_shape
+    ))
+  }
+
+  # --- cumsum / cumprod / cummax / cummin ---
+  if (
+    fname %in% c("cumsum", "cumprod", "cummax", "cummin") && length(e) == 2L
+  ) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(fname, " requires a vector argument")
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "cumulative", op = fname, expr = x$node),
+      mode = x$mode,
+      shape = "vector"
+    ))
+  }
+
+  # --- rev(x) ---
+  if (fname == "rev" && length(e) == 2L) {
+    x <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!x$ok) {
+      return(x)
+    }
+    if (x$shape != "vector") {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "rev requires a vector argument"
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "rev", expr = x$node),
+      mode = x$mode,
+      shape = "vector"
+    ))
+  }
+
+  # --- stop(msg) → Rf_error ---
+  if (fname == "stop" && length(e) == 2L) {
+    msg <- e[[2]]
+    if (is.character(msg)) {
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "stop", msg = msg),
+        mode = "void"
+      ))
+    }
+    return(tccq_lower_result(
+      FALSE,
+      reason = "stop() requires a string literal"
+    ))
+  }
+
+  # --- Unknown function: emit rf_call (inline R evaluation) ---
+  # Try to lower all arguments; if any fails, bail out entirely.
+
+  rf_allow <- tcc_quick_rf_call_allowlist()
+  if (!fname %in% rf_allow) {
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0("Unsupported function call: ", fname)
+    ))
+  }
+
+  if (tcc_quick_rf_call_should_message(fname)) {
+    message(
+      "[tcc_quick] '",
+      fname,
+      "' not natively supported is delegating to R via Rf_eval() !"
+    )
+  }
+  rf_args <- list()
+  for (ai in seq_len(length(e) - 1L)) {
+    a <- tccq_lower_expr(e[[ai + 1L]], sc, decl)
+    if (!a$ok) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0("Cannot lower argument ", ai, " of ", fname)
+      ))
+    }
+    if (
+      a$shape %in% c("vector", "matrix") &&
+        !a$node$tag %in% c("var", "rf_call", "matmul")
+    ) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = paste0(
+          "Delegated call ",
+          fname,
+          " requires named vector/matrix arguments in current subset"
+        )
+      ))
+    }
+    rf_args[[ai]] <- a
+  }
+  rf_arg_nodes <- lapply(rf_args, function(a) {
+    nd <- a$node
+    nd$shape <- a$shape
+    nd$mode <- a$mode
+    nd
+  })
+  contract <- tccq_rf_contract_resolve(fname, rf_args)
+  if (!isTRUE(contract$ok)) {
+    return(tccq_lower_result(
+      FALSE,
+      reason = paste0(
+        "Delegated call contract unavailable for ",
+        fname,
+        ": ",
+        contract$reason
+      )
+    ))
+  }
+  out_mode <- contract$mode
+  out_shape <- contract$shape
+  tccq_lower_result(
+    TRUE,
+    node = list(
+      tag = "rf_call",
+      fun = fname,
+      args = rf_arg_nodes,
+      mode = out_mode,
+      shape = out_shape,
+      contract = contract$contract
+    ),
+    mode = out_mode,
+    shape = out_shape
+  )
 }
+
+# ---------------------------------------------------------------------------
+# Statement lowering
+# ---------------------------------------------------------------------------
+
+tccq_lower_stmt <- function(e, sc, decl) {
+  if (!is.call(e)) {
+    return(tccq_lower_expr(e, sc, decl))
+  }
+
+  fun <- e[[1]]
+  if (!is.symbol(fun)) {
+    return(tccq_lower_result(FALSE, reason = "Non-symbol call in statement"))
+  }
+  fname <- as.character(fun)
+
+  # Block: { ... }
+  if (fname == "{") {
+    stmts <- as.list(e)[-1]
+    nodes <- list()
+    for (s in stmts) {
+      r <- tccq_lower_stmt(s, sc, decl)
+      if (!r$ok) {
+        return(r)
+      }
+      nodes[[length(nodes) + 1L]] <- r$node
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "block", stmts = nodes),
+      mode = "void"
+    ))
+  }
+
+  # Assignment: x <- expr / x[i] <- expr / x[i,j] <- expr
+  if (fname == "<-" && length(e) == 3L) {
+    lhs <- e[[2]]
+
+    if (is.call(lhs) && is.symbol(lhs[[1]]) && as.character(lhs[[1]]) == "[") {
+      # x[i] <- expr
+      if (length(lhs) == 3L) {
+        arr <- tccq_lower_expr(lhs[[2]], sc, decl)
+        idx <- tccq_lower_expr(lhs[[3]], sc, decl)
+        val <- tccq_lower_expr(e[[3]], sc, decl)
+        if (!arr$ok) {
+          return(arr)
+        }
+        if (!idx$ok) {
+          return(idx)
+        }
+        if (!val$ok) {
+          return(val)
+        }
+        # Mark param as mutated so codegen duplicates before writing
+        tccq_scope_mark_mutated(sc, arr$node$name)
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "vec_set",
+            arr = arr$node$name,
+            idx = idx$node,
+            value = val$node
+          ),
+          mode = "void"
+        ))
+      }
+      # x[i, j] <- expr
+      if (length(lhs) == 4L) {
+        arr <- tccq_lower_expr(lhs[[2]], sc, decl)
+        row <- tccq_lower_expr(lhs[[3]], sc, decl)
+        col <- tccq_lower_expr(lhs[[4]], sc, decl)
+        val <- tccq_lower_expr(e[[3]], sc, decl)
+        if (!arr$ok) {
+          return(arr)
+        }
+        if (!row$ok) {
+          return(row)
+        }
+        if (!col$ok) {
+          return(col)
+        }
+        if (!val$ok) {
+          return(val)
+        }
+        # Mark param as mutated
+        tccq_scope_mark_mutated(sc, arr$node$name)
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "mat_set",
+            arr = arr$node$name,
+            row = row$node,
+            col = col$node,
+            value = val$node
+          ),
+          mode = "void"
+        ))
+      }
+    }
+
+    # x <- expr
+    if (is.symbol(lhs)) {
+      nm <- as.character(lhs)
+      rhs <- tccq_lower_expr(e[[3]], sc, decl)
+      if (!rhs$ok) {
+        return(rhs)
+      }
+
+      existing <- tccq_scope_get(sc, nm)
+      if (is.null(existing)) {
+        tccq_scope_set(
+          sc,
+          nm,
+          list(
+            kind = "local",
+            mode = rhs$mode,
+            shape = rhs$shape
+          )
+        )
+      }
+
+      # Vector reassignment: rewrite existing array element-wise
+      if (
+        !is.null(existing) &&
+          existing$shape %in% c("vector", "matrix") &&
+          rhs$shape == "vector" &&
+          !identical(rhs$node$tag, "vec_alloc") &&
+          !identical(rhs$node$tag, "mat_alloc")
+      ) {
+        # Mark param as mutated so codegen duplicates before writing
+        tccq_scope_mark_mutated(sc, nm)
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "vec_rewrite",
+            name = nm,
+            expr = rhs$node
+          ),
+          mode = "void"
+        ))
+      }
+
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "assign",
+          name = nm,
+          expr = rhs$node,
+          mode = rhs$mode,
+          shape = rhs$shape
+        ),
+        mode = "void"
+      ))
+    }
+
+    return(tccq_lower_result(FALSE, reason = "Unsupported assignment target"))
+  }
+
+  # for (i in iter) body
+  if (fname == "for" && length(e) == 4L) {
+    var <- as.character(e[[2]])
+    iter_r <- tccq_lower_expr(e[[3]], sc, decl)
+    if (!iter_r$ok) {
+      return(iter_r)
+    }
+
+    # Value iteration: for (x in vec) where vec is a named vector
+    # Desugar to: hidden index loop + x = vec[idx] at top of body
+    if (
+      iter_r$shape == "vector" &&
+        identical(iter_r$node$tag, "var")
+    ) {
+      idx_var <- paste0(".tccq_i_", var)
+      vec_name <- iter_r$node$name
+
+      tccq_scope_set(
+        sc,
+        idx_var,
+        list(kind = "loop_var", mode = "integer", shape = "scalar")
+      )
+      tccq_scope_set(
+        sc,
+        var,
+        list(
+          kind = "local",
+          mode = iter_r$mode,
+          shape = "scalar"
+        )
+      )
+
+      body_r <- tccq_lower_stmt(e[[4]], sc, decl)
+      if (!body_r$ok) {
+        return(body_r)
+      }
+
+      # Prepend: var <- vec[idx]
+      extract_stmt <- list(
+        tag = "assign",
+        name = var,
+        expr = list(
+          tag = "vec_get",
+          arr = vec_name,
+          idx = list(tag = "var", name = idx_var)
+        ),
+        mode = iter_r$mode,
+        shape = "scalar"
+      )
+      inner_body <- if (identical(body_r$node$tag, "block")) {
+        list(
+          tag = "block",
+          stmts = c(list(extract_stmt), body_r$node$stmts)
+        )
+      } else {
+        list(
+          tag = "block",
+          stmts = list(extract_stmt, body_r$node)
+        )
+      }
+
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "for",
+          var = idx_var,
+          iter = list(tag = "seq_along", target = vec_name),
+          body = inner_body
+        ),
+        mode = "void"
+      ))
+    }
+
+    # Set loop variable mode: double for seq_by, integer otherwise
+    loop_mode <- if (identical(iter_r$node$tag, "seq_by")) {
+      "double"
+    } else {
+      "integer"
+    }
+    tccq_scope_set(
+      sc,
+      var,
+      list(
+        kind = "loop_var",
+        mode = loop_mode,
+        shape = "scalar"
+      )
+    )
+    body_r <- tccq_lower_stmt(e[[4]], sc, decl)
+    if (!body_r$ok) {
+      return(body_r)
+    }
+
+    return(tccq_lower_result(
+      TRUE,
+      node = list(
+        tag = "for",
+        var = var,
+        iter = iter_r$node,
+        body = body_r$node
+      ),
+      mode = "void"
+    ))
+  }
+
+  # while (cond) body
+  if (fname == "while" && length(e) == 3L) {
+    cond <- tccq_lower_expr(e[[2]], sc, decl)
+    body_r <- tccq_lower_stmt(e[[3]], sc, decl)
+    if (!cond$ok) {
+      return(cond)
+    }
+    if (!body_r$ok) {
+      return(body_r)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "while", cond = cond$node, body = body_r$node),
+      mode = "void"
+    ))
+  }
+
+  # repeat body
+  if (fname == "repeat" && length(e) == 2L) {
+    body_r <- tccq_lower_stmt(e[[2]], sc, decl)
+    if (!body_r$ok) {
+      return(body_r)
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "repeat", body = body_r$node),
+      mode = "void"
+    ))
+  }
+
+  # break / next
+  if (fname == "break") {
+    return(tccq_lower_result(TRUE, node = list(tag = "break"), mode = "void"))
+  }
+  if (fname == "next") {
+    return(tccq_lower_result(TRUE, node = list(tag = "next"), mode = "void"))
+  }
+
+  # if / if-else statement
+  if (fname == "if") {
+    cond <- tccq_lower_expr(e[[2]], sc, decl)
+    if (!cond$ok) {
+      return(cond)
+    }
+    yes <- tccq_lower_stmt(e[[3]], sc, decl)
+    if (!yes$ok) {
+      return(yes)
+    }
+    if (length(e) == 4L) {
+      no <- tccq_lower_stmt(e[[4]], sc, decl)
+      if (!no$ok) {
+        return(no)
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "if_else_stmt",
+          cond = cond$node,
+          yes = yes$node,
+          no = no$node
+        ),
+        mode = "void"
+      ))
+    }
+    return(tccq_lower_result(
+      TRUE,
+      node = list(tag = "if_stmt", cond = cond$node, yes = yes$node),
+      mode = "void"
+    ))
+  }
+
+  # General expression statement
+  tccq_lower_expr(e, sc, decl)
+}
+
+# ---------------------------------------------------------------------------
+# Top-level: lower function body → fn_body IR
+# ---------------------------------------------------------------------------
+
+tccq_lower_fn_body <- function(fn, decl) {
+  exprs <- tcc_quick_body_without_declare(fn)
+  if (length(exprs) < 1L) {
+    return(tcc_quick_fallback_ir("Empty function body after declare()"))
+  }
+
+  sc <- tccq_scope_new(decl)
+  if (isTRUE(tccq_scope_has_array(sc))) {
+    return(tcc_quick_fallback_ir(
+      "Rank-3+ array declarations are reserved for upcoming multidimensional support"
+    ))
+  }
+  stmts <- list()
+
+  if (length(exprs) > 1L) {
+    for (i in seq_len(length(exprs) - 1L)) {
+      r <- tccq_lower_stmt(exprs[[i]], sc, decl)
+      if (!r$ok) {
+        return(tcc_quick_fallback_ir(
+          r$reason %||% paste0("Unsupported statement at position ", i)
+        ))
+      }
+      stmts[[length(stmts) + 1L]] <- r$node
+    }
+  }
+
+  last <- exprs[[length(exprs)]]
+  ret <- tccq_lower_expr(last, sc, decl)
+  if (!ret$ok) {
+    return(tcc_quick_fallback_ir(
+      ret$reason %||% "Unsupported return expression"
+    ))
+  }
+
+  locals <- list()
+  mutated_params <- character(0)
+  for (nm in ls(sc, all.names = TRUE)) {
+    info <- sc[[nm]]
+    if (info$kind == "local") {
+      locals[[nm]] <- info
+    }
+    if (info$kind == "param" && isTRUE(info$mutated)) {
+      mutated_params <- c(mutated_params, nm)
+    }
+  }
+
+  list(
+    tag = "fn_body",
+    params = decl$args,
+    formal_names = decl$formal_names,
+    locals = locals,
+    mutated_params = mutated_params,
+    stmts = stmts,
+    ret = ret$node,
+    ret_mode = ret$mode,
+    ret_shape = ret$shape
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Pipeline entry point
+# ---------------------------------------------------------------------------
 
 tcc_quick_lower <- function(fn, decl) {
-    exprs <- tcc_quick_body_without_declare(fn)
-    lex <- tcc_quick_lex_exprs(exprs)
-    exprs <- tcc_quick_normalize_exprs(exprs, lex)
-
-    checked <- tcc_quick_typecheck_exprs(exprs, decl)
-    if (!isTRUE(checked$ok)) {
-        reason <- checked$reason
-        if (is.null(reason)) {
-            reason <- "Typecheck failed"
-        }
-        return(tcc_quick_fallback_ir(reason))
-    }
-    exprs <- checked$exprs
-
-    kernel <- tcc_quick_try_lower_kernels(exprs, decl)
-    if (!is.null(kernel)) {
-        return(tcc_quick_verify_ir(kernel))
-    }
-
-    tcc_quick_verify_ir(tcc_quick_lower_block(exprs, decl))
+  ir <- tccq_lower_fn_body(fn, decl)
+  tcc_quick_verify_ir(ir)
 }

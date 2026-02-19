@@ -16,6 +16,7 @@ SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_library(SEXP ext, SEXP library);
+SEXP RC_libtcc_set_options(SEXP ext, SEXP options);
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code);
 SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
 SEXP RC_libtcc_add_host_symbols(SEXP ext);
@@ -86,6 +87,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_add_sysinclude_path", (DL_FUNC) &RC_libtcc_add_sysinclude_path, 2},
     {"RC_libtcc_add_library_path",   (DL_FUNC) &RC_libtcc_add_library_path,   2},
     {"RC_libtcc_add_library",        (DL_FUNC) &RC_libtcc_add_library,        2},
+    {"RC_libtcc_set_options",        (DL_FUNC) &RC_libtcc_set_options,        2},
     {"RC_libtcc_compile_string", (DL_FUNC) &RC_libtcc_compile_string, 2},
     {"RC_libtcc_add_symbol",  (DL_FUNC) &RC_libtcc_add_symbol,  3},
     {"RC_libtcc_add_host_symbols", (DL_FUNC) &RC_libtcc_add_host_symbols, 1},

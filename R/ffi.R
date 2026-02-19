@@ -13,6 +13,7 @@ tcc_ffi_object <- function() {
       symbols = list(),
       headers = character(0),
       c_code = character(0),
+      options = character(0),
       libraries = character(0),
       lib_paths = character(0),
       include_paths = character(0),
@@ -78,6 +79,40 @@ tcc_library_path <- function(ffi, path) {
     stop("Expected tcc_ffi object", call. = FALSE)
   }
   ffi$lib_paths <- c(ffi$lib_paths, path)
+  ffi
+}
+
+#' Add TinyCC compiler options to FFI context
+#'
+#' Append raw options that are passed to `tcc_set_options()` before compiling
+#' generated wrappers (for example `"-O2"` or `"-Wall"`).
+#'
+#' @param ffi A tcc_ffi object
+#' @param options Character vector of option fragments
+#' @return Updated tcc_ffi object (for chaining)
+#' @export
+tcc_options <- function(ffi, options) {
+  if (!inherits(ffi, "tcc_ffi")) {
+    stop("Expected tcc_ffi object", call. = FALSE)
+  }
+  if (missing(options)) {
+    stop("`options` must be provided", call. = FALSE)
+  }
+  if (is.null(options)) {
+    ffi$options <- character(0)
+    return(ffi)
+  }
+
+  opts <- as.character(options)
+  if (!length(opts)) {
+    stop("`options` must not be empty", call. = FALSE)
+  }
+  opts <- trimws(opts)
+  if (any(!nzchar(opts))) {
+    stop("`options` entries must be non-empty strings", call. = FALSE)
+  }
+
+  ffi$options <- c(ffi$options, opts)
   ffi
 }
 
@@ -649,6 +684,13 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     lib_path = c(tcc_lib_paths(), ffi$lib_paths, r_lib_paths)
   )
 
+  if (!is.null(ffi$options) && length(ffi$options) > 0) {
+    rc <- tcc_set_options(state, paste(ffi$options, collapse = " "))
+    if (rc < 0) {
+      stop("Failed to apply TinyCC compiler options", call. = FALSE)
+    }
+  }
+
   # Add library paths
   for (lib_path in ffi$lib_paths) {
     tcc_add_library_path(state, lib_path)
@@ -659,10 +701,9 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     tcc_add_library(state, lib)
   }
 
-  # On Windows, link against R.dll so TCC can resolve R API symbols
-  if (.Platform$OS.type == "windows") {
-    tcc_add_library(state, "R")
-  }
+  # Always link against R's shared library so TCC can resolve
+  # R API symbols (and any symbols R itself exports).
+  tcc_add_library(state, "R")
 
   # Compile the generated code
   result <- tcc_compile_string(state, c_code)
@@ -1056,6 +1097,10 @@ tcc_compiled_object <- function(
 
   # Create environment with callable functions
   env <- new.env(parent = emptyenv())
+  bind_failures <- character(0)
+  add_bind_failure <- function(msg) {
+    bind_failures <<- c(bind_failures, msg)
+  }
 
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
@@ -1086,25 +1131,29 @@ tcc_compiled_object <- function(
               {
                 fn_ptr <- tcc_get_symbol(state, wrapper_name)
                 if (!tcc_symbol_is_valid(fn_ptr)) {
-                  warning(
-                    "Symbol '",
-                    sym_name,
-                    "' returned invalid pointer for '",
-                    wrapper_name,
-                    "'"
+                  add_bind_failure(
+                    paste0(
+                      "Symbol '",
+                      sym_name,
+                      "' returned invalid pointer for '",
+                      wrapper_name,
+                      "'"
+                    )
                   )
                   next
                 }
                 fn_ptrs[[key]] <- fn_ptr
               },
               error = function(e) {
-                warning(
-                  "Could not bind symbol '",
-                  sym_name,
-                  "' wrapper '",
-                  wrapper_name,
-                  "': ",
-                  conditionMessage(e)
+                add_bind_failure(
+                  paste0(
+                    "Could not bind symbol '",
+                    sym_name,
+                    "' wrapper '",
+                    wrapper_name,
+                    "': ",
+                    conditionMessage(e)
+                  )
                 )
               }
             )
@@ -1124,25 +1173,29 @@ tcc_compiled_object <- function(
             {
               fn_ptr <- tcc_get_symbol(state, wrapper_name)
               if (!tcc_symbol_is_valid(fn_ptr)) {
-                warning(
-                  "Symbol '",
-                  sym_name,
-                  "' returned invalid pointer for '",
-                  wrapper_name,
-                  "'"
+                add_bind_failure(
+                  paste0(
+                    "Symbol '",
+                    sym_name,
+                    "' returned invalid pointer for '",
+                    wrapper_name,
+                    "'"
+                  )
                 )
                 next
               }
               fn_ptrs[[as.character(n_varargs)]] <- fn_ptr
             },
             error = function(e) {
-              warning(
-                "Could not bind symbol '",
-                sym_name,
-                "' wrapper '",
-                wrapper_name,
-                "': ",
-                conditionMessage(e)
+              add_bind_failure(
+                paste0(
+                  "Could not bind symbol '",
+                  sym_name,
+                  "' wrapper '",
+                  wrapper_name,
+                  "': ",
+                  conditionMessage(e)
+                )
               )
             }
           )
@@ -1150,10 +1203,12 @@ tcc_compiled_object <- function(
       }
 
       if (length(fn_ptrs) == 0) {
-        warning(
-          "Could not bind any variadic wrappers for symbol '",
-          sym_name,
-          "'"
+        add_bind_failure(
+          paste0(
+            "Could not bind any variadic wrappers for symbol '",
+            sym_name,
+            "'"
+          )
         )
         next
       }
@@ -1169,19 +1224,28 @@ tcc_compiled_object <- function(
 
         # Validate the pointer before creating callable
         if (!tcc_symbol_is_valid(fn_ptr)) {
-          warning(
-            "Symbol '",
-            sym_name,
-            "' returned invalid pointer for '",
-            wrapper_name,
-            "'"
+          add_bind_failure(
+            paste0(
+              "Symbol '",
+              sym_name,
+              "' returned invalid pointer for '",
+              wrapper_name,
+              "'"
+            )
           )
           next
         }
         env[[sym_name]] <- make_callable(fn_ptr, sym, state)
       },
       error = function(e) {
-        warning("Could not bind symbol '", sym_name, "': ", conditionMessage(e))
+        add_bind_failure(
+          paste0(
+            "Could not bind symbol '",
+            sym_name,
+            "': ",
+            conditionMessage(e)
+          )
+        )
       }
     )
   }
@@ -1190,7 +1254,7 @@ tcc_compiled_object <- function(
     wrapper_name <- paste0("R_wrap_", sym_name)
     sym <- helper_specs[[sym_name]]
     if (is.null(sym)) {
-      warning("Unknown helper symbol '", sym_name, "'")
+      add_bind_failure(paste0("Unknown helper symbol '", sym_name, "'"))
       next
     }
     sym$name <- sym_name
@@ -1200,12 +1264,14 @@ tcc_compiled_object <- function(
         fn_ptr <- tcc_get_symbol(state, wrapper_name)
 
         if (!tcc_symbol_is_valid(fn_ptr)) {
-          warning(
-            "Symbol '",
-            sym_name,
-            "' returned invalid pointer for '",
-            wrapper_name,
-            "'"
+          add_bind_failure(
+            paste0(
+              "Symbol '",
+              sym_name,
+              "' returned invalid pointer for '",
+              wrapper_name,
+              "'"
+            )
           )
           next
         }
@@ -1213,8 +1279,23 @@ tcc_compiled_object <- function(
         env[[sym_name]] <- make_callable(fn_ptr, sym, state)
       },
       error = function(e) {
-        warning("Could not bind symbol '", sym_name, "': ", conditionMessage(e))
+        add_bind_failure(
+          paste0(
+            "Could not bind symbol '",
+            sym_name,
+            "': ",
+            conditionMessage(e)
+          )
+        )
       }
+    )
+  }
+
+  if (length(bind_failures) > 0) {
+    stop(
+      "Failed to bind compiled wrapper symbols:\n  - ",
+      paste(unique(bind_failures), collapse = "\n  - "),
+      call. = FALSE
     )
   }
 
@@ -1246,6 +1327,7 @@ make_callable <- function(fn_ptr, sym, state) {
   vararg_types_allowed <- sym$varargs_types %||% list()
   variadic <- isTRUE(sym$variadic)
   vararg_mode <- if (variadic) sym$varargs_mode %||% "prefix" else NULL
+  fixed_n <- length(arg_types)
   varargs_min <- if (variadic) {
     sym$varargs_min %||% length(vararg_types)
   } else {
@@ -1256,76 +1338,143 @@ make_callable <- function(fn_ptr, sym, state) {
   } else {
     0L
   }
+  min_n <- fixed_n + varargs_min
+  max_n <- fixed_n + varargs_max
+  fn_ptr_is_map <- is.list(fn_ptr)
+  prefix_ptr_by_tail <- NULL
+  types_ptr_env <- NULL
+  if (variadic && fn_ptr_is_map) {
+    if (identical(vararg_mode, "prefix")) {
+      ptr_names <- suppressWarnings(as.integer(names(fn_ptr)))
+      if (
+        length(ptr_names) == length(fn_ptr) &&
+          length(ptr_names) > 0L &&
+          all(!is.na(ptr_names))
+      ) {
+        prefix_ptr_by_tail <- vector("list", varargs_max + 1L)
+        for (i in seq_along(fn_ptr)) {
+          tail_n <- ptr_names[[i]]
+          if (!is.na(tail_n) && tail_n >= 0L && tail_n <= varargs_max) {
+            prefix_ptr_by_tail[[tail_n + 1L]] <- fn_ptr[[i]]
+          }
+        }
+      }
+    } else if (identical(vararg_mode, "types")) {
+      ptr_keys <- names(fn_ptr)
+      if (!is.null(ptr_keys) && length(ptr_keys) == length(fn_ptr)) {
+        types_ptr_env <- list2env(fn_ptr, hash = TRUE, parent = emptyenv())
+      }
+    }
+  }
   sym_name <- sym$name
+
+  if (!variadic) {
+    expected_n <- fixed_n
+    dot_syms <- if (expected_n > 0L) {
+      lapply(seq_len(expected_n), function(i) as.name(paste0("..", i)))
+    } else {
+      list()
+    }
+    call_expr <- as.call(c(as.name(".RtinyccCall"), as.name(".call_ptr"), dot_syms))
+    body_expr <- bquote({
+      n_args <- nargs()
+      if (n_args != .(expected_n)) {
+        stop(
+          "Expected ",
+          .(expected_n),
+          " arguments, got ",
+          n_args,
+          call. = FALSE
+        )
+      }
+      if (!tcc_symbol_is_valid(.call_ptr)) {
+        stop(
+          "Function pointer for '",
+          .(sym_name),
+          "' is no longer valid",
+          call. = FALSE
+        )
+      }
+      .(call_expr)
+    })
+    f <- eval(
+      call("function", as.pairlist(alist(... = )), body_expr),
+      envir = list2env(
+        list(
+          .call_ptr = fn_ptr,
+          .RtinyccCall = .RtinyccCall,
+          tcc_symbol_is_valid = tcc_symbol_is_valid
+        ),
+        parent = baseenv()
+      )
+    )
+
+    # Store the pointer in the function's environment to prevent GC
+    environment(f)$.fn_ptr <- fn_ptr
+    environment(f)$.state <- state
+    environment(f)$.arg_types <- arg_types
+    environment(f)$.sym_name <- sym_name
+
+    return(f)
+  }
 
   # Create function that calls the wrapper via .Call()
   f <- function(...) {
     args <- list(...)
     n_args <- length(args)
+    if (n_args < min_n || n_args > max_n) {
+      stop(
+        "Expected between ",
+        min_n,
+        " and ",
+        max_n,
+        " arguments, got ",
+        n_args,
+        call. = FALSE
+      )
+    }
+    n_tail <- n_args - fixed_n
 
-    if (variadic) {
-      min_n <- length(arg_types) + varargs_min
-      max_n <- length(arg_types) + varargs_max
-      if (n_args < min_n || n_args > max_n) {
-        stop(
-          "Expected between ",
-          min_n,
-          " and ",
-          max_n,
-          " arguments, got ",
-          n_args,
-          call. = FALSE
-        )
-      }
-      n_tail <- n_args - length(arg_types)
-
-      if (identical(vararg_mode, "types")) {
-        tail_args <- if (n_tail > 0) {
-          args[seq.int(length(arg_types) + 1L, n_args)]
-        } else {
-          list()
-        }
-
-        inferred_types <- if (length(tail_args) > 0) {
-          vapply(
-            tail_args,
-            infer_variadic_arg_type,
-            character(1),
-            allowed_types = vararg_types_allowed
+    if (identical(vararg_mode, "types")) {
+      inferred_types <- character(n_tail)
+      if (n_tail > 0L) {
+        for (i in seq_len(n_tail)) {
+          inferred_types[[i]] <- infer_variadic_arg_type(
+            args[[fixed_n + i]],
+            vararg_types_allowed
           )
-        } else {
-          character(0)
-        }
-        key <- variadic_signature_key(as.list(inferred_types))
-        call_ptr <- if (is.list(fn_ptr)) fn_ptr[[key]] else fn_ptr
-      } else {
-        call_ptr <- if (is.list(fn_ptr)) {
-          fn_ptr[[as.character(n_tail)]]
-        } else {
-          fn_ptr
         }
       }
-
-      if (is.null(call_ptr)) {
-        stop(
-          "No compiled variadic wrapper for symbol '",
-          sym_name,
-          "' and the provided argument shape",
-          call. = FALSE
-        )
+      key <- variadic_signature_key(inferred_types)
+      if (!is.null(types_ptr_env)) {
+        call_ptr <- if (exists(key, envir = types_ptr_env, inherits = FALSE)) {
+          types_ptr_env[[key]]
+        } else {
+          NULL
+        }
+      } else {
+        call_ptr <- if (fn_ptr_is_map) fn_ptr[[key]] else fn_ptr
       }
     } else {
-      expected_n <- length(arg_types)
-      if (n_args != expected_n) {
-        stop(
-          "Expected ",
-          expected_n,
-          " arguments, got ",
-          n_args,
-          call. = FALSE
-        )
+      if (!is.null(prefix_ptr_by_tail)) {
+        idx <- n_tail + 1L
+        call_ptr <- if (idx > 0L && idx <= length(prefix_ptr_by_tail)) {
+          prefix_ptr_by_tail[[idx]]
+        } else {
+          NULL
+        }
+      } else {
+        call_ptr <- if (fn_ptr_is_map) fn_ptr[[as.character(n_tail)]] else fn_ptr
       }
-      call_ptr <- fn_ptr
+    }
+
+    if (is.null(call_ptr)) {
+      stop(
+        "No compiled variadic wrapper for symbol '",
+        sym_name,
+        "' and the provided argument shape",
+        call. = FALSE
+      )
     }
 
     # Validate pointer is still valid before calling
@@ -1339,7 +1488,7 @@ make_callable <- function(fn_ptr, sym, state) {
     }
 
     # R's .Call() can invoke external pointers as functions.
-    rtinycc_call(as.integer(n_args), call_ptr, args)
+    rtinycc_call(n_args, call_ptr, args)
   }
 
   # Store the pointer in the function's environment to prevent GC
@@ -1706,10 +1855,9 @@ tcc_link <- function(
     tcc_add_library(state, lib)
   }
 
-  # On Windows, link against R.dll so TCC can resolve R API symbols
-  if (.Platform$OS.type == "windows") {
-    tcc_add_library(state, "R")
-  }
+  # Always link against R's shared library so TCC can resolve
+  # R API symbols (and any symbols R itself exports).
+  tcc_add_library(state, "R")
 
   # Compile the generated code
   result <- tcc_compile_string(state, c_code)
@@ -1790,15 +1938,8 @@ tcc_cstring_object <- function(ptr, clone = TRUE, owned = FALSE) {
     }
   }
 
-  # Register finalizer if owned
-  if (owned) {
-    reg.finalizer(obj, function(x) {
-      if (!is.null(x$ptr)) {
-        # Free C memory
-        # This would need a C helper to call free()
-      }
-    })
-  }
+  # owned is currently reserved; the pointer itself may already carry
+  # ownership/finalizer semantics (for example via tcc_cstring()).
 
   class(obj) <- "tcc_cstring"
   obj

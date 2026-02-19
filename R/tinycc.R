@@ -89,6 +89,73 @@ tcc_include_paths <- function() {
 #' @export
 tcc_sysinclude_paths <- tcc_include_paths
 
+tcc_parse_runtime_lib_path <- function(x) {
+  if (is.null(x) || !length(x)) {
+    return(NA_character_)
+  }
+  s <- as.character(x[[1]])
+  if (!nzchar(s) || is.na(s)) {
+    return(NA_character_)
+  }
+  s <- trimws(sub(";.*$", "", s))
+  if (!nzchar(s) || identical(s, "NA")) {
+    return(NA_character_)
+  }
+  normalizePath(s, winslash = "/", mustWork = FALSE)
+}
+
+#' Report active BLAS/LAPACK runtime information from R
+#'
+#' Returns the BLAS/LAPACK runtime details as reported by R itself, plus
+#' convenience flags indicating whether `Rblas` and `Rlapack` appear available
+#' in loaded DLLs/shared objects.
+#'
+#' @return A named list with fields:
+#'   `blas_path`, `lapack_path`, `has_rblas`, `has_rlapack`, `loaded_dlls`.
+#' @export
+blas_lapack_info <- function() {
+  si <- utils::sessionInfo()
+  loaded <- getLoadedDLLs()
+  loaded_names <- names(loaded)
+  loaded_paths <- vapply(
+    loaded,
+    function(x) {
+      p <- x[["path"]]
+      if (is.null(p) || !length(p)) "" else as.character(p[[1]])
+    },
+    character(1)
+  )
+
+  blas_path <- tcc_parse_runtime_lib_path(si$BLAS)
+  lapack_path <- tryCatch(La_library(), error = function(e) NA_character_)
+  lapack_path <- tcc_parse_runtime_lib_path(lapack_path)
+  if (is.na(lapack_path) || !nzchar(lapack_path)) {
+    lapack_path <- tcc_parse_runtime_lib_path(si$LAPACK)
+  }
+
+  path_has_name <- function(path, name) {
+    if (!is.character(path) || length(path) != 1 || is.na(path) || !nzchar(path)) {
+      return(FALSE)
+    }
+    grepl(name, basename(path), ignore.case = TRUE)
+  }
+  loaded_has_name <- function(name) {
+    any(grepl(name, loaded_names, ignore.case = TRUE)) ||
+      any(grepl(name, basename(loaded_paths), ignore.case = TRUE))
+  }
+
+  has_rblas <- loaded_has_name("Rblas") || path_has_name(blas_path, "Rblas")
+  has_rlapack <- loaded_has_name("Rlapack") || path_has_name(lapack_path, "Rlapack")
+
+  list(
+    blas_path = blas_path,
+    lapack_path = lapack_path,
+    has_rblas = isTRUE(has_rblas),
+    has_rlapack = isTRUE(has_rlapack),
+    loaded_dlls = loaded_names
+  )
+}
+
 tcc_output_type <- function(output) {
   output <- match.arg(output, c("memory", "obj", "dll", "exe", "preprocess"))
   tcc_output_type_rule(output)
@@ -182,6 +249,21 @@ tcc_add_library_path <- function(state, path) {
 #' @export
 tcc_add_library <- function(state, library) {
   .Call(RC_libtcc_add_library, state, library)
+}
+
+#' Apply raw TinyCC options to a libtcc state
+#'
+#' Passes options directly to `tcc_set_options()` for the given state.
+#'
+#' @param state A `tcc_state`.
+#' @param options Character scalar of options (for example `"-O2 -Wall"`).
+#' @return Integer status code (`0` on success; negative on parse error).
+#' @export
+tcc_set_options <- function(state, options) {
+  if (!is.character(options) || length(options) != 1 || !nzchar(trimws(options))) {
+    stop("`options` must be a non-empty character scalar", call. = FALSE)
+  }
+  .Call(RC_libtcc_set_options, state, options)
 }
 
 #' Compile C code from a character string

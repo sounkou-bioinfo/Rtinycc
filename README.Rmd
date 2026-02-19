@@ -19,11 +19,12 @@ knitr::opts_chunk$set(
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rtinycc/actions/workflows/R-CMD-check.yaml)[![Rtinycc status badge](https://sounkou-bioinfo.r-universe.dev/Rtinycc/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rtinycc)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
 ## Abstract
 
-Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an experimental FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities. The package runs on unix-alikes and windows( pace UCRT issues, so WSL2 is recommended) and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
+Rtinycc is an R interface to [TinyCC](https://github.com/TinyCC/tinycc), providing both CLI access and a libtcc-backed in-memory compiler. It includes an FFI inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi) for binding C symbols with predictable type conversions and pointer utilities, and an experimental and limited in scope R-to-C transpiler `tcc_quick()`, inspired by [quickr](https://github.com/t-kalinowski/quickr) that compiles `declare()` annotated R functions to C via TinyCC. The package works on unix-alikes and Windows and focuses on embedding TinyCC and enabling JIT-compiled bindings directly from R. Combined with [treesitter.c](https://github.com/sounkou-bioinfo/treesitter.c), which provides C header parsers, it can be used to rapidly generate declarative bindings.
 
 
 ## How it works
@@ -186,6 +187,13 @@ Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `i
 
 Pointer types include `ptr` (opaque external pointer), `sexp` (pass a `SEXP` directly), and callback signatures like `callback:double(double)`.
 
+Variadic functions are supported in two forms: typed prefix tails (`varargs`) and
+bounded dynamic tails (`varargs_types` + `varargs_min`/`varargs_max`). Prefix
+mode is the cheaper runtime path because dispatch is by tail arity only;
+bounded dynamic mode adds per-call scalar type inference to select a compatible
+wrapper. For hot loops, prefer fixed arity first, then prefix variadics with a
+tight maximum tail size.
+
 
 Array returns use `returns = list(type = "integer_array", length_arg = 2, free = TRUE)` to copy the result into a new R vector. The `length_arg` is the 1-based index of the C argument that carries the array length. Set `free = TRUE` when the C function returns a `malloc`-owned buffer.
 
@@ -202,15 +210,18 @@ ffi <- tcc_ffi() |>
 ffi$add(5L, 3L)
 
 # Compare to the R builtin `+` in a tight loop.
-# Each FFI call allocates a return SEXP, so GC pressure is expected.
+# Each FFI call boxes the return value into a fresh SEXP.
+# In tight scalar loops this creates allocation churn, so GC pressure is expected.
+# R's allocator for SEXP arguments/returns at the R<->C boundary.
 r_p <- sample(10000)
-bench::mark(
+timings_ffi_scalar <- bench::mark(
   Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
   Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
-
 )
+timings_ffi_scalar
 
-# For performance-sensitive code, move the loop into C and operate on arrays.
+# For performance-sensitive code, move the loop into C and operate on arrays
+# (one call over many elements instead of many scalar calls).
 ffi_vec <- tcc_ffi() |>
   tcc_source(" \
     void add_vec(int32_t* x, int32_t n) {\
@@ -220,8 +231,8 @@ ffi_vec <- tcc_ffi() |>
   tcc_bind(add_vec = list(args = list("integer_array", "i32"), returns = "void")) |>
   tcc_compile()
 
-x <- sample(10000)
-bench::mark(
+x <- sample(100000)
+timings_ffi_vec <- bench::mark(
   Rtinycc_vec = {
     y <- as.integer(x)
     y <- y + 0L
@@ -234,8 +245,10 @@ bench::mark(
     y + 1L
   }
 )
-
+timings_ffi_vec
 ```
+
+
 
 ### Variadic calls (e.g. `Rprintf` style)
 
@@ -310,7 +323,43 @@ math$floor(3.7)
 
 
 ```
+### Compiler options
 
+Use `tcc_options()` to pass raw TinyCC options in the high-level FFI pipeline.
+For low-level states, use `tcc_set_options()` directly.
+
+```{r ffi-options}
+ffi_opt_off <- tcc_ffi() |>
+  tcc_options("-O0") |>
+  tcc_source('
+    int opt_macro() {
+    #ifdef __OPTIMIZE__
+      return 1;
+    #else
+      return 0;
+    #endif
+    }
+  ') |>
+  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
+  tcc_compile()
+
+ffi_opt_on <- tcc_ffi() |>
+  tcc_options(c("-Wall", "-O2")) |>
+  tcc_source('
+    int opt_macro() {
+    #ifdef __OPTIMIZE__
+      return 1;
+    #else
+      return 0;
+    #endif
+    }
+  ') |>
+  tcc_bind(opt_macro = list(args = list(), returns = "i32")) |>
+  tcc_compile()
+
+ffi_opt_off$opt_macro()
+ffi_opt_on$opt_macro()
+```
 ### Working with arrays
 
 R vectors are passed to C with zero copy. Mutations in C are visible in R.
@@ -675,7 +724,7 @@ ffi$global_global_counter_get()
 
 `CSV` parser using [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) on linux
 
-```{r io_uring-demo}
+```{r io_uring-demo, eval=TRUE}
 if (Sys.info()[["sysname"]] == "Linux") {
   c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
 
@@ -747,8 +796,8 @@ if (Sys.info()[["sysname"]] == "Linux") {
       )
       nrow(x)
     },
-     vroom_df_altrep_false_mat = {
-      vroom::vroom(
+    vroom_df_altrep_false_mat = {
+      x <- vroom::vroom(
         tmp_csv,
         delim = ",",
         altrep = FALSE,
@@ -756,6 +805,7 @@ if (Sys.info()[["sysname"]] == "Linux") {
         progress = FALSE,
         show_col_types = FALSE
       )
+      x <- as.matrix(x)
       nrow(x)
     },
     c_read_df = {
@@ -779,9 +829,64 @@ if (Sys.info()[["sysname"]] == "Linux") {
 
 ## tcc_quick
 
-`tcc_quick()` is the experimental R-to-C transpiler path in Rtinycc. It compiles a
-declared subset of R code into C and executes it via TinyCC, while preserving a
-safe fallback route to R evaluation through `Rf_lang*` + `Rf_eval` when needed.
+`tcc_quick()` is an experimental and limited in scope R-to-C transpiler path in Rtinycc, inspired by
+[quickr](https://github.com/t-kalinowski/quickr). It compiles a `declare()`-annotated
+subset of R into C and executes it via TinyCC, while preserving a safe fallback
+route to R evaluation through `Rf_lang*` + `Rf_eval` for explicitly delegated
+calls (allowlist + output contract).
+
+Fallback behavior is explicit:
+
+- `fallback = "hard"`: compile-only; reject any `rf_call` path.
+- `fallback = "soft"`: allow mixed compiled + delegated `Rf_eval` execution.
+- `fallback = "auto"`: compatibility mode (default behavior).
+
+When delegated calls are used, `Rf_eval`  runs in the compiled wrapper call
+environment (`environment()`), not a fixed global environment, so lexical
+lookups are consistent with normal function calls.
+
+Type declarations also reserve space for multidimensional arrays:
+rank-3+ declarations (for example `double(NA, NA, NA)`) are parsed and tracked,
+but currently treated as outside the native subset pending full shape-polymorphic
+array lowering. In practice: `soft`/`auto` fall back, `hard` errors.
+
+<!--
+The core codegen mechanism is ψ-reduction (Mullin 1988) / condensation (Scholz,
+SAC 1994): `tccq_cg_vec_elem` recursively defines the k-th element of any vector
+expression tree, fusing slices, element-wise ops, and reductions into single
+tight loops with zero intermediate allocations. Vector slices (`x[a:b]`) are
+views (pointer + offset), never copies.
+-->
+
+### Supported operations
+
+`tcc_quick_ops()` returns the full table programmatically. Here is the current
+snapshot, grouped by category:
+
+```{r tcc-quick-ops-table}
+knitr::kable(tcc_quick_ops(), row.names = FALSE)
+```
+
+### Performance expectations
+
+`tcc_quick()` can beat base R for some data-heavy loops, but it is not
+guaranteed to be faster in every case.  TinyCC (`libtcc`) is a fast compiler frontend/JIT but not a heavy optimizing
+  compiler (in bundled TinyCC, `-O` mostly toggles `__OPTIMIZE__`). Small functions are sensitive to call overhead and may be faster in base R. Delegated `rf_call` paths (`fallback = "soft"/"auto"`) pay extra overhead. Native-lowered loops over large vectors/matrices are the main win scenario.
+
+### Codegen-only mode
+
+Use `mode = "code"` when you want the generated C source without compiling:
+
+```{r tcc-quick-code-only}
+add_one <- function(x) {
+  declare(type(x = double(1)))
+  x + 1
+}
+
+c_src <- tcc_quick(add_one, fallback = "hard", mode = "code")
+c_lines <- strsplit(c_src, "\n", fixed = TRUE)[[1]]
+c_lines[seq_len(min(20L, length(c_lines)))]
+```
 
 ### Convolution benchmark
 
@@ -833,7 +938,7 @@ nb <- length(b)
 nab <- na + nb - 1L
 
 quick_convolve <- quick(slow_convolve)
-quick_tcc <- tcc_quick(slow_convolve, fallback = "never")
+quick_tcc <- tcc_quick(slow_convolve, fallback = "hard")
 
 stopifnot(
   isTRUE(all.equal(slow_convolve(a, b), quick_tcc(a, b), tolerance = 1e-10))
@@ -874,13 +979,13 @@ slow_roll_mean <- function(x, weights, normalize = TRUE) {
 }
 
 quickr_roll_mean <- quick(slow_roll_mean)
-quick_tcc_roll_mean <- tcc_quick(slow_roll_mean, fallback = "never")
+quick_tcc_roll_mean <- tcc_quick(slow_roll_mean, fallback = "hard")
 
 x <- dnorm(seq(-3, 3, len = 100000))
 weights <- dnorm(seq(-1, 1, len = 100))
 
 timings_roll_mean <- bench::mark(
-  r = slow_roll_mean(x, weights),
+  R = slow_roll_mean(x, weights),
   quickr = quickr_roll_mean(x, weights = weights),
   Rtinycc_quick = quick_tcc_roll_mean(x, weights = weights),
   min_time = 1
@@ -889,6 +994,245 @@ timings_roll_mean
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+### Viterbi benchmark (from quickr README)
+
+The [Viterbi algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm) is a
+classic dynamic programming example from Hidden Markov Models. This version
+uses operations that `tcc_quick` lowers natively (`matrix`, `for`, scalar
+arithmetic, integer vector allocation, matrix element access). The loop body
+itself — index iteration, argmax tracking, element access — runs in compiled C,
+which is where most of the time is spent.
+
+```{r benchmark-tcc-quick-viterbi}
+slow_viterbi <- function(observations, states, initial_probs,
+                         transition_probs, emission_probs) {
+    declare(
+      type(observations = integer(NA)),
+      type(states = integer(NA)),
+      type(initial_probs = double(NA)),
+      type(transition_probs = double(NA, NA)),
+      type(emission_probs = double(NA, NA))
+    )
+
+    n_states <- length(states)
+    n_obs <- length(observations)
+    trellis <- matrix(0.0, nrow = n_states, ncol = n_obs)
+    backpointer <- matrix(0L, nrow = n_states, ncol = n_obs)
+
+    for (s in seq_len(n_states)) {
+      trellis[s, 1L] <- initial_probs[s] * emission_probs[s, observations[1L]]
+    }
+
+    for (step in 2:n_obs) {
+      for (cs in seq_len(n_states)) {
+        best_prob <- -1.0
+        best_state <- 1L
+        for (ps in seq_len(n_states)) {
+          p <- trellis[ps, step - 1L] * transition_probs[ps, cs]
+          if (p > best_prob) {
+            best_prob <- p
+            best_state <- ps
+          }
+        }
+        trellis[cs, step] <- best_prob * emission_probs[cs, observations[step]]
+        backpointer[cs, step] <- best_state
+      }
+    }
+
+    path <- integer(n_obs)
+    best_final <- -1.0
+    best_final_s <- 1L
+    for (s in seq_len(n_states)) {
+      if (trellis[s, n_obs] > best_final) {
+        best_final <- trellis[s, n_obs]
+        best_final_s <- s
+      }
+    }
+    path[n_obs] <- best_final_s
+
+    for (step in (n_obs - 1L):1L) {
+      path[step] <- backpointer[path[step + 1L], step + 1L]
+    }
+    path
+}
+
+quickr_viterbi <- quick(slow_viterbi)
+quick_viterbi <- tcc_quick(slow_viterbi, fallback = "hard")
+
+set.seed(1234)
+n_steps <- 500L
+n_states <- 20L
+n_obs <- 20L
+
+observations <- sample(1:n_obs, n_steps, replace = TRUE)
+states <- 1:n_states
+initial_probs <- runif(n_states)
+initial_probs <- initial_probs / sum(initial_probs)
+transition_probs <- matrix(runif(n_states * n_states), nrow = n_states)
+transition_probs <- transition_probs / rowSums(transition_probs)
+emission_probs <- matrix(runif(n_states * n_obs), nrow = n_states)
+emission_probs <- emission_probs / rowSums(emission_probs)
+
+stopifnot(identical(
+  slow_viterbi(observations, states, initial_probs, transition_probs, emission_probs),
+  quick_viterbi(observations, states, initial_probs, transition_probs, emission_probs)
+))
+
+timings_viterbi <- bench::mark(
+  R = slow_viterbi(observations, states, initial_probs,
+                   transition_probs, emission_probs),
+  quickr = quickr_viterbi(observations, states, initial_probs,
+                          transition_probs, emission_probs),
+  Rtinycc_quick = quick_viterbi(observations, states, initial_probs,
+                                transition_probs, emission_probs),
+  min_time = 1
+)
+timings_viterbi
+plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+### Matrix algebra, BLAS, and delegation
+
+`tcc_quick`  emits native BLAS/LAPACK-backed paths for `%*%`, `crossprod`,
+`tcrossprod` (matrix/matrix cases, `F77_CALL(dgemm)`) and `solve(A, b)` /
+`solve(A, B)` (`F77_CALL(dgesv)`) through R headers. This keeps behavior
+portable across platforms while still using R's linked BLAS/LAPACK stack.
+
+Runtime note: BLAS/LAPACK linkage depends on your R build (OpenBLAS, MKL,
+Accelerate, reference BLAS, etc.). Use `blas_lapack_info()` to inspect what R
+is currently using. `tcc_quick` links `Rblas`/`Rlapack` for lowered matrix
+kernels when those runtime libraries are available.
+
+```{r blas-lapack-info}
+str(blas_lapack_info())
+```
+
+Only delegated calls with a registered output contract are evaluated through
+`Rf_eval()` in `soft`/`auto` mode. Calls outside the current native subset, or
+without a delegated contract, are treated as outside the supported `tcc_quick`
+subset. In `hard` mode, all `rf_call` paths are rejected at compile time.
+
+In the example below, `%*%` and `crossprod` compile natively. `solve` can also
+compile natively for direct `solve(A, b/B)` forms, but this OLS expression still
+delegates because `solve` is fed nested expression arguments.
+
+```{r tcc-quick-linalg-bypass}
+# A function that mixes native matrix products with delegated linear solves.
+# %*% and crossprod(X) lower natively; crossprod(X, y) and nested solve(...)
+# delegate through Rf_eval() in soft mode.
+fast_ols <- function(X, y) {
+  declare(
+    type(X = double(NA, NA)),
+    type(y = double(NA))
+  )
+  coef <- solve(crossprod(X), crossprod(X, y))
+  pred <- X %*% coef
+  n <- nrow(X)
+  k <- ncol(X)
+  s2 <- 0.0
+  for (i in seq_len(n)) {
+    r <- y[i] - pred[i]
+    s2 <- s2 + r * r
+  }
+  s2 <- s2 / as.double(n - k)
+  s2
+}
+
+quick_ols <- tcc_quick(fast_ols, fallback = "soft")
+
+set.seed(42)
+X <- cbind(1, matrix(rnorm(5000 * 4), ncol = 4))
+y <- as.numeric(X %*% c(1, 2, -1, 0.5, 3) + rnorm(5000))
+
+stopifnot(all.equal(fast_ols(X, y), quick_ols(X, y), tolerance = 1e-10))
+
+timings_ols <- bench::mark(
+  R = fast_ols(X, y),
+  Rtinycc_quick = quick_ols(X, y),
+  min_time = 1
+)
+timings_ols
+plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+
+# Notes on allocation behavior:
+# - %*% and crossprod(X) are native-lowered in this example.
+# - crossprod(X, y) and solve(crossprod(X), crossprod(X, y)) are delegated via
+#   Rf_eval() in soft mode, which allocates language objects/SEXP wrappers in
+#   addition to result objects.
+# - To reduce GC pressure, prefer fully native-lowered paths
+#   (fallback = "hard") where possible.
+```
+
+### Native statistics lowering
+
+`tcc_quick`  lowers common statistics directly (`mean`, `sd`, `median`,
+`quantile`) including `na.rm = TRUE` and vector `probs` for `quantile`.
+
+That means this example runs as native generated loops (plus sorting for
+`median`/`quantile`) rather than going through `Rf_eval`.
+
+```{r tcc-quick-bypass}
+# These operations are natively lowered in tcc_quick.
+slow_stats <- function(x) {
+  declare(type(x = double(NA)))
+  m <- mean(x)
+  s <- sd(x)
+  med <- median(x)
+  q1 <- quantile(x, 0.25)
+  q3 <- quantile(x, 0.75)
+  iqr <- q3 - q1
+  iqr
+}
+
+quick_stats <- tcc_quick(slow_stats, fallback = "hard")
+
+x <- rnorm(10000)
+stopifnot(all.equal(
+  unname(slow_stats(x)), unname(quick_stats(x)),
+  tolerance = 1e-10
+))
+
+timings_bypass <- bench::mark(
+  R = slow_stats(x),
+  Rtinycc_quick = quick_stats(x),
+  check = FALSE
+)
+timings_bypass
+plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
+```
+
+### Typed `sapply` / `apply` subset
+
+`tcc_quick`  supports a typed subset of mapping helpers:
+
+- `sapply(x, FUN)` where `FUN` is a symbol in the supported subset (for example
+  unary math intrinsics, `identity`, and scalar casts such as `as.raw`).
+- `apply(X, MARGIN, FUN)` for matrix inputs with literal `MARGIN` (`1` or `2`)
+  and `FUN` in `{sum, mean}`. Direct matrix-variable cases lower natively via
+  `rowSums`/`colSums`/`rowMeans`/`colMeans` loops; non-direct cases may still
+  delegate in `soft`/`auto`.
+
+```{r tcc-quick-apply-subset}
+sapply_example <- function(x) {
+  declare(type(x = double(NA)))
+  sapply(x, sqrt)
+}
+
+apply_example <- function(X) {
+  declare(type(X = double(NA, NA)))
+  apply(X, 1, sum)
+}
+
+f_sapply <- tcc_quick(sapply_example, fallback = "hard")
+f_apply <- tcc_quick(apply_example, fallback = "soft")
+
+x <- runif(10)
+X <- matrix(runif(30), nrow = 6)
+
+stopifnot(all.equal(f_sapply(x), sapply_example(x), tolerance = 1e-12))
+stopifnot(all.equal(f_apply(X), apply_example(X), tolerance = 1e-12))
 ```
 
 ## Known limitations
@@ -997,4 +1341,3 @@ GPL-3
 - [RSimpleFFI](https://github.com/sounkou-bioinfo/RSimpleFFI#readme)
 - [CSlug](https://cslug.readthedocs.io/en/latest/)
 - [quickr](https://github.com/t-kalinowski/quickr)
-

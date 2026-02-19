@@ -60,6 +60,16 @@ expect_equal(result, 8L)
 
 result <- ffi$add(10L, 20L)
 expect_equal(result, 30L)
+expect_error(
+  ffi$add(1L),
+  "Expected 2 arguments, got 1",
+  info = "Fixed-arity wrappers enforce under-arity with stable error text"
+)
+expect_error(
+  ffi$add(1L, 2L, 3L),
+  "Expected 2 arguments, got 3",
+  info = "Fixed-arity wrappers enforce over-arity with stable error text"
+)
 
 # Test 5: Compile and call function with double arguments
 ffi <- tcc_ffi() |>
@@ -115,3 +125,36 @@ ffi <- tcc_ffi() |>
 expect_true(inherits(ffi, "tcc_compiled"))
 result <- ffi$dup_array(as.integer(c(1, 2, 3)), 3L)
 expect_equal(result, c(2L, 4L, 6L))
+
+# Test 8: Missing wrapper bindings fail fast (no partially-broken object)
+state_bind_fail <- tcc_state(output = "memory")
+expect_equal(
+  tcc_compile_string(
+    state_bind_fail,
+    "
+    int R_wrap_existing(void) {
+      return 1;
+    }
+    "
+  ),
+  0L
+)
+expect_equal(tcc_relocate(state_bind_fail), 0L)
+
+expect_error(
+  Rtinycc:::tcc_compiled_object(
+    state_bind_fail,
+    symbols = list(missing = list(args = list(), returns = "i32")),
+    output = "memory",
+    structs = NULL,
+    unions = NULL,
+    enums = NULL,
+    globals = NULL,
+    container_of = NULL,
+    field_addr = NULL,
+    struct_raw_access = NULL,
+    introspect = NULL
+  ),
+  "Failed to bind compiled wrapper symbols",
+  info = "Missing wrappers should raise a hard binding error"
+)
