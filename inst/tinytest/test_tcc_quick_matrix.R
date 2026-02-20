@@ -70,16 +70,40 @@ col_sum_from_slice <- function(X, j) {
   sum(prev)
 }
 
+mat_rebind_col <- function(X, j) {
+  declare(type(X = double(NA, NA)), type(j = integer(1)))
+  X <- X[, j]
+  X
+}
+
+mat_rebind_row <- function(X, i) {
+  declare(type(X = double(NA, NA)), type(i = integer(1)))
+  X <- X[i, ]
+  X
+}
+
+mat_rebind_col_sum <- function(X, j) {
+  declare(type(X = double(NA, NA)), type(j = integer(1)))
+  X <- X[, j]
+  sum(X)
+}
+
 f_mat_col <- tcc_quick(mat_col, fallback = "never")
 f_mat_row <- tcc_quick(mat_row, fallback = "never")
 f_mat_full <- tcc_quick(mat_full, fallback = "never")
 f_col_sum_from_slice <- tcc_quick(col_sum_from_slice, fallback = "never")
+f_mat_rebind_col <- tcc_quick(mat_rebind_col, fallback = "never")
+f_mat_rebind_row <- tcc_quick(mat_rebind_row, fallback = "never")
+f_mat_rebind_col_sum <- tcc_quick(mat_rebind_col_sum, fallback = "never")
 
 A_slice <- matrix(seq_len(20), 5, 4)
 expect_equal(f_mat_col(A_slice, 3L), A_slice[, 3L])
 expect_equal(f_mat_row(A_slice, 2L), A_slice[2L, ])
 expect_equal(f_mat_full(A_slice), A_slice[, ])
 expect_equal(f_col_sum_from_slice(A_slice, 4L), sum(A_slice[, 4L]))
+expect_equal(f_mat_rebind_col(A_slice, 2L), A_slice[, 2L])
+expect_equal(f_mat_rebind_row(A_slice, 4L), A_slice[4L, ])
+expect_equal(f_mat_rebind_col_sum(A_slice, 3L), sum(A_slice[, 3L]))
 
 # --- BLAS-backed matrix products ---
 

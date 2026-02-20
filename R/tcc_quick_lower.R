@@ -2015,12 +2015,23 @@ tccq_lower_stmt <- function(e, sc, decl) {
             shape = rhs$shape
           )
         )
+      } else {
+        # Keep scope metadata in sync for shape/mode-changing rebinds
+        # (e.g. X <- X[, j] where X starts as matrix and becomes vector).
+        if (!identical(existing$shape, rhs$shape) || !identical(existing$mode, rhs$mode)) {
+          updated <- existing
+          updated$shape <- rhs$shape
+          updated$mode <- rhs$mode
+          tccq_scope_set(sc, nm, updated)
+          existing <- updated
+        }
       }
 
       # Vector reassignment: rewrite existing array element-wise
       if (
         !is.null(existing) &&
-          existing$shape %in% c("vector", "matrix") &&
+          existing$shape == "vector" &&
+          identical(existing$mode, rhs$mode) &&
           rhs$shape == "vector" &&
           !identical(rhs$node$tag, "vec_alloc") &&
           !identical(rhs$node$tag, "mat_alloc")
