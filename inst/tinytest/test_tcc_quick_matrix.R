@@ -47,6 +47,40 @@ f_msum <- tcc_quick(mat_sum, fallback = "never")
 A <- matrix(1:12, 3, 4)
 expect_equal(f_msum(A), sum(A))
 
+# --- Omitted matrix subscripts (column/row/full extraction) ---
+
+mat_col <- function(X, j) {
+  declare(type(X = double(NA, NA)), type(j = integer(1)))
+  X[, j]
+}
+
+mat_row <- function(X, i) {
+  declare(type(X = double(NA, NA)), type(i = integer(1)))
+  X[i, ]
+}
+
+mat_full <- function(X) {
+  declare(type(X = double(NA, NA)))
+  X[, ]
+}
+
+col_sum_from_slice <- function(X, j) {
+  declare(type(X = double(NA, NA)), type(j = integer(1)))
+  prev <- X[, j]
+  sum(prev)
+}
+
+f_mat_col <- tcc_quick(mat_col, fallback = "never")
+f_mat_row <- tcc_quick(mat_row, fallback = "never")
+f_mat_full <- tcc_quick(mat_full, fallback = "never")
+f_col_sum_from_slice <- tcc_quick(col_sum_from_slice, fallback = "never")
+
+A_slice <- matrix(seq_len(20), 5, 4)
+expect_equal(f_mat_col(A_slice, 3L), A_slice[, 3L])
+expect_equal(f_mat_row(A_slice, 2L), A_slice[2L, ])
+expect_equal(f_mat_full(A_slice), A_slice[, ])
+expect_equal(f_col_sum_from_slice(A_slice, 4L), sum(A_slice[, 4L]))
+
 # --- BLAS-backed matrix products ---
 
 mat_ops <- function(A, B) {

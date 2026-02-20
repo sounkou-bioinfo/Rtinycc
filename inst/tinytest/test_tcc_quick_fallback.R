@@ -251,6 +251,61 @@ expect_error(
   pattern = "outside the current tcc_quick subset|Matrix operand for operator '-'"
 )
 
+# --- omitted-index matrix assignment should fallback cleanly (no internal crash) ---
+
+matrix_col_assign <- function(X, v) {
+  declare(type(X = double(NA, NA)), type(v = double(1)))
+  X[, 1L] <- v
+  X
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(matrix_col_assign, fallback = "soft")),
+  matrix_col_assign
+))
+
+expect_error(
+  tcc_quick(matrix_col_assign, fallback = "hard"),
+  pattern = "outside the current tcc_quick subset|omitted indices"
+)
+
+# --- named/extra subscript args should fallback, not be misparsed ---
+
+matrix_drop_false <- function(X) {
+  declare(type(X = double(NA, NA)))
+  X[, 1L, drop = FALSE]
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(matrix_drop_false, fallback = "soft")),
+  matrix_drop_false
+))
+
+expect_error(
+  tcc_quick(matrix_drop_false, fallback = "hard"),
+  pattern = "outside the current tcc_quick subset|one- and two-dimensional|Named subscript argument"
+)
+
+# --- declare() dimensions must be integer-valued ---
+
+bad_fractional_dim <- function(x) {
+  declare(type(x = double(2.5)))
+  x
+}
+
+expect_error(
+  tcc_quick(bad_fractional_dim, fallback = "soft"),
+  pattern = "integer-valued"
+)
+
+na_integer_dim <- function(x) {
+  declare(type(x = double(NA_integer_)))
+  x
+}
+
+decl_na_integer <- Rtinycc:::tcc_quick_parse_declare(na_integer_dim)
+expect_true(identical(decl_na_integer$args$x$dims[[1L]], NA_integer_))
+
 # raw arithmetic is intentionally disallowed; use bitw* helpers or explicit casts
 raw_add_bad <- function(x, y) {
   declare(type(x = raw(1)), type(y = raw(1)))

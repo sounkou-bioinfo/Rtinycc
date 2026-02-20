@@ -209,6 +209,9 @@ tccq_scope_has_array <- function(sc) {
 }
 
 tccq_scope_get <- function(sc, name) {
+  if (!is.character(name) || length(name) != 1L || is.na(name) || !nzchar(name)) {
+    return(NULL)
+  }
   if (exists(name, envir = sc, inherits = FALSE)) {
     return(get(name, envir = sc, inherits = FALSE))
   }
@@ -371,11 +374,10 @@ tccq_lower_expr <- function(e, sc, decl) {
     return(tccq_lower_result(FALSE, reason = "Unsupported expression node"))
   }
 
-  fun <- e[[1]]
-  if (!is.symbol(fun)) {
+  fname <- tccq_call_head(e)
+  if (is.null(fname)) {
     return(tccq_lower_result(FALSE, reason = "Only symbol calls supported"))
   }
-  fname <- as.character(fun)
 
   # --- Boundary calls ---
   if (fname %in% tcc_quick_boundary_calls()) {
@@ -403,6 +405,12 @@ tccq_lower_expr <- function(e, sc, decl) {
         mode = "integer"
       ))
     }
+    if (!identical(x$node$tag, "var")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "length() currently requires a named variable argument"
+      ))
+    }
     return(tccq_lower_result(
       TRUE,
       node = list(tag = "length", arr = x$node$name),
@@ -416,6 +424,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!x$ok) {
       return(x)
     }
+    if (!identical(x$node$tag, "var")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "nrow() currently requires a named matrix variable argument"
+      ))
+    }
     return(tccq_lower_result(
       TRUE,
       node = list(tag = "nrow", arr = x$node$name),
@@ -427,6 +441,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!x$ok) {
       return(x)
     }
+    if (!identical(x$node$tag, "var")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "ncol() currently requires a named matrix variable argument"
+      ))
+    }
     return(tccq_lower_result(
       TRUE,
       node = list(tag = "ncol", arr = x$node$name),
@@ -434,76 +454,152 @@ tccq_lower_expr <- function(e, sc, decl) {
     ))
   }
 
-  # --- 1D subscript: x[i], x[a:b], or x[mask] ---
-  if (fname == "[" && length(e) == 3L) {
-    arr <- tccq_lower_expr(e[[2]], sc, decl)
-    idx <- tccq_lower_expr(e[[3]], sc, decl)
+  # --- Subscript: x[i], x[i, j], x[, j], x[i, ], x[] ---
+  subset <- tccq_parse_subset_call(e)
+  if (isTRUE(subset$is_subset)) {
+    if (!isTRUE(subset$ok)) {
+      return(tccq_lower_result(FALSE, reason = subset$reason))
+    }
+
+    arr <- tccq_lower_expr(subset$target, sc, decl)
     if (!arr$ok) {
       return(arr)
-    }
-    if (!idx$ok) {
-      return(idx)
     }
     if (arr$shape == "scalar") {
       return(tccq_lower_result(FALSE, reason = "Cannot subscript a scalar"))
     }
-    # Range subscript → vec_slice (view, no copy)
-    if (idx$shape == "vector" && identical(idx$node$tag, "seq_range")) {
+    if (!identical(arr$node$tag, "var")) {
       return(tccq_lower_result(
-        TRUE,
-        node = list(
-          tag = "vec_slice",
-          arr = arr$node$name,
-          from = idx$node$from,
-          to = idx$node$to
-        ),
-        mode = arr$mode,
-        shape = "vector"
+        FALSE,
+        reason = "Subscript target must be a named variable in current subset"
       ))
     }
-    # Logical mask subscript → vec_mask (count + fill)
-    if (idx$shape == "vector" && idx$mode == "logical") {
-      return(tccq_lower_result(
-        TRUE,
-        node = list(
-          tag = "vec_mask",
-          arr = arr$node$name,
-          mask = idx$node
-        ),
-        mode = arr$mode,
-        shape = "vector"
-      ))
-    }
-    return(tccq_lower_result(
-      TRUE,
-      node = list(tag = "vec_get", arr = arr$node$name, idx = idx$node),
-      mode = arr$mode
-    ))
-  }
 
-  # --- 2D subscript: x[i, j] ---
-  if (fname == "[" && length(e) == 4L) {
-    arr <- tccq_lower_expr(e[[2]], sc, decl)
-    row <- tccq_lower_expr(e[[3]], sc, decl)
-    col <- tccq_lower_expr(e[[4]], sc, decl)
-    if (!arr$ok) {
-      return(arr)
+    if (subset$rank == 1L) {
+      if (subset$missing[[1L]]) {
+        return(tccq_lower_result(
+          TRUE,
+          node = arr$node,
+          mode = arr$mode,
+          shape = arr$shape
+        ))
+      }
+      idx <- tccq_lower_expr(subset$indices[[1L]], sc, decl)
+      if (!idx$ok) {
+        return(idx)
+      }
+      # Range subscript → vec_slice (view, no copy)
+      if (idx$shape == "vector" && identical(idx$node$tag, "seq_range")) {
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "vec_slice",
+            arr = arr$node$name,
+            from = idx$node$from,
+            to = idx$node$to
+          ),
+          mode = arr$mode,
+          shape = "vector"
+        ))
+      }
+      # Logical mask subscript → vec_mask (count + fill)
+      if (idx$shape == "vector" && idx$mode == "logical") {
+        return(tccq_lower_result(
+          TRUE,
+          node = list(
+            tag = "vec_mask",
+            arr = arr$node$name,
+            mask = idx$node
+          ),
+          mode = arr$mode,
+          shape = "vector"
+        ))
+      }
+      return(tccq_lower_result(
+        TRUE,
+        node = list(tag = "vec_get", arr = arr$node$name, idx = idx$node),
+        mode = arr$mode
+      ))
     }
-    if (!row$ok) {
-      return(row)
+
+    if (subset$rank == 2L) {
+      if (arr$shape != "matrix") {
+        return(tccq_lower_result(
+          FALSE,
+          reason = "Two-dimensional subscript requires matrix target"
+        ))
+      }
+      row_missing <- subset$missing[[1L]]
+      col_missing <- subset$missing[[2L]]
+      if (row_missing && col_missing) {
+        return(tccq_lower_result(
+          TRUE,
+          node = arr$node,
+          mode = arr$mode,
+          shape = "matrix"
+        ))
+      }
+
+      row <- NULL
+      if (!row_missing) {
+        row <- tccq_lower_expr(subset$indices[[1L]], sc, decl)
+        if (!row$ok) {
+          return(row)
+        }
+        if (row$shape != "scalar") {
+          return(tccq_lower_result(
+            FALSE,
+            reason = "Matrix row index must be scalar in current subset"
+          ))
+        }
+      }
+
+      col <- NULL
+      if (!col_missing) {
+        col <- tccq_lower_expr(subset$indices[[2L]], sc, decl)
+        if (!col$ok) {
+          return(col)
+        }
+        if (col$shape != "scalar") {
+          return(tccq_lower_result(
+            FALSE,
+            reason = "Matrix column index must be scalar in current subset"
+          ))
+        }
+      }
+
+      if (row_missing) {
+        return(tccq_lower_result(
+          TRUE,
+          node = list(tag = "mat_col", arr = arr$node$name, col = col$node),
+          mode = arr$mode,
+          shape = "vector"
+        ))
+      }
+      if (col_missing) {
+        return(tccq_lower_result(
+          TRUE,
+          node = list(tag = "mat_row", arr = arr$node$name, row = row$node),
+          mode = arr$mode,
+          shape = "vector"
+        ))
+      }
+
+      return(tccq_lower_result(
+        TRUE,
+        node = list(
+          tag = "mat_get",
+          arr = arr$node$name,
+          row = row$node,
+          col = col$node
+        ),
+        mode = arr$mode
+      ))
     }
-    if (!col$ok) {
-      return(col)
-    }
+
     return(tccq_lower_result(
-      TRUE,
-      node = list(
-        tag = "mat_get",
-        arr = arr$node$name,
-        row = row$node,
-        col = col$node
-      ),
-      mode = arr$mode
+      FALSE,
+      reason = "Only one- and two-dimensional subscripting is in current subset"
     ))
   }
 
@@ -1779,11 +1875,10 @@ tccq_lower_stmt <- function(e, sc, decl) {
     return(tccq_lower_expr(e, sc, decl))
   }
 
-  fun <- e[[1]]
-  if (!is.symbol(fun)) {
+  fname <- tccq_call_head(e)
+  if (is.null(fname)) {
     return(tccq_lower_result(FALSE, reason = "Non-symbol call in statement"))
   }
-  fname <- as.character(fun)
 
   # Block: { ... }
   if (fname == "{") {
@@ -1807,22 +1902,39 @@ tccq_lower_stmt <- function(e, sc, decl) {
   if (fname == "<-" && length(e) == 3L) {
     lhs <- e[[2]]
 
-    if (is.call(lhs) && is.symbol(lhs[[1]]) && as.character(lhs[[1]]) == "[") {
-      # x[i] <- expr
-      if (length(lhs) == 3L) {
-        arr <- tccq_lower_expr(lhs[[2]], sc, decl)
-        idx <- tccq_lower_expr(lhs[[3]], sc, decl)
-        val <- tccq_lower_expr(e[[3]], sc, decl)
-        if (!arr$ok) {
-          return(arr)
+    subset_lhs <- tccq_parse_subset_call(lhs)
+    if (isTRUE(subset_lhs$is_subset)) {
+      if (!isTRUE(subset_lhs$ok)) {
+        return(tccq_lower_result(FALSE, reason = subset_lhs$reason))
+      }
+
+      arr <- tccq_lower_expr(subset_lhs$target, sc, decl)
+      if (!arr$ok) {
+        return(arr)
+      }
+      if (!identical(arr$node$tag, "var")) {
+        return(tccq_lower_result(
+          FALSE,
+          reason = "Assignment subscript target must be a named variable"
+        ))
+      }
+      val <- tccq_lower_expr(e[[3]], sc, decl)
+      if (!val$ok) {
+        return(val)
+      }
+
+      if (subset_lhs$rank == 1L) {
+        if (subset_lhs$missing[[1L]]) {
+          return(tccq_lower_result(
+            FALSE,
+            reason = "Whole-object subscript assignment x[] <- ... is not in current subset"
+          ))
         }
+        idx <- tccq_lower_expr(subset_lhs$indices[[1L]], sc, decl)
         if (!idx$ok) {
           return(idx)
         }
-        if (!val$ok) {
-          return(val)
-        }
-        # Mark param as mutated so codegen duplicates before writing
+        # Mark param as mutated so codegen duplicates before writing.
         tccq_scope_mark_mutated(sc, arr$node$name)
         return(tccq_lower_result(
           TRUE,
@@ -1835,25 +1947,35 @@ tccq_lower_stmt <- function(e, sc, decl) {
           mode = "void"
         ))
       }
-      # x[i, j] <- expr
-      if (length(lhs) == 4L) {
-        arr <- tccq_lower_expr(lhs[[2]], sc, decl)
-        row <- tccq_lower_expr(lhs[[3]], sc, decl)
-        col <- tccq_lower_expr(lhs[[4]], sc, decl)
-        val <- tccq_lower_expr(e[[3]], sc, decl)
-        if (!arr$ok) {
-          return(arr)
+
+      if (subset_lhs$rank == 2L) {
+        if (arr$shape != "matrix") {
+          return(tccq_lower_result(
+            FALSE,
+            reason = "Two-dimensional assignment subscript requires matrix target"
+          ))
         }
+        if (any(subset_lhs$missing)) {
+          return(tccq_lower_result(
+            FALSE,
+            reason = "Matrix subscript assignment with omitted indices is not in current subset"
+          ))
+        }
+        row <- tccq_lower_expr(subset_lhs$indices[[1L]], sc, decl)
+        col <- tccq_lower_expr(subset_lhs$indices[[2L]], sc, decl)
         if (!row$ok) {
           return(row)
         }
         if (!col$ok) {
           return(col)
         }
-        if (!val$ok) {
-          return(val)
+        if (row$shape != "scalar" || col$shape != "scalar") {
+          return(tccq_lower_result(
+            FALSE,
+            reason = "Matrix assignment indices must be scalar in current subset"
+          ))
         }
-        # Mark param as mutated
+        # Mark param as mutated.
         tccq_scope_mark_mutated(sc, arr$node$name)
         return(tccq_lower_result(
           TRUE,
@@ -1867,6 +1989,11 @@ tccq_lower_stmt <- function(e, sc, decl) {
           mode = "void"
         ))
       }
+
+      return(tccq_lower_result(
+        FALSE,
+        reason = "Only one- and two-dimensional assignment subscripts are supported"
+      ))
     }
 
     # x <- expr

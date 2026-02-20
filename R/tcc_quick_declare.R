@@ -4,25 +4,38 @@
 
 tcc_quick_extract_exprs <- function(fn) {
   b <- body(fn)
-  if (is.call(b) && identical(b[[1]], quote(`{`))) {
+  if (is.call(b) && tccq_is_call(b, "{")) {
     return(as.list(b)[-1])
   }
   list(b)
 }
 
 tcc_quick_parse_dim <- function(x) {
-  if (is.symbol(x) && identical(as.character(x), "NA")) {
+  x_name <- tccq_node_name(x)
+  if (!is.null(x_name) && x_name %in% c("NA", "NA_integer_", "NA_real_")) {
     return(NA_integer_)
   }
-  if (length(x) == 1 && is.logical(x) && is.na(x)) {
+  if (length(x) == 1L && is.logical(x) && is.na(x)) {
     return(NA_integer_)
   }
-  if (length(x) == 1 && (is.integer(x) || is.double(x))) {
+  if (length(x) == 1L && (is.integer(x) || is.double(x))) {
+    if (is.na(x[[1L]]) && !is.nan(as.double(x[[1L]]))) {
+      return(NA_integer_)
+    }
+    if (!is.finite(as.double(x))) {
+      stop("declare() dimensions must be >= 1 or NA", call. = FALSE)
+    }
+    if (!identical(as.double(x), trunc(as.double(x)))) {
+      stop(
+        "declare() dimensions must be integer-valued (>= 1) or NA",
+        call. = FALSE
+      )
+    }
     out <- as.integer(x)
     if (is.na(out) || out < 1L) {
       stop("declare() dimensions must be >= 1 or NA", call. = FALSE)
     }
-    return(out)
+    return(out[[1L]])
   }
   stop("Unsupported declare() dimension", call. = FALSE)
 }
@@ -32,7 +45,10 @@ tcc_quick_parse_type_spec <- function(spec) {
     stop("declare(type(...)) entries must be calls", call. = FALSE)
   }
 
-  type_name <- as.character(spec[[1]])
+  type_name <- tccq_call_head(spec)
+  if (is.null(type_name)) {
+    stop("declare(type(...)) entries must be symbol calls", call. = FALSE)
+  }
   type_name <- switch(type_name, numeric = "double", type_name)
 
   if (!type_name %in% c("double", "integer", "logical", "raw")) {
@@ -66,7 +82,7 @@ tcc_quick_parse_declare <- function(fn) {
   }
 
   d <- exprs[[1]]
-  if (!(is.call(d) && identical(d[[1]], quote(declare)))) {
+  if (!(is.call(d) && tccq_is_call(d, "declare"))) {
     stop(
       "tcc_quick requires declare(type(...)) as the first expression",
       call. = FALSE
@@ -80,12 +96,18 @@ tcc_quick_parse_declare <- function(fn) {
 
   arg_decl <- list()
   for (entry in decl_items) {
-    if (!(is.call(entry) && identical(entry[[1]], quote(type)))) {
+    if (!(is.call(entry) && tccq_is_call(entry, "type"))) {
       stop("declare() currently supports only type(...) entries", call. = FALSE)
     }
     vars <- as.list(entry)[-1]
     vnames <- names(vars)
-    if (length(vars) == 0L || any(!nzchar(vnames))) {
+    if (
+      length(vars) == 0L ||
+        is.null(vnames) ||
+        length(vnames) != length(vars) ||
+        any(is.na(vnames)) ||
+        any(!nzchar(vnames))
+    ) {
       stop("type(...) entries must be named", call. = FALSE)
     }
     for (i in seq_along(vars)) {
