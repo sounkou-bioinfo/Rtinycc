@@ -9,8 +9,9 @@
 
 tccq_walk <- function(e, w) {
   if (typeof(e) == "language") {
-    if (typeof(e[[1]]) %in% c("symbol", "character")) {
-      h <- w$handler(as.character(e[[1]]), w)
+    head <- tccq_call_head(e)
+    if (!is.null(head)) {
+      h <- w$handler(head, w)
       if (!is.null(h)) {
         return(h(e, w))
       }
@@ -83,8 +84,14 @@ tccq_collect_subset_arrays <- function(e) {
     handler = function(v, w) {
       if (identical(v, "[")) {
         function(e, w) {
-          if (length(e) == 3L && is.symbol(e[[2]])) {
-            arrays <<- unique(c(arrays, as.character(e[[2]])))
+          subset <- tccq_parse_subset_call(e)
+          if (
+            isTRUE(subset$is_subset) &&
+              isTRUE(subset$ok) &&
+              identical(subset$rank, 1L) &&
+              is.symbol(subset$target)
+          ) {
+            arrays <<- unique(c(arrays, tccq_node_name(subset$target)))
           }
           if (typeof(e[[1]]) == "language") {
             tccq_walk(e[[1]], w)
@@ -123,8 +130,9 @@ tccq_scan_constructs <- function(exprs) {
       }
     },
     call = function(e, w) {
-      if (is.symbol(e[[1]])) {
-        calls <<- unique(c(calls, as.character(e[[1]])))
+      head <- tccq_call_head(e)
+      if (!is.null(head)) {
+        calls <<- unique(c(calls, head))
       }
       if (typeof(e[[1]]) == "language") {
         tccq_walk(e[[1]], w)

@@ -265,6 +265,23 @@ tccq_cg_expr <- function(node) {
     ))
   }
 
+  if (tag == "mat_col") {
+    arr <- tccq_cg_ident(node$arr)
+    col <- tccq_cg_expr(node$col)
+    return(sprintf(
+      "p_%s[(R_xlen_t)((%s) - 1) * nrow_%s]",
+      arr,
+      col,
+      arr
+    ))
+  }
+
+  if (tag == "mat_row") {
+    arr <- tccq_cg_ident(node$arr)
+    row <- tccq_cg_expr(node$row)
+    return(sprintf("p_%s[(R_xlen_t)((%s) - 1)]", arr, row))
+  }
+
   if (tag == "reduce") {
     # When appearing as an expression, emit the precomputed variable name.
     # The actual loop is emitted as a statement via tccq_cg_reduce_stmt.
@@ -3379,6 +3396,12 @@ tccq_cg_vec_len <- function(node) {
     to <- tccq_cg_expr(node$to)
     return(sprintf("((R_xlen_t)(%s) - (R_xlen_t)(%s) + 1)", to, from))
   }
+  if (tag == "mat_col") {
+    return(sprintf("nrow_%s", tccq_cg_ident(node$arr)))
+  }
+  if (tag == "mat_row") {
+    return(sprintf("ncol_%s", tccq_cg_ident(node$arr)))
+  }
   if (tag == "binary") {
     return(tccq_cg_vec_len(node$lhs) %||% tccq_cg_vec_len(node$rhs))
   }
@@ -3442,6 +3465,30 @@ tccq_cg_vec_elem <- function(node, idx_var) {
     arr <- tccq_cg_ident(node$arr)
     from <- tccq_cg_expr(node$from)
     return(sprintf("p_%s[((R_xlen_t)(%s) - 1) + %s]", arr, from, idx_var))
+  }
+
+  if (tag == "mat_col") {
+    arr <- tccq_cg_ident(node$arr)
+    col <- tccq_cg_expr(node$col)
+    return(sprintf(
+      "p_%s[%s + (R_xlen_t)((%s) - 1) * nrow_%s]",
+      arr,
+      idx_var,
+      col,
+      arr
+    ))
+  }
+
+  if (tag == "mat_row") {
+    arr <- tccq_cg_ident(node$arr)
+    row <- tccq_cg_expr(node$row)
+    return(sprintf(
+      "p_%s[(R_xlen_t)((%s) - 1) + %s * nrow_%s]",
+      arr,
+      row,
+      idx_var,
+      arr
+    ))
   }
 
   if (tag == "const") {
