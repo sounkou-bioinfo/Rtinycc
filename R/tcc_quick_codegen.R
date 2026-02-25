@@ -407,7 +407,7 @@ tccq_cg_stmt <- function(node, indent) {
     ) {
       nr <- tccq_cg_expr(node$expr$nrow)
       nc <- tccq_cg_expr(node$expr$ncol)
-      fill <- format(node$expr$fill, scientific = FALSE)
+      fill <- tccq_cg_expr(node$expr$fill)
       return(paste0(
         pad,
         "s_",
@@ -451,7 +451,9 @@ tccq_cg_stmt <- function(node, indent) {
         "; ++zz_) p_",
         nm,
         "[zz_] = ",
+        "((double)(",
         fill,
+        "))",
         ";"
       ))
     }

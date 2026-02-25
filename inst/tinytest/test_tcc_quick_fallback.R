@@ -175,6 +175,38 @@ expect_error(
   pattern = "scalar length argument|outside the current tcc_quick subset"
 )
 
+# --- matrix() data must be scalar; no silent zero-fill ---
+
+matrix_data_vector <- function(x, n, m) {
+  declare(type(x = double(NA)), type(n = integer(1)), type(m = integer(1)))
+  matrix(x, n, m)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(matrix_data_vector, fallback = "soft")),
+  matrix_data_vector
+))
+expect_error(
+  tcc_quick(matrix_data_vector, fallback = "hard"),
+  pattern = "matrix\\(\\) data must be a scalar|outside the current tcc_quick subset"
+)
+
+# --- ifelse branches must have compatible shapes ---
+
+ifelse_shape_mismatch <- function(x, y) {
+  declare(type(x = logical(1)), type(y = double(NA)))
+  ifelse(x, y, 0.0)
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(ifelse_shape_mismatch, fallback = "soft")),
+  ifelse_shape_mismatch
+))
+expect_error(
+  tcc_quick(ifelse_shape_mismatch, fallback = "hard"),
+  pattern = "ifelse\\(\\) requires matching yes/no shapes|outside the current tcc_quick subset"
+)
+
 # --- rf_call allowlist enforcement ---
 
 not_allowlisted_call <- function(x) {

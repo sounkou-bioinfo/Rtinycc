@@ -655,6 +655,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     if (!no$ok) {
       return(no)
     }
+    if (!identical(yes$shape, no$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "if() requires matching branch shapes in current subset"
+      ))
+    }
     out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
     if (is.null(out_mode)) {
       out_mode <- yes$mode
@@ -685,6 +691,12 @@ tccq_lower_expr <- function(e, sc, decl) {
     }
     if (!no$ok) {
       return(no)
+    }
+    if (!identical(yes$shape, no$shape)) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "ifelse() requires matching yes/no shapes in current subset"
+      ))
     }
     out_mode <- tcc_quick_promote_mode(yes$mode, no$mode)
     if (is.null(out_mode)) {
@@ -1484,18 +1496,29 @@ tccq_lower_expr <- function(e, sc, decl) {
 
   # --- matrix(fill, nrow, ncol) ---
   if (fname == "matrix" && length(e) >= 4L) {
-    data_expr <- e[[2]]
+    fill <- tccq_lower_expr(e[[2]], sc, decl)
     nr <- tccq_lower_expr(e[[3]], sc, decl)
     nc <- tccq_lower_expr(e[[4]], sc, decl)
+    if (!fill$ok) {
+      return(fill)
+    }
     if (!nr$ok) {
       return(nr)
     }
     if (!nc$ok) {
       return(nc)
     }
-    fill_val <- 0
-    if (length(data_expr) == 1L && is.numeric(data_expr)) {
-      fill_val <- as.double(data_expr)
+    if (!identical(fill$shape, "scalar")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "matrix() data must be a scalar in current subset"
+      ))
+    }
+    if (!fill$mode %in% c("double", "integer", "logical", "raw")) {
+      return(tccq_lower_result(
+        FALSE,
+        reason = "matrix() scalar data must be numeric/logical/raw in current subset"
+      ))
     }
     return(tccq_lower_result(
       TRUE,
@@ -1503,7 +1526,7 @@ tccq_lower_expr <- function(e, sc, decl) {
         tag = "mat_alloc",
         nrow = nr$node,
         ncol = nc$node,
-        fill = fill_val,
+        fill = fill$node,
         alloc_mode = "double"
       ),
       mode = "double",
