@@ -243,32 +243,27 @@ with direct function pointers before
 These functions are NOT in `init.c` / not exported via `.Call` — they
 are only called by TCC-generated JIT code.
 
-### snprintf is not exported from ucrtbase.dll
+### `snprintf` and callback dispatch
 
-In UCRT, `snprintf` is an inline function in the headers that calls
-`__stdio_common_vsprintf`. It is not a direct DLL export, so TCC’s JIT
-linker can’t find it. The original callback trampoline codegen used
-`snprintf` to convert the callback token id (an int) to a string, then
-called `RC_invoke_callback(SEXP string, SEXP args)` which did `atoi` to
-get the int back — a pointless round-trip.
+UCRT does not export `snprintf` directly for TCC JIT linking. Callback
+dispatch must use `RC_invoke_callback_id(int id, SEXP args)` and pass
+ids as integers (no string round-trip through `snprintf`/`atoi`).
 
-The fix: `RC_invoke_callback_id(int id, SEXP args)` in `RC_libtcc.c`
-takes the int directly. The trampoline codegen in `R/callbacks.R` now
-calls `RC_invoke_callback_id(tok->id, args)` instead, eliminating the
-`snprintf`, `mkString`, and `atoi` round-trip entirely. The forward
-declaration in `R/ffi_codegen.R` was updated to match.
+### Async callbacks (current behavior)
 
-### Async callbacks: Windows stubs
-
-Async callbacks rely on
-[`pipe()`](https://rdrr.io/r/base/connections.html), `pthread_create`,
-and R’s `addInputHandler()` — none of which exist on Windows.
-`RC_libtcc.c` has `#ifdef _WIN32` stubs that call
-`Rf_error("Async callbacks are not supported on Windows")` for the
-R-facing functions, and return `-1` for the C-facing
-`RC_callback_async_schedule_c`. The async callback tests in
-`test_callback_invoke_runtime.R` are guarded with
-`if (.Platform$OS.type != "windows")`.
+- Async callbacks are supported on both Unix-like systems and Windows.
+- Unix uses [`pipe()`](https://rdrr.io/r/base/connections.html) +
+  `addInputHandler()` wakeups; Windows uses a queue + mutex and explicit
+  drain calls.
+- `RC_platform_async_drain()` must be safe before init (no-op when queue
+  is uninitialized).
+- `callback_async` signatures may be non-`void`; scheduled calls still
+  return immediately with a type-default value.
+- Marshaling rules for async arguments:
+- Pointer-like args (including `char **`) must map to `CB_ARG_PTR`.
+- Only single-level `char*` / `const char*` map to `CB_ARG_CSTRING`.
+- Unsupported wide integer async args must fail at codegen with a clear
+  error (avoid lossy `int` truncation).
 
 ### No libm on Windows
 
@@ -289,7 +284,6 @@ uses `fork()` which does not exist on Windows. Fork-related tests in
 - `configure.win`: Build TCC from source, generate R.def and ucrt.def
 - `src/Makevars.win`: Dynamic linking against libtcc.dll
 - `src/install.libs.R`: Copy libtcc.dll next to Rtinycc.dll
-- `.github/workflows/windows.yml`: Windows CI
 
 ## Key files
 
@@ -306,6 +300,7 @@ uses `fork()` which does not exist on Windows. Fork-related tests in
   fallback policy, R API mapping)
 - Tests: `inst/tinytest/`
 - Docs: `README.Rmd`, `NEWS.md`
+- Lowering audit and reuse notes: `docs/lowering_audit_notes.md`
 
 ## Roadmap: declare-based R→C JIT (`tcc_quick`)
 

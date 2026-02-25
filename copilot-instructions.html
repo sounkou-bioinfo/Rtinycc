@@ -156,14 +156,23 @@
 <p>On Windows (and macOS), TCC cannot find package-internal C functions (<code>RC_free_finalizer</code>, <code>RC_invoke_callback_id</code>, <code>RC_callback_async_schedule_c</code>) through the dynamic linker. <code>RC_libtcc_add_host_symbols()</code> registers them via <code><a href="reference/tcc_add_symbol.html">tcc_add_symbol()</a></code> with direct function pointers before <code><a href="reference/tcc_relocate.html">tcc_relocate()</a></code>. These functions are NOT in <code>init.c</code> / not exported via <code>.Call</code> — they are only called by TCC-generated JIT code.</p>
 </div>
 <div class="section level3">
-<h3 id="snprintf-is-not-exported-from-ucrtbasedll">snprintf is not exported from ucrtbase.dll<a class="anchor" aria-label="anchor" href="#snprintf-is-not-exported-from-ucrtbasedll"></a></h3>
-<p>In UCRT, <code>snprintf</code> is an inline function in the headers that calls <code>__stdio_common_vsprintf</code>. It is not a direct DLL export, so TCC’s JIT linker can’t find it. The original callback trampoline codegen used <code>snprintf</code> to convert the callback token id (an int) to a string, then called <code>RC_invoke_callback(SEXP string, SEXP args)</code> which did <code>atoi</code> to get the int back — a pointless round-trip.</p>
-<p>The fix: <code>RC_invoke_callback_id(int id, SEXP args)</code> in <code>RC_libtcc.c</code> takes the int directly. The trampoline codegen in <code>R/callbacks.R</code> now calls <code>RC_invoke_callback_id(tok-&gt;id, args)</code> instead, eliminating the <code>snprintf</code>, <code>mkString</code>, and <code>atoi</code> round-trip entirely. The forward declaration in <code>R/ffi_codegen.R</code> was updated to match.</p>
+<h3 id="snprintf-and-callback-dispatch">
+<code>snprintf</code> and callback dispatch<a class="anchor" aria-label="anchor" href="#snprintf-and-callback-dispatch"></a></h3>
+<p>UCRT does not export <code>snprintf</code> directly for TCC JIT linking. Callback dispatch must use <code>RC_invoke_callback_id(int id, SEXP args)</code> and pass ids as integers (no string round-trip through <code>snprintf</code>/<code>atoi</code>).</p>
 </div>
 <div class="section level3">
-<h3 id="async-callbacks-windows-stubs">Async callbacks: Windows stubs<a class="anchor" aria-label="anchor" href="#async-callbacks-windows-stubs"></a></h3>
-<p>Async callbacks rely on <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code>, <code>pthread_create</code>, and R’s <code>addInputHandler()</code> — none of which exist on Windows. <code>RC_libtcc.c</code> has <code>#ifdef _WIN32</code> stubs that call <code>Rf_error("Async callbacks are not supported on Windows")</code> for the R-facing functions, and return <code>-1</code> for the C-facing <code>RC_callback_async_schedule_c</code>. The async callback tests in <code>test_callback_invoke_runtime.R</code> are guarded with <code>if (.Platform$OS.type != "windows")</code>.</p>
-</div>
+<h3 id="async-callbacks-current-behavior">Async callbacks (current behavior)<a class="anchor" aria-label="anchor" href="#async-callbacks-current-behavior"></a></h3>
+<ul><li>Async callbacks are supported on both Unix-like systems and Windows.</li>
+<li>Unix uses <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code> + <code>addInputHandler()</code> wakeups; Windows uses a queue + mutex and explicit drain calls.</li>
+<li>
+<code>RC_platform_async_drain()</code> must be safe before init (no-op when queue is uninitialized).</li>
+<li>
+<code>callback_async</code> signatures may be non-<code>void</code>; scheduled calls still return immediately with a type-default value.</li>
+<li>Marshaling rules for async arguments:</li>
+<li>Pointer-like args (including <code>char **</code>) must map to <code>CB_ARG_PTR</code>.</li>
+<li>Only single-level <code>char*</code> / <code>const char*</code> map to <code>CB_ARG_CSTRING</code>.</li>
+<li>Unsupported wide integer async args must fail at codegen with a clear error (avoid lossy <code>int</code> truncation).</li>
+</ul></div>
 <div class="section level3">
 <h3 id="no-libm-on-windows">No libm on Windows<a class="anchor" aria-label="anchor" href="#no-libm-on-windows"></a></h3>
 <p>On Unix, math functions live in <code>libm.so</code> and require <code>-lm</code>. On Windows, they are part of the CRT (ucrtbase.dll). Any tests using <code>tcc_link("m")</code> or <code>tcc_library("m")</code> must be guarded with <code>if (.Platform$OS.type != "windows")</code>.</p>
@@ -180,8 +189,6 @@
 <code>src/Makevars.win</code>: Dynamic linking against libtcc.dll</li>
 <li>
 <code>src/install.libs.R</code>: Copy libtcc.dll next to Rtinycc.dll</li>
-<li>
-<code>.github/workflows/windows.yml</code>: Windows CI</li>
 </ul></div>
 </div>
 <div class="section level2">
@@ -197,6 +204,8 @@
 <li>Tests: <code>inst/tinytest/</code>
 </li>
 <li>Docs: <code>README.Rmd</code>, <code>NEWS.md</code>
+</li>
+<li>Lowering audit and reuse notes: <code>docs/lowering_audit_notes.md</code>
 </li>
 </ul></div>
 <div class="section level2">
