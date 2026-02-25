@@ -28,6 +28,21 @@ for (i in 1:3) {
 }
 expect_equal(result, expected)
 
+# --- Matrix allocation with scalar expression fill ---
+
+mat_fill_scalar_expr <- function(fill, n, m) {
+  declare(type(fill = double(1)), type(n = integer(1)), type(m = integer(1)))
+  A <- matrix(fill + 1, n, m)
+  A
+}
+
+f_mat_fill_scalar_expr <- tcc_quick(mat_fill_scalar_expr, fallback = "never")
+expect_equal(
+  f_mat_fill_scalar_expr(2.5, 2L, 3L),
+  matrix(3.5, 2L, 3L),
+  tolerance = 1e-12
+)
+
 # --- Matrix sum with nrow/ncol ---
 
 mat_sum <- function(A) {

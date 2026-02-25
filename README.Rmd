@@ -565,7 +565,7 @@ tcc_callback_close(cb_err)
 
 ### Async callbacks
 
-For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread when you call `tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once before use.
+For thread-safe scheduling from worker threads, use `callback_async:<signature>` in `tcc_bind()`. The callback is enqueued from any thread and executed on the main R thread when you call `tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once before use. For non-`void` async signatures, the C caller receives an immediate type-default return value (for example `0`/`NULL`), not the eventual R callback result.
 
 ```{r callback-async}
 tcc_callback_async_enable()
@@ -577,9 +577,31 @@ cb_async <- tcc_callback(
 )
 
 code_async <- '
-#include <pthread.h>
-
 struct task { void (*cb)(void* ctx, int); void* ctx; int value; };
+
+#ifdef _WIN32
+#include <windows.h>
+
+static DWORD WINAPI worker(LPVOID data) {
+  struct task* t = (struct task*) data;
+  t->cb(t->ctx, t->value);
+  return 0;
+}
+
+int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
+  if (!cb || !ctx) return -1;
+  struct task t;
+  t.cb = cb;
+  t.ctx = ctx;
+  t.value = value;
+  HANDLE th = CreateThread(NULL, 0, worker, &t, 0, NULL);
+  if (!th) return -2;
+  WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+  return 0;
+}
+#else
+#include <pthread.h>
 
 static void* worker(void* data) {
   struct task* t = (struct task*) data;
@@ -604,11 +626,15 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
   return 0;
 }
+#endif
 '
 
 ffi_async <- tcc_ffi() |>
-  tcc_source(code_async) |>
-  tcc_library("pthread") |>
+  tcc_source(code_async)
+if (.Platform$OS.type != "windows") {
+  ffi_async <- tcc_library(ffi_async, "pthread")
+}
+ffi_async <- ffi_async |>
   tcc_bind(
     spawn_async = list(
       args = list("callback_async:void(int)", "ptr", "i32"),

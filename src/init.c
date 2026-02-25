@@ -8,6 +8,7 @@
 #include <R_ext/Rdynload.h>
 #include <R_ext/Print.h>
 #include <stdint.h>
+#include "platform_async.h"
 
 
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
@@ -76,7 +77,7 @@ SEXP RC_cleanup_callbacks();
 SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
-int RC_callback_async_schedule_c(int id, int n_args, const void *args);
+int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 
 
 // .Call entries
