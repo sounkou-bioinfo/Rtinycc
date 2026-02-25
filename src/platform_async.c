@@ -212,6 +212,9 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
  * Protection: none.
  */
 void RC_platform_async_drain(void) {
+    if (!cbq_initialized) {
+        return; // drain is a no-op until initialized
+    }
     cbq_drain_tasks();
 }
 
