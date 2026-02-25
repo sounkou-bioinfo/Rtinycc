@@ -425,6 +425,16 @@ generate_trampoline <- function(trampoline_name, sig) {
 
 # Generate async trampoline that schedules on main thread
 generate_async_trampoline <- function(trampoline_name, sig) {
+  unsupported <- vapply(sig$arg_types, async_type_unsupported, logical(1))
+  if (any(unsupported)) {
+    bad <- unique(trimws(sig$arg_types[unsupported]))
+    stop(
+      "callback_async unsupported argument type(s): ",
+      paste(bad, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
   n_args <- length(sig$arg_types)
 
   c_args <- c("void* cb")
@@ -491,6 +501,30 @@ generate_async_trampoline <- function(trampoline_name, sig) {
   paste(lines, collapse = "\n")
 }
 
+async_type_unsupported <- function(c_type) {
+  key <- normalize_cb_kind_key(c_type)
+  if (key %in% c("ptr", "cstring", "real", "logical")) {
+    return(FALSE)
+  }
+  if (!identical(key, "int")) {
+    return(TRUE)
+  }
+  type_name <- trimws(c_type)
+  !type_name %in% c(
+    "int",
+    "int32_t",
+    "i32",
+    "int16_t",
+    "i16",
+    "int8_t",
+    "i8",
+    "uint8_t",
+    "u8",
+    "uint16_t",
+    "u16"
+  )
+}
+
 generate_cb_arg_assignment <- function(index, c_type) {
   kind <- map_c_to_cb_arg_kind(c_type)
   value <- map_c_to_cb_arg_value(c_type, paste0("arg", index))
@@ -502,7 +536,12 @@ generate_cb_arg_assignment <- function(index, c_type) {
 
 is_ptr_type <- function(c_type) {
   c_type <- trimws(c_type)
-  grepl("\\*", c_type) && !grepl("char\\s*\\*", c_type)
+  grepl("\\*", c_type) && !is_cstring_type(c_type)
+}
+
+is_cstring_type <- function(c_type) {
+  c_type <- trimws(c_type)
+  grepl("^const\\s+char\\s*\\*$", c_type) || grepl("^char\\s*\\*$", c_type)
 }
 
 normalize_cb_kind_key <- function(c_type) {

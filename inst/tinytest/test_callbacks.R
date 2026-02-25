@@ -226,3 +226,50 @@ expect_true(
   grepl("NA_LOGICAL", tramp_bool),
   info = "Trampoline guards NA logical returns"
 )
+
+# ==========================================================================
+# Test 17: Async trampoline validation (supported args, pointer handling)
+# ==========================================================================
+mk_tramps <- function(arg_type) {
+  Rtinycc:::generate_callback_trampolines(
+    list(
+      run = list(
+        args = list(arg_type),
+        returns = "i32"
+      )
+    )
+  )
+}
+
+expect_silent(
+  mk_tramps("callback_async:double(int)"),
+  info = "Async callback allows non-void return signatures"
+)
+
+msg_i64 <- tryCatch(
+  {
+    mk_tramps("callback_async:void(int64_t)")
+    ""
+  },
+  error = function(e) conditionMessage(e)
+)
+expect_true(
+  grepl("unsupported argument type", msg_i64, fixed = TRUE),
+  info = "Async callback rejects unsupported wide integer args"
+)
+
+expect_silent(
+  mk_tramps("callback_async:void(int, double, const char*, void*)"),
+  info = "Async callback accepts supported argument types"
+)
+
+sig_ptrptr <- Rtinycc:::parse_callback_type("callback_async:void(char **)")
+tramp_ptrptr <- Rtinycc:::generate_async_trampoline("tramp_ptrptr", sig_ptrptr)
+expect_true(
+  grepl("CB_ARG_PTR", tramp_ptrptr, fixed = TRUE),
+  info = "Async callback treats char** as pointer"
+)
+expect_true(
+  grepl(".v.p = arg1;", tramp_ptrptr, fixed = TRUE),
+  info = "Async callback stores char** in pointer slot"
+)
