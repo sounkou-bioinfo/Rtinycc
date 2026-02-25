@@ -129,39 +129,40 @@ expect_true(
 )
 close_if_valid(cb_closed)
 
-# Test: async scheduling from worker thread (Unix-like only)
+# Test: async scheduling from worker thread (cross-platform)
+tcc_callback_async_enable()
+
+hits <- 0L
+cb_async <- tcc_callback(
+  function(x) {
+    hits <<- hits + x
+    NULL
+  },
+  signature = "void (*)(int)"
+)
+cb_ptr_async <- tcc_callback_ptr(cb_async)
+
+code_async <- "\n#define _Complex\n\nstruct task { void (*cb)(void* ctx, int); void* ctx; int value; };\n\n#ifdef _WIN32\n#include <windows.h>\n\nstatic DWORD WINAPI worker(LPVOID data) {\n  struct task* t = (struct task*) data;\n  t->cb(t->ctx, t->value);\n  return 0;\n}\n\nint spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {\n  if (!cb || !ctx) return -1;\n  struct task t;\n  t.cb = cb;\n  t.ctx = ctx;\n  t.value = value;\n  HANDLE th = CreateThread(NULL, 0, worker, &t, 0, NULL);\n  if (!th) return -2;\n  WaitForSingleObject(th, INFINITE);\n  CloseHandle(th);\n  return 0;\n}\n#else\n#include <pthread.h>\n\nstatic void* worker(void* data) {\n  struct task* t = (struct task*) data;\n  t->cb(t->ctx, t->value);\n  return NULL;\n}\n\nint spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {\n  if (!cb || !ctx) return -1;\n  struct task t;\n  t.cb = cb;\n  t.ctx = ctx;\n  t.value = value;\n  pthread_t th;\n  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;\n  pthread_join(th, NULL);\n  return 0;\n}\n#endif\n"
+
+ffi_async <- tcc_ffi() |>
+  tcc_source(code_async)
 if (.Platform$OS.type != "windows") {
-  tcc_callback_async_enable()
-
-  hits <- 0L
-  cb_async <- tcc_callback(
-    function(x) {
-      hits <<- hits + x
-      NULL
-    },
-    signature = "void (*)(int)"
-  )
-  cb_ptr_async <- tcc_callback_ptr(cb_async)
-
-  code_async <- "\n#define _Complex\n#include <pthread.h>\n\nstruct task { void (*cb)(void* ctx, int); void* ctx; int value; };\n\nstatic void* worker(void* data) {\n  struct task* t = (struct task*) data;\n  t->cb(t->ctx, t->value);\n  return NULL;\n}\n\nint spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {\n  if (!cb || !ctx) return -1;\n  struct task t;\n  t.cb = cb;\n  t.ctx = ctx;\n  t.value = value;\n  pthread_t th;\n  if (pthread_create(&th, NULL, worker, &t) != 0) return -2;\n  pthread_join(th, NULL);\n  return 0;\n}\n"
-
-  ffi_async <- tcc_ffi() |>
-    tcc_source(code_async) |>
-    tcc_library("pthread") |>
-    tcc_bind(
-      spawn_async = list(
-        args = list("callback_async:void(int)", "ptr", "i32"),
-        returns = "i32"
-      )
-    ) |>
-    tcc_compile()
-
-  rc <- ffi_async$spawn_async(cb_async, cb_ptr_async, 2L)
-  tcc_callback_async_drain()
-
-  expect_true(
-    isTRUE(rc == 0L && hits == 2L),
-    info = "Async callback scheduled from worker thread"
-  )
-  close_if_valid(cb_async)
+  ffi_async <- tcc_library(ffi_async, "pthread")
 }
+ffi_async <- ffi_async |>
+  tcc_bind(
+    spawn_async = list(
+      args = list("callback_async:void(int)", "ptr", "i32"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+rc <- ffi_async$spawn_async(cb_async, cb_ptr_async, 2L)
+tcc_callback_async_drain()
+
+expect_true(
+  isTRUE(rc == 0L && hits == 2L),
+  info = "Async callback scheduled from worker thread"
+)
+close_if_valid(cb_async)
