@@ -207,6 +207,40 @@ expect_error(
   pattern = "ifelse\\(\\) requires matching yes/no shapes|outside the current tcc_quick subset"
 )
 
+# --- named variable reassignments keep shape/mode in subset ---
+
+reassign_shape_change <- function(x, y) {
+  declare(type(x = double(1)), type(y = double(NA)))
+  z <- x
+  z <- y
+  z
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(reassign_shape_change, fallback = "soft")),
+  reassign_shape_change
+))
+expect_error(
+  tcc_quick(reassign_shape_change, fallback = "hard"),
+  pattern = "Reassignment to z changes shape|outside the current tcc_quick subset"
+)
+
+reassign_mode_change <- function(x) {
+  declare(type(x = double(NA)))
+  z <- x
+  z <- as.integer(x)
+  z
+}
+
+expect_true(identical(
+  suppressWarnings(tcc_quick(reassign_mode_change, fallback = "soft")),
+  reassign_mode_change
+))
+expect_error(
+  tcc_quick(reassign_mode_change, fallback = "hard"),
+  pattern = "Reassignment to z changes mode.*non-scalar|outside the current tcc_quick subset"
+)
+
 # --- rf_call allowlist enforcement ---
 
 not_allowlisted_call <- function(x) {

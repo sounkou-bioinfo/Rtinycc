@@ -2038,12 +2038,45 @@ tccq_lower_stmt <- function(e, sc, decl) {
             shape = rhs$shape
           )
         )
+      } else {
+        if (!identical(existing$shape, rhs$shape)) {
+          return(tccq_lower_result(
+            FALSE,
+            reason = paste0(
+              "Reassignment to ",
+              nm,
+              " changes shape from ",
+              existing$shape,
+              " to ",
+              rhs$shape,
+              " in current subset"
+            )
+          ))
+        }
+        if (!identical(existing$mode, rhs$mode)) {
+          if (!identical(existing$shape, "scalar")) {
+            return(tccq_lower_result(
+              FALSE,
+              reason = paste0(
+                "Reassignment to ",
+                nm,
+                " changes mode from ",
+                existing$mode,
+                " to ",
+                rhs$mode,
+                " for non-scalar value in current subset"
+              )
+            ))
+          }
+          existing$mode <- rhs$mode
+          tccq_scope_set(sc, nm, existing)
+        }
       }
 
       # Vector reassignment: rewrite existing array element-wise
       if (
         !is.null(existing) &&
-          existing$shape %in% c("vector", "matrix") &&
+          existing$shape == "vector" &&
           rhs$shape == "vector" &&
           !identical(rhs$node$tag, "vec_alloc") &&
           !identical(rhs$node$tag, "mat_alloc")
