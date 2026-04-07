@@ -265,21 +265,8 @@ tccq_cg_expr <- function(node) {
     ))
   }
 
-  if (tag == "mat_col") {
-    arr <- tccq_cg_ident(node$arr)
-    col <- tccq_cg_expr(node$col)
-    return(sprintf(
-      "p_%s[(R_xlen_t)((%s) - 1) * nrow_%s]",
-      arr,
-      col,
-      arr
-    ))
-  }
-
-  if (tag == "mat_row") {
-    arr <- tccq_cg_ident(node$arr)
-    row <- tccq_cg_expr(node$row)
-    return(sprintf("p_%s[(R_xlen_t)((%s) - 1)]", arr, row))
+  if (tag == "mat_col" || tag == "mat_row") {
+    stop("BUG: mat_col/mat_row in scalar expression context (shape=vector)", call. = FALSE)
   }
 
   if (tag == "reduce") {
@@ -3384,13 +3371,10 @@ tccq_cg_vec_len <- function(node) {
     from <- tccq_cg_expr(node$from)
     to <- tccq_cg_expr(node$to)
     return(sprintf(
-      "(((R_xlen_t)(%s) <= (R_xlen_t)(%s)) ? ((R_xlen_t)(%s) - (R_xlen_t)(%s) + 1) : ((R_xlen_t)(%s) - (R_xlen_t)(%s) + 1))",
-      from,
-      to,
-      to,
-      from,
-      from,
-      to
+      "(((R_xlen_t)(%s) > (R_xlen_t)(%s)) ? (R_xlen_t)(%s) - (R_xlen_t)(%s) : (R_xlen_t)(%s) - (R_xlen_t)(%s)) + 1",
+      from, to,
+      from, to,
+      to, from
     ))
   }
   if (tag == "vec_slice") {

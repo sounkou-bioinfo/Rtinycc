@@ -243,22 +243,13 @@ tccq_parse_na_rm <- function(e) {
   list(ok = FALSE, reason = "na.rm must be literal TRUE/FALSE")
 }
 
-tccq_call_names <- function(e) {
-  nms <- names(e)
-  if (is.null(nms)) {
-    nms <- rep("", length(e))
-  }
-  nms[is.na(nms)] <- ""
-  nms
-}
-
 tccq_validate_call_args <- function(
   e,
   fname,
   allowed_named,
   allowed_positional
 ) {
-  nms <- tccq_call_names(e)
+  nms <- tccq_call_arg_names(e)
   if (length(e) < 2L) {
     return(list(ok = FALSE, reason = paste0(fname, "() requires arguments")))
   }
@@ -1122,7 +1113,7 @@ tccq_lower_expr <- function(e, sc, decl) {
     } else {
       NA_integer_
     }
-    if (is.na(p_idx) || p_idx == 2L) {
+    if (is.na(p_idx)) {
       return(tccq_lower_result(
         FALSE,
         reason = "quantile() requires a probs argument in current subset"

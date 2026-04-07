@@ -84,7 +84,7 @@ static cb_task_t *cbq_pop_all(void) {
  * Convert a task's args to an R list.
  * Ownership: returns R-managed list.
  * Allocation: R allocations only.
- * Protection: PROTECT(1), UNPROTECT(1).
+ * Protection: none — caller must PROTECT the returned value.
  */
 static SEXP cb_task_to_args(cb_task_t *task) {
     if (task->n_args <= 0) {
@@ -144,9 +144,11 @@ static void cbq_drain_tasks(void) {
     cb_task_t *task = cbq_pop_all();
     while (task) {
         cb_task_t *next = task->next;
-        SEXP args = cb_task_to_args(task);
-        RC_invoke_callback_internal(task->id, args);
+        int id = task->id;
+        SEXP args = PROTECT(cb_task_to_args(task));
         cbq_free_task(task);
+        RC_invoke_callback_internal(id, args);
+        UNPROTECT(1);
         task = next;
     }
 }
@@ -184,8 +186,6 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     if (!task) return -3;
     task->id = id;
     task->n_args = n_args;
-    task->args = NULL;
-    task->next = NULL;
 
     if (n_args > 0) {
         task->args = (cb_arg_t *)calloc((size_t)n_args, sizeof(cb_arg_t));
@@ -300,7 +300,7 @@ static cb_task_t *cbq_pop_all(void) {
  * Convert a task's args to an R list.
  * Ownership: returns R-managed list.
  * Allocation: R allocations only.
- * Protection: PROTECT(1), UNPROTECT(1).
+ * Protection: none — caller must PROTECT the returned value.
  */
 static SEXP cb_task_to_args(cb_task_t *task) {
     if (task->n_args <= 0) {
@@ -360,10 +360,11 @@ static void cbq_drain_tasks(void) {
     cb_task_t *task = cbq_pop_all();
     while (task) {
         cb_task_t *next = task->next;
-        SEXP args = cb_task_to_args(task);
         int id = task->id;
-        RC_invoke_callback_internal(id, args);
+        SEXP args = PROTECT(cb_task_to_args(task));
         cbq_free_task(task);
+        RC_invoke_callback_internal(id, args);
+        UNPROTECT(1);
         task = next;
     }
 }
@@ -422,8 +423,6 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args) {
     if (!task) return -3;
     task->id = id;
     task->n_args = n_args;
-    task->args = NULL;
-    task->next = NULL;
 
     if (n_args > 0) {
         task->args = (cb_arg_t*) calloc((size_t) n_args, sizeof(cb_arg_t));

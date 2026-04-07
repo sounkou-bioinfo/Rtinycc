@@ -30,7 +30,7 @@ tccq_make_walker <- function(
       tccq_walk(e[[1]], w)
     }
     for (ee in as.list(e)[-1]) {
-      if (!missing(ee)) tccq_walk(ee, w)
+      tccq_walk(ee, w)
     }
     invisible(NULL)
   },
@@ -63,9 +63,7 @@ tccq_has_boundary <- function(e, boundary = tccq_boundary_calls()) {
           tccq_walk(e[[1]], w)
         }
         for (ee in as.list(e)[-1]) {
-          if (!missing(ee)) {
-            tccq_walk(ee, w)
-          }
+          tccq_walk(ee, w)
           if (found) break
         }
       }
@@ -97,7 +95,7 @@ tccq_collect_subset_arrays <- function(e) {
             tccq_walk(e[[1]], w)
           }
           for (ee in as.list(e)[-1]) {
-            if (!missing(ee)) tccq_walk(ee, w)
+            tccq_walk(ee, w)
           }
         }
       }
@@ -123,7 +121,7 @@ tccq_scan_constructs <- function(exprs) {
           cur_depth <<- cur_depth + 1L
           max_depth <<- max(max_depth, cur_depth)
           for (ee in as.list(e)[-1]) {
-            if (!missing(ee)) tccq_walk(ee, w)
+            tccq_walk(ee, w)
           }
           cur_depth <<- cur_depth - 1L
         }
@@ -138,7 +136,7 @@ tccq_scan_constructs <- function(exprs) {
         tccq_walk(e[[1]], w)
       }
       for (ee in as.list(e)[-1]) {
-        if (!missing(ee)) tccq_walk(ee, w)
+        tccq_walk(ee, w)
       }
     }
   )
