@@ -167,8 +167,11 @@ expect_true(
 )
 close_if_valid(cb_async)
 
-# Test: non-void async callback returns the real computed value (synchronous path)
-# The worker thread blocks until R executes the callback and returns an int.
+# Test: non-void async callback returns the real computed value (synchronous path).
+#
+# The worker thread blocks on the cond/SendMessage until R drains.
+# We must NOT join the worker while calling drain — that deadlocks.
+# Pattern: start worker (non-blocking) -> drain loop -> join -> check result.
 cb_async_int <- tcc_callback(
   function(x) x * 3L,
   signature = "int (*)(int)"
@@ -178,45 +181,49 @@ cb_ptr_async_int <- tcc_callback_ptr(cb_async_int)
 code_async_sync <- "
 #define _Complex
 
-struct task_int { int (*cb)(void* ctx, int); void* ctx; int value; int result; };
-
 #ifdef _WIN32
 #include <windows.h>
 
-static DWORD WINAPI worker_int(LPVOID data) {
-  struct task_int* t = (struct task_int*) data;
-  t->result = t->cb(t->ctx, t->value);
+struct itask { int (*cb)(void*,int); void* ctx; int in; volatile int out; volatile int done; };
+static struct itask g_it;
+static HANDLE g_ith = NULL;
+
+static DWORD WINAPI iworker(LPVOID p) {
+  struct itask* t = (struct itask*) p;
+  t->out = t->cb(t->ctx, t->in);
+  t->done = 1;
   return 0;
 }
-
-int spawn_async_int(int (*cb)(void* ctx, int), void* ctx, int value) {
-  if (!cb || !ctx) return -1;
-  struct task_int t;
-  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999;
-  HANDLE th = CreateThread(NULL, 0, worker_int, &t, 0, NULL);
-  if (!th) return -2;
-  WaitForSingleObject(th, INFINITE);
-  CloseHandle(th);
-  return t.result;
+int  start_int_worker(int (*cb)(void*,int), void* ctx, int x) {
+  g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -999; g_it.done = 0;
+  g_ith = CreateThread(NULL, 0, iworker, &g_it, 0, NULL);
+  return g_ith ? 0 : -1;
 }
+int  is_int_worker_done(void) { return g_it.done; }
+int  join_int_worker(void) {
+  if (g_ith) { WaitForSingleObject(g_ith, INFINITE); CloseHandle(g_ith); g_ith = NULL; }
+  return g_it.out;
+}
+
 #else
 #include <pthread.h>
 
-static void* worker_int(void* data) {
-  struct task_int* t = (struct task_int*) data;
-  t->result = t->cb(t->ctx, t->value);
+struct itask { int (*cb)(void*,int); void* ctx; int in; volatile int out; volatile int done; };
+static struct itask g_it;
+static pthread_t g_ith;
+
+static void* iworker(void* p) {
+  struct itask* t = (struct itask*) p;
+  t->out = t->cb(t->ctx, t->in);
+  t->done = 1;
   return NULL;
 }
-
-int spawn_async_int(int (*cb)(void* ctx, int), void* ctx, int value) {
-  if (!cb || !ctx) return -1;
-  struct task_int t;
-  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999;
-  pthread_t th;
-  if (pthread_create(&th, NULL, worker_int, &t) != 0) return -2;
-  pthread_join(th, NULL);
-  return t.result;
+int  start_int_worker(int (*cb)(void*,int), void* ctx, int x) {
+  g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -999; g_it.done = 0;
+  return pthread_create(&g_ith, NULL, iworker, &g_it) == 0 ? 0 : -1;
 }
+int  is_int_worker_done(void) { return g_it.done; }
+int  join_int_worker(void) { pthread_join(g_ith, NULL); return g_it.out; }
 #endif
 "
 
@@ -227,14 +234,19 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_async_sync <- ffi_async_sync |>
   tcc_bind(
-    spawn_async_int = list(
-      args = list("callback_async:int(int)", "ptr", "i32"),
-      returns = "i32"
-    )
+    start_int_worker  = list(args = list("callback_async:int(int)", "ptr", "i32"), returns = "i32"),
+    is_int_worker_done = list(args = list(), returns = "i32"),
+    join_int_worker   = list(args = list(), returns = "i32")
   ) |>
   tcc_compile()
 
-result_val <- ffi_async_sync$spawn_async_int(cb_async_int, cb_ptr_async_int, 7L)
+ffi_async_sync$start_int_worker(cb_async_int, cb_ptr_async_int, 7L)
+for (i in seq_len(50)) {
+  tcc_callback_async_drain()
+  if (ffi_async_sync$is_int_worker_done() != 0L) break
+  Sys.sleep(0.01)
+}
+result_val <- ffi_async_sync$join_int_worker()
 expect_true(
   isTRUE(result_val == 21L),
   info = "Non-void async callback returns real computed value (7 * 3 = 21)"
@@ -251,45 +263,49 @@ cb_ptr_async_dbl <- tcc_callback_ptr(cb_async_dbl)
 code_async_dbl <- "
 #define _Complex
 
-struct task_dbl { double (*cb)(void* ctx, double); void* ctx; double value; double result; };
-
 #ifdef _WIN32
 #include <windows.h>
 
-static DWORD WINAPI worker_dbl(LPVOID data) {
-  struct task_dbl* t = (struct task_dbl*) data;
-  t->result = t->cb(t->ctx, t->value);
+struct dtask { double (*cb)(void*,double); void* ctx; double in; volatile double out; volatile int done; };
+static struct dtask g_dt;
+static HANDLE g_dth = NULL;
+
+static DWORD WINAPI dworker(LPVOID p) {
+  struct dtask* t = (struct dtask*) p;
+  t->out = t->cb(t->ctx, t->in);
+  t->done = 1;
   return 0;
 }
-
-double spawn_async_dbl(double (*cb)(void* ctx, double), void* ctx, double value) {
-  if (!cb || !ctx) return -1.0;
-  struct task_dbl t;
-  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999.0;
-  HANDLE th = CreateThread(NULL, 0, worker_dbl, &t, 0, NULL);
-  if (!th) return -2.0;
-  WaitForSingleObject(th, INFINITE);
-  CloseHandle(th);
-  return t.result;
+int    start_dbl_worker(double (*cb)(void*,double), void* ctx, double x) {
+  g_dt.cb = cb; g_dt.ctx = ctx; g_dt.in = x; g_dt.out = -999.0; g_dt.done = 0;
+  g_dth = CreateThread(NULL, 0, dworker, &g_dt, 0, NULL);
+  return g_dth ? 0 : -1;
 }
+int    is_dbl_worker_done(void) { return g_dt.done; }
+double join_dbl_worker(void) {
+  if (g_dth) { WaitForSingleObject(g_dth, INFINITE); CloseHandle(g_dth); g_dth = NULL; }
+  return g_dt.out;
+}
+
 #else
 #include <pthread.h>
 
-static void* worker_dbl(void* data) {
-  struct task_dbl* t = (struct task_dbl*) data;
-  t->result = t->cb(t->ctx, t->value);
+struct dtask { double (*cb)(void*,double); void* ctx; double in; volatile double out; volatile int done; };
+static struct dtask g_dt;
+static pthread_t g_dth;
+
+static void* dworker(void* p) {
+  struct dtask* t = (struct dtask*) p;
+  t->out = t->cb(t->ctx, t->in);
+  t->done = 1;
   return NULL;
 }
-
-double spawn_async_dbl(double (*cb)(void* ctx, double), void* ctx, double value) {
-  if (!cb || !ctx) return -1.0;
-  struct task_dbl t;
-  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999.0;
-  pthread_t th;
-  if (pthread_create(&th, NULL, worker_dbl, &t) != 0) return -2.0;
-  pthread_join(th, NULL);
-  return t.result;
+int    start_dbl_worker(double (*cb)(void*,double), void* ctx, double x) {
+  g_dt.cb = cb; g_dt.ctx = ctx; g_dt.in = x; g_dt.out = -999.0; g_dt.done = 0;
+  return pthread_create(&g_dth, NULL, dworker, &g_dt) == 0 ? 0 : -1;
 }
+int    is_dbl_worker_done(void) { return g_dt.done; }
+double join_dbl_worker(void) { pthread_join(g_dth, NULL); return g_dt.out; }
 #endif
 "
 
@@ -300,14 +316,19 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_async_dbl <- ffi_async_dbl |>
   tcc_bind(
-    spawn_async_dbl = list(
-      args = list("callback_async:double(double)", "ptr", "f64"),
-      returns = "f64"
-    )
+    start_dbl_worker   = list(args = list("callback_async:double(double)", "ptr", "f64"), returns = "i32"),
+    is_dbl_worker_done = list(args = list(), returns = "i32"),
+    join_dbl_worker    = list(args = list(), returns = "f64")
   ) |>
   tcc_compile()
 
-result_dbl <- ffi_async_dbl$spawn_async_dbl(cb_async_dbl, cb_ptr_async_dbl, 2.5)
+ffi_async_dbl$start_dbl_worker(cb_async_dbl, cb_ptr_async_dbl, 2.5)
+for (i in seq_len(50)) {
+  tcc_callback_async_drain()
+  if (ffi_async_dbl$is_dbl_worker_done() != 0L) break
+  Sys.sleep(0.01)
+}
+result_dbl <- ffi_async_dbl$join_dbl_worker()
 expect_true(
   isTRUE(all.equal(result_dbl, 3.0, tolerance = 1e-12)),
   info = "Non-void async callback returns real double value (2.5 + 0.5 = 3.0)"

@@ -1079,6 +1079,27 @@ generate_ffi_code <- function(
       } else {
         NULL
       },
+      if (cb_tramps$needs_async_sync) {
+        c(
+          "",
+          "typedef enum {",
+          "  CB_RESULT_VOID = 0,",
+          "  CB_RESULT_INT = 1,",
+          "  CB_RESULT_REAL = 2,",
+          "  CB_RESULT_LOGICAL = 3,",
+          "  CB_RESULT_PTR = 4",
+          "} cb_result_kind_t;",
+          "",
+          "typedef struct {",
+          "  cb_result_kind_t kind;",
+          "  union { int i; double d; void* p; } v;",
+          "} cb_result_t;",
+          "",
+          "int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);"
+        )
+      } else {
+        NULL
+      },
       "",
       cb_tramps$code,
       ""
@@ -1156,6 +1177,7 @@ generate_callback_trampolines <- function(symbols) {
   trampolines <- character(0)
   needs_sync <- FALSE
   needs_async <- FALSE
+  needs_async_sync <- FALSE
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
     arg_types <- sym$args
@@ -1176,6 +1198,9 @@ generate_callback_trampolines <- function(symbols) {
         tramp_name <- callback_trampoline_name(wrapper_name, i)
         if (is_callback_async_type(ffi_type)) {
           needs_async <- TRUE
+          if (!identical(sig$return_type, "void")) {
+            needs_async_sync <- TRUE
+          }
           trampolines <- c(
             trampolines,
             generate_async_trampoline(tramp_name, sig),
@@ -1196,6 +1221,7 @@ generate_callback_trampolines <- function(symbols) {
   list(
     code = paste(trampolines, collapse = "\n"),
     needs_sync = needs_sync,
-    needs_async = needs_async
+    needs_async = needs_async,
+    needs_async_sync = needs_async_sync
   )
 }

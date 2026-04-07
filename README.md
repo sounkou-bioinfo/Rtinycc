@@ -181,7 +181,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x58ba71099060"
+#> [1] "0x5afcf90918f0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -212,11 +212,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x58ba7090b920>
+#> <pointer: 0x5afcfad85190>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x58ba7368c6f0>
+#> <pointer: 0x5afcfae6f040>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x58ba7090b920>
+#> <pointer: 0x5afcfad85190>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -289,8 +289,8 @@ timings_ffi_scalar
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      24.3ms   25.5ms      39.3   53.98KB     41.2
-#> 2 Rbuiltin    543.4µs  578.2µs    1622.     9.05KB     28.0
+#> 1 Rtinycc      32.5ms   33.8ms      29.1   53.98KB     31.0
+#> 2 Rbuiltin    706.2µs  769.9µs    1215.     9.05KB     22.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays
 # (one call over many elements instead of many scalar calls).
@@ -321,8 +321,8 @@ timings_ffi_vec
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec     178µs    262µs     3780.     391KB     28.2
-#> 2 Rbuiltin_vec    172µs    328µs     3115.     781KB     45.4
+#> 1 Rtinycc_vec     214µs    337µs     2978.     391KB     21.8
+#> 2 Rbuiltin_vec    204µs    411µs     2460.     781KB     35.9
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -484,7 +484,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @58ba75037600 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5afcfd539430 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -500,7 +500,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @58ba75037600 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5afcfd539430 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -527,15 +527,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x58ba75161db0>
+#> <pointer: 0x5afcf902d530>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x58ba75161db0>
+#> <pointer: 0x5afcf902d530>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x58ba72d95470>
+#> <pointer: 0x5afcfa486890>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x58ba72d95470>
+#> <pointer: 0x5afcfa486890>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -580,9 +580,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x58ba73c8ab10>
+#> <pointer: 0x5afcfc94c7f0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x58ba73c8ab10>
+#> <pointer: 0x5afcfc94c7f0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -693,16 +693,26 @@ tcc_callback_close(cb_err)
 ### Async callbacks
 
 For thread-safe scheduling from worker threads, use
-`callback_async:<signature>` in `tcc_bind()`. The callback is enqueued
-from any thread and executed on the main R thread when you call
-`tcc_callback_async_drain()`. Call `tcc_callback_async_enable()` once
-before use. For non-`void` async signatures, the C caller receives an
-immediate type-default return value (for example `0`/`NULL`), not the
-eventual R callback result.
+`callback_async:<signature>` in `tcc_bind()`. Call
+`tcc_callback_async_enable()` once before use.
+
+**Void return (fire-and-forget):** the callback is enqueued from any
+thread and executed on the main R thread automatically — on Windows via
+R’s message pump, on Linux/macOS via R’s event loop `addInputHandler`.
+No manual drain is required when R is idle at the console.
+`tcc_callback_async_drain()` is available for an explicit flush (useful
+in tests or batch scenarios).
+
+**Non-void return (synchronous):** the worker thread blocks until the
+main R thread executes the callback and returns the real result.
+Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
+`u8`, `u16`), floating-point (`double`, `float`), `bool`/`logical`, and
+pointer (`void*`, `T*`).
 
 ``` r
 tcc_callback_async_enable()
 
+# Fire-and-forget: void callback accumulated from 100 worker threads
 hits <- 0L
 cb_async <- tcc_callback(
   function(x) { hits <<- hits + x; NULL },
@@ -781,6 +791,95 @@ tcc_callback_async_drain()
 hits
 #> [1] 200
 tcc_callback_close(cb_async)
+```
+
+For non-void return, the worker thread blocks on the sync trampoline
+until the main R thread executes the callback and returns the real
+value. At the interactive console this happens automatically via R’s
+event loop. In batch contexts (including `rmarkdown::render`) you must
+start the worker without blocking R, call `tcc_callback_async_drain()`,
+then join:
+
+``` r
+tcc_callback_async_enable()
+
+cb_triple <- tcc_callback(
+  function(x) x * 3L,
+  signature = "int (*)(int)"
+)
+
+# C helpers: start worker (returns immediately), poll done flag, join and
+# retrieve result.  The worker calls the callback_async:int trampoline which
+# blocks until the main thread drains.
+code_sync <- '
+#ifdef _WIN32
+#include <windows.h>
+
+struct itask { int (*cb)(void*,int); void* ctx; int in; volatile int out; volatile int done; };
+static struct itask g_it;
+static HANDLE g_ith = NULL;
+
+static DWORD WINAPI iworker(LPVOID p) {
+  struct itask* t = (struct itask*)p;
+  t->out  = t->cb(t->ctx, t->in);
+  t->done = 1;
+  return 0;
+}
+int  start_worker(int (*cb)(void*,int), void* ctx, int x) {
+  g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -1; g_it.done = 0;
+  g_ith = CreateThread(NULL, 0, iworker, &g_it, 0, NULL);
+  return g_ith ? 0 : -1;
+}
+int  worker_done(void)  { return g_it.done; }
+int  join_worker(void)  {
+  if (g_ith) { WaitForSingleObject(g_ith, INFINITE); CloseHandle(g_ith); g_ith = NULL; }
+  return g_it.out;
+}
+#else
+#include <pthread.h>
+
+struct itask { int (*cb)(void*,int); void* ctx; int in; volatile int out; volatile int done; };
+static struct itask g_it;
+static pthread_t g_ith;
+
+static void* iworker(void* p) {
+  struct itask* t = (struct itask*)p;
+  t->out  = t->cb(t->ctx, t->in);
+  t->done = 1;
+  return NULL;
+}
+int  start_worker(int (*cb)(void*,int), void* ctx, int x) {
+  g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -1; g_it.done = 0;
+  return pthread_create(&g_ith, NULL, iworker, &g_it) == 0 ? 0 : -1;
+}
+int  worker_done(void) { return g_it.done; }
+int  join_worker(void) { pthread_join(g_ith, NULL); return g_it.out; }
+#endif
+'
+
+ffi_sync <- tcc_ffi() |>
+  tcc_source(code_sync)
+if (.Platform$OS.type != "windows") {
+  ffi_sync <- tcc_library(ffi_sync, "pthread")
+}
+ffi_sync <- ffi_sync |>
+  tcc_bind(
+    start_worker = list(args = list("callback_async:int(int)", "ptr", "i32"), returns = "i32"),
+    worker_done  = list(args = list(), returns = "i32"),
+    join_worker  = list(args = list(), returns = "i32")
+  ) |>
+  tcc_compile()
+
+ffi_sync$start_worker(cb_triple, tcc_callback_ptr(cb_triple), 7L)
+#> [1] 0
+for (i in seq_len(50)) {
+  tcc_callback_async_drain()
+  if (ffi_sync$worker_done() != 0L) break
+  Sys.sleep(0.01)
+}
+ffi_sync$join_worker()  # 21
+#> [1] 21
+tcc_callback_close(cb_triple)
 ```
 
 ### SQLite: a complete example
@@ -902,7 +1001,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x58ba75ea4250>
+#> <pointer: 0x5afcf8c9c3e0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1017,13 +1116,13 @@ if (Sys.info()[["sysname"]] == "Linux") {
 }
 #> CSV size: 2.75 MB
 #> # A tibble: 5 × 13
-#>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
-#>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 52.21ms 52.21ms      19.2    6.33MB     19.2     1     1     52.2ms
-#> 2 vroom_df_…  6.45ms  6.72ms     149.     1.22MB      0       2     0     13.4ms
-#> 3 vroom_df_…  6.46ms  6.55ms     153.     2.44MB      0       2     0     13.1ms
-#> 4 c_read_df  20.95ms 21.05ms      47.5    1.22MB      0       2     0     42.1ms
-#> 5 io_uring_… 20.76ms 20.89ms      47.9    1.22MB      0       2     0     41.8ms
+#>   expression      min median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
+#>   <bch:expr>   <bch:> <bch:>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
+#> 1 read_table_… 70.2ms 70.2ms      14.3    6.33MB     14.3     1     1     70.2ms
+#> 2 vroom_df_al… 10.9ms 11.3ms      88.5    1.22MB      0       2     0     22.6ms
+#> 3 vroom_df_al… 12.9ms   13ms      77.2    2.44MB      0       2     0     25.9ms
+#> 4 c_read_df    44.9ms   45ms      22.2    1.22MB      0       2     0       90ms
+#> 5 io_uring_df  43.7ms 43.8ms      22.8    1.22MB      0       2     0     87.6ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1295,10 +1394,10 @@ print(timings)
 #> # A tibble: 4 × 13
 #>   expression            min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
 #>   <bch:expr>       <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 R                   607ms 609.87ms      1.63     782KB    0.545     3     1
-#> 2 quickr             3.73ms   4.14ms    241.       782KB    7.42    455    14
-#> 3 Rtinycc_quick     16.69ms  17.19ms     57.7      782KB    2.08    111     4
-#> 4 Rtinycc_manual_c  55.46ms  57.93ms     17.3      782KB    0.508    34     1
+#> 1 R                793.59ms 795.85ms      1.26     782KB    0.628     2     1
+#> 2 quickr             4.18ms   5.37ms    188.       782KB    5.77    359    11
+#> 3 Rtinycc_quick     20.99ms   22.3ms     44.4      782KB    1.55     86     3
+#> 4 Rtinycc_manual_c     67ms   73.5ms     13.6      782KB    0.503    27     1
 #> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
 #> #   time <list>, gc <list>
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1348,9 +1447,9 @@ timings_roll_mean
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R              75.62ms  85.08ms      9.80     124MB    20.6 
-#> 2 quickr          2.91ms   4.02ms    253.       781KB     2.99
-#> 3 Rtinycc_quick  16.11ms  16.46ms     60.3      781KB     0
+#> 1 R             100.81ms 112.69ms      5.96     124MB   11.9  
+#> 2 quickr          4.07ms   5.08ms    195.       781KB    1.99 
+#> 3 Rtinycc_quick  17.87ms  20.55ms     49.2      781KB    0.984
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1456,9 +1555,9 @@ timings_viterbi
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R               10.7ms   11.2ms      89.5     119KB     1.01
-#> 2 quickr         197.8µs  199.1µs    4984.        2KB     0   
-#> 3 Rtinycc_quick  588.1µs  628.7µs    1572.      158KB     4.05
+#> 1 R               13.5ms   14.4ms      69.1     119KB     0   
+#> 2 quickr         216.4µs  246.3µs    4073.        2KB     0   
+#> 3 Rtinycc_quick  764.9µs  819.8µs    1213.      158KB     3.04
 plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1537,8 +1636,8 @@ timings_ols
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R              335.9µs  365.7µs     2568.    39.8KB     1.00
-#> 2 Rtinycc_quick   46.6µs   48.5µs    19376.    39.8KB    11.6
+#> 1 R              448.6µs    991µs      533.    39.8KB     1.01
+#> 2 Rtinycc_quick   61.4µs   68.4µs    13853.    39.8KB     8.32
 plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1593,8 +1692,8 @@ timings_bypass
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R                397µs    414µs     2396.     422KB     16.8
-#> 2 Rtinycc_quick    294µs    301µs     3296.     235KB     10.3
+#> 1 R                515µs    554µs     1699.     422KB    10.6 
+#> 2 Rtinycc_quick    358µs    390µs     2516.     235KB     8.35
 plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1679,11 +1778,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x58ba8c122980>
+#> <pointer: 0x5afd01758870>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x58ba7b661c10>
+#> <pointer: 0x5afcf8d7f640>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1712,9 +1811,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x58ba7c00e760>
+#> <pointer: 0x5afd11f5c2b0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x58ba7c00e760>
+#> <pointer: 0x5afd11f5c2b0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
