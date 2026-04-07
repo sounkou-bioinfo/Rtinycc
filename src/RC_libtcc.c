@@ -142,6 +142,7 @@ SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
+int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
 static void RC_callback_finalizer(SEXP ext);
 static void RC_callback_ptr_finalizer(SEXP ext);
 SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
@@ -1372,6 +1373,30 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
 }
 
 /**
+ * Schedule a synchronous async callback from C worker threads.
+ * Blocks the calling thread until the main thread executes the R callback
+ * and returns a result in *result.
+ * @param id Callback registry id.
+ * @param n_args Number of arguments.
+ * @param args Array of cb_arg_t values.
+ * @param result Output: filled with the callback's return value.
+ * @return 0 on success, negative error code otherwise.
+ */
+int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
+                                      cb_result_t *result) {
+    if (!RC_platform_async_is_supported()) {
+        return -1;
+    }
+    if (!RC_platform_async_is_initialized()) {
+        return -1;
+    }
+    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
+        return -2;
+    }
+    return RC_platform_async_schedule_sync(id, n_args, args, result);
+}
+
+/**
  * Finalizer for callback tokens.
  * Ownership: releases preserved R function and frees token when refs hit 0.
  * Allocation: frees heap memory (malloc/free).
@@ -1852,5 +1877,7 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     tcc_add_symbol(s, "RC_invoke_callback_id", RC_invoke_callback_id);
     tcc_add_symbol(s, "RC_callback_async_schedule_c",
                    RC_callback_async_schedule_c);
+    tcc_add_symbol(s, "RC_callback_async_schedule_sync_c",
+                   RC_callback_async_schedule_sync_c);
     return R_NilValue;
 }

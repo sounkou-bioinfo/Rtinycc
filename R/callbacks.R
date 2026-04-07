@@ -423,7 +423,14 @@ generate_trampoline <- function(trampoline_name, sig) {
   paste(lines, collapse = "\n")
 }
 
-# Generate async trampoline that schedules on main thread
+# Generate async trampoline that schedules callbacks on the main thread.
+#
+# void return    -> fire-and-forget via RC_callback_async_schedule_c
+#                   (PostMessage on Windows, write-to-pipe on Linux).
+#                   Auto-drains through R's message pump / input handler.
+# non-void return -> synchronous via RC_callback_async_schedule_sync_c
+#                   (SendMessage on Windows, pthread_cond on Linux).
+#                   Blocks the worker thread until R returns the real value.
 generate_async_trampoline <- function(trampoline_name, sig) {
   unsupported <- vapply(sig$arg_types, async_type_unsupported, logical(1))
   if (any(unsupported)) {
@@ -433,6 +440,19 @@ generate_async_trampoline <- function(trampoline_name, sig) {
       paste(bad, collapse = ", "),
       call. = FALSE
     )
+  }
+
+  is_void_return <- identical(sig$return_type, "void")
+
+  if (!is_void_return) {
+    ret_kind <- async_result_kind(sig$return_type)
+    if (is.null(ret_kind)) {
+      stop(
+        "callback_async unsupported return type: ", sig$return_type,
+        " (supported: void, int variants, double/float, bool/logical, ptr)",
+        call. = FALSE
+      )
+    }
   }
 
   n_args <- length(sig$arg_types)
@@ -474,31 +494,79 @@ generate_async_trampoline <- function(trampoline_name, sig) {
     lines <- c(lines, "  cb_arg_t* args = NULL;")
   }
 
-  lines <- c(
-    lines,
-    sprintf(
-      "  int rc = RC_callback_async_schedule_c(tok->id, %d, %s);",
-      n_args,
-      if (n_args > 0) "args" else "NULL"
-    ),
-    "  if (rc != 0) {",
-    sprintf(
-      "    Rf_warning(\"Async schedule failed (rc=%%d) in %s\", rc);",
-      trampoline_name
-    ),
-    get_c_default_return(sig$return_type, indent = 4L),
-    "  }"
-  )
-
-  if (sig$return_type == "void") {
-    lines <- c(lines, "  return;")
+  if (is_void_return) {
+    lines <- c(
+      lines,
+      sprintf(
+        "  int rc = RC_callback_async_schedule_c(tok->id, %d, %s);",
+        n_args,
+        if (n_args > 0) "args" else "NULL"
+      ),
+      "  if (rc != 0) {",
+      sprintf(
+        "    Rf_warning(\"Async schedule failed (rc=%%d) in %s\", rc);",
+        trampoline_name
+      ),
+      "  }",
+      "  return;"
+    )
   } else {
-    lines <- c(lines, get_c_default_return(sig$return_type, indent = 2L))
+    lines <- c(
+      lines,
+      "  cb_result_t result;",
+      sprintf(
+        "  int rc = RC_callback_async_schedule_sync_c(tok->id, %d, %s, &result);",
+        n_args,
+        if (n_args > 0) "args" else "NULL"
+      ),
+      "  if (rc != 0) {",
+      sprintf(
+        "    Rf_warning(\"Async schedule failed (rc=%%d) in %s\", rc);",
+        trampoline_name
+      ),
+      get_c_default_return(sig$return_type, indent = 4L),
+      "  }",
+      get_async_result_return(sig$return_type)
+    )
   }
 
   lines <- c(lines, "}")
 
   paste(lines, collapse = "\n")
+}
+
+# Determine the CB_RESULT_* kind that a C return type maps to.
+# Returns NULL if the type cannot be returned from an async sync callback.
+async_result_kind <- function(return_type) {
+  rt <- trimws(return_type)
+  if (rt %in% c("int", "i32", "int32_t", "i16", "int16_t",
+                 "i8", "int8_t", "u8", "uint8_t", "u16", "uint16_t")) {
+    return("int")
+  }
+  if (rt %in% c("double", "f64", "float", "f32",
+                 "i64", "int64_t", "u32", "uint32_t", "u64", "uint64_t")) {
+    return("real")
+  }
+  if (rt %in% c("bool", "logical")) {
+    return("logical")
+  }
+  if (grepl("\\*", rt) && !grepl("char", rt)) {
+    return("ptr")
+  }
+  NULL
+}
+
+# Generate the C return statement that extracts a value from cb_result_t.
+get_async_result_return <- function(return_type) {
+  kind <- async_result_kind(return_type)
+  rt <- trimws(return_type)
+  switch(kind,
+    "int"     = sprintf("  return (%s)result.v.i;", rt),
+    "real"    = sprintf("  return (%s)result.v.d;", rt),
+    "logical" = sprintf("  return (%s)result.v.i;", rt),
+    "ptr"     = sprintf("  return (%s)result.v.p;", rt),
+    stop("BUG: unhandled async result kind for return type: ", return_type, call. = FALSE)
+  )
 }
 
 async_type_unsupported <- function(c_type) {

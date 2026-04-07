@@ -166,3 +166,150 @@ expect_true(
   info = "Async callback scheduled from worker thread"
 )
 close_if_valid(cb_async)
+
+# Test: non-void async callback returns the real computed value (synchronous path)
+# The worker thread blocks until R executes the callback and returns an int.
+cb_async_int <- tcc_callback(
+  function(x) x * 3L,
+  signature = "int (*)(int)"
+)
+cb_ptr_async_int <- tcc_callback_ptr(cb_async_int)
+
+code_async_sync <- "
+#define _Complex
+
+struct task_int { int (*cb)(void* ctx, int); void* ctx; int value; int result; };
+
+#ifdef _WIN32
+#include <windows.h>
+
+static DWORD WINAPI worker_int(LPVOID data) {
+  struct task_int* t = (struct task_int*) data;
+  t->result = t->cb(t->ctx, t->value);
+  return 0;
+}
+
+int spawn_async_int(int (*cb)(void* ctx, int), void* ctx, int value) {
+  if (!cb || !ctx) return -1;
+  struct task_int t;
+  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999;
+  HANDLE th = CreateThread(NULL, 0, worker_int, &t, 0, NULL);
+  if (!th) return -2;
+  WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+  return t.result;
+}
+#else
+#include <pthread.h>
+
+static void* worker_int(void* data) {
+  struct task_int* t = (struct task_int*) data;
+  t->result = t->cb(t->ctx, t->value);
+  return NULL;
+}
+
+int spawn_async_int(int (*cb)(void* ctx, int), void* ctx, int value) {
+  if (!cb || !ctx) return -1;
+  struct task_int t;
+  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999;
+  pthread_t th;
+  if (pthread_create(&th, NULL, worker_int, &t) != 0) return -2;
+  pthread_join(th, NULL);
+  return t.result;
+}
+#endif
+"
+
+ffi_async_sync <- tcc_ffi() |>
+  tcc_source(code_async_sync)
+if (.Platform$OS.type != "windows") {
+  ffi_async_sync <- tcc_library(ffi_async_sync, "pthread")
+}
+ffi_async_sync <- ffi_async_sync |>
+  tcc_bind(
+    spawn_async_int = list(
+      args = list("callback_async:int(int)", "ptr", "i32"),
+      returns = "i32"
+    )
+  ) |>
+  tcc_compile()
+
+result_val <- ffi_async_sync$spawn_async_int(cb_async_int, cb_ptr_async_int, 7L)
+expect_true(
+  isTRUE(result_val == 21L),
+  info = "Non-void async callback returns real computed value (7 * 3 = 21)"
+)
+close_if_valid(cb_async_int)
+
+# Test: non-void async callback (double return) from worker thread
+cb_async_dbl <- tcc_callback(
+  function(x) x + 0.5,
+  signature = "double (*)(double)"
+)
+cb_ptr_async_dbl <- tcc_callback_ptr(cb_async_dbl)
+
+code_async_dbl <- "
+#define _Complex
+
+struct task_dbl { double (*cb)(void* ctx, double); void* ctx; double value; double result; };
+
+#ifdef _WIN32
+#include <windows.h>
+
+static DWORD WINAPI worker_dbl(LPVOID data) {
+  struct task_dbl* t = (struct task_dbl*) data;
+  t->result = t->cb(t->ctx, t->value);
+  return 0;
+}
+
+double spawn_async_dbl(double (*cb)(void* ctx, double), void* ctx, double value) {
+  if (!cb || !ctx) return -1.0;
+  struct task_dbl t;
+  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999.0;
+  HANDLE th = CreateThread(NULL, 0, worker_dbl, &t, 0, NULL);
+  if (!th) return -2.0;
+  WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+  return t.result;
+}
+#else
+#include <pthread.h>
+
+static void* worker_dbl(void* data) {
+  struct task_dbl* t = (struct task_dbl*) data;
+  t->result = t->cb(t->ctx, t->value);
+  return NULL;
+}
+
+double spawn_async_dbl(double (*cb)(void* ctx, double), void* ctx, double value) {
+  if (!cb || !ctx) return -1.0;
+  struct task_dbl t;
+  t.cb = cb; t.ctx = ctx; t.value = value; t.result = -999.0;
+  pthread_t th;
+  if (pthread_create(&th, NULL, worker_dbl, &t) != 0) return -2.0;
+  pthread_join(th, NULL);
+  return t.result;
+}
+#endif
+"
+
+ffi_async_dbl <- tcc_ffi() |>
+  tcc_source(code_async_dbl)
+if (.Platform$OS.type != "windows") {
+  ffi_async_dbl <- tcc_library(ffi_async_dbl, "pthread")
+}
+ffi_async_dbl <- ffi_async_dbl |>
+  tcc_bind(
+    spawn_async_dbl = list(
+      args = list("callback_async:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+result_dbl <- ffi_async_dbl$spawn_async_dbl(cb_async_dbl, cb_ptr_async_dbl, 2.5)
+expect_true(
+  isTRUE(all.equal(result_dbl, 3.0, tolerance = 1e-12)),
+  info = "Non-void async callback returns real double value (2.5 + 0.5 = 3.0)"
+)
+close_if_valid(cb_async_dbl)

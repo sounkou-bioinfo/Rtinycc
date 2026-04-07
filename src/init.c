@@ -78,6 +78,7 @@ SEXP RC_callback_async_init();
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
+int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
 
 
 // .Call entries
