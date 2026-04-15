@@ -297,19 +297,6 @@ parse_callback_type <- function(type) {
   NULL
 }
 
-#' Enable async callback dispatcher (main-thread queue)
-#'
-#' Initializes an event-loop handler so callbacks can be scheduled from
-#' non-R threads and executed on the main R thread. This is currently
-#' supported on Unix-like systems only.
-#'
-#' @return NULL (invisible)
-#' @export
-tcc_callback_async_enable <- function() {
-  .Call(RC_callback_async_init)
-  invisible(NULL)
-}
-
 #' Schedule a callback to run on the main thread
 #'
 #' Enqueue a callback for main-thread execution. Arguments must be basic
@@ -332,8 +319,14 @@ tcc_callback_async_schedule <- function(callback, args = list()) {
 
 #' Drain the async callback queue
 #'
-#' This is mainly useful for tests; normally callbacks are executed by the
-#' event loop once scheduled.
+#' Execute any pending async callbacks immediately on the main R thread.
+#' Normally callbacks fire automatically via R's event loop (input
+#' handler on POSIX, message pump on Windows), so explicit draining is
+#' only needed in test harnesses or tight batch loops that never yield
+#' to R's event loop.
+#'
+#' TCC-compiled C code running on the main thread can call
+#' \code{RC_callback_async_drain_c()} directly instead of returning to R.
 #'
 #' @return NULL (invisible)
 #' @export
@@ -427,10 +420,13 @@ generate_trampoline <- function(trampoline_name, sig) {
 #
 # void return    -> fire-and-forget via RC_callback_async_schedule_c
 #                   (PostMessage on Windows, write-to-pipe on Linux).
-#                   Auto-drains through R's message pump / input handler.
+#                   Auto-drains through R's input handler / message pump.
 # non-void return -> synchronous via RC_callback_async_schedule_sync_c
 #                   (SendMessage on Windows, pthread_cond on Linux).
-#                   Blocks the worker thread until R returns the real value.
+#                   Blocks the worker thread until the main thread
+#                   services the callback.  C code on the main thread
+#                   can call RC_callback_async_drain_c() in a loop
+#                   rather than returning to R.
 generate_async_trampoline <- function(trampoline_name, sig) {
   unsupported <- vapply(sig$arg_types, async_type_unsupported, logical(1))
   if (any(unsupported)) {

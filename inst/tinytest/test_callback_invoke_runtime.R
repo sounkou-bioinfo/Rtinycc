@@ -130,8 +130,6 @@ expect_true(
 close_if_valid(cb_closed)
 
 # Test: async scheduling from worker thread (cross-platform)
-tcc_callback_async_enable()
-
 hits <- 0L
 cb_async <- tcc_callback(
   function(x) {

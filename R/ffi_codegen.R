@@ -1074,7 +1074,9 @@ generate_ffi_code <- function(
           "  union { int i; double d; void* p; char* s; } v;",
           "} cb_arg_t;",
           "",
-          "int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);"
+          "int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);",
+          "/* Drain pending async callbacks from main-thread C code */",
+          "void RC_callback_async_drain_c(void);"
         )
       } else {
         NULL

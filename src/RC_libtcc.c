@@ -1271,12 +1271,13 @@ static int RC_callback_find_free_slot() {
 
 /**
  * Initialize async callback queue.
+ * Idempotent — safe to call multiple times.  Called automatically at
+ * package load (R_init_Rtinycc) but kept in the .Call table so R code
+ * can re-init after an unload/reload cycle if needed.
  * @return R_NilValue on success.
  */
 SEXP RC_callback_async_init() {
-    if (RC_platform_async_init() != 0) {
-        Rf_error("Failed to initialize async callback queue");
-    }
+    RC_platform_async_init();
     return R_NilValue;
 }
 
@@ -1296,9 +1297,6 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     }
     if (token->id < 0 || token->id >= MAX_CALLBACKS || !callback_registry[token->id].valid) {
         Rf_error("Invalid or expired callback");
-    }
-    if (!RC_platform_async_is_initialized()) {
-        Rf_error("Async callback queue is not initialized. Call tcc_callback_async_enable().");
     }
 
     int n_args = (args == R_NilValue) ? 0 : (int)XLENGTH(args);
@@ -1360,9 +1358,8 @@ SEXP RC_callback_async_drain() {
  * @return 0 on success, negative error code otherwise.
  */
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
-    if (!RC_platform_async_is_supported()) {
-        return -1;
-    }
+    /* Lazy-init: covers deserialized objects used in a fresh session. */
+    RC_platform_async_init();
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
@@ -1384,9 +1381,8 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
  */
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
                                       cb_result_t *result) {
-    if (!RC_platform_async_is_supported()) {
-        return -1;
-    }
+    /* Lazy-init: covers deserialized objects used in a fresh session. */
+    RC_platform_async_init();
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
@@ -1879,5 +1875,12 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
                    RC_callback_async_schedule_c);
     tcc_add_symbol(s, "RC_callback_async_schedule_sync_c",
                    RC_callback_async_schedule_sync_c);
+    /* Expose drain to TCC-compiled C code so the main-thread C side can
+       service pending async callbacks without returning to R.  This lets
+       C orchestration loops drain the queue directly:
+         while (!worker_done()) { RC_callback_async_drain_c(); usleep(1000); }
+    */
+    tcc_add_symbol(s, "RC_callback_async_drain_c",
+                   RC_platform_async_drain);
     return R_NilValue;
 }

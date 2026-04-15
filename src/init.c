@@ -157,4 +157,10 @@ static const R_CallMethodDef CallEntries[] = {
 void R_init_Rtinycc(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
+    // Auto-init the async callback queue at package load.
+    // The pipe + input-handler (POSIX) or message-only window (Windows)
+    // have zero overhead when no callbacks are scheduled.
+    // The C-level schedule functions also call init() lazily to handle
+    // deserialized objects used in a fresh session.
+    RC_platform_async_init();
 }
