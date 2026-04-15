@@ -90,6 +90,17 @@ int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args);
 void RC_platform_async_drain(void);
 
 /**
+ * Drain pending callbacks in a polling loop until *done_flag becomes non-zero.
+ * Polls every 10 ms (calibrated per R's Rprof / tcltk conventions).
+ * Calls R_CheckUserInterrupt() every ~100 ms to support Ctrl+C.
+ * Must be called from the main R thread only.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
+void RC_platform_async_drain_loop(volatile int *done_flag);
+
+/**
  * Schedule a synchronous async callback and block until the main thread
  * executes it and returns a result.
  * On Windows: uses SendMessage (blocks worker until WndProc returns).

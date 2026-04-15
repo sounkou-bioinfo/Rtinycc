@@ -143,6 +143,7 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
+void RC_callback_async_drain_loop_c(volatile int *done_flag);
 static void RC_callback_finalizer(SEXP ext);
 static void RC_callback_ptr_finalizer(SEXP ext);
 SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
@@ -1393,6 +1394,19 @@ int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
 }
 
 /**
+ * Drain pending async callbacks in a polling loop until *done_flag != 0.
+ * Delegates to RC_platform_async_drain_loop().
+ * This is the TCC-visible entry point; the platform layer does the real work.
+ * @param done_flag Pointer to a volatile int that the worker sets to non-zero
+ *                  when it finishes.
+ */
+void RC_callback_async_drain_loop_c(volatile int *done_flag) {
+    /* Lazy-init: covers deserialized objects used in a fresh session. */
+    RC_platform_async_init();
+    RC_platform_async_drain_loop(done_flag);
+}
+
+/**
  * Finalizer for callback tokens.
  * Ownership: releases preserved R function and frees token when refs hit 0.
  * Allocation: frees heap memory (malloc/free).
@@ -1876,11 +1890,13 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     tcc_add_symbol(s, "RC_callback_async_schedule_sync_c",
                    RC_callback_async_schedule_sync_c);
     /* Expose drain to TCC-compiled C code so the main-thread C side can
-       service pending async callbacks without returning to R.  This lets
-       C orchestration loops drain the queue directly:
-         while (!worker_done()) { RC_callback_async_drain_c(); usleep(1000); }
-    */
+       service pending async callbacks without returning to R. */
     tcc_add_symbol(s, "RC_callback_async_drain_c",
                    RC_platform_async_drain);
+    /* Drain loop: blocks main thread servicing callbacks via select()/
+       MsgWaitForMultipleObjects until *done_flag becomes non-zero.
+       Zero latency wakeup, zero CPU waste while idle. */
+    tcc_add_symbol(s, "RC_callback_async_drain_loop_c",
+                   RC_callback_async_drain_loop_c);
     return R_NilValue;
 }

@@ -266,11 +266,29 @@ void RC_platform_async_drain(void) {
     }
 }
 
+/**
+ * Drain pending callbacks in a polling loop until *done_flag != 0.
+ * Uses MsgWaitForMultipleObjects to wake instantly on PostMessage with
+ * zero CPU waste while idle.  100 ms timeout for R_CheckUserInterrupt.
+ * Must be called from the main R thread only.
+ */
+void RC_platform_async_drain_loop(volatile int *done_flag) {
+    if (!done_flag || !cbq_initialized) return;
+    while (!*done_flag) {
+        RC_platform_async_drain();
+        if (*done_flag) break;
+        MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_POSTMESSAGE);
+        R_CheckUserInterrupt();
+    }
+    RC_platform_async_drain();
+}
+
 #else  /* POSIX */
 
 #include <R_ext/eventloop.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/select.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -535,6 +553,35 @@ int RC_platform_async_schedule_sync(int id, int n_args, const cb_arg_t *args,
  * Used by tcc_callback_async_drain() for testing / manual flush.
  */
 void RC_platform_async_drain(void) {
+    cbq_drain_tasks();
+}
+
+/**
+ * Drain pending callbacks in a polling loop until *done_flag != 0.
+ * Uses select() on the callback pipe for instant wakeup when a worker
+ * enqueues a callback — zero latency, zero CPU waste while idle.
+ * 100 ms select timeout for periodic R_CheckUserInterrupt (Ctrl+C).
+ * Must be called from the main R thread only.
+ */
+void RC_platform_async_drain_loop(volatile int *done_flag) {
+    if (!done_flag || !cbq_initialized) return;
+    while (!*done_flag) {
+        /* Drain pipe bytes and execute pending tasks. */
+        char buf[32];
+        while (read(cbq_pipe[0], buf, sizeof(buf)) > 0) {}
+        cbq_drain_tasks();
+        if (*done_flag) break;
+        /* Block until the pipe has data or 100 ms timeout. */
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(cbq_pipe[0], &rfds);
+        struct timeval tv = { .tv_sec = 0, .tv_usec = 100000 };
+        select(cbq_pipe[0] + 1, &rfds, NULL, NULL, &tv);
+        R_CheckUserInterrupt();
+    }
+    /* Final drain to flush any stragglers. */
+    char buf[32];
+    while (read(cbq_pipe[0], buf, sizeof(buf)) > 0) {}
     cbq_drain_tasks();
 }
 

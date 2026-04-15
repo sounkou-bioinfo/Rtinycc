@@ -10,6 +10,13 @@ tcc_callback_async_drain()
 NULL (invisible)
 }
 \description{
-This is mainly useful for tests; normally callbacks are executed by the
-event loop once scheduled.
+Execute any pending async callbacks immediately on the main R thread.
+Normally callbacks fire automatically via R's event loop (input
+handler on POSIX, message pump on Windows), so explicit draining is
+only needed in test harnesses or tight batch loops that never yield
+to R's event loop.
+}
+\details{
+TCC-compiled C code running on the main thread can call
+\code{RC_callback_async_drain_c()} directly instead of returning to R.
 }

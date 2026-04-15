@@ -1097,7 +1097,9 @@ generate_ffi_code <- function(
           "  union { int i; double d; void* p; } v;",
           "} cb_result_t;",
           "",
-          "int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);"
+          "int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);",
+          "/* Drain loop: services callbacks via select()/MsgWait until *done_flag != 0. */",
+          "void RC_callback_async_drain_loop_c(volatile int *done_flag);"
         )
       } else {
         NULL
