@@ -62,9 +62,6 @@
 - [`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
   : Drain the async callback queue
 
-- [`tcc_callback_async_enable()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_enable.md)
-  : Enable async callback dispatcher (main-thread queue)
-
 - [`tcc_callback_async_schedule()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_schedule.md)
   : Schedule a callback to run on the main thread
 

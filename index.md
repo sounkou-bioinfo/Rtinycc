@@ -705,16 +705,11 @@ tcc_callback_close(cb_err)
 For thread-safe scheduling from worker threads, use
 `callback_async:<signature>` in
 [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md).
-Call
-[`tcc_callback_async_enable()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_enable.md)
-once before use.
+The async callback queue is initialized automatically at package load.
 
 **Void return (fire-and-forget):** the callback is enqueued from any
 thread and executed on the main R thread automatically — on Windows via
 R’s message pump, on Linux/macOS via R’s event loop `addInputHandler`.
-No manual drain is required when R is idle at the console.
-[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
-is available for an explicit flush (useful in tests or batch scenarios).
 
 **Non-void return (synchronous):** the worker thread blocks until the
 main R thread executes the callback and returns the real result.
@@ -722,9 +717,24 @@ Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
 `u8`, `u16`), floating-point (`double`, `float`), `bool`/`logical`, and
 pointer (`void*`, `T*`).
 
-``` r
-tcc_callback_async_enable()
+**C-level drain:** TCC-compiled C code running on the main thread can
+call `RC_callback_async_drain_c()` in a loop to service pending
+callbacks without returning to R. This is the recommended pattern when C
+orchestrates the whole workflow (spawn workers, drain, join):
 
+``` c
+// Main-thread C code compiled by tcc_source()
+while (!worker_done()) {
+    RC_callback_async_drain_c();  /* service any pending callbacks */
+    usleep(1000);
+}
+```
+
+[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
+is the R-level equivalent, useful only in test harnesses that need
+deterministic flushing.
+
+``` r
 # Fire-and-forget: void callback accumulated from 100 worker threads
 hits <- 0L
 cb_async <- tcc_callback(
@@ -809,15 +819,11 @@ tcc_callback_close(cb_async)
 For non-void return, the worker thread blocks on the sync trampoline
 until the main R thread executes the callback and returns the real
 value. At the interactive console this happens automatically via R’s
-event loop. In batch contexts (including
-[`rmarkdown::render`](https://pkgs.rstudio.com/rmarkdown/reference/render.html))
-you must start the worker without blocking R, call
-[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md),
-then join:
+event loop. In batch or non-interactive contexts, use
+[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
+(R) or `RC_callback_async_drain_c()` (C) to service the queue:
 
 ``` r
-tcc_callback_async_enable()
-
 cb_triple <- tcc_callback(
   function(x) x * 3L,
   signature = "int (*)(int)"
