@@ -183,7 +183,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6409669abfa0"
+#> [1] "0x5e8b568ade60"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -214,11 +214,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x640966901ee0>
+#> <pointer: 0x5e8b543abe20>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x64096880a190>
+#> <pointer: 0x5e8b53ae6530>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x640966901ee0>
+#> <pointer: 0x5e8b543abe20>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -291,8 +291,8 @@ timings_ffi_scalar
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      22.9ms   23.8ms      41.5   53.98KB     45.4
-#> 2 Rbuiltin    525.8µs  550.9µs    1718.     9.05KB     32.0
+#> 1 Rtinycc      24.3ms   25.2ms      39.3   53.98KB     43.3
+#> 2 Rbuiltin    530.1µs  572.6µs    1651.     9.05KB     30.0
 
 # For performance-sensitive code, move the loop into C and operate on arrays
 # (one call over many elements instead of many scalar calls).
@@ -323,8 +323,8 @@ timings_ffi_vec
 #> # A tibble: 2 × 6
 #>   expression        min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec     173µs    255µs     3878.     391KB     28.2
-#> 2 Rbuiltin_vec    169µs    320µs     3129.     781KB     47.9
+#> 1 Rtinycc_vec     176µs    273µs     3689.     391KB     26.0
+#> 2 Rbuiltin_vec    180µs    343µs     2993.     781KB     46.0
 ```
 
 ### Variadic calls (e.g. `Rprintf` style)
@@ -490,7 +490,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @64096aa2e5b0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5e8b58a0a398 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -506,7 +506,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @64096aa2e5b0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5e8b58a0a398 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -534,15 +534,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x640967aee5a0>
+#> <pointer: 0x5e8b568b2760>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x640967aee5a0>
+#> <pointer: 0x5e8b568b2760>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x640965e441c0>
+#> <pointer: 0x5e8b57d2b1b0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x640965e441c0>
+#> <pointer: 0x5e8b57d2b1b0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -587,9 +587,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x640967f1c590>
+#> <pointer: 0x5e8b57cb88a0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x640967f1c590>
+#> <pointer: 0x5e8b57cb88a0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -717,19 +717,20 @@ Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
 `u8`, `u16`), floating-point (`double`, `float`), `bool`/`logical`, and
 pointer (`void*`, `T*`).
 
-**C-level drain:** TCC-compiled C code running on the main thread can
-call `RC_callback_async_drain_c()` in a loop to service pending
-callbacks without returning to R. This is the recommended pattern when C
-orchestrates the whole workflow (spawn workers, drain, join):
+**C-level drain loop:** TCC-compiled C code running on the main thread
+can call `RC_callback_async_drain_loop_c(&done_flag)` to service pending
+callbacks until a worker sets `done_flag` to non-zero. Uses `select()`
+(POSIX) or `MsgWaitForMultipleObjects` (Windows) for instant wakeup —
+zero latency, zero CPU waste:
 
 ``` c
 // Main-thread C code compiled by tcc_source()
-while (!worker_done()) {
-    RC_callback_async_drain_c();  /* service any pending callbacks */
-    usleep(1000);
-}
+RC_callback_async_drain_loop_c(&task.done);   /* blocks until worker finishes */
 ```
 
+For fire-and-forget (void) callbacks, `RC_callback_async_drain_c()`
+flushes all pending callbacks in a single shot — useful after joining
+worker threads.
 [`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
 is the R-level equivalent, useful only in test harnesses that need
 deterministic flushing.
@@ -764,6 +765,7 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   if (!th) return -2;
   WaitForSingleObject(th, INFINITE);
   CloseHandle(th);
+  RC_callback_async_drain_c();
   return 0;
 }
 #else
@@ -790,6 +792,7 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
     }
   }
   for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
+  RC_callback_async_drain_c();
   return 0;
 }
 #endif
@@ -810,7 +813,6 @@ ffi_async <- ffi_async |>
   tcc_compile()
 
 rc <- ffi_async$spawn_async(cb_async, tcc_callback_ptr(cb_async), 2L)
-tcc_callback_async_drain()
 hits
 #> [1] 200
 tcc_callback_close(cb_async)
@@ -818,10 +820,10 @@ tcc_callback_close(cb_async)
 
 For non-void return, the worker thread blocks on the sync trampoline
 until the main R thread executes the callback and returns the real
-value. At the interactive console this happens automatically via R’s
-event loop. In batch or non-interactive contexts, use
-[`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
-(R) or `RC_callback_async_drain_c()` (C) to service the queue:
+value. Call `RC_callback_async_drain_loop_c(&done_flag)` in your C code
+to service the queue until the worker finishes — it uses `select()`
+(POSIX) or `MsgWaitForMultipleObjects` (Windows) for instant wakeup with
+zero CPU waste:
 
 ``` r
 cb_triple <- tcc_callback(
@@ -829,9 +831,10 @@ cb_triple <- tcc_callback(
   signature = "int (*)(int)"
 )
 
-# C helpers: start worker (returns immediately), poll done flag, join and
-# retrieve result.  The worker calls the callback_async:int trampoline which
-# blocks until the main thread drains.
+# C helper: spawn worker, drain callbacks until done, join and return result.
+# The worker calls the callback_async:int trampoline which blocks until the
+# main thread drains.  RC_callback_async_drain_loop_c handles the drain loop
+# internally — no R-level polling needed.
 code_sync <- '
 #ifdef _WIN32
 #include <windows.h>
@@ -846,14 +849,13 @@ static DWORD WINAPI iworker(LPVOID p) {
   t->done = 1;
   return 0;
 }
-int  start_worker(int (*cb)(void*,int), void* ctx, int x) {
+int run_worker(int (*cb)(void*,int), void* ctx, int x) {
   g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -1; g_it.done = 0;
   g_ith = CreateThread(NULL, 0, iworker, &g_it, 0, NULL);
-  return g_ith ? 0 : -1;
-}
-int  worker_done(void)  { return g_it.done; }
-int  join_worker(void)  {
-  if (g_ith) { WaitForSingleObject(g_ith, INFINITE); CloseHandle(g_ith); g_ith = NULL; }
+  if (!g_ith) return -1;
+  RC_callback_async_drain_loop_c(&g_it.done);
+  WaitForSingleObject(g_ith, INFINITE);
+  CloseHandle(g_ith); g_ith = NULL;
   return g_it.out;
 }
 #else
@@ -869,12 +871,13 @@ static void* iworker(void* p) {
   t->done = 1;
   return NULL;
 }
-int  start_worker(int (*cb)(void*,int), void* ctx, int x) {
+int run_worker(int (*cb)(void*,int), void* ctx, int x) {
   g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -1; g_it.done = 0;
-  return pthread_create(&g_ith, NULL, iworker, &g_it) == 0 ? 0 : -1;
+  if (pthread_create(&g_ith, NULL, iworker, &g_it) != 0) return -1;
+  RC_callback_async_drain_loop_c(&g_it.done);
+  pthread_join(g_ith, NULL);
+  return g_it.out;
 }
-int  worker_done(void) { return g_it.done; }
-int  join_worker(void) { pthread_join(g_ith, NULL); return g_it.out; }
 #endif
 '
 
@@ -885,20 +888,11 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_sync <- ffi_sync |>
   tcc_bind(
-    start_worker = list(args = list("callback_async:int(int)", "ptr", "i32"), returns = "i32"),
-    worker_done  = list(args = list(), returns = "i32"),
-    join_worker  = list(args = list(), returns = "i32")
+    run_worker = list(args = list("callback_async:int(int)", "ptr", "i32"), returns = "i32")
   ) |>
   tcc_compile()
 
-ffi_sync$start_worker(cb_triple, tcc_callback_ptr(cb_triple), 7L)
-#> [1] 0
-for (i in seq_len(50)) {
-  tcc_callback_async_drain()
-  if (ffi_sync$worker_done() != 0L) break
-  Sys.sleep(0.01)
-}
-ffi_sync$join_worker()  # 21
+ffi_sync$run_worker(cb_triple, tcc_callback_ptr(cb_triple), 7L)  # 21
 #> [1] 21
 tcc_callback_close(cb_triple)
 ```
@@ -1023,7 +1017,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x640965d7e180>
+#> <pointer: 0x5e8b5617a000>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1140,11 +1134,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 48.02ms 48.02ms      20.8    6.33MB     20.8     1     1       48ms
-#> 2 vroom_df_…  6.09ms  6.37ms     157.     1.22MB      0       2     0     12.7ms
-#> 3 vroom_df_…  6.28ms   6.3ms     159.     2.44MB      0       2     0     12.6ms
-#> 4 c_read_df  20.89ms 21.11ms      47.4    1.22MB      0       2     0     42.2ms
-#> 5 io_uring_… 19.76ms 19.84ms      50.4    1.22MB      0       2     0     39.7ms
+#> 1 read_tabl… 49.15ms 49.15ms      20.3    6.33MB     20.3     1     1     49.1ms
+#> 2 vroom_df_…  6.23ms  6.48ms     154.     1.22MB      0       2     0       13ms
+#> 3 vroom_df_…  6.45ms  6.91ms     145.     2.44MB      0       2     0     13.8ms
+#> 4 c_read_df  20.87ms 21.09ms      47.4    1.22MB      0       2     0     42.2ms
+#> 5 io_uring_… 21.08ms 21.19ms      47.2    1.22MB      0       2     0     42.4ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1412,10 +1406,10 @@ print(timings)
 #> # A tibble: 4 × 13
 #>   expression            min   median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc
 #>   <bch:expr>       <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl> <int> <dbl>
-#> 1 R                586.67ms 587.59ms      1.70     782KB    0.567     3     1
-#> 2 quickr             3.53ms   3.98ms    249.       782KB    8.47    471    16
-#> 3 Rtinycc_quick     16.61ms  16.77ms     59.5      782KB    1.54    116     3
-#> 4 Rtinycc_manual_c  53.95ms  56.32ms     17.8      782KB    0.509    35     1
+#> 1 R                 608.5ms 614.97ms      1.63     782KB    0.543     3     1
+#> 2 quickr              3.7ms   4.26ms    235.       782KB    7.40    444    14
+#> 3 Rtinycc_quick      16.7ms  17.25ms     57.7      782KB    2.08    111     4
+#> 4 Rtinycc_manual_c   55.6ms  57.84ms     17.3      782KB    0.509    34     1
 #> # ℹ 5 more variables: total_time <bch:tm>, result <list>, memory <list>,
 #> #   time <list>, gc <list>
 plot(timings, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1466,9 +1460,9 @@ timings_roll_mean
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R               76.9ms  86.47ms      8.87     124MB    16.8 
-#> 2 quickr           2.9ms   4.08ms    249.       781KB     3.00
-#> 3 Rtinycc_quick   15.8ms  16.25ms     61.2      781KB     0
+#> 1 R              78.36ms  86.26ms      8.74     124MB    16.5 
+#> 2 quickr          3.02ms   4.15ms    244.       781KB     2.99
+#> 3 Rtinycc_quick  15.97ms  16.39ms     60.9      781KB     0
 
 timings_roll_mean$expression <- factor(names(timings_roll_mean$expression), rev(names(timings_roll_mean$expression)))
 plot(timings_roll_mean, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
@@ -1574,9 +1568,9 @@ timings_viterbi
 #> # A tibble: 3 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R               10.7ms   11.2ms      89.5     119KB     1.01
-#> 2 quickr         193.9µs  199.2µs    5002.        2KB     0   
-#> 3 Rtinycc_quick    589µs  636.3µs    1560.      158KB     4.06
+#> 1 R               10.5ms   11.2ms      89.6     119KB     1.01
+#> 2 quickr         194.3µs  199.7µs    4950.        2KB     0   
+#> 3 Rtinycc_quick  588.5µs  651.9µs    1521.      158KB     4.05
 plot(timings_viterbi, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1657,8 +1651,8 @@ timings_ols
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R              330.1µs    365µs     1979.    39.8KB     1.01
-#> 2 Rtinycc_quick   46.6µs   48.7µs    19185.    39.8KB    11.5
+#> 1 R              224.2µs  344.1µs     2939.    39.8KB     2.02
+#> 2 Rtinycc_quick   46.1µs   49.4µs    19147.    39.8KB    11.5
 plot(timings_ols, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1713,8 +1707,8 @@ timings_bypass
 #> # A tibble: 2 × 6
 #>   expression         min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R                391µs    410µs     2420.     422KB     14.7
-#> 2 Rtinycc_quick    288µs    301µs     3288.     235KB     12.4
+#> 1 R                405µs    431µs     2313.     422KB     14.7
+#> 2 Rtinycc_quick    288µs    311µs     3249.     235KB     12.4
 plot(timings_bypass, type = "boxplot") + bench::scale_x_bench_time(base = NULL)
 ```
 
@@ -1801,11 +1795,11 @@ ffi <- tcc_ffi() |>
 o <- ffi$struct_outer_new()
 i <- ffi$struct_inner_new()
 ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x64096e7f7c90>
+#> <pointer: 0x5e8b6d2a4430>
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x64097b8b5d20>
+#> <pointer: 0x5e8b585bc2e0>
 
 # Read it back through indirection
 ffi$struct_outer_in_addr(o) |>
@@ -1836,9 +1830,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x6409711efe90>
+#> <pointer: 0x5e8b709ac350>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x6409711efe90>
+#> <pointer: 0x5e8b709ac350>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
