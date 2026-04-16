@@ -11,6 +11,7 @@ knitr::opts_chunk$set(
   fig.path = "man/figures/README-",
   out.width = "100%"
 )
+has_callme <- requireNamespace("callme", quietly = TRUE)
 ```
 
 # Rtinycc
@@ -207,45 +208,170 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$add(5L, 3L)
-
-# Compare to the R builtin `+` in a tight loop.
-# Each FFI call boxes the return value into a fresh SEXP.
-# In tight scalar loops this creates allocation churn, so GC pressure is expected.
-# R's allocator for SEXP arguments/returns at the R<->C boundary.
-r_p <- sample(10000)
-timings_ffi_scalar <- bench::mark(
-  Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
-  Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
-)
-timings_ffi_scalar
-
-# For performance-sensitive code, move the loop into C and operate on arrays
-# (one call over many elements instead of many scalar calls).
-ffi_vec <- tcc_ffi() |>
-  tcc_source(" \
-    void add_vec(int32_t* x, int32_t n) {\
-      for (int32_t i = 0; i < n; i++) x[i] = x[i] + 1;\
-    }\
-  ") |>
-  tcc_bind(add_vec = list(args = list("integer_array", "i32"), returns = "void")) |>
-  tcc_compile()
-
-x <- sample(100000)
-timings_ffi_vec <- bench::mark(
-  Rtinycc_vec = {
-    y <- as.integer(x)
-    y <- y + 0L
-    ffi_vec$add_vec(y, length(y))
-    y
-  },
-  Rbuiltin_vec = {
-    y <- as.integer(x)
-    y <- y + 0L
-    y + 1L
-  }
-)
-timings_ffi_vec
 ```
+
+### Compilation and call overhead
+
+To get a rough sense of cost, it is useful to compare `Rtinycc` against a
+conventional `.Call()` shared-library workflow. The snippet below uses the
+[`callme`](https://cran.r-project.org/package=callme) package as the baseline.
+
+Two tiny cases are enough to make the main point:
+
+- `noop()`: takes nothing and returns nothing
+- `rand_unif(n)`: generates `n` random doubles
+
+The `callme` version allocates the final R vector directly with the R C API. The
+`Rtinycc` version returns a native `double*`, and the generated wrapper copies
+that buffer into an R vector. That second case therefore includes the cost of
+the copy.
+
+```{r ffi-overhead, eval = has_callme}
+rtinycc_code <- '
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <Rmath.h>
+  #include <stdlib.h>
+
+  void noop(void) {}
+
+  double* rand_unif(int n) {
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+    if (n == 0) {
+      return (double*) malloc(sizeof(double));
+    }
+
+    double *out = (double*) malloc(sizeof(double) * (size_t) n);
+    if (!out) {
+      Rf_error("malloc failed");
+    }
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+    return out;
+  }
+'
+
+callme_code <- '
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <Rmath.h>
+
+  SEXP noop(void) {
+    return R_NilValue;
+  }
+
+  SEXP rand_unif(SEXP n_) {
+    int n = asInteger(n_);
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    SEXP out = PROTECT(allocVector(REALSXP, n));
+    double *ptr = REAL(out);
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      ptr[i] = unif_rand();
+    }
+    PutRNGstate();
+
+    UNPROTECT(1);
+    return out;
+  }
+'
+
+build_rtinycc_module <- function() {
+  tcc_ffi() |>
+    tcc_source(rtinycc_code) |>
+    tcc_bind(
+      noop = list(args = list(), returns = "void"),
+      rand_unif = list(
+        args = list("i32"),
+        returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
+      )
+    ) |>
+    tcc_compile()
+}
+
+build_callme_module <- function() {
+  callme::compile(callme_code, env = NULL, verbosity = 0)
+}
+
+median_elapsed <- function(expr, times = 3L) {
+  expr <- substitute(expr)
+  env <- parent.frame()
+  stats::median(replicate(
+    times,
+    {
+      gc()
+      t0 <- proc.time()[["elapsed"]]
+      eval(expr, envir = env)
+      proc.time()[["elapsed"]] - t0
+    }
+  ))
+}
+
+run_noop <- function(fun, n) {
+  for (i in seq_len(n)) {
+    fun()
+  }
+  invisible(NULL)
+}
+
+compile_times <- data.frame(
+  implementation = c("Rtinycc", "callme"),
+  milliseconds = round(c(
+    median_elapsed(build_rtinycc_module(), times = 2L),
+    median_elapsed(build_callme_module(), times = 2L)
+  ) * 1000, 1)
+)
+
+rt_mod <- build_rtinycc_module()
+cm_mod <- build_callme_module()
+
+n_noop <- 50000L
+noop_times <- data.frame(
+  implementation = c("Rtinycc", "callme"),
+  ns_per_call = round(c(
+    median_elapsed(run_noop(rt_mod$noop, n_noop), times = 3L),
+    median_elapsed(run_noop(cm_mod$noop, n_noop), times = 3L)
+  ) / n_noop * 1e9, 1)
+)
+
+rand_times <- data.frame(
+  implementation = c("Rtinycc", "callme"),
+  us_per_call_n1 = round(c(
+    median_elapsed(for (i in seq_len(5000L)) rt_mod$rand_unif(1L), times = 3L),
+    median_elapsed(for (i in seq_len(5000L)) cm_mod$rand_unif(1L), times = 3L)
+  ) / 5000L * 1e6, 1),
+  us_per_call_n4096 = round(c(
+    median_elapsed(for (i in seq_len(300L)) rt_mod$rand_unif(4096L), times = 3L),
+    median_elapsed(for (i in seq_len(300L)) cm_mod$rand_unif(4096L), times = 3L)
+  ) / 300L * 1e6, 1)
+)
+
+compile_times
+noop_times
+rand_times
+```
+
+The usual pattern is:
+
+- `Rtinycc` compiles tiny modules much faster because it stays in-process
+- a regular `.Call()` module has lower minimal call overhead
+- when `Rtinycc` returns a native buffer that must be copied into an R vector,
+  that copy is measurable
+
+For performance-sensitive paths, the main mitigation is to move more work into
+each call. One large array-oriented call is usually a much better fit than many
+tiny scalar crossings. The full benchmark discussion is in the
+`Compilation and Call Overhead` vignette.
 
 
 
@@ -501,7 +627,7 @@ ffi$global_counter_get()
 
 ### Callbacks
 
-R functions can be registered as C function pointers via `tcc_callback()` and passed to compiled code. Specify a `callback:<signature>` argument in `tcc_bind()` so the trampoline is generated automatically. Always close callbacks when done.
+R functions can be registered as C function pointers via `tcc_callback()` and passed to compiled code. Specify a `callback:<signature>` argument in `tcc_bind()` so the trampoline is generated automatically. Call `tcc_callback_close()` when you want deterministic invalidation and earlier release of the preserved R function.
 
 ```{r callback-example}
 cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
@@ -528,7 +654,7 @@ tcc_callback_close(cb)
 
 ### Callback errors
 
-If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate default (0 for numeric, `FALSE` for logical, `NULL` for pointer). This prevents C code from seeing an unwound stack.
+If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate sentinel instead of unwinding through C. In practice this means NA-like numeric or integer values, `NA` logical, `NA` string, or a null external pointer depending on the declared return type.
 
 ```{r callback-error}
 cb_err <- tcc_callback(
