@@ -77,14 +77,14 @@ ptr_ref <- tcc_malloc(ptr_size)
 target <- tcc_malloc(4)
 
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x55e489b01e40>
+#> <pointer: 0x560845a0f860>
 tcc_ptr_addr(tcc_data_ptr(ptr_ref))
-#> [1] "94440117340256"
+#> [1] "94593544663632"
 tcc_ptr_addr(target)
-#> [1] "94440117340256"
+#> [1] "94593544663632"
 
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x55e489b01e40>
+#> <pointer: 0x560845a0f860>
 tcc_ptr_is_null(tcc_data_ptr(ptr_ref))
 #> [1] TRUE
 

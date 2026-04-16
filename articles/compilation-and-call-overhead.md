@@ -159,7 +159,36 @@ build_rtinycc_module <- function() {
 }
 
 build_callme_module <- function() {
-  callme::compile(callme_code, env = NULL, verbosity = 0)
+  before <- names(getLoadedDLLs())
+  mod <- callme::compile(callme_code, env = NULL, verbosity = 0)
+  dlls <- getLoadedDLLs()
+  new_names <- setdiff(names(dlls), before)
+  new_names <- new_names[startsWith(new_names, "callme_")]
+  attr(mod, "dll_paths") <- unname(vapply(
+    dlls[new_names],
+    function(x) x[["path"]],
+    character(1)
+  ))
+  mod
+}
+
+cleanup_callme_module <- function(mod) {
+  dll_paths <- rev(unique(attr(mod, "dll_paths", exact = TRUE)))
+  if (is.null(dll_paths) || !length(dll_paths)) {
+    return(invisible(NULL))
+  }
+  for (dll_path in dll_paths) {
+    if (is.character(dll_path) && nzchar(dll_path) && file.exists(dll_path)) {
+      try(dyn.unload(dll_path), silent = TRUE)
+    }
+  }
+  invisible(NULL)
+}
+
+build_and_cleanup_callme_module <- function() {
+  mod <- build_callme_module()
+  on.exit(cleanup_callme_module(mod), add = TRUE)
+  invisible(NULL)
 }
 
 median_elapsed <- function(expr, times = 3L) {
@@ -240,17 +269,6 @@ has_bench
 #> [1] TRUE
 ```
 
-``` r
-run_overhead_benchmarks
-#> [1] FALSE
-```
-
-The timed chunks are opt-in and only run when
-`RTINYCC_RUN_BENCHMARKS=true` is set in the environment. This keeps
-`R CMD check` and CRAN-style vignette rebuilds focused on reproducible
-documentation rather than on timing-sensitive subprocess benchmarks that
-shell out to a system compiler.
-
 ## Compilation Latency
 
 This measures module build time, not call time.
@@ -260,12 +278,15 @@ compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   seconds = c(
     median_elapsed(build_rtinycc_module(), times = 3L),
-    median_elapsed(build_callme_module(), times = 3L)
+    median_elapsed(build_and_cleanup_callme_module(), times = 3L)
   )
 )
 
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
+#>   implementation seconds milliseconds
+#> 1        Rtinycc   0.019           19
+#> 2         callme   0.181          181
 ```
 
 The expected pattern is:
@@ -387,20 +408,28 @@ on call overhead above a plain
 [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point.
 
 ``` r
-rt_mod <- build_rtinycc_module()
-cm_mod <- build_callme_module()
+local({
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
 
-n_noop <- 1000L
+  n_noop <- 1000L
 
-noop_bench <- bench::mark(
-  Rtinycc = run_noop(rt_mod$noop, n_noop),
-  callme = run_noop(cm_mod$noop, n_noop),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
-noop_bench
+  noop_bench <- bench::mark(
+    Rtinycc = run_noop(rt_mod$noop, n_noop),
+    callme = run_noop(cm_mod$noop, n_noop),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+  noop_bench
+})
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc      1.24ms   1.26ms      793.    21.9KB        0
+#> 2 callme     465.05µs 472.87µs     2116.        0B        0
 ```
 
 Interpretation:
@@ -421,16 +450,27 @@ an existing R numeric vector instead of returning a newly allocated
 result.
 
 ``` r
-fill_bench_n4096 <- bench::mark(
-  Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
-  callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+local({
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
 
-fill_bench_n4096
+  fill_bench_n4096 <- bench::mark(
+    Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
+    callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+
+  fill_bench_n4096
+})
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc      2.79ms   4.02ms      246.    3.15MB     12.3
+#> 2 callme       1.99ms   2.12ms      431.    3.13MB     21.6
 ```
 
 Interpretation:
@@ -452,26 +492,37 @@ differs:
 We time both a tiny and a larger return size.
 
 ``` r
-rand_bench_n1 <- bench::mark(
-  Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
-  callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+local({
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
 
-rand_bench_n4096 <- bench::mark(
-  Rtinycc = run_rand(rt_mod$rand_unif, 4096L, 100L),
-  callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+  rand_bench_n1 <- bench::mark(
+    Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
+    callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
 
-rand_bench_n1
-rand_bench_n4096
+  rand_bench_n4096 <- bench::mark(
+    Rtinycc = run_rand(rt_mod$rand_unif, 4096L, 100L),
+    callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+
+  rand_bench_n1
+  rand_bench_n4096
+})
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc       9.8ms  14.62ms      74.0    3.13MB     3.70
+#> 2 callme       1.81ms   3.08ms     305.     3.13MB    15.3
 ```
 
 The usual pattern is:
