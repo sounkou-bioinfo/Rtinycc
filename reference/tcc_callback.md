@@ -52,3 +52,9 @@ pointers. Lengths must be supplied separately if needed.
 The return type may be any scalar type supported by the FFI mappings
 (e.g., `i32`, `f64`, `bool`, `cstring`), or `SEXP` to return an R object
 directly.
+
+Callback lifetime: callbacks are eventually released by finalizers and
+package unload. Call
+[`tcc_callback_close()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_close.md)
+when you want deterministic invalidation and earlier release of the
+preserved R function.

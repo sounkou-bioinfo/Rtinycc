@@ -1598,3 +1598,11 @@ GPL-3
 - [`tcc_write_u8()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_write_u8.md)
   : Write an unsigned 8-bit integer
 
+# Articles
+
+### All vignettes
+
+- [FFI Objects, Structs, and
+  Callbacks](https://sounkou-bioinfo.github.io/Rtinycc/articles/ffi-objects-and-callbacks.md):
+- [Getting Started with
+  Rtinycc](https://sounkou-bioinfo.github.io/Rtinycc/articles/getting-started.md):

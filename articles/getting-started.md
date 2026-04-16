@@ -1,0 +1,102 @@
+# Getting Started with Rtinycc
+
+`Rtinycc` bundles TinyCC and exposes two layers:
+
+- low-level helpers for working with the bundled compiler and `libtcc`
+- a higher-level FFI interface for compiling small C fragments into
+  callable R functions
+
+The package is designed around explicit data conversion. You declare the
+C signature you want, `Rtinycc` generates the wrapper code, and the
+compiled object exposes ordinary R-callable functions.
+
+## Toolchain Paths
+
+The bundled TinyCC installation is discoverable from R:
+
+``` r
+tcc_path()
+#> [1] "/home/runner/work/_temp/Library/Rtinycc/tinycc/bin/tcc"
+tcc_include_paths()
+#> [1] "/home/runner/work/_temp/Library/Rtinycc/tinycc/include"        
+#> [2] "/home/runner/work/_temp/Library/Rtinycc/tinycc/lib/tcc/include"
+tcc_lib_paths()
+#> [1] "/home/runner/work/_temp/Library/Rtinycc/tinycc/lib/tcc"
+#> [2] "/home/runner/work/_temp/Library/Rtinycc/tinycc/lib"
+```
+
+These helpers are useful when you need to inspect the bundled toolchain
+or bridge `Rtinycc` with other build logic.
+
+## A Minimal FFI Example
+
+The usual entry point is
+[`tcc_ffi()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ffi.md).
+You add C source, declare the function signatures you want to expose,
+and compile once:
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    static double affine(double x, double slope, double intercept) {
+      return slope * x + intercept;
+    }
+    "
+  ) |>
+  tcc_bind(
+    affine = list(
+      args = list("f64", "f64", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+ffi$affine(2, 3, 4)
+#> [1] 10
+```
+
+The wrapper takes care of converting R numerics to `double` and
+converting the C return value back to an R scalar.
+
+## Managing Globals
+
+You can also expose C globals through generated getter and setter
+helpers:
+
+``` r
+ffi_globals <- tcc_ffi() |>
+  tcc_source(
+    "
+    int shared_counter = 1;
+
+    void bump_counter(void) {
+      shared_counter += 1;
+    }
+    "
+  ) |>
+  tcc_bind(
+    bump_counter = list(args = list(), returns = "void")
+  ) |>
+  tcc_global("shared_counter", "i32") |>
+  tcc_compile()
+
+ffi_globals$global_shared_counter_get()
+#> [1] 1
+ffi_globals$bump_counter()
+#> NULL
+ffi_globals$global_shared_counter_get()
+#> [1] 2
+```
+
+This pattern is useful for wrapping small stateful C helpers without
+dropping to the lower-level `libtcc` API.
+
+## When to Use `tcc_link()`
+
+[`tcc_compile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.md)
+is for source you provide directly.
+[`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
+is for binding to functions that already exist in a shared library. The
+high-level binding format is the same, so you can move between generated
+code and linked code without changing the R-side calling convention.
