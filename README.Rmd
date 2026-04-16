@@ -12,6 +12,7 @@ knitr::opts_chunk$set(
   out.width = "100%"
 )
 has_callme <- requireNamespace("callme", quietly = TRUE)
+has_bench <- requireNamespace("bench", quietly = TRUE)
 ```
 
 # Rtinycc
@@ -215,18 +216,28 @@ ffi$add(5L, 3L)
 To get a rough sense of cost, it is useful to compare `Rtinycc` against a
 conventional `.Call()` shared-library workflow. The snippet below uses the
 [`callme`](https://cran.r-project.org/package=callme) package as the baseline.
+That means `callme` is compiling through `R CMD SHLIB` with the platform
+compiler toolchain (`gcc`/`clang` on the usual Unix-like targets), so better
+steady-state optimization than TinyCC is expected.
 
-Two tiny cases are enough to make the main point:
+Three small cases are enough to make the main point:
 
 - `noop()`: takes nothing and returns nothing
+- `fill_rand(out, n)`: fills a caller-provided numeric vector in place
 - `rand_unif(n)`: generates `n` random doubles
 
-The `callme` version allocates the final R vector directly with the R C API. The
-`Rtinycc` version returns a native `double*`, and the generated wrapper copies
-that buffer into an R vector. That second case therefore includes the cost of
-the copy.
+The `fill_rand()` case is the fairer array-oriented comparison:
 
-```{r ffi-overhead, eval = has_callme}
+- `Rtinycc` uses the `numeric_array` input path and borrows the backing R buffer
+- `callme` writes into `REAL(vec)` directly
+
+The `rand_unif()` case then isolates the extra copy path:
+
+- `callme` allocates the final R vector directly with the R C API
+- `Rtinycc` returns a native `double*`, and the generated wrapper copies that
+  buffer into an R vector
+
+```{r ffi-overhead, eval = has_callme && has_bench}
 rtinycc_code <- '
   #include <R.h>
   #include <Rinternals.h>
@@ -234,6 +245,18 @@ rtinycc_code <- '
   #include <stdlib.h>
 
   void noop(void) {}
+
+  void fill_rand(double* out, int n) {
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+  }
 
   double* rand_unif(int n) {
     if (n < 0) {
@@ -266,6 +289,30 @@ callme_code <- '
     return R_NilValue;
   }
 
+  SEXP fill_rand(SEXP out_, SEXP n_) {
+    int n = asInteger(n_);
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    if (TYPEOF(out_) != REALSXP) {
+      Rf_error("out must be a numeric vector");
+    }
+
+    if (XLENGTH(out_) < n) {
+      Rf_error("out is shorter than n");
+    }
+
+    double *out = REAL(out_);
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+
+    return out_;
+  }
+
   SEXP rand_unif(SEXP n_) {
     int n = asInteger(n_);
     if (n < 0) {
@@ -291,6 +338,7 @@ build_rtinycc_module <- function() {
     tcc_source(rtinycc_code) |>
     tcc_bind(
       noop = list(args = list(), returns = "void"),
+      fill_rand = list(args = list("numeric_array", "i32"), returns = "void"),
       rand_unif = list(
         args = list("i32"),
         returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
@@ -324,6 +372,47 @@ run_noop <- function(fun, n) {
   invisible(NULL)
 }
 
+run_rand <- function(fun, n, reps) {
+  for (i in seq_len(reps)) {
+    invisible(fun(n))
+  }
+  invisible(NULL)
+}
+
+run_fill <- function(fun, n, reps) {
+  for (i in seq_len(reps)) {
+    out <- numeric(n)
+    invisible(fun(out, n))
+  }
+  invisible(NULL)
+}
+
+rtinycc_recipe <- tcc_ffi() |>
+  tcc_source(rtinycc_code) |>
+  tcc_bind(
+    noop = list(args = list(), returns = "void"),
+    fill_rand = list(args = list("numeric_array", "i32"), returns = "void"),
+    rand_unif = list(
+      args = list("i32"),
+      returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
+    )
+  )
+
+generated_code <- Rtinycc:::generate_ffi_code(
+  symbols = rtinycc_recipe$symbols,
+  headers = rtinycc_recipe$headers,
+  c_code = rtinycc_recipe$c_code,
+  is_external = FALSE,
+  structs = rtinycc_recipe$structs,
+  unions = rtinycc_recipe$unions,
+  enums = rtinycc_recipe$enums,
+  globals = rtinycc_recipe$globals,
+  container_of = rtinycc_recipe$container_of,
+  field_addr = rtinycc_recipe$field_addr,
+  struct_raw_access = rtinycc_recipe$struct_raw_access,
+  introspect = rtinycc_recipe$introspect
+)
+
 compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   milliseconds = round(c(
@@ -335,38 +424,60 @@ compile_times <- data.frame(
 rt_mod <- build_rtinycc_module()
 cm_mod <- build_callme_module()
 
-n_noop <- 50000L
-noop_times <- data.frame(
-  implementation = c("Rtinycc", "callme"),
-  ns_per_call = round(c(
-    median_elapsed(run_noop(rt_mod$noop, n_noop), times = 3L),
-    median_elapsed(run_noop(cm_mod$noop, n_noop), times = 3L)
-  ) / n_noop * 1e9, 1)
+n_noop <- 1000L
+noop_bench <- bench::mark(
+  Rtinycc = run_noop(rt_mod$noop, n_noop),
+  callme = run_noop(cm_mod$noop, n_noop),
+  iterations = 20,
+  check = FALSE,
+  memory = TRUE,
+  filter_gc = FALSE
 )
 
-rand_times <- data.frame(
-  implementation = c("Rtinycc", "callme"),
-  us_per_call_n1 = round(c(
-    median_elapsed(for (i in seq_len(5000L)) rt_mod$rand_unif(1L), times = 3L),
-    median_elapsed(for (i in seq_len(5000L)) cm_mod$rand_unif(1L), times = 3L)
-  ) / 5000L * 1e6, 1),
-  us_per_call_n4096 = round(c(
-    median_elapsed(for (i in seq_len(300L)) rt_mod$rand_unif(4096L), times = 3L),
-    median_elapsed(for (i in seq_len(300L)) cm_mod$rand_unif(4096L), times = 3L)
-  ) / 300L * 1e6, 1)
+rand_bench_n1 <- bench::mark(
+  Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
+  callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
+  iterations = 20,
+  check = FALSE,
+  memory = TRUE,
+  filter_gc = FALSE
+)
+
+rand_bench_n4096 <- bench::mark(
+  Rtinycc = run_rand(rt_mod$rand_unif, 4096L, 100L),
+  callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
+  iterations = 20,
+  check = FALSE,
+  memory = TRUE,
+  filter_gc = FALSE
+)
+
+fill_bench_n4096 <- bench::mark(
+  Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
+  callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
+  iterations = 20,
+  check = FALSE,
+  memory = TRUE,
+  filter_gc = FALSE
 )
 
 compile_times
-noop_times
-rand_times
+cat(generated_code)
+noop_bench
+fill_bench_n4096
+rand_bench_n1
+rand_bench_n4096
 ```
 
 The usual pattern is:
 
 - `Rtinycc` compiles tiny modules much faster because it stays in-process
 - a regular `.Call()` module has lower minimal call overhead
+- the zero-copy `fill_rand()` case is the fairer vector benchmark for `Rtinycc`
 - when `Rtinycc` returns a native buffer that must be copied into an R vector,
   that copy is measurable
+- part of the runtime gap is also expected backend quality: `callme` is using
+  the system compiler, while `Rtinycc` is using TinyCC
 
 For performance-sensitive paths, the main mitigation is to move more work into
 each call. One large array-oriented call is usually a much better fit than many

@@ -19,6 +19,9 @@ front-end. That work belongs in the downstream `tccquickr` repo.
 
 - Never manually write `.Rd` files.
 - Generate `.Rd` files from source documentation using `roxygen2`.
+- `NEWS.md`, release notes, and other user-facing changelog text must stay
+  user-oriented. Do not reference `AGENTS.md` or other internal agent/contributor
+  guidance from user-facing documentation.
 
 ## Protection And Copying Model
 

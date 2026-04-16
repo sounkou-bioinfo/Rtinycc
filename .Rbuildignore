@@ -15,6 +15,7 @@ src/*.o
 ^\.vscode$
 ^Makefile$
 ^AGENTS.md$
+^CLAUDE.md$
 ^config\.log$
 ^copilot-instructions\.md$
 ^GCF_.*$

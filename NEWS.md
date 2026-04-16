@@ -1,6 +1,4 @@
-# Rtinycc 0.0.3.9000 (development version)
-
-- `tcc_quick` for transpiling some `R` functions to `C` and compile them in memory
+# Rtinycc 0.1.0
 
 - Add variadic FFI support in `tcc_bind()` with both legacy typed-tail mode (`variadic = TRUE`, `varargs`) and bounded dynamic-tail mode (`variadic = TRUE`, `varargs_types`, `varargs_min`, `varargs_max`).
 
@@ -10,9 +8,11 @@
 
 - Treesitter helper examples are now wrapped in `\dontrun{}` and the treesitter helper tests are skipped on Windows to avoid process-exit crashes related to `treesitter.c` cleanup.
 
-- Experimental Windows support. The package now builds and passes R CMD check on Windows (Rtools 4.5 / UCRT). The build system compiles TinyCC from source via `configure.win`, dynamically links `libtcc.dll`, and generates `.def` files for R API symbol resolution. CRT heap consistency is ensured by redirecting TCC's default msvcrt linkage to `ucrtbase.dll`. Async callbacks and `fork()`-based parallelism remain Unix-only. See `AGENTS.md` for implementation details.
+- Experimental Windows support. The package now builds and passes `R CMD check` on Windows (Rtools 4.5 / UCRT). The Windows build compiles TinyCC from source, dynamically links `libtcc.dll`, and includes the compatibility glue needed for R's UCRT runtime. Async callbacks and `fork()`-based parallelism remain Unix-only.
 
 - `RC_invoke_callback_id()` replaces the `snprintf`-based callback dispatch. The trampoline now passes the callback token as an integer directly, eliminating a round-trip through string conversion that relied on `snprintf` (unavailable as a direct symbol on Windows/UCRT).
+
+- Add new user documentation for core FFI semantics, internals, external library linking, treesitter-based header parsing, and benchmark-oriented comparisons against a conventional `.Call()` workflow.
 
 # Rtinycc 0.0.3
 
