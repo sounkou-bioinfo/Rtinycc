@@ -210,7 +210,7 @@
 </ul></div>
 <div class="section level2">
 <h2 id="roadmap-declare-based-rc-jit-tcc_quick">Roadmap: declare-based R→C JIT (<code>tcc_quick</code>)<a class="anchor" aria-label="anchor" href="#roadmap-declare-based-rc-jit-tcc_quick"></a></h2>
-<p><code><a href="reference/tcc_quick.html">tcc_quick()</a></code> compiles a <code><a href="https://rdrr.io/r/base/declare.html" class="external-link">declare()</a></code>-annotated R subset to C via TinyCC, with optional fallback to R C API calls when an operation is not yet lowered directly. See <code>docs/ir_design.md</code> for the full IR design and SSA roadmap.</p>
+<p><code>tcc_quick()</code> compiles a <code><a href="https://rdrr.io/r/base/declare.html" class="external-link">declare()</a></code>-annotated R subset to C via TinyCC, with optional fallback to R C API calls when an operation is not yet lowered directly. See <code>docs/ir_design.md</code> for the full IR design and SSA roadmap.</p>
 <div class="section level3">
 <h3 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a></h3>
 <p>The compiler pipeline draws on four reference implementations in <code>.sync/</code>:</p>
@@ -267,7 +267,7 @@
 <div class="section level3">
 <h3 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h3>
 <ul><li>
-<code><a href="reference/tcc_quick.html">tcc_quick()</a></code> API is exported and working.</li>
+<code>tcc_quick()</code> API is exported and working.</li>
 <li>Declaration parsing (<code>R/tcc_quick_declare.R</code>), codetools-style walker (<code>R/tcc_quick_walk.R</code>), lowering (<code>R/tcc_quick_lower.R</code>), codegen (<code>R/tcc_quick_codegen.R</code>), and caching (<code>R/tcc_quick_cache.R</code>) are all implemented.</li>
 <li>IR node constructors are in <code>R/tcc_ir.R</code>; R→C function registry in <code>R/tcc_ir_registry.R</code> (39 entries covering math.h and Rmath.h).</li>
 <li>Registry-driven dispatch: the lowerer checks <code>tcc_ir_c_api_registry()</code> for any function call and emits <code>call1</code> (arity-1) or <code>call2</code> (arity-2) IR nodes. Adding a new math function requires one registry entry, no dispatcher or codegen changes.</li>

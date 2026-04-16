@@ -304,11 +304,11 @@ uses `fork()` which does not exist on Windows. Fork-related tests in
 
 ## Roadmap: declare-based R→C JIT (`tcc_quick`)
 
-[`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
-compiles a [`declare()`](https://rdrr.io/r/base/declare.html)-annotated
-R subset to C via TinyCC, with optional fallback to R C API calls when
-an operation is not yet lowered directly. See `docs/ir_design.md` for
-the full IR design and SSA roadmap.
+`tcc_quick()` compiles a
+[`declare()`](https://rdrr.io/r/base/declare.html)-annotated R subset to
+C via TinyCC, with optional fallback to R C API calls when an operation
+is not yet lowered directly. See `docs/ir_design.md` for the full IR
+design and SSA roadmap.
 
 ### Architecture
 
@@ -368,8 +368,7 @@ Correspondence with SAC:
 
 ### Current state
 
-- [`tcc_quick()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_quick.md)
-  API is exported and working.
+- `tcc_quick()` API is exported and working.
 - Declaration parsing (`R/tcc_quick_declare.R`), codetools-style walker
   (`R/tcc_quick_walk.R`), lowering (`R/tcc_quick_lower.R`), codegen
   (`R/tcc_quick_codegen.R`), and caching (`R/tcc_quick_cache.R`) are all
