@@ -42,4 +42,8 @@ external pointers. Lengths must be supplied separately if needed.
 The return type may be any scalar type supported by the FFI mappings
 (e.g., \code{i32}, \code{f64}, \code{bool}, \code{cstring}), or
 \code{SEXP} to return an R object directly.
+
+Callback lifetime: callbacks are eventually released by finalizers and
+package unload. Call \code{tcc_callback_close()} when you want deterministic
+invalidation and earlier release of the preserved R function.
 }

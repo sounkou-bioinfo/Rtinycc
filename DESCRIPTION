@@ -19,8 +19,11 @@ Depends: R (>= 4.4.0)
 Imports:
     lambda.r
 Suggests:
+    knitr,
+    rmarkdown,
     tinytest,
     treesitter.c (>= 0.0.4)
+VignetteBuilder: knitr
 SystemRequirements: GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -17,10 +17,17 @@ expect_true(is.logical(info$has_rblas) && length(info$has_rblas) == 1L)
 expect_true(is.logical(info$has_rlapack) && length(info$has_rlapack) == 1L)
 expect_true(is.character(info$loaded_dlls))
 
-# Runtime helper should never disagree in the positive direction.
+# Positive detections should be justified by either a loaded DLL name or the
+# runtime library path that R reported.
 if (isTRUE(info$has_rblas)) {
-  expect_true(Rtinycc:::tccq_runtime_library_available("Rblas"))
+  expect_true(
+    any(grepl("Rblas", info$loaded_dlls, ignore.case = TRUE)) ||
+      grepl("Rblas", basename(info$blas_path), ignore.case = TRUE)
+  )
 }
 if (isTRUE(info$has_rlapack)) {
-  expect_true(Rtinycc:::tccq_runtime_library_available("Rlapack"))
+  expect_true(
+    any(grepl("Rlapack", info$loaded_dlls, ignore.case = TRUE)) ||
+      grepl("Rlapack", basename(info$lapack_path), ignore.case = TRUE)
+  )
 }

@@ -33,6 +33,10 @@
 #' (e.g., \code{i32}, \code{f64}, \code{bool}, \code{cstring}), or
 #' \code{SEXP} to return an R object directly.
 #'
+#' Callback lifetime: callbacks are eventually released by finalizers and
+#' package unload. Call `tcc_callback_close()` when you want deterministic
+#' invalidation and earlier release of the preserved R function.
+#'
 #' @param fun An R function to be called from C
 #' @param signature C function signature string (e.g., "double (*)(int, double)")
 #' @param threadsafe Whether to enable thread-safe invocation (experimental)
@@ -70,8 +74,10 @@ tcc_callback <- function(fun, signature, threadsafe = FALSE) {
 
 #' Close/unregister a callback
 #'
-#' Releases the preserved R function reference and cleans up resources.
-#' Must be called when the callback is no longer needed.
+#' Invalidates a callback immediately, releases the preserved R function
+#' reference, and cleans up callback resources as early as possible.
+#' This is recommended for deterministic lifetime management, but callbacks
+#' are also eventually released by finalizers if you simply drop all references.
 #'
 #' @param callback A tcc_callback object returned by tcc_callback()
 #' @return NULL (invisible)
@@ -160,16 +166,10 @@ parse_callback_signature <- function(signature) {
 
   # Pattern: return_type (*)(arg1, arg2, ...)
   # or:      return_type (*name)(arg1, arg2, ...)
-  # or:      return_type (name*)(arg1, arg2, ...)
-
-  # Try to match various signature patterns
-  patterns <- list(
-    # (*name)(args) or (*)(args)
-    "^(.*?)\\s*\\(\\*\\w*\\)\\s*\\(([^)]*)\\)",
-    # (*name) (args) with space
-    "^(.*?)\\s*\\(\\*\\w*\\)\\s+\\(([^)]*)\\)",
-    # Just return type and args: void(int, double)
-    "^(.*?)\\(([^)]*)\\)$"
+  # or:      return_type(arg1, arg2, ...)
+  patterns <- c(
+    "^(.*?)\\s*\\(\\*[^)]*\\)\\s*\\((.*)\\)$",
+    "^(.*?)\\((.*)\\)$"
   )
 
   for (pat in patterns) {
@@ -205,10 +205,32 @@ parse_arg_list <- function(args_str) {
     return(character(0))
   }
 
-  # Simple split by comma - handles most common cases
-  # For complex function pointer arguments, they should use callback type
-  args <- strsplit(args_str, ",")[[1]]
-  args <- trimws(args)
+  chars <- strsplit(args_str, "", fixed = TRUE)[[1]]
+  args <- character(0)
+  current <- character(0)
+  depth_paren <- 0L
+  depth_bracket <- 0L
+
+  for (ch in chars) {
+    if (ch == "," && depth_paren == 0L && depth_bracket == 0L) {
+      args <- c(args, trimws(paste(current, collapse = "")))
+      current <- character(0)
+      next
+    }
+
+    current <- c(current, ch)
+    if (ch == "(") {
+      depth_paren <- depth_paren + 1L
+    } else if (ch == ")") {
+      depth_paren <- max(0L, depth_paren - 1L)
+    } else if (ch == "[") {
+      depth_bracket <- depth_bracket + 1L
+    } else if (ch == "]") {
+      depth_bracket <- max(0L, depth_bracket - 1L)
+    }
+  }
+  args <- c(args, trimws(paste(current, collapse = "")))
+  args <- args[nzchar(args)]
 
   # Remove parameter names (keep only type)
   # e.g., "int x" -> "int", "double* ptr" -> "double*"
@@ -221,18 +243,40 @@ parse_arg_list <- function(args_str) {
     if (grepl("\\(", arg)) {
       result[i] <- "callback"
     } else {
-      # Remove identifier name (last word if it looks like an identifier)
-      # This is a simplification - for complex types we may need more parsing
-      parts <- strsplit(arg, "\\s+")[[1]]
-      if (length(parts) > 1 && !grepl("[*\\[]", parts[length(parts)])) {
-        # Last part looks like an identifier, remove it
-        parts <- parts[-length(parts)]
-      }
-      result[i] <- paste(parts, collapse = " ")
+      result[i] <- strip_callback_arg_name(arg)
     }
   }
 
   result
+}
+
+strip_callback_arg_name <- function(arg) {
+  arg <- trimws(gsub("\\s+", " ", arg))
+  if (!nzchar(arg)) {
+    return(arg)
+  }
+
+  # Pointer declarators often attach the parameter name directly to the last
+  # asterisk, for example `const char *name` or `int **out`.
+  ptr_match <- regexec(
+    "^(.*?)(\\*+)\\s*([A-Za-z_][A-Za-z0-9_]*)$",
+    arg,
+    perl = TRUE
+  )[[1]]
+  if (ptr_match[[1]] != -1) {
+    pieces <- regmatches(arg, list(ptr_match))[[1]]
+    return(trimws(paste0(pieces[[2]], pieces[[3]])))
+  }
+
+  parts <- strsplit(arg, "\\s+")[[1]]
+  if (
+    length(parts) > 1 &&
+      grepl("^[A-Za-z_][A-Za-z0-9_]*$", parts[[length(parts)]])
+  ) {
+    parts <- parts[-length(parts)]
+  }
+
+  trimws(paste(parts, collapse = " "))
 }
 
 # Format signature for display

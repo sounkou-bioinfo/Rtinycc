@@ -661,64 +661,13 @@ tcc_compile <- function(ffi, verbose = FALSE) {
     message("Generated C code:\n", c_code)
   }
 
-  # Create TinyCC state
-  r_lib_paths <- file.path(R.home("lib"))
-  if (.Platform$OS.type == "windows") {
-    # On Windows, R.dll lives in bin/<arch>; TCC needs it for R API symbols
-    r_lib_paths <- c(
-      r_lib_paths,
-      normalizePath(
-        file.path(R.home(), "bin", .Platform$r_arch),
-        winslash = "/",
-        mustWork = FALSE
-      )
-    )
-  }
-  state <- tcc_state(
-    output = ffi$output,
-    include_path = c(
-      tcc_include_paths(),
-      ffi$include_paths,
-      file.path(R.home("include"))
-    ),
-    lib_path = c(tcc_lib_paths(), ffi$lib_paths, r_lib_paths)
+  state <- tcc_ffi_create_state(ffi, output = ffi$output)
+  tcc_ffi_compile_state(
+    state = state,
+    c_code = c_code,
+    libraries = ffi$libraries,
+    target = "FFI bindings"
   )
-
-  if (!is.null(ffi$options) && length(ffi$options) > 0) {
-    rc <- tcc_set_options(state, paste(ffi$options, collapse = " "))
-    if (rc < 0) {
-      stop("Failed to apply TinyCC compiler options", call. = FALSE)
-    }
-  }
-
-  # Add library paths
-  for (lib_path in ffi$lib_paths) {
-    tcc_add_library_path(state, lib_path)
-  }
-
-  # Add libraries
-  for (lib in ffi$libraries) {
-    tcc_add_library(state, lib)
-  }
-
-  # Always link against R's shared library so TCC can resolve
-  # R API symbols (and any symbols R itself exports).
-  tcc_add_library(state, "R")
-
-  # Compile the generated code
-  result <- tcc_compile_string(state, c_code)
-  if (result != 0) {
-    stop("Failed to compile FFI bindings", call. = FALSE)
-  }
-
-  # Register host symbols for macOS compatibility
-  .Call(RC_libtcc_add_host_symbols, state)
-
-  # Relocate
-  result <- tcc_relocate(state)
-  if (result != 0) {
-    stop("Failed to relocate compiled code", call. = FALSE)
-  }
 
   # Create callable object
   compiled <- tcc_compiled_object(
@@ -739,6 +688,65 @@ tcc_compile <- function(ffi, verbose = FALSE) {
   compiled$.ffi <- ffi
 
   compiled
+}
+
+tcc_runtime_library_paths <- function() {
+  paths <- file.path(R.home("lib"))
+  if (.Platform$OS.type == "windows") {
+    # On Windows, R.dll lives in bin/<arch>; TCC needs it for R API symbols.
+    paths <- c(paths, file.path(R.home(), "bin", .Platform$r_arch))
+  }
+  normalizePath(paths, winslash = "/", mustWork = FALSE)
+}
+
+tcc_ffi_create_state <- function(ffi, output = ffi$output) {
+  state <- tcc_state(
+    output = output,
+    include_path = c(
+      tcc_include_paths(),
+      ffi$include_paths,
+      file.path(R.home("include"))
+    ),
+    lib_path = c(
+      tcc_lib_paths(),
+      ffi$lib_paths,
+      tcc_runtime_library_paths()
+    )
+  )
+
+  if (!is.null(ffi$options) && length(ffi$options) > 0) {
+    rc <- tcc_set_options(state, paste(ffi$options, collapse = " "))
+    if (rc < 0) {
+      stop("Failed to apply TinyCC compiler options", call. = FALSE)
+    }
+  }
+
+  state
+}
+
+tcc_ffi_compile_state <- function(state, c_code, libraries, target) {
+  for (lib in libraries) {
+    tcc_add_library(state, lib)
+  }
+
+  # Always link against R's shared library so TCC can resolve
+  # R API symbols (and any symbols R itself exports).
+  tcc_add_library(state, "R")
+
+  result <- tcc_compile_string(state, c_code)
+  if (result != 0) {
+    stop("Failed to compile ", target, call. = FALSE)
+  }
+
+  # Register host symbols for macOS compatibility before relocation.
+  .Call(RC_libtcc_add_host_symbols, state)
+
+  result <- tcc_relocate(state)
+  if (result != 0) {
+    stop("Failed to relocate compiled code for ", target, call. = FALSE)
+  }
+
+  invisible(state)
 }
 
 infer_variadic_arg_type <- function(x, allowed_types) {
@@ -1750,11 +1758,7 @@ tcc_link <- function(
 
   # Add library
   ffi$libraries <- libs
-  if (!is_short_name) {
-    ffi$lib_paths <- c(dirname(path), lib_paths)
-  } else {
-    ffi$lib_paths <- lib_paths
-  }
+  ffi$lib_paths <- lib_paths
   ffi$include_paths <- include_paths
 
   # Process headers
@@ -1821,58 +1825,13 @@ tcc_link <- function(
     message("Generated C code:\n", c_code)
   }
 
-  # Create TinyCC state
-  r_lib_paths <- file.path(R.home("lib"))
-  if (.Platform$OS.type == "windows") {
-    r_lib_paths <- c(
-      r_lib_paths,
-      normalizePath(
-        file.path(R.home(), "bin", .Platform$r_arch),
-        winslash = "/",
-        mustWork = FALSE
-      )
-    )
-  }
-  state <- tcc_state(
-    output = "memory",
-    include_path = c(
-      tcc_include_paths(),
-      ffi$include_paths,
-      file.path(R.home("include"))
-    ),
-    lib_path = c(tcc_lib_paths(), ffi$lib_paths, r_lib_paths)
+  state <- tcc_ffi_create_state(ffi, output = "memory")
+  tcc_ffi_compile_state(
+    state = state,
+    c_code = c_code,
+    libraries = ffi$libraries,
+    target = paste0("FFI bindings for ", basename(path))
   )
-
-  # Add library paths
-  for (lp in ffi$lib_paths) {
-    if (nzchar(lp) > 0 && dir.exists(lp)) {
-      tcc_add_library_path(state, lp)
-    }
-  }
-
-  # Add libraries
-  for (lib in ffi$libraries) {
-    tcc_add_library(state, lib)
-  }
-
-  # Always link against R's shared library so TCC can resolve
-  # R API symbols (and any symbols R itself exports).
-  tcc_add_library(state, "R")
-
-  # Compile the generated code
-  result <- tcc_compile_string(state, c_code)
-  if (result != 0) {
-    stop("Failed to compile FFI bindings for ", basename(path), call. = FALSE)
-  }
-
-  # Register host symbols for macOS compatibility
-  .Call(RC_libtcc_add_host_symbols, state)
-
-  # Relocate
-  result <- tcc_relocate(state)
-  if (result != 0) {
-    stop("Failed to relocate compiled code for ", basename(path), call. = FALSE)
-  }
 
   # Create compiled object
   compiled <- tcc_compiled_object(
