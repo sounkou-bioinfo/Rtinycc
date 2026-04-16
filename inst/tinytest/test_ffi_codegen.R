@@ -48,6 +48,20 @@ expect_true(grepl("if \\(__rtinycc_ret\\) free\\(__rtinycc_ret\\);", rc))
 expect_false(grepl("memcpy\\(REAL\\(out\\), rand_unif\\(arg1\\)", rc))
 expect_false(grepl("free\\(rand_unif\\(arg1\\)\\)", rc))
 
+# Test 3c: Scalar return expressions with warnings/branching are evaluated once
+rc <- Rtinycc:::generate_c_return("next_i64()", "i64")
+expect_true(grepl("int64_t __rtinycc_ret = next_i64\\(\\);", rc))
+expect_false(grepl("next_i64\\(\\).+next_i64\\(\\)", rc))
+
+rc <- Rtinycc:::generate_c_return("next_u64()", "u64")
+expect_true(grepl("uint64_t __rtinycc_ret = next_u64\\(\\);", rc))
+expect_false(grepl("next_u64\\(\\).+next_u64\\(\\)", rc))
+
+rc <- Rtinycc:::generate_c_return("next_str()", "cstring")
+expect_true(grepl("char\\* __rtinycc_ret = next_str\\(\\);", rc))
+expect_true(grepl("mkString\\(__rtinycc_ret\\)", rc))
+expect_false(grepl("next_str\\(\\).+next_str\\(\\)", rc))
+
 # Test 4: Generate full wrapper function
 wrapper <- Rtinycc:::generate_c_wrapper(
   symbol_name = "my_add",

@@ -12,6 +12,10 @@ all: check
 
 rd:
 	R -e 'roxygen2::roxygenize(load_code = "source")'
+vig:
+	R -e "tools::buildVignettes(dir = '.')"
+vig-md:
+	R -e "for (f in Sys.glob('vignettes/*.Rmd')) { out <- sub('\\\\.Rmd$$', '.md', f); rmarkdown::render(f, output_format = rmarkdown::md_document(variant = 'gfm'), output_file = basename(out), output_dir = dirname(out), quiet = FALSE, envir = new.env(parent = globalenv())) }"
 build:  install_deps
 	R CMD build .
 
@@ -46,4 +50,4 @@ test: install
 
 rdm: install
 	R -e "rmarkdown::render('README.Rmd')"
-.PHONY: all rd build check install_deps install clean dev-install dev-test dev-preprocess-test dev-parse-test dev-all-tests
+.PHONY: all rd vig vig-md build check install_deps install clean dev-install dev-test dev-preprocess-test dev-parse-test dev-all-tests

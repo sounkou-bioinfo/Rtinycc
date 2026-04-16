@@ -519,11 +519,11 @@ ffi_return_rule("i64", value_expr) %as%
   {
     sprintf(
       paste(
-        "  if (fabs((double)%s) > 9007199254740992.0) Rf_warning(\"i64 precision loss in R numeric\");",
-        "  return ScalarReal((double)%s);",
+        "  int64_t __rtinycc_ret = %s;",
+        "  if (fabs((double)__rtinycc_ret) > 9007199254740992.0) Rf_warning(\"i64 precision loss in R numeric\");",
+        "  return ScalarReal((double)__rtinycc_ret);",
         sep = "\n"
       ),
-      value_expr,
       value_expr
     )
   }
@@ -547,11 +547,11 @@ ffi_return_rule("u64", value_expr) %as%
   {
     sprintf(
       paste(
-        "  if ((double)%s > 9007199254740992.0) Rf_warning(\"u64 precision loss in R numeric\");",
-        "  return ScalarReal((double)%s);",
+        "  uint64_t __rtinycc_ret = %s;",
+        "  if ((double)__rtinycc_ret > 9007199254740992.0) Rf_warning(\"u64 precision loss in R numeric\");",
+        "  return ScalarReal((double)__rtinycc_ret);",
         sep = "\n"
       ),
-      value_expr,
       value_expr
     )
   }
@@ -575,8 +575,9 @@ ffi_return_rule("cstring", value_expr) %as%
   {
     sprintf(
       paste(
-        "if (%s) {",
-        "    SEXP out = PROTECT(mkString(%s));",
+        "char* __rtinycc_ret = %s;",
+        "if (__rtinycc_ret) {",
+        "    SEXP out = PROTECT(mkString(__rtinycc_ret));",
         "    UNPROTECT(1);",
         "    return out;",
         "} else {",
@@ -584,7 +585,6 @@ ffi_return_rule("cstring", value_expr) %as%
         "}",
         sep = "\n"
       ),
-      value_expr,
       value_expr
     )
   }
