@@ -172,8 +172,8 @@ build_callme_module <- function() {
   mod
 }
 
-cleanup_callme_module <- function(mod) {
-  dll_paths <- rev(unique(attr(mod, "dll_paths", exact = TRUE)))
+unload_callme_dlls <- function(dll_paths) {
+  dll_paths <- rev(unique(dll_paths))
   if (is.null(dll_paths) || !length(dll_paths)) {
     return(invisible(NULL))
   }
@@ -185,10 +185,27 @@ cleanup_callme_module <- function(mod) {
   invisible(NULL)
 }
 
-build_and_cleanup_callme_module <- function() {
+build_and_dispose_callme_module <- function() {
   mod <- build_callme_module()
-  on.exit(cleanup_callme_module(mod), add = TRUE)
+  dll_paths <- attr(mod, "dll_paths", exact = TRUE)
+  rm(mod)
+  gc()
+  unload_callme_dlls(dll_paths)
   invisible(NULL)
+}
+
+with_benchmark_modules <- function(fun) {
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  dll_paths <- attr(cm_mod, "dll_paths", exact = TRUE)
+
+  on.exit({
+    rm(rt_mod, cm_mod)
+    gc()
+    unload_callme_dlls(dll_paths)
+  }, add = TRUE)
+
+  fun(rt_mod, cm_mod)
 }
 
 median_elapsed <- function(expr, times = 3L) {
@@ -278,15 +295,15 @@ compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   seconds = c(
     median_elapsed(build_rtinycc_module(), times = 3L),
-    median_elapsed(build_and_cleanup_callme_module(), times = 3L)
+    median_elapsed(build_and_dispose_callme_module(), times = 3L)
   )
 )
 
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc   0.019           19
-#> 2         callme   0.181          181
+#> 1        Rtinycc   0.016           16
+#> 2         callme   0.215          215
 ```
 
 The expected pattern is:
@@ -408,14 +425,10 @@ on call overhead above a plain
 [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point.
 
 ``` r
-local({
-  rt_mod <- build_rtinycc_module()
-  cm_mod <- build_callme_module()
-  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
-
+noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
   n_noop <- 1000L
 
-  noop_bench <- bench::mark(
+  bench::mark(
     Rtinycc = run_noop(rt_mod$noop, n_noop),
     callme = run_noop(cm_mod$noop, n_noop),
     iterations = 20,
@@ -423,13 +436,14 @@ local({
     memory = TRUE,
     filter_gc = FALSE
   )
-  noop_bench
 })
+
+noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.24ms   1.26ms      793.    21.9KB        0
-#> 2 callme     465.05µs 472.87µs     2116.        0B        0
+#> 1 Rtinycc      1.18ms   1.34ms      762.    21.9KB        0
+#> 2 callme     425.44µs 434.61µs     2283.        0B        0
 ```
 
 Interpretation:
@@ -450,12 +464,8 @@ an existing R numeric vector instead of returning a newly allocated
 result.
 
 ``` r
-local({
-  rt_mod <- build_rtinycc_module()
-  cm_mod <- build_callme_module()
-  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
-
-  fill_bench_n4096 <- bench::mark(
+fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  bench::mark(
     Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
     callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
     iterations = 20,
@@ -463,14 +473,14 @@ local({
     memory = TRUE,
     filter_gc = FALSE
   )
-
-  fill_bench_n4096
 })
+
+fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.79ms   4.02ms      246.    3.15MB     12.3
-#> 2 callme       1.99ms   2.12ms      431.    3.13MB     21.6
+#> 1 Rtinycc      2.62ms   3.54ms      284.    3.15MB     14.2
+#> 2 callme       2.17ms   2.36ms      406.    3.13MB     20.3
 ```
 
 Interpretation:
@@ -492,11 +502,7 @@ differs:
 We time both a tiny and a larger return size.
 
 ``` r
-local({
-  rt_mod <- build_rtinycc_module()
-  cm_mod <- build_callme_module()
-  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
-
+rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
   rand_bench_n1 <- bench::mark(
     Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
     callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
@@ -515,14 +521,21 @@ local({
     filter_gc = FALSE
   )
 
-  rand_bench_n1
-  rand_bench_n4096
+  list(rand_bench_n1 = rand_bench_n1, rand_bench_n4096 = rand_bench_n4096)
 })
+
+rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       9.8ms  14.62ms      74.0    3.13MB     3.70
-#> 2 callme       1.81ms   3.08ms     305.     3.13MB    15.3
+#> 1 Rtinycc      2.12ms   2.16ms      433.    15.4KB     21.7
+#> 2 callme     808.36µs 833.82µs     1177.        0B      0
+rand_results$rand_bench_n4096
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc      9.49ms  12.85ms      83.7    3.13MB     4.19
+#> 2 callme       2.09ms   2.98ms     332.     3.13MB    16.6
 ```
 
 The usual pattern is:

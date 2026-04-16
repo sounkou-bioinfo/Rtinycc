@@ -49,6 +49,7 @@
 <h2 class="pkg-version" data-toc-text="0.1.1" id="rtinycc-011">Rtinycc 0.1.1<a class="anchor" aria-label="anchor" href="#rtinycc-011"></a></h2>
 <ul><li><p>Fix C compiler warnings in the package sources by using strict prototypes for zero-argument routines and explicit initialization for async callback result structs.</p></li>
 <li><p>Remove compiler-specific diagnostic pragmas from the host-symbol registration path so package checks no longer report pragma usage notes.</p></li>
+<li><p>Rework the benchmark documentation so temporary <code>callme</code> DLLs are created, benchmarked, and unloaded within helper scopes. This reduces the risk of Windows vignette-build failures caused by lingering loaded modules.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="rtinycc-010">Rtinycc 0.1.0<a class="anchor" aria-label="anchor" href="#rtinycc-010"></a></h2>

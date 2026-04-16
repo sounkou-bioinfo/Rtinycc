@@ -10,6 +10,11 @@
   registration path so package checks no longer report pragma usage
   notes.
 
+- Rework the benchmark documentation so temporary `callme` DLLs are
+  created, benchmarked, and unloaded within helper scopes. This reduces
+  the risk of Windows vignette-build failures caused by lingering loaded
+  modules.
+
 ## Rtinycc 0.1.0
 
 - Add variadic FFI support in

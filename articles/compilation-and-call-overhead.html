@@ -261,8 +261,8 @@ vector before freeing the original C allocation</li>
 <span>  <span class="va">mod</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="va">cleanup_callme_module</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">mod</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">mod</span>, <span class="st">"dll_paths"</span>, exact <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">unload_callme_dlls</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span> <span class="op">||</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
@@ -274,10 +274,27 @@ vector before freeing the original C allocation</li>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="va">build_and_cleanup_callme_module</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
+<span><span class="va">build_and_dispose_callme_module</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">cleanup_callme_module</span><span class="op">(</span><span class="va">mod</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">mod</span>, <span class="st">"dll_paths"</span>, exact <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">mod</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="fu">unload_callme_dlls</span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">with_benchmark_modules</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fun</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">cm_mod</span>, <span class="st">"dll_paths"</span>, exact <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>    <span class="fu">unload_callme_dlls</span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span></span>
+<span>  <span class="op">}</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu">fun</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
 <span><span class="va">median_elapsed</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">expr</span>, <span class="va">times</span> <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span> <span class="op">{</span></span>
@@ -363,15 +380,15 @@ executable runtime benchmarks below are skipped.</p>
 <span>  implementation <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Rtinycc"</span>, <span class="st">"callme"</span><span class="op">)</span>,</span>
 <span>  seconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span>,</span>
-<span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">build_and_cleanup_callme_module</span><span class="op">(</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span></span>
+<span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">build_and_dispose_callme_module</span><span class="op">(</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">compile_times</span><span class="op">$</span><span class="va">milliseconds</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">compile_times</span><span class="op">$</span><span class="va">seconds</span> <span class="op">*</span> <span class="fl">1000</span>, <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">compile_times</span></span>
 <span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
-<span><span class="co">#&gt; 1        Rtinycc   0.019           19</span></span>
-<span><span class="co">#&gt; 2         callme   0.181          181</span></span></code></pre></div>
+<span><span class="co">#&gt; 1        Rtinycc   0.016           16</span></span>
+<span><span class="co">#&gt; 2         callme   0.215          215</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -498,14 +515,10 @@ input path.</p>
 bound on call overhead above a plain <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> entry
 point.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">cleanup_callme_module</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
+<code class="sourceCode R"><span><span class="va">noop_bench</span> <span class="op">&lt;-</span> <span class="fu">with_benchmark_modules</span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">n_noop</span> <span class="op">&lt;-</span> <span class="fl">1000L</span></span>
 <span></span>
-<span>  <span class="va">noop_bench</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<span>  <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
 <span>    Rtinycc <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
 <span>    callme <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
 <span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
@@ -513,13 +526,14 @@ point.</p>
 <span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
-<span>  <span class="va">noop_bench</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">noop_bench</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.24ms   1.26ms      793.    21.9KB        0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     465.05µs 472.87µs     <span style="text-decoration: underline;">2</span>116.        0B        0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.18ms   1.34ms      762.    21.9KB        0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     425.44µs 434.61µs     <span style="text-decoration: underline;">2</span>283.        0B        0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -542,12 +556,8 @@ copying</li>
 fill an existing R numeric vector instead of returning a newly allocated
 result.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">cleanup_callme_module</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">fill_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">fill_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">with_benchmark_modules</span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
 <span>    Rtinycc <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
 <span>    callme <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
 <span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
@@ -555,14 +565,14 @@ result.</p>
 <span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">fill_bench_n4096</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">fill_bench_n4096</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.79ms   4.02ms      246.    3.15MB     12.3</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.99ms   2.12ms      431.    3.13MB     21.6</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.62ms   3.54ms      284.    3.15MB     14.2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.17ms   2.36ms      406.    3.13MB     20.3</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>both sides now write into ordinary R numeric storage</li>
@@ -586,11 +596,7 @@ into a fresh R vector</li>
 </ul>
 <p>We time both a tiny and a larger return size.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">cleanup_callme_module</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
+<code class="sourceCode R"><span><span class="va">rand_results</span> <span class="op">&lt;-</span> <span class="fu">with_benchmark_modules</span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">rand_bench_n1</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
 <span>    Rtinycc <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
 <span>    callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
@@ -609,14 +615,21 @@ into a fresh R vector</li>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
 <span></span>
-<span>  <span class="va">rand_bench_n1</span></span>
-<span>  <span class="va">rand_bench_n4096</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>rand_bench_n1 <span class="op">=</span> <span class="va">rand_bench_n1</span>, rand_bench_n4096 <span class="op">=</span> <span class="va">rand_bench_n4096</span><span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n1</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc       9.8ms  14.62ms      74.0    3.13MB     3.70</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.81ms   3.08ms     305.     3.13MB    15.3</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.12ms   2.16ms      433.    15.4KB     21.7</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     808.36µs 833.82µs     <span style="text-decoration: underline;">1</span>177.        0B      0</span></span>
+<span><span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n4096</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
+<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      9.49ms  12.85ms      83.7    3.13MB     4.19</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.09ms   2.98ms     332.     3.13MB    16.6</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
 <li>for <code>fill_rand()</code>, the comparison is much closer to
