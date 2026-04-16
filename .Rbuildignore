@@ -1,6 +1,8 @@
 ^README\.Rmd$
 ^\.github$
 ^README\.html$
+^\.claude$
+^\.codex$
 src/*so$
 src/*.o
 ^_pkgdown\.yml$
@@ -8,9 +10,15 @@ src/*.o
 ^pkgdown$
 ^LICENSE\.md$
 ^Rtinycc*tar\.gz$
+^Rtinycc\.Rcheck$
 ^tinycc/*$
 ^\.vscode$
 ^Makefile$
 ^AGENTS.md$
+^config\.log$
+^copilot-instructions\.md$
+^GCF_.*$
+^mutations$
+^mutations/.*$
 ^\.sync/.*$
 ^treesiter\.c/.*$

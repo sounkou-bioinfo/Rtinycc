@@ -1,0 +1,22 @@
+Rtinycc bundles TinyCC as a vendored third-party component.
+
+Bundled component: TinyCC
+Upstream repository: https://github.com/TinyCC/tinycc
+Vendored source archive: src/tinycc-34eed88.tar.gz
+Vendored commit: 34eed88a70fc8238cd5b623cc96b8bf0e40392ed
+
+TinyCC copyright:
+- Fabrice Bellard
+- TinyCC contributors and copyright holders
+
+TinyCC licensing:
+- The bundled TinyCC source archive includes a COPYING file stating the
+  GNU Lesser General Public License, version 2.1.
+- See the upstream source archive and repository for the complete TinyCC
+  license text and notices.
+
+Rtinycc package licensing:
+- The Rtinycc package code is licensed under GPL (>= 3), as declared in
+  DESCRIPTION.
+- This notice documents the bundled TinyCC component and does not modify
+  the license terms declared for the Rtinycc package itself.
