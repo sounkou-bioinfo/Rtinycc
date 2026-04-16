@@ -36,6 +36,18 @@ expect_true(grepl("ScalarReal", rc))
 rc <- Rtinycc:::generate_c_return("result", "cstring")
 expect_true(grepl("mkString", rc))
 
+# Test 3b: Array return expressions are evaluated once and reused
+rc <- Rtinycc:::generate_c_return(
+  "rand_unif(arg1)",
+  list(type = "numeric_array", length_arg = 1, free = TRUE),
+  arg_names = c("arg1")
+)
+expect_true(grepl("double\\* __rtinycc_ret = rand_unif\\(arg1\\);", rc))
+expect_true(grepl("memcpy\\(REAL\\(out\\), __rtinycc_ret,", rc))
+expect_true(grepl("if \\(__rtinycc_ret\\) free\\(__rtinycc_ret\\);", rc))
+expect_false(grepl("memcpy\\(REAL\\(out\\), rand_unif\\(arg1\\)", rc))
+expect_false(grepl("free\\(rand_unif\\(arg1\\)\\)", rc))
+
 # Test 4: Generate full wrapper function
 wrapper <- Rtinycc:::generate_c_wrapper(
   symbol_name = "my_add",

@@ -344,7 +344,7 @@ noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
     Rtinycc = run_noop(rt_mod$noop, n_noop),
     callme = run_noop(cm_mod$noop, n_noop),
     iterations = 20,
-    check = FALSE,
+    check = TRUE,
     memory = TRUE,
     filter_gc = FALSE
   )
@@ -359,6 +359,8 @@ Interpretation:
 - the `Rtinycc` path adds the generated wrapper layer and external-pointer call
   target
 - the difference here is mostly boundary overhead, not useful computation
+- `check = TRUE` is appropriate here because both expressions always return
+  `NULL`
 - `bench` also exposes allocation and GC differences directly, which is useful
   for understanding the cost of boxing and copying
 

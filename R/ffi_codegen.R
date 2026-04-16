@@ -33,19 +33,21 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
         stop("length_arg out of range", call. = FALSE)
       }
       len_name <- arg_names[[as.integer(len_arg)]]
+      value_var <- "__rtinycc_ret"
 
       alloc_line <- array_return_alloc_line(base_type, len_name)
-      copy_line <- array_return_copy_line(base_type, len_name, value_expr)
+      copy_line <- array_return_copy_line(base_type, len_name, value_var)
 
       free_line <- if (isTRUE(ffi_type$free)) {
-        sprintf("  if (%s) free(%s);", value_expr, value_expr)
+        sprintf("  if (%s) free(%s);", value_var, value_var)
       } else {
         NULL
       }
 
       return(paste(
         c(
-          sprintf("if (!%s) return R_NilValue;", value_expr),
+          sprintf("%s %s = %s;", type_info$c_type, value_var, value_expr),
+          sprintf("if (!%s) return R_NilValue;", value_var),
           alloc_line,
           copy_line,
           free_line,
