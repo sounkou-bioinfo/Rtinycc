@@ -303,7 +303,7 @@ compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
 #> 1        Rtinycc   0.019           19
-#> 2         callme   0.235          235
+#> 2         callme   0.237          237
 ```
 
 The expected pattern is:
@@ -443,8 +443,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.23ms   1.26ms      792.    21.9KB        0
-#> 2 callme     465.37µs 478.86µs     2075.        0B        0
+#> 1 Rtinycc      1.19ms   1.22ms      816.    21.9KB        0
+#> 2 callme     462.89µs 476.55µs     2088.        0B        0
 ```
 
 Interpretation:
@@ -482,8 +482,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.81ms   4.06ms      261.    3.15MB     13.0
-#> 2 callme       2.07ms   2.11ms      434.    3.13MB     21.7
+#> 1 Rtinycc      2.79ms   3.99ms      265.    3.15MB     13.3
+#> 2 callme       2.06ms   2.08ms      421.    3.13MB     21.1
 ```
 
 Interpretation:
@@ -531,14 +531,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.81ms   1.87ms      498.    15.4KB     24.9
-#> 2 callme        984µs   1.01ms      988.        0B      0
+#> 1 Rtinycc      1.75ms    1.8ms      520.    15.4KB     26.0
+#> 2 callme      940.3µs  958.5µs     1034.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.77ms   2.79ms      336.    3.13MB     16.8
-#> 2 callme       1.79ms   1.81ms      514.    3.13MB     25.7
+#> 1 Rtinycc      2.76ms   2.78ms      338.    3.13MB     16.9
+#> 2 callme       1.79ms    1.8ms      510.    3.13MB     25.5
 ```
 
 The usual pattern is:

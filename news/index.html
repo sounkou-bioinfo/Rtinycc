@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,6 +45,12 @@
       <small>Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.2" id="rtinycc-012">Rtinycc 0.1.2<a class="anchor" aria-label="anchor" href="#rtinycc-012"></a></h2>
+<ul><li><p>Fix FFI return code generation so array, <code>cstring</code>, <code>i64</code>, and <code>u64</code> return expressions are evaluated once before boxing/copying. This avoids repeated calls in generated wrappers for side-effectful expressions.</p></li>
+<li><p>Add regression tests for repeated-evaluation bugs in generated FFI return code.</p></li>
+<li><p>Add <code>make vig</code> and <code>make vig-md</code> development targets for rebuilding HTML package vignettes and Markdown vignette exports.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="rtinycc-011">Rtinycc 0.1.1<a class="anchor" aria-label="anchor" href="#rtinycc-011"></a></h2>
 <ul><li><p>Fix C compiler warnings in the package sources by using strict prototypes for zero-argument routines and explicit initialization for async callback result structs.</p></li>
