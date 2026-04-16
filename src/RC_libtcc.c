@@ -1900,10 +1900,6 @@ static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn)
 
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-#endif
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
@@ -1924,8 +1920,5 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
        Used by generated wrappers so user code never touches drain. */
     RC_tcc_add_function_symbol(s, "RC_callback_async_exec_c",
                                (DL_FUNC) RC_callback_async_exec_c);
-#if defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
     return R_NilValue;
 }
