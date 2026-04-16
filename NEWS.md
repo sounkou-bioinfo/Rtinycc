@@ -7,6 +7,10 @@
 - Remove compiler-specific diagnostic pragmas from the host-symbol registration
   path so package checks no longer report pragma usage notes.
 
+- Rework the benchmark documentation so temporary `callme` DLLs are created,
+  benchmarked, and unloaded within helper scopes. This reduces the risk of
+  Windows vignette-build failures caused by lingering loaded modules.
+
 # Rtinycc 0.1.0
 
 - Add variadic FFI support in `tcc_bind()` with both legacy typed-tail mode (`variadic = TRUE`, `varargs`) and bounded dynamic-tail mode (`variadic = TRUE`, `varargs_types`, `varargs_min`, `varargs_max`).

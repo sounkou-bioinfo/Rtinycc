@@ -185,8 +185,8 @@ build_callme_module <- function() {
   mod
 }
 
-cleanup_callme_module <- function(mod) {
-  dll_paths <- rev(unique(attr(mod, "dll_paths", exact = TRUE)))
+unload_callme_dlls <- function(dll_paths) {
+  dll_paths <- rev(unique(dll_paths))
   if (is.null(dll_paths) || !length(dll_paths)) {
     return(invisible(NULL))
   }
@@ -198,10 +198,27 @@ cleanup_callme_module <- function(mod) {
   invisible(NULL)
 }
 
-build_and_cleanup_callme_module <- function() {
+build_and_dispose_callme_module <- function() {
   mod <- build_callme_module()
-  on.exit(cleanup_callme_module(mod), add = TRUE)
+  dll_paths <- attr(mod, "dll_paths", exact = TRUE)
+  rm(mod)
+  gc()
+  unload_callme_dlls(dll_paths)
   invisible(NULL)
+}
+
+with_benchmark_modules <- function(fun) {
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  dll_paths <- attr(cm_mod, "dll_paths", exact = TRUE)
+
+  on.exit({
+    rm(rt_mod, cm_mod)
+    gc()
+    unload_callme_dlls(dll_paths)
+  }, add = TRUE)
+
+  fun(rt_mod, cm_mod)
 }
 
 median_elapsed <- function(expr, times = 3L) {
@@ -289,7 +306,7 @@ compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   seconds = c(
     median_elapsed(build_rtinycc_module(), times = 3L),
-    median_elapsed(build_and_cleanup_callme_module(), times = 3L)
+    median_elapsed(build_and_dispose_callme_module(), times = 3L)
   )
 )
 
@@ -320,14 +337,10 @@ This is the smallest useful call path. It approximates the lower bound on call
 overhead above a plain `.Call()` entry point.
 
 ```{r, eval = requireNamespace("callme", quietly = TRUE) && requireNamespace("bench", quietly = TRUE)}
-local({
-  rt_mod <- build_rtinycc_module()
-  cm_mod <- build_callme_module()
-  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
-
+noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
   n_noop <- 1000L
 
-  noop_bench <- bench::mark(
+  bench::mark(
     Rtinycc = run_noop(rt_mod$noop, n_noop),
     callme = run_noop(cm_mod$noop, n_noop),
     iterations = 20,
@@ -335,8 +348,9 @@ local({
     memory = TRUE,
     filter_gc = FALSE
   )
-  noop_bench
 })
+
+noop_bench
 ```
 
 Interpretation:
@@ -354,12 +368,8 @@ This is the fairer vector comparison because both implementations fill an
 existing R numeric vector instead of returning a newly allocated result.
 
 ```{r, eval = requireNamespace("callme", quietly = TRUE) && requireNamespace("bench", quietly = TRUE)}
-local({
-  rt_mod <- build_rtinycc_module()
-  cm_mod <- build_callme_module()
-  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
-
-  fill_bench_n4096 <- bench::mark(
+fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  bench::mark(
     Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
     callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
     iterations = 20,
@@ -367,9 +377,9 @@ local({
     memory = TRUE,
     filter_gc = FALSE
   )
-
-  fill_bench_n4096
 })
+
+fill_bench_n4096
 ```
 
 Interpretation:
@@ -388,11 +398,7 @@ Here the implementation work is still small, but the return path differs:
 We time both a tiny and a larger return size.
 
 ```{r, eval = requireNamespace("callme", quietly = TRUE) && requireNamespace("bench", quietly = TRUE)}
-local({
-  rt_mod <- build_rtinycc_module()
-  cm_mod <- build_callme_module()
-  on.exit(cleanup_callme_module(cm_mod), add = TRUE)
-
+rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
   rand_bench_n1 <- bench::mark(
     Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
     callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
@@ -411,9 +417,11 @@ local({
     filter_gc = FALSE
   )
 
-  rand_bench_n1
-  rand_bench_n4096
+  list(rand_bench_n1 = rand_bench_n1, rand_bench_n4096 = rand_bench_n4096)
 })
+
+rand_results$rand_bench_n1
+rand_results$rand_bench_n4096
 ```
 
 The usual pattern is:

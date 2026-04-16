@@ -348,7 +348,53 @@ build_rtinycc_module <- function() {
 }
 
 build_callme_module <- function() {
-  callme::compile(callme_code, env = NULL, verbosity = 0)
+  before <- names(getLoadedDLLs())
+  mod <- callme::compile(callme_code, env = NULL, verbosity = 0)
+  dlls <- getLoadedDLLs()
+  new_names <- setdiff(names(dlls), before)
+  new_names <- new_names[startsWith(new_names, "callme_")]
+  attr(mod, "dll_paths") <- unname(vapply(
+    dlls[new_names],
+    function(x) x[["path"]],
+    character(1)
+  ))
+  mod
+}
+
+unload_callme_dlls <- function(dll_paths) {
+  dll_paths <- rev(unique(dll_paths))
+  if (is.null(dll_paths) || !length(dll_paths)) {
+    return(invisible(NULL))
+  }
+  for (dll_path in dll_paths) {
+    if (is.character(dll_path) && nzchar(dll_path) && file.exists(dll_path)) {
+      try(dyn.unload(dll_path), silent = TRUE)
+    }
+  }
+  invisible(NULL)
+}
+
+build_and_dispose_callme_module <- function() {
+  mod <- build_callme_module()
+  dll_paths <- attr(mod, "dll_paths", exact = TRUE)
+  rm(mod)
+  gc()
+  unload_callme_dlls(dll_paths)
+  invisible(NULL)
+}
+
+with_benchmark_modules <- function(fun) {
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  dll_paths <- attr(cm_mod, "dll_paths", exact = TRUE)
+
+  on.exit({
+    rm(rt_mod, cm_mod)
+    gc()
+    unload_callme_dlls(dll_paths)
+  }, add = TRUE)
+
+  fun(rt_mod, cm_mod)
 }
 
 median_elapsed <- function(expr, times = 3L) {
@@ -417,49 +463,57 @@ compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   milliseconds = round(c(
     median_elapsed(build_rtinycc_module(), times = 2L),
-    median_elapsed(build_callme_module(), times = 2L)
+    median_elapsed(build_and_dispose_callme_module(), times = 2L)
   ) * 1000, 1)
 )
 
-rt_mod <- build_rtinycc_module()
-cm_mod <- build_callme_module()
+noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  n_noop <- 1000L
+  bench::mark(
+    Rtinycc = run_noop(rt_mod$noop, n_noop),
+    callme = run_noop(cm_mod$noop, n_noop),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+})
 
-n_noop <- 1000L
-noop_bench <- bench::mark(
-  Rtinycc = run_noop(rt_mod$noop, n_noop),
-  callme = run_noop(cm_mod$noop, n_noop),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  bench::mark(
+    Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
+    callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+})
 
-rand_bench_n1 <- bench::mark(
-  Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
-  callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  rand_bench_n1 <- bench::mark(
+    Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
+    callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
 
-rand_bench_n4096 <- bench::mark(
-  Rtinycc = run_rand(rt_mod$rand_unif, 4096L, 100L),
-  callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+  rand_bench_n4096 <- bench::mark(
+    Rtinycc = run_rand(rt_mod$rand_unif, 4096L, 100L),
+    callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
 
-fill_bench_n4096 <- bench::mark(
-  Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
-  callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
-  iterations = 20,
-  check = FALSE,
-  memory = TRUE,
-  filter_gc = FALSE
-)
+  list(rand_bench_n1 = rand_bench_n1, rand_bench_n4096 = rand_bench_n4096)
+})
+
+rand_bench_n1 <- rand_results$rand_bench_n1
+rand_bench_n4096 <- rand_results$rand_bench_n4096
 
 compile_times
 cat(generated_code)
