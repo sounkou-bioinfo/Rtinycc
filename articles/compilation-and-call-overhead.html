@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -68,7 +68,7 @@
       <h1>Compilation and Call Overhead</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/v0.1.0/vignettes/compilation-and-call-overhead.Rmd" class="external-link"><code>vignettes/compilation-and-call-overhead.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/main/vignettes/compilation-and-call-overhead.Rmd" class="external-link"><code>vignettes/compilation-and-call-overhead.Rmd</code></a></small>
       <div class="d-none name"><code>compilation-and-call-overhead.Rmd</code></div>
     </div>
 
@@ -324,12 +324,20 @@ executable runtime benchmarks below are skipped.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">has_bench</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">run_overhead_benchmarks</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span></code></pre></div>
+<p>The timed chunks are opt-in and only run when
+<code>RTINYCC_RUN_BENCHMARKS=true</code> is set in the environment. This
+keeps <code>R CMD check</code> and CRAN-style vignette rebuilds focused
+on reproducible documentation rather than on timing-sensitive subprocess
+benchmarks that shell out to a system compiler.</p>
 </div>
 <div class="section level2">
 <h2 id="compilation-latency">Compilation Latency<a class="anchor" aria-label="anchor" href="#compilation-latency"></a>
 </h2>
 <p>This measures module build time, not call time.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">compile_times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  implementation <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Rtinycc"</span>, <span class="st">"callme"</span><span class="op">)</span>,</span>
 <span>  seconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -339,10 +347,7 @@ executable runtime benchmarks below are skipped.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">compile_times</span><span class="op">$</span><span class="va">milliseconds</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">compile_times</span><span class="op">$</span><span class="va">seconds</span> <span class="op">*</span> <span class="fl">1000</span>, <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="va">compile_times</span></span>
-<span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
-<span><span class="co">#&gt; 1        Rtinycc   0.019           19</span></span>
-<span><span class="co">#&gt; 2         callme   0.172          172</span></span></code></pre></div>
+<span><span class="va">compile_times</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -363,7 +368,7 @@ particular, the <code>rand_unif()</code> wrapper allocates an R vector,
 then <code>free()</code>s the original buffer. In contrast,
 <code>fill_rand()</code> uses the borrowed <code>numeric_array</code>
 input path.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">generated_code</span><span class="op">)</span></span>
 <span><span class="co">#&gt; /* TinyCC workaround: _Complex not supported */</span></span>
 <span><span class="co">#&gt; #define _Complex</span></span>
@@ -468,7 +473,7 @@ input path.</p>
 <p>This is the smallest useful call path. It approximates the lower
 bound on call overhead above a plain <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> entry
 point.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -482,12 +487,7 @@ point.</p>
 <span>  memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">noop_bench</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.13ms   1.18ms      849.    21.9KB        0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     413.59µs 427.52µs     <span style="text-decoration: underline;">2</span>320.        0B        0</span></span></code></pre></div>
+<span><span class="va">noop_bench</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -509,7 +509,7 @@ copying</li>
 <p>This is the fairer vector comparison because both implementations
 fill an existing R numeric vector instead of returning a newly allocated
 result.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fill_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
 <span>  Rtinycc <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
 <span>  callme <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
@@ -519,12 +519,7 @@ result.</p>
 <span>  filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">fill_bench_n4096</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.84ms   4.49ms      240.    3.15MB     12.0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.02ms   2.05ms      455.    3.13MB     22.7</span></span></code></pre></div>
+<span><span class="va">fill_bench_n4096</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>both sides now write into ordinary R numeric storage</li>
@@ -547,7 +542,7 @@ differs:</p>
 into a fresh R vector</li>
 </ul>
 <p>We time both a tiny and a larger return size.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rand_bench_n1</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
 <span>  Rtinycc <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
 <span>  callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
@@ -567,17 +562,7 @@ into a fresh R vector</li>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">rand_bench_n1</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc       2.2ms   2.26ms      419.    15.4KB     20.9</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme      985.8µs 998.03µs      997.        0B      0</span></span>
-<span><span class="va">rand_bench_n4096</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      9.55ms  15.26ms      73.7    3.13MB     3.69</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.87ms   3.27ms     318.     3.13MB    15.9</span></span></code></pre></div>
+<span><span class="va">rand_bench_n4096</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
 <li>for <code>fill_rand()</code>, the comparison is much closer to

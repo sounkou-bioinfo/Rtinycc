@@ -240,6 +240,17 @@ has_bench
 #> [1] TRUE
 ```
 
+``` r
+run_overhead_benchmarks
+#> [1] FALSE
+```
+
+The timed chunks are opt-in and only run when
+`RTINYCC_RUN_BENCHMARKS=true` is set in the environment. This keeps
+`R CMD check` and CRAN-style vignette rebuilds focused on reproducible
+documentation rather than on timing-sensitive subprocess benchmarks that
+shell out to a system compiler.
+
 ## Compilation Latency
 
 This measures module build time, not call time.
@@ -255,9 +266,6 @@ compile_times <- data.frame(
 
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
-#>   implementation seconds milliseconds
-#> 1        Rtinycc   0.019           19
-#> 2         callme   0.172          172
 ```
 
 The expected pattern is:
@@ -393,11 +401,6 @@ noop_bench <- bench::mark(
   filter_gc = FALSE
 )
 noop_bench
-#> # A tibble: 2 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.13ms   1.18ms      849.    21.9KB        0
-#> 2 callme     413.59µs 427.52µs     2320.        0B        0
 ```
 
 Interpretation:
@@ -428,11 +431,6 @@ fill_bench_n4096 <- bench::mark(
 )
 
 fill_bench_n4096
-#> # A tibble: 2 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.84ms   4.49ms      240.    3.15MB     12.0
-#> 2 callme       2.02ms   2.05ms      455.    3.13MB     22.7
 ```
 
 Interpretation:
@@ -473,17 +471,7 @@ rand_bench_n4096 <- bench::mark(
 )
 
 rand_bench_n1
-#> # A tibble: 2 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       2.2ms   2.26ms      419.    15.4KB     20.9
-#> 2 callme      985.8µs 998.03µs      997.        0B      0
 rand_bench_n4096
-#> # A tibble: 2 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      9.55ms  15.26ms      73.7    3.13MB     3.69
-#> 2 callme       1.87ms   3.27ms     318.     3.13MB    15.9
 ```
 
 The usual pattern is:

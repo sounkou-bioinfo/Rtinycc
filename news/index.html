@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,9 +42,14 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/v0.1.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.1" id="rtinycc-011">Rtinycc 0.1.1<a class="anchor" aria-label="anchor" href="#rtinycc-011"></a></h2>
+<ul><li><p>Fix C compiler warnings in the package sources by using strict prototypes for zero-argument routines and explicit initialization for async callback result structs.</p></li>
+<li><p>Benchmark-oriented comparison chunks are now opt-in via <code>RTINYCC_RUN_BENCHMARKS=true</code> instead of running as part of ordinary vignette rebuilds. This keeps CRAN and CI vignette checks focused on reproducible documentation rather than timing-sensitive subprocess benchmarks.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="rtinycc-010">Rtinycc 0.1.0<a class="anchor" aria-label="anchor" href="#rtinycc-010"></a></h2>
 <ul><li><p>Add variadic FFI support in <code><a href="../reference/tcc_bind.html">tcc_bind()</a></code> with both legacy typed-tail mode (<code>variadic = TRUE</code>, <code>varargs</code>) and bounded dynamic-tail mode (<code>variadic = TRUE</code>, <code>varargs_types</code>, <code>varargs_min</code>, <code>varargs_max</code>).</p></li>

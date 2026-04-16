@@ -1,5 +1,17 @@
 # Changelog
 
+## Rtinycc 0.1.1
+
+- Fix C compiler warnings in the package sources by using strict
+  prototypes for zero-argument routines and explicit initialization for
+  async callback result structs.
+
+- Benchmark-oriented comparison chunks are now opt-in via
+  `RTINYCC_RUN_BENCHMARKS=true` instead of running as part of ordinary
+  vignette rebuilds. This keeps CRAN and CI vignette checks focused on
+  reproducible documentation rather than timing-sensitive subprocess
+  benchmarks.
+
 ## Rtinycc 0.1.0
 
 - Add variadic FFI support in
