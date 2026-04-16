@@ -1,3 +1,15 @@
+# Rtinycc 0.1.2
+
+- Fix FFI return code generation so array, `cstring`, `i64`, and `u64`
+  return expressions are evaluated once before boxing/copying. This avoids
+  repeated calls in generated wrappers for side-effectful expressions.
+
+- Add regression tests for repeated-evaluation bugs in generated FFI return
+  code.
+
+- Add `make vig` and `make vig-md` development targets for rebuilding HTML
+  package vignettes and Markdown vignette exports.
+
 # Rtinycc 0.1.1
 
 - Fix C compiler warnings in the package sources by using strict prototypes for
