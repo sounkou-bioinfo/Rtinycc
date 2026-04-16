@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.3.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -81,8 +81,17 @@
 </ul>
 <p>The comparison target is the <a href="https://cran.r-project.org/package=callme" class="external-link"><code>callme</code></a>
 package, which builds ordinary <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> entry points with
-<code>R CMD SHLIB</code>. That gives us a useful baseline against a
-conventional R C API module.</p>
+<code>R CMD SHLIB</code>. That means it goes through the platform
+compiler toolchain (<code>gcc</code>/<code>clang</code> on the usual
+Unix-like targets), so we should expect stronger optimization than
+TinyCC for steady-state machine code. That does not make the comparison
+useless, but it does mean the runtime results combine two effects:</p>
+<ul>
+<li>direct <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> entry points and direct R C API
+allocation in <code>callme</code>
+</li>
+<li>better backend optimization from the system compiler</li>
+</ul>
 <p>The point is not that the two packages expose identical APIs. They do
 not. Instead, the comparison asks a narrower question:</p>
 <ul>
@@ -93,22 +102,41 @@ layer?</li>
 returned C buffer into an R vector?</li>
 </ul>
 <div class="section level2">
-<h2 id="two-minimal-cases">Two Minimal Cases<a class="anchor" aria-label="anchor" href="#two-minimal-cases"></a>
+<h2 id="three-minimal-cases">Three Minimal Cases<a class="anchor" aria-label="anchor" href="#three-minimal-cases"></a>
 </h2>
-<p>We use two tiny workloads:</p>
+<p>We use three small workloads:</p>
 <ul>
 <li>
 <code>noop()</code>: takes nothing, returns nothing</li>
 <li>
+<code>fill_rand(out, n)</code>: fills a caller-provided numeric
+buffer in place</li>
+<li>
 <code>rand_unif(n)</code>: generates <code>n</code> random
 doubles</li>
 </ul>
-<p>The <code>callme</code> version of <code>rand_unif()</code> allocates
-the final R vector directly with the R C API.</p>
-<p>The <code>Rtinycc</code> version returns a heap-allocated
-<code>double*</code>, and the generated wrapper copies that buffer into
-a fresh R numeric vector before freeing the original C allocation.</p>
-<p>That makes the second case useful for isolating copy overhead.</p>
+<p>The <code>fill_rand()</code> case is the fairer array-oriented
+comparison:</p>
+<ul>
+<li>
+<code>Rtinycc</code> receives a <code>numeric_array</code>, so the
+wrapper borrows the backing <code>REAL()</code> storage of the R vector
+directly</li>
+<li>
+<code>callme</code> takes an R numeric vector and writes into
+<code>REAL(vec)</code> directly</li>
+</ul>
+<p>The <code>rand_unif()</code> case intentionally stresses the extra
+copy path:</p>
+<ul>
+<li>
+<code>callme</code> allocates the final R vector directly with the R
+C API</li>
+<li>
+<code>Rtinycc</code> returns a heap-allocated <code>double*</code>,
+and the generated wrapper copies that buffer into a fresh R numeric
+vector before freeing the original C allocation</li>
+</ul>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rtinycc_code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">  #include &lt;R.h&gt;</span></span>
@@ -117,6 +145,18 @@ a fresh R numeric vector before freeing the original C allocation.</p>
 <span><span class="st">  #include &lt;stdlib.h&gt;</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">  void noop(void) {}</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">  void fill_rand(double* out, int n) {</span></span>
+<span><span class="st">    if (n &lt; 0) {</span></span>
+<span><span class="st">      Rf_error("n must be non-negative");</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    GetRNGstate();</span></span>
+<span><span class="st">    for (int i = 0; i &lt; n; ++i) {</span></span>
+<span><span class="st">      out[i] = unif_rand();</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    PutRNGstate();</span></span>
+<span><span class="st">  }</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">  double* rand_unif(int n) {</span></span>
 <span><span class="st">    if (n &lt; 0) {</span></span>
@@ -149,6 +189,30 @@ a fresh R numeric vector before freeing the original C allocation.</p>
 <span><span class="st">    return R_NilValue;</span></span>
 <span><span class="st">  }</span></span>
 <span><span class="st"></span></span>
+<span><span class="st">  SEXP fill_rand(SEXP out_, SEXP n_) {</span></span>
+<span><span class="st">    int n = asInteger(n_);</span></span>
+<span><span class="st">    if (n &lt; 0) {</span></span>
+<span><span class="st">      Rf_error("n must be non-negative");</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    if (TYPEOF(out_) != REALSXP) {</span></span>
+<span><span class="st">      Rf_error("out must be a numeric vector");</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    if (XLENGTH(out_) &lt; n) {</span></span>
+<span><span class="st">      Rf_error("out is shorter than n");</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    double *out = REAL(out_);</span></span>
+<span><span class="st">    GetRNGstate();</span></span>
+<span><span class="st">    for (int i = 0; i &lt; n; ++i) {</span></span>
+<span><span class="st">      out[i] = unif_rand();</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    PutRNGstate();</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    return out_;</span></span>
+<span><span class="st">  }</span></span>
+<span><span class="st"></span></span>
 <span><span class="st">  SEXP rand_unif(SEXP n_) {</span></span>
 <span><span class="st">    int n = asInteger(n_);</span></span>
 <span><span class="st">    if (n &lt; 0) {</span></span>
@@ -174,6 +238,7 @@ a fresh R numeric vector before freeing the original C allocation.</p>
 <span>    <span class="fu"><a href="../reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">rtinycc_code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>    <span class="fu"><a href="../reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
 <span>      noop <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
+<span>      fill_rand <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"numeric_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
 <span>      rand_unif <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>        args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
 <span>        returns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"numeric_array"</span>, length_arg <span class="op">=</span> <span class="fl">1</span>, free <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -212,7 +277,41 @@ a fresh R numeric vector before freeing the original C allocation.</p>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu">fun</span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">run_fill</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fun</span>, <span class="va">n</span>, <span class="va">reps</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">reps</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu">fun</span><span class="op">(</span><span class="va">out</span>, <span class="va">n</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">rtinycc_recipe</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">rtinycc_code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    noop <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
+<span>    fill_rand <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"numeric_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
+<span>    rand_unif <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>      returns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"numeric_array"</span>, length_arg <span class="op">=</span> <span class="fl">1</span>, free <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span><span class="va">generated_code</span> <span class="op">&lt;-</span> <span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">generate_ffi_code</span><span class="op">(</span></span>
+<span>  symbols <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">symbols</span>,</span>
+<span>  headers <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">headers</span>,</span>
+<span>  c_code <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">c_code</span>,</span>
+<span>  is_external <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  structs <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">structs</span>,</span>
+<span>  unions <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">unions</span>,</span>
+<span>  enums <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">enums</span>,</span>
+<span>  globals <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">globals</span>,</span>
+<span>  container_of <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">container_of</span>,</span>
+<span>  field_addr <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">field_addr</span>,</span>
+<span>  struct_raw_access <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">struct_raw_access</span>,</span>
+<span>  introspect <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">introspect</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="availability">Availability<a class="anchor" aria-label="anchor" href="#availability"></a>
@@ -220,14 +319,17 @@ a fresh R numeric vector before freeing the original C allocation.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">has_callme</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>If this prints <code>FALSE</code>, the executable benchmarks below
-are skipped.</p>
+<p>If <code>callme</code> or <code>bench</code> is unavailable, the
+executable runtime benchmarks below are skipped.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">has_bench</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="compilation-latency">Compilation Latency<a class="anchor" aria-label="anchor" href="#compilation-latency"></a>
 </h2>
 <p>This measures module build time, not call time.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">compile_times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  implementation <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Rtinycc"</span>, <span class="st">"callme"</span><span class="op">)</span>,</span>
 <span>  seconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -239,8 +341,8 @@ are skipped.</p>
 <span><span class="va">compile_times</span><span class="op">$</span><span class="va">milliseconds</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">compile_times</span><span class="op">$</span><span class="va">seconds</span> <span class="op">*</span> <span class="fl">1000</span>, <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">compile_times</span></span>
 <span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
-<span><span class="co">#&gt; 1        Rtinycc   0.024           24</span></span>
-<span><span class="co">#&gt; 2         callme   0.172          172</span></span></code></pre></div>
+<span><span class="co">#&gt; 1        Rtinycc   0.019           19</span></span>
+<span><span class="co">#&gt; 2         callme   0.171          171</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -253,31 +355,139 @@ cost</li>
 </ul>
 </div>
 <div class="section level2">
+<h2 id="generated-wrapper-code">Generated Wrapper Code<a class="anchor" aria-label="anchor" href="#generated-wrapper-code"></a>
+</h2>
+<p>The generated code makes the extra return-path work explicit. In
+particular, the <code>rand_unif()</code> wrapper allocates an R vector,
+<code>memcpy()</code>s the native <code>double*</code> buffer into it,
+then <code>free()</code>s the original buffer. In contrast,
+<code>fill_rand()</code> uses the borrowed <code>numeric_array</code>
+input path.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">generated_code</span><span class="op">)</span></span>
+<span><span class="co">#&gt; /* TinyCC workaround: _Complex not supported */</span></span>
+<span><span class="co">#&gt; #define _Complex</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; #include &lt;R.h&gt;</span></span>
+<span><span class="co">#&gt; #include &lt;Rinternals.h&gt;</span></span>
+<span><span class="co">#&gt; void RC_free_finalizer(SEXP ext);</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; #include &lt;stdint.h&gt;</span></span>
+<span><span class="co">#&gt; #include &lt;stdbool.h&gt;</span></span>
+<span><span class="co">#&gt; #include &lt;stddef.h&gt;</span></span>
+<span><span class="co">#&gt; #include &lt;limits.h&gt;</span></span>
+<span><span class="co">#&gt; #include &lt;math.h&gt;</span></span>
+<span><span class="co">#&gt; #include &lt;string.h&gt;</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; /* User code */</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   #include &lt;R.h&gt;</span></span>
+<span><span class="co">#&gt;   #include &lt;Rinternals.h&gt;</span></span>
+<span><span class="co">#&gt;   #include &lt;Rmath.h&gt;</span></span>
+<span><span class="co">#&gt;   #include &lt;stdlib.h&gt;</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   void noop(void) {}</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   void fill_rand(double* out, int n) {</span></span>
+<span><span class="co">#&gt;     if (n &lt; 0) {</span></span>
+<span><span class="co">#&gt;       Rf_error("n must be non-negative");</span></span>
+<span><span class="co">#&gt;     }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     GetRNGstate();</span></span>
+<span><span class="co">#&gt;     for (int i = 0; i &lt; n; ++i) {</span></span>
+<span><span class="co">#&gt;       out[i] = unif_rand();</span></span>
+<span><span class="co">#&gt;     }</span></span>
+<span><span class="co">#&gt;     PutRNGstate();</span></span>
+<span><span class="co">#&gt;   }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   double* rand_unif(int n) {</span></span>
+<span><span class="co">#&gt;     if (n &lt; 0) {</span></span>
+<span><span class="co">#&gt;       Rf_error("n must be non-negative");</span></span>
+<span><span class="co">#&gt;     }</span></span>
+<span><span class="co">#&gt;     if (n == 0) {</span></span>
+<span><span class="co">#&gt;       return (double*) malloc(sizeof(double));</span></span>
+<span><span class="co">#&gt;     }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     double *out = (double*) malloc(sizeof(double) * (size_t) n);</span></span>
+<span><span class="co">#&gt;     if (!out) {</span></span>
+<span><span class="co">#&gt;       Rf_error("malloc failed");</span></span>
+<span><span class="co">#&gt;     }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     GetRNGstate();</span></span>
+<span><span class="co">#&gt;     for (int i = 0; i &lt; n; ++i) {</span></span>
+<span><span class="co">#&gt;       out[i] = unif_rand();</span></span>
+<span><span class="co">#&gt;     }</span></span>
+<span><span class="co">#&gt;     PutRNGstate();</span></span>
+<span><span class="co">#&gt;     return out;</span></span>
+<span><span class="co">#&gt;   }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; /* R callable wrappers for bound symbols */</span></span>
+<span><span class="co">#&gt; SEXP R_wrap_noop(void) {</span></span>
+<span><span class="co">#&gt;   // No arguments</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   // Call and return</span></span>
+<span><span class="co">#&gt;    noop();</span></span>
+<span><span class="co">#&gt;      return R_NilValue;</span></span>
+<span><span class="co">#&gt; }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; SEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {</span></span>
+<span><span class="co">#&gt;   double* arg1 = REAL(arg1_);</span></span>
+<span><span class="co">#&gt;   int _arg2 = asInteger(arg2_);</span></span>
+<span><span class="co">#&gt;   if (_arg2 == NA_INTEGER) Rf_error("integer value is NA");</span></span>
+<span><span class="co">#&gt;   if (_arg2 &lt; INT32_MIN || _arg2 &gt; INT32_MAX) Rf_error("i32 out of range");</span></span>
+<span><span class="co">#&gt;   int32_t arg2 = (int32_t)_arg2;</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   // Call and return</span></span>
+<span><span class="co">#&gt;    fill_rand(arg1, arg2);</span></span>
+<span><span class="co">#&gt;      return R_NilValue;</span></span>
+<span><span class="co">#&gt; }</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; SEXP R_wrap_rand_unif(SEXP arg1_) {</span></span>
+<span><span class="co">#&gt;   int _arg1 = asInteger(arg1_);</span></span>
+<span><span class="co">#&gt;   if (_arg1 == NA_INTEGER) Rf_error("integer value is NA");</span></span>
+<span><span class="co">#&gt;   if (_arg1 &lt; INT32_MIN || _arg1 &gt; INT32_MAX) Rf_error("i32 out of range");</span></span>
+<span><span class="co">#&gt;   int32_t arg1 = (int32_t)_arg1;</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   // Call and return</span></span>
+<span><span class="co">#&gt;    if (!rand_unif(arg1)) return R_NilValue;</span></span>
+<span><span class="co">#&gt;    SEXP out = PROTECT(allocVector(REALSXP, arg1));</span></span>
+<span><span class="co">#&gt;      if (arg1 &gt; 0) memcpy(REAL(out), rand_unif(arg1), sizeof(double) * arg1);</span></span>
+<span><span class="co">#&gt;      if (rand_unif(arg1)) free(rand_unif(arg1));</span></span>
+<span><span class="co">#&gt;      UNPROTECT(1);</span></span>
+<span><span class="co">#&gt;      return out;</span></span>
+<span><span class="co">#&gt; }</span></span></code></pre></div>
+</div>
+<div class="section level2">
 <h2 id="noop-call-overhead">
 <code>noop()</code> Call Overhead<a class="anchor" aria-label="anchor" href="#noop-call-overhead"></a>
 </h2>
 <p>This is the smallest useful call path. It approximates the lower
 bound on call overhead above a plain <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> entry
 point.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">n_noop</span> <span class="op">&lt;-</span> <span class="fl">50000L</span></span>
+<span><span class="va">n_noop</span> <span class="op">&lt;-</span> <span class="fl">1000L</span></span>
 <span></span>
-<span><span class="va">noop_times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  implementation <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Rtinycc"</span>, <span class="st">"callme"</span><span class="op">)</span>,</span>
-<span>  seconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">run_noop</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span>,</span>
-<span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">run_noop</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
+<span><span class="va">noop_bench</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<span>  Rtinycc <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
+<span>  callme <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
+<span>  iterations <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">noop_times</span><span class="op">$</span><span class="va">ns_per_call</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">noop_times</span><span class="op">$</span><span class="va">seconds</span> <span class="op">/</span> <span class="va">n_noop</span> <span class="op">*</span> <span class="fl">1e9</span>, <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="va">noop_times</span></span>
-<span><span class="co">#&gt;   implementation seconds ns_per_call</span></span>
-<span><span class="co">#&gt; 1        Rtinycc   0.058        1160</span></span>
-<span><span class="co">#&gt; 2         callme   0.020         400</span></span></code></pre></div>
+<span><span class="va">noop_bench</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
+<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.12ms   1.17ms      854.    21.9KB        0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     405.78µs 421.11µs     <span style="text-decoration: underline;">2</span>371.        0B        0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -286,6 +496,41 @@ point.</p>
 external-pointer call target</li>
 <li>the difference here is mostly boundary overhead, not useful
 computation</li>
+<li>
+<code>bench</code> also exposes allocation and GC differences
+directly, which is useful for understanding the cost of boxing and
+copying</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="fill_randout-n-and-zero-copy-arrays">
+<code>fill_rand(out, n)</code> And Zero-Copy Arrays<a class="anchor" aria-label="anchor" href="#fill_randout-n-and-zero-copy-arrays"></a>
+</h2>
+<p>This is the fairer vector comparison because both implementations
+fill an existing R numeric vector instead of returning a newly allocated
+result.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fill_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<span>  Rtinycc <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
+<span>  callme <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
+<span>  iterations <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">fill_bench_n4096</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
+<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.68ms   4.33ms      250.    3.15MB     12.5</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.97ms   1.98ms      471.    3.13MB     23.5</span></span></code></pre></div>
+<p>Interpretation:</p>
+<ul>
+<li>both sides now write into ordinary R numeric storage</li>
+<li>this removes the return-copy penalty from the comparison</li>
+<li>the remaining gap is mostly call boundary overhead plus backend code
+quality</li>
 </ul>
 </div>
 <div class="section level2">
@@ -302,39 +547,41 @@ differs:</p>
 into a fresh R vector</li>
 </ul>
 <p>We time both a tiny and a larger return size.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">rand_specs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">4096L</span><span class="op">)</span>,</span>
-<span>  reps <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5000L</span>, <span class="fl">300L</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">rand_bench_n1</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<span>  Rtinycc <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
+<span>  callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
+<span>  iterations <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">rand_times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span></span>
-<span>  <span class="va">rbind</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">rand_specs</span><span class="op">)</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">n</span> <span class="op">&lt;-</span> <span class="va">rand_specs</span><span class="op">$</span><span class="va">n</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span></span>
-<span>    <span class="va">reps</span> <span class="op">&lt;-</span> <span class="va">rand_specs</span><span class="op">$</span><span class="va">reps</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span></span>
-<span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>      implementation <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Rtinycc"</span>, <span class="st">"callme"</span><span class="op">)</span>,</span>
-<span>      n <span class="op">=</span> <span class="va">n</span>,</span>
-<span>      reps <span class="op">=</span> <span class="va">reps</span>,</span>
-<span>      seconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>        <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="va">n</span>, <span class="va">reps</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span>,</span>
-<span>        <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="va">n</span>, <span class="va">reps</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">}</span><span class="op">)</span></span>
+<span><span class="va">rand_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<span>  Rtinycc <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
+<span>  callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
+<span>  iterations <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">rand_times</span><span class="op">$</span><span class="va">us_per_call</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">rand_times</span><span class="op">$</span><span class="va">seconds</span> <span class="op">/</span> <span class="va">rand_times</span><span class="op">$</span><span class="va">reps</span> <span class="op">*</span> <span class="fl">1e6</span>, <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="va">rand_times</span></span>
-<span><span class="co">#&gt;   implementation    n reps seconds us_per_call</span></span>
-<span><span class="co">#&gt; 1        Rtinycc    1 5000   0.011         2.2</span></span>
-<span><span class="co">#&gt; 2         callme    1 5000   0.005         1.0</span></span>
-<span><span class="co">#&gt; 3        Rtinycc 4096  300   0.042       140.0</span></span>
-<span><span class="co">#&gt; 4         callme 4096  300   0.005        16.7</span></span></code></pre></div>
+<span><span class="va">rand_bench_n1</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
+<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.18ms   2.25ms      419.    15.4KB     21.0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     997.08µs   1.01ms      985.        0B      0</span></span>
+<span><span class="va">rand_bench_n4096</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
+<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      9.18ms  14.51ms      77.6    3.13MB     3.88</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme          2ms   3.22ms     321.     3.13MB    16.0</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
+<li>for <code>fill_rand()</code>, the comparison is much closer to
+<code>Rtinycc</code>’s intended array-oriented usage</li>
 <li>for <code>n = 1</code>, wrapper overhead and return-path mechanics
 dominate</li>
 <li>for larger <code>n</code>, the copy still matters, but more of the
@@ -353,6 +600,9 @@ direct interactive use</li>
 entry point has lower overhead</li>
 <li>when <code>Rtinycc</code> must copy returned buffers into R vectors,
 that copy is real and measurable</li>
+<li>part of the runtime gap is also expected backend quality:
+<code>callme</code> is using the system compiler, while
+<code>Rtinycc</code> is using TinyCC</li>
 <li>the main way to amortize the boundary cost is to do more work per
 call</li>
 </ul>

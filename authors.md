@@ -13,13 +13,13 @@ Source:
 [`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/main/DESCRIPTION)
 
 Toure S (2026). *Rtinycc: Builds the 'TinyCC' CLI and Library for 'C'
-Scripting in 'R'*. R package version 0.0.3.9000,
+Scripting in 'R'*. R package version 0.1.0,
 <https://github.com/sounkou-bioinfo/Rtinycc>.
 
     @Manual{,
       title = {Rtinycc: Builds the 'TinyCC' CLI and Library for 'C' Scripting in 'R'},
       author = {Sounkou Mahamane Toure},
       year = {2026},
-      note = {R package version 0.0.3.9000},
+      note = {R package version 0.1.0},
       url = {https://github.com/sounkou-bioinfo/Rtinycc},
     }
