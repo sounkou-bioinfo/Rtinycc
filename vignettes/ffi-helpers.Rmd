@@ -1,0 +1,102 @@
+---
+title: "FFI Helper APIs"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{FFI Helper APIs}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(Rtinycc)
+```
+
+The helper APIs are the low-level tools you use when a binding needs explicit
+memory management, pointer inspection, or typed reads and writes.
+
+## Allocation and Ownership
+
+The owned-memory helpers are `tcc_malloc()` and `tcc_cstring()`.
+
+```{r}
+buf <- tcc_malloc(16)
+str_ptr <- tcc_cstring("hello")
+
+tcc_ptr_is_owned(buf)
+tcc_ptr_is_owned(str_ptr)
+```
+
+Both return owned external pointers. They can be freed explicitly with
+`tcc_free()` and also carry finalizers.
+
+```{r}
+tcc_free(buf)
+tcc_free(str_ptr)
+```
+
+## Reading and Writing Raw Bytes
+
+```{r}
+buf <- tcc_malloc(8)
+tcc_write_bytes(buf, as.raw(1:8))
+tcc_read_bytes(buf, 8)
+tcc_free(buf)
+```
+
+## Typed Reads and Writes
+
+The helper layer also exposes typed accessors for primitive values at byte
+offsets.
+
+```{r}
+buf <- tcc_malloc(16)
+tcc_write_i32(buf, 0L, 42L)
+tcc_write_f64(buf, 8L, 3.5)
+
+tcc_read_i32(buf, offset = 0L)
+tcc_read_f64(buf, offset = 8L)
+
+tcc_free(buf)
+```
+
+These helpers are useful for manual struct-like layouts, output buffers, or
+pointer-heavy APIs that do not map cleanly onto ordinary R vectors.
+
+## Pointer-to-Pointer Helpers
+
+Some C APIs fill outputs through `T **` or `void **`. `Rtinycc` exposes a small
+set of helpers for that pattern.
+
+```{r}
+ptr_size <- if (!is.null(.Machine$sizeof.pointer)) .Machine$sizeof.pointer else 8L
+ptr_ref <- tcc_malloc(ptr_size)
+target <- tcc_malloc(4)
+
+tcc_ptr_set(ptr_ref, target)
+tcc_ptr_addr(tcc_data_ptr(ptr_ref))
+tcc_ptr_addr(target)
+
+tcc_ptr_set(ptr_ref, tcc_null_ptr())
+tcc_ptr_is_null(tcc_data_ptr(ptr_ref))
+
+tcc_free(target)
+tcc_free(ptr_ref)
+```
+
+`tcc_data_ptr()` returns a borrowed pointer view. It is not an owned allocation.
+
+## C String Helpers
+
+```{r}
+str_ptr <- tcc_cstring("Hello, world")
+tcc_read_cstring(str_ptr)
+tcc_read_cstring(str_ptr, max_bytes = 5)
+tcc_free(str_ptr)
+```
+
+This helper is the safe way to allocate a C-owned NUL-terminated string when
+the callee expects a mutable or longer-lived `char *`.

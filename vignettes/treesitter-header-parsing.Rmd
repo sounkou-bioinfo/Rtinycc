@@ -1,0 +1,144 @@
+---
+title: "Header Parsing with treesitter.c"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Header Parsing with treesitter.c}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(Rtinycc)
+has_treesitter <- requireNamespace("treesitter.c", quietly = TRUE) &&
+  packageVersion("treesitter.c") >= "0.0.4"
+```
+
+`Rtinycc` can build FFI bindings from C declarations instead of requiring every
+signature to be written manually. The parsing layer is provided by the optional
+`treesitter.c` package, while `Rtinycc` is responsible for mapping parsed C
+types into its own FFI type system.
+
+This workflow is useful when:
+
+- you already have a C header snippet
+- you want a first-pass binding specification quickly
+- you want to inspect declarations before deciding what to expose
+
+## Availability
+
+These helpers require the optional `treesitter.c` package.
+
+```{r}
+has_treesitter
+```
+
+If `FALSE`, the parsing functions are unavailable and the executable examples in
+this vignette are skipped.
+
+## Start from a Header Snippet
+
+```{r}
+header <- paste(
+  "double sqrt(double x);",
+  "int add(int a, int b);",
+  "struct point { double x; double y; };",
+  "enum status { OK = 0, ERR = 1 };",
+  sep = "\n"
+)
+```
+
+## Inspect Parsed Functions
+
+The lowest-level helpers return parsed declarations from the header:
+
+```{r, eval = has_treesitter}
+tcc_treesitter_functions(header)
+```
+
+For quick inspection of functions only, `tcc_treesitter_bindings()` converts the
+parsed signatures into `tcc_bind()`-ready specs:
+
+```{r, eval = has_treesitter}
+tcc_treesitter_bindings(header)
+```
+
+## Generate a Working FFI Object
+
+For a fuller workflow, use `tcc_generate_bindings()` on a `tcc_ffi` object that
+already has matching C source attached:
+
+```{r, eval = has_treesitter}
+ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    double sqrt(double x) { return x < 0 ? 0 : x; }
+    int add(int a, int b) { return a + b; }
+    struct point { double x; double y; };
+    enum status { OK = 0, ERR = 1 };
+    "
+  )
+
+ffi <- tcc_generate_bindings(
+  ffi,
+  header,
+  functions = TRUE,
+  structs = TRUE,
+  enums = TRUE,
+  unions = FALSE,
+  globals = FALSE
+)
+
+compiled <- tcc_compile(ffi)
+
+compiled$add(2L, 3L)
+compiled$enum_status_OK()
+```
+
+This keeps the parsing step separate from the actual compilation step, which is
+important when you want to inspect or edit the generated binding plan first.
+
+## Struct Helpers
+
+You can also extract just the generated struct accessors:
+
+```{r, eval = has_treesitter}
+tcc_treesitter_struct_accessors("struct point { double x; double y; };")
+```
+
+That output is what `Rtinycc` feeds into `tcc_struct()` when you ask it to
+generate struct bindings from a header.
+
+## Conservative Type Mapping
+
+The default mapper is intentionally conservative. In particular, pointer types
+are not automatically treated as C strings unless that is semantically safe.
+
+```{r, eval = has_treesitter}
+tcc_map_c_type_to_ffi("int")
+tcc_map_c_type_to_ffi("double")
+tcc_map_c_type_to_ffi("const char *")
+```
+
+If you know a specific API uses `const char *` as a real NUL-terminated string,
+you can override the mapping:
+
+```{r, eval = has_treesitter}
+string_mapper <- function(type) {
+  if (trimws(type) == "const char *") {
+    return("cstring")
+  }
+  tcc_map_c_type_to_ffi(type)
+}
+
+tcc_treesitter_bindings(
+  "int puts(const char *s);",
+  mapper = string_mapper
+)
+```
+
+This is the intended extension point: keep the default mapper strict, then
+relax specific cases where you know the source API contract.

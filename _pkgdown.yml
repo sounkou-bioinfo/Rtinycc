@@ -2,3 +2,21 @@ url: https://sounkou-bioinfo.github.io/Rtinycc/
 template:
   bootstrap: 5
 
+articles:
+  - title: Getting Started
+    navbar: ~
+    contents:
+      - getting-started
+  - title: Core FFI
+    navbar: ~
+    contents:
+      - ffi-types
+      - advanced-ffi-types
+      - ffi-helpers
+      - ffi-boundary-semantics
+  - title: Core Workflows
+    navbar: ~
+    contents:
+      - linking-external-libraries
+      - ffi-objects-and-callbacks
+      - treesitter-header-parsing
