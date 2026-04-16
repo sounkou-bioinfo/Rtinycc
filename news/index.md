@@ -6,6 +6,10 @@
   prototypes for zero-argument routines and explicit initialization for
   async callback result structs.
 
+- Remove compiler-specific diagnostic pragmas from the host-symbol
+  registration path so package checks no longer report pragma usage
+  notes.
+
 - Benchmark-oriented comparison chunks are now opt-in via
   `RTINYCC_RUN_BENCHMARKS=true` instead of running as part of ordinary
   vignette rebuilds. This keeps CRAN and CI vignette checks focused on
