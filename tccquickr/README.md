@@ -20,8 +20,10 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 supporting parser, IR, lowering, and code-generation pipeline.
 
 The package is intentionally scoped as the compiler-front-end
-experiment. It depends on `Rtinycc` for the underlying TinyCC toolchain,
-libtcc runtime, FFI compilation pipeline, and pointer/runtime support.
+experiment. It depends on
+[`Rtinycc`](https://github.com/sounkou-bioinfo/Rtinycc) for the
+underlying TinyCC toolchain, libtcc runtime, FFI compilation pipeline,
+and pointer/runtime support.
 
 ## Scope
 
@@ -32,7 +34,8 @@ libtcc runtime, FFI compilation pipeline, and pointer/runtime support.
 - the internal IR and lowering/codegen helpers
 - transpiler-focused `tinytest` coverage
 
-`Rtinycc` remains responsible for:
+[`Rtinycc`](https://github.com/sounkou-bioinfo/Rtinycc) remains
+responsible for:
 
 - bundled TinyCC build and installation
 - `tcc_ffi()`, `tcc_bind()`, and `tcc_compile()`
@@ -53,10 +56,12 @@ install.packages(
 
 ## Status
 
-This package is experimental. The split from `Rtinycc` is primarily
+This package is experimental. The split from
+[`Rtinycc`](https://github.com/sounkou-bioinfo/Rtinycc) is primarily
 about semantic clarity and package soundness:
 
-- `Rtinycc` should read as the TinyCC/FFI package
+- [`Rtinycc`](https://github.com/sounkou-bioinfo/Rtinycc) should read as
+  the TinyCC/FFI package
 - `tccquickr` should carry the separate R-to-C lowering experiment
 
 ## Development

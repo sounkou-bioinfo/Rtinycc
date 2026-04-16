@@ -20,5 +20,7 @@ src/*.o
 ^GCF_.*$
 ^mutations$
 ^mutations/.*$
+^tccquickr$
+^tccquickr/.*$
 ^\.sync/.*$
 ^treesiter\.c/.*$

@@ -13,7 +13,8 @@ Description: Provides an experimental and intentionally narrow
     declare()-annotated R-to-C lowering pipeline built on top of
     'Rtinycc'. The package contains the parser, IR, lowering, and
     code-generation layers for the tcc_quick prototype while keeping the
-    underlying TinyCC toolchain and FFI runtime in 'Rtinycc'.
+    underlying TinyCC toolchain and FFI runtime in 'Rtinycc'
+    <https://github.com/sounkou-bioinfo/Rtinycc>.
 License: GPL (>= 3)
 Depends: R (>= 4.4.0)
 Imports:
@@ -24,5 +25,5 @@ Suggests:
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-URL: https://github.com/sounkou-bioinfo/tccquickr, https://sounkou-bioinfo.r-universe.dev/tccquickr
+URL: https://github.com/sounkou-bioinfo/tccquickr, https://sounkou-bioinfo.r-universe.dev/tccquickr, https://github.com/sounkou-bioinfo/Rtinycc
 BugReports: https://github.com/sounkou-bioinfo/tccquickr/issues

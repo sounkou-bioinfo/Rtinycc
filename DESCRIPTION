@@ -20,8 +20,7 @@ Imports:
     lambda.r
 Suggests:
     tinytest,
-    treesitter.c (>= 0.0.4),
-    quickr
+    treesitter.c (>= 0.0.4)
 SystemRequirements: GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
