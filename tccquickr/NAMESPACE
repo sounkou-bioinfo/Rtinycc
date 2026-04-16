@@ -1,3 +1,0 @@
-export(tcc_quick)
-export(tcc_quick_ops)
-import(Rtinycc)
