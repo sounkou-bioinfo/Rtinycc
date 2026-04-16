@@ -1,0 +1,437 @@
+---
+title: "Internals"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Internals}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(Rtinycc)
+```
+
+This article is about how `Rtinycc` works internally. It is not the stable
+user-facing API contract. The pieces described here are current implementation
+choices and may change as the package evolves.
+
+At a high level, the package is built as a pipeline:
+
+1. an R-side recipe is accumulated in a `tcc_ffi` object
+2. that recipe is turned into a generated C translation unit
+3. TinyCC compiles and relocates the generated code in memory
+4. wrapper pointers are recovered and exposed back to R as closures
+
+## The `tcc_ffi` Object Is a Recipe
+
+`tcc_ffi()` does not compile anything by itself. It creates a plain R object
+that accumulates:
+
+- bound symbols
+- user headers and user C code
+- library and include paths
+- extra compiler options
+- helper declarations such as structs, unions, enums, globals, and callback use
+
+That state lives in the `tcc_ffi` list object built by `tcc_ffi_object()`. The
+important point is that `tcc_compile()` works from this declarative recipe, not
+from an already-live TCC process.
+
+```{r}
+ffi <- tcc_ffi() |>
+  tcc_source("int add(int a, int b) { return a + b; }") |>
+  tcc_bind(add = list(args = list("i32", "i32"), returns = "i32"))
+
+names(ffi)
+```
+
+## Code Generation Is Central
+
+`tcc_compile()` calls the internal `generate_ffi_code()` helper to assemble one
+large C source string. That generated source is the real boundary layer between
+R and the target C functions.
+
+Internally, the generated translation unit is assembled in this order:
+
+- a TinyCC workaround for `_Complex`
+- `R.h` and `Rinternals.h`
+- callback trampoline declarations when needed
+- user headers
+- external declarations for `tcc_link()`
+- user C code
+- generated helpers for structs, unions, enums, globals, and raw access
+- generated `SEXP` wrappers for each bound symbol
+
+For a small binding:
+
+```{r}
+code <- Rtinycc:::generate_ffi_code(
+  symbols = ffi$symbols,
+  headers = ffi$headers,
+  c_code = ffi$c_code,
+  is_external = FALSE,
+  structs = ffi$structs,
+  unions = ffi$unions,
+  enums = ffi$enums,
+  globals = ffi$globals,
+  container_of = ffi$container_of,
+  field_addr = ffi$field_addr,
+  struct_raw_access = ffi$struct_raw_access,
+  introspect = ffi$introspect
+)
+
+grepl("SEXP R_wrap_add", code, fixed = TRUE)
+```
+
+The wrapper is where input coercion, range checks, callback trampoline setup,
+actual C invocation, and return boxing happen.
+
+## How Values Move Between R, The Wrapper, And C
+
+The important internal boundary is not "R calls user C directly". The flow is:
+
+1. an R closure created by `make_callable()` calls `.Call` on a compiled wrapper
+   pointer
+2. that wrapper receives `SEXP` arguments
+3. wrapper code uses the R C API to decode or borrow data from those `SEXP`s
+4. the wrapper calls the target C symbol using ordinary C arguments
+5. the wrapper converts the C result back into a `SEXP`
+6. `.Call` returns that `SEXP` to the R interpreter
+
+So the generated wrapper is the translator between:
+
+- R evaluation and `SEXP` objects on one side
+- the target function's plain C signature on the other side
+
+This is why `Rtinycc` includes `R.h` and `Rinternals.h` in every generated
+translation unit and why the wrapper code uses constructors and accessors such
+as:
+
+- `asInteger()` / `asReal()`
+- `RAW()`, `INTEGER()`, `REAL()`, `LOGICAL()`
+- `STRING_ELT()` and `Rf_translateCharUTF8()`
+- `ScalarInteger()`, `ScalarReal()`, `ScalarLogical()`
+- `mkString()` and `R_MakeExternalPtr()`
+
+At the R level, `make_callable()` builds a small closure around the compiled
+wrapper pointer. That closure does argument-count validation, checks that the
+pointer is still valid, and then hands control to `.Call`.
+
+The wrapper itself is where the actual C API interaction happens.
+
+## Copying Versus Borrowing Happens In The Wrapper
+
+The copy model is mostly determined by the generated conversion code.
+
+Scalar inputs are copied or coerced into local C values:
+
+- integers and booleans go through `asInteger()`
+- doubles go through `asReal()`
+- range checks happen before the target function is called
+
+These are not zero-copy paths.
+
+Vector inputs are split into two groups:
+
+- `raw`, `integer_array`, `numeric_array`, and `logical_array` borrow the
+  underlying R vector storage directly
+- `cstring_array` allocates a temporary pointer array with `R_alloc()` and
+  fills it from translated R strings
+
+String and pointer inputs need more care:
+
+- `cstring` uses `STRING_ELT()` plus `Rf_translateCharUTF8()` for the duration
+  of the call
+- `ptr` reads the raw address from an external pointer with
+  `R_ExternalPtrAddr()`
+- `sexp` passes the original `SEXP` through unchanged
+
+Returns have their own copy model:
+
+- scalar returns are boxed into fresh R objects
+- `cstring` returns are copied into R-managed string memory with `mkString()`
+- `ptr` returns stay as external pointers to raw addresses
+- array returns allocate a fresh R vector and `memcpy()` the C buffer into it
+
+So the internal design is intentionally mixed:
+
+- borrow when R already has contiguous vector storage that matches the C view
+- copy when returning data into R-managed memory
+- keep raw pointers raw when the package cannot safely invent ownership
+
+That is the main semantic reason the generated wrapper layer exists.
+
+## Why `lambda.r` Is Used
+
+The large rule file `R/aaa_ffi_codegen_rules.R` uses `lambda.r` as a small
+dispatch DSL. The package imports `%as%` and `UseFunction`, and defines rules
+like:
+
+- `ffi_input_rule(...)`
+- `ffi_return_rule(...)`
+- `array_return_alloc_line_rule(...)`
+- `c_default_return_rule(...)`
+- `ffi_c_type_map_rule(...)`
+
+Those rules are not user-facing metaprogramming. They are an internal way to
+register many small code-generation cases without turning
+`R/ffi_codegen.R` into one enormous nest of `if` and `switch` statements.
+
+In practice, `generate_c_input()` and `generate_c_return()` delegate into that
+rule table:
+
+```{r}
+Rtinycc:::generate_c_input("x", "arg1_", "i32")
+Rtinycc:::generate_c_return("res", "f64")
+```
+
+The main tradeoff is simple:
+
+- `lambda.r` keeps the dispatch table explicit and composable
+- the rule file becomes long because many integer, floating-point, and helper
+  cases are still written out individually
+
+So `lambda.r` here is being used for internal rule dispatch and code-template
+selection, not because the public API depends on functional programming style.
+
+## Wrapper Builders Work at the `SEXP` Boundary
+
+`Rtinycc` is not using a libffi ABI layer. The generated wrappers are normal C
+functions with `SEXP` signatures so that R can call them through `.Call`.
+
+The key internal steps are:
+
+- `generate_wrappers()` decides which wrapper variants are needed
+- `generate_c_wrapper()` builds the normal synchronous wrapper body
+- `generate_async_exec_wrapper()` builds the async execution path for
+  `callback_async:` arguments
+- `generate_callback_trampolines()` emits trampoline functions for callback
+  arguments
+
+For non-variadic bindings, the generated wrapper is named `R_wrap_<symbol>`.
+Variadic bindings generate several wrapper variants and dispatch is chosen later
+from R based on tail arity or inferred tail types.
+
+This design keeps platform-specific calling conventions inside compiled C rather
+than trying to reproduce them from R.
+
+## Protection And Lifetime Rules Matter
+
+Because wrappers use the R C API directly, protection and object lifetime are
+part of the internal design.
+
+When wrapper code allocates a fresh R object, it protects that object until the
+result is fully built and returned. Typical cases include:
+
+- array returns that allocate `out`
+- `cstring` returns that construct an R string
+- callback trampolines that build an argument list before calling back into R
+
+Borrowed pointers have a different constraint: they are only sound as long as
+the underlying owner stays alive and the wrapper does not invalidate the
+assumption by introducing unexpected allocation patterns.
+
+This is especially important for:
+
+- zero-copy vector inputs
+- borrowed field-address helpers for structs and unions
+- callback token pointers that must remain tied to a live callback registry
+
+The package also uses external pointer metadata and protected slots to encode
+lifetime relationships. For example, borrowed field pointers can keep their
+owner object alive by storing that owner in the external pointer's protected
+field.
+
+## Ownership And Lifetime Semantics In The Main Cases
+
+The main internal cases are easier to reason about if you separate them by who
+owns the underlying storage and how long the view is valid.
+
+### Call-scoped borrows from R objects
+
+These values are borrowed from existing R objects and are only intended to be
+used during the wrapper call:
+
+- `raw`, `integer_array`, `numeric_array`, and `logical_array` inputs borrow the
+  backing R vector storage
+- `cstring` input borrows the translated string pointer for the duration of the
+  call
+- `sexp` input borrows the original R object directly
+
+The wrapper does not transfer ownership of these objects to C. If target C code
+stores the pointer and uses it after the call returns, that is outside the safe
+contract.
+
+### Owned native allocations
+
+These are heap allocations owned through explicit external-pointer semantics:
+
+- `tcc_malloc()` returns `rtinycc_owned` memory with a finalizer
+- `tcc_cstring()` returns a malloc-backed UTF-8 C string with the same owned tag
+- generated struct and union constructors allocate native storage and attach
+  type-specific finalizers
+
+These objects have a stable native lifetime until:
+
+- they are explicitly freed
+- their owner-specific free helper is called
+- or their finalizer runs during normal R lifetime
+
+### Borrowed native views
+
+These are external pointers that point into someone else's storage:
+
+- `tcc_data_ptr()` returns a borrowed pointer
+- field-address helpers for structs and unions return borrowed pointers
+- many plain `ptr` returns are just raw addresses wrapped as external pointers
+
+Borrowed pointers do not imply ownership and must not be freed as if they were
+`rtinycc_owned`. Their validity depends entirely on the lifetime of the
+underlying storage.
+
+### Returned R objects
+
+When the wrapper returns a scalar, string, or copied array to R, the result is
+an ordinary R-managed object:
+
+- scalar returns are fresh boxed R values
+- `cstring` returns become fresh R strings
+- array returns become fresh R vectors after copying
+
+Once returned, these objects follow the normal R GC lifetime and are no longer
+tied to the lifetime of the original C storage.
+
+### Callback registry lifetime
+
+Callbacks have a separate ownership model:
+
+- the callback registry preserves the underlying R function
+- callback tokens are external pointers referencing registry entries
+- `tcc_callback_close()` releases the preserved function deterministically
+- if not closed manually, finalizers and package unload eventually release it
+
+This means the callback object is not just a function pointer. It is a managed
+pairing of:
+
+- preserved R function state
+- callback metadata
+- one or more external-pointer handles to the token
+
+### Compiled object lifetime
+
+A `tcc_compiled` object owns a live TCC state and the wrapper pointers recovered
+from that state.
+
+When that state dies, the wrapper pointers are dead as machine-code references
+even though the R closures still exist. That is why the package stores a recipe
+and recompiles instead of pretending those pointers survive serialization.
+
+## Host Symbol Injection Happens Before Relocation
+
+After the generated code is compiled, `tcc_ffi_compile_state()` calls the C
+entry point `RC_libtcc_add_host_symbols()` before `tcc_relocate()`.
+
+That host-injection step registers package-side C helpers with the live TCC
+state. This matters most on macOS, where the package cannot rely on the dynamic
+linker to expose every host symbol the same way TinyCC expects.
+
+The injected symbols include:
+
+- `RC_free_finalizer`
+- callback invocation helpers
+- async callback scheduling helpers
+- async drain helpers
+- the `RC_callback_async_exec_c()` helper used by generated async wrappers
+
+The important semantic point is that some generated C code depends on package
+runtime helpers, not just on user code and the R API.
+
+## Callback Round-Trips Cross The Boundary Twice
+
+Callbacks are the clearest example of value exchange between plain C and the R
+interpreter.
+
+For synchronous callbacks:
+
+1. generated C trampoline code receives plain C arguments
+2. the trampoline boxes them into a `VECSXP` argument list
+3. it calls `RC_invoke_callback_id()`
+4. the runtime builds and evaluates the R call with `R_tryEvalSilent()`
+5. the result is converted back into the declared C return type
+6. the trampoline returns that C value to the original compiled code
+
+So a callback call is:
+
+- C values -> boxed into R objects
+- evaluated in R
+- converted back from R objects -> C values
+
+Async callbacks add one more layer: arguments are first marshaled into a
+cross-thread task representation, then rebuilt as fresh R objects on the main
+thread before the callback is evaluated.
+
+## State Creation Is Separate from Compilation
+
+The TCC state is created first, then populated and compiled.
+
+Internally:
+
+- `tcc_ffi_create_state()` creates the state with bundled TinyCC include/lib
+  paths, user include/lib paths, and R headers/runtime library paths
+- user compiler options are applied with `tcc_set_options()`
+- `tcc_ffi_compile_state()` adds requested libraries, always links `R`,
+  compiles the generated C string, injects host symbols, then relocates
+
+This split is useful because both `tcc_compile()` and `tcc_link()` follow the
+same broad pattern even though one starts from user C source and the other
+starts from external-library declarations.
+
+## The Compiled Object Is an Environment of Closures
+
+After relocation, `tcc_compiled_object()` recovers wrapper symbols with
+`tcc_get_symbol()` and turns them into R callables with `make_callable()`.
+
+That compiled object is an environment, not an S4 class or external pointer
+wrapper. The environment stores:
+
+- callable closures for user symbols
+- callable closures for generated helpers
+- the live TCC state
+- metadata such as symbol specs and helper specs
+
+For non-variadic functions, `make_callable()` creates a closure that:
+
+- checks arity
+- checks that the wrapper pointer is still valid
+- calls the wrapper through `.Call`
+
+For variadic bindings, the closure selects the matching precompiled wrapper
+first, then calls that wrapper pointer.
+
+## Serialization Works by Recompiling the Recipe
+
+Compiled wrapper pointers do not survive serialization as usable machine code.
+`Rtinycc` handles this by storing the original recipe:
+
+- `tcc_compile()` stores `.ffi` on the compiled object
+- `tcc_link()` stores `.link_args`
+- `$.tcc_compiled` checks whether the state pointer is still valid
+- if not, `recompile_into()` rebuilds a fresh compiled object and copies the
+  bindings back into the target environment
+
+So serialization support is not pointer persistence. It is recipe persistence
+plus transparent recompilation.
+
+## Where To Read Next
+
+If you want to inspect the implementation directly, the main files are:
+
+- `R/ffi.R`: high-level FFI object, compilation flow, compiled-object assembly
+- `R/ffi_codegen.R`: generated wrapper and translation-unit builders
+- `R/aaa_ffi_codegen_rules.R`: rule tables for conversions and mapping
+- `R/callbacks.R`: callback parsing and trampoline generation helpers
+- `src/RC_libtcc.c`: TCC/R bridge, host symbol injection, callback runtime

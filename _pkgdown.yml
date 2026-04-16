@@ -20,3 +20,7 @@ articles:
       - linking-external-libraries
       - ffi-objects-and-callbacks
       - treesitter-header-parsing
+  - title: Internals
+    navbar: ~
+    contents:
+      - internals
