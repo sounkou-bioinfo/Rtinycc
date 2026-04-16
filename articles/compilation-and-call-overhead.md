@@ -1,0 +1,290 @@
+# Compilation and Call Overhead
+
+This article measures two different costs:
+
+- compilation latency for a tiny module
+- call overhead once the code is already compiled
+
+The comparison target is the
+[`callme`](https://cran.r-project.org/package=callme) package, which
+builds ordinary [`.Call()`](https://rdrr.io/r/base/CallExternal.html)
+entry points with `R CMD SHLIB`. That gives us a useful baseline against
+a conventional R C API module.
+
+The point is not that the two packages expose identical APIs. They do
+not. Instead, the comparison asks a narrower question:
+
+- how much compile-time latency does in-memory TinyCC avoid?
+- what is the extra runtime cost of Rtinycc’s generated wrapper layer?
+- how much does an extra copy matter when Rtinycc has to convert a
+  returned C buffer into an R vector?
+
+## Two Minimal Cases
+
+We use two tiny workloads:
+
+- `noop()`: takes nothing, returns nothing
+- `rand_unif(n)`: generates `n` random doubles
+
+The `callme` version of `rand_unif()` allocates the final R vector
+directly with the R C API.
+
+The `Rtinycc` version returns a heap-allocated `double*`, and the
+generated wrapper copies that buffer into a fresh R numeric vector
+before freeing the original C allocation.
+
+That makes the second case useful for isolating copy overhead.
+
+``` r
+rtinycc_code <- '
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <Rmath.h>
+  #include <stdlib.h>
+
+  void noop(void) {}
+
+  double* rand_unif(int n) {
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+    if (n == 0) {
+      return (double*) malloc(sizeof(double));
+    }
+
+    double *out = (double*) malloc(sizeof(double) * (size_t) n);
+    if (!out) {
+      Rf_error("malloc failed");
+    }
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+    return out;
+  }
+'
+
+callme_code <- '
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <Rmath.h>
+
+  SEXP noop(void) {
+    return R_NilValue;
+  }
+
+  SEXP rand_unif(SEXP n_) {
+    int n = asInteger(n_);
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    SEXP out = PROTECT(allocVector(REALSXP, n));
+    double *ptr = REAL(out);
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      ptr[i] = unif_rand();
+    }
+    PutRNGstate();
+
+    UNPROTECT(1);
+    return out;
+  }
+'
+
+build_rtinycc_module <- function() {
+  tcc_ffi() |>
+    tcc_source(rtinycc_code) |>
+    tcc_bind(
+      noop = list(args = list(), returns = "void"),
+      rand_unif = list(
+        args = list("i32"),
+        returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
+      )
+    ) |>
+    tcc_compile()
+}
+
+build_callme_module <- function() {
+  callme::compile(callme_code, env = NULL, verbosity = 0)
+}
+
+median_elapsed <- function(expr, times = 3L) {
+  expr <- substitute(expr)
+  env <- parent.frame()
+  stats::median(replicate(
+    times,
+    {
+      gc()
+      t0 <- proc.time()[["elapsed"]]
+      eval(expr, envir = env)
+      proc.time()[["elapsed"]] - t0
+    }
+  ))
+}
+
+run_noop <- function(fun, n) {
+  for (i in seq_len(n)) {
+    fun()
+  }
+  invisible(NULL)
+}
+
+run_rand <- function(fun, n, reps) {
+  for (i in seq_len(reps)) {
+    invisible(fun(n))
+  }
+  invisible(NULL)
+}
+```
+
+## Availability
+
+``` r
+has_callme
+#> [1] TRUE
+```
+
+If this prints `FALSE`, the executable benchmarks below are skipped.
+
+## Compilation Latency
+
+This measures module build time, not call time.
+
+``` r
+compile_times <- data.frame(
+  implementation = c("Rtinycc", "callme"),
+  seconds = c(
+    median_elapsed(build_rtinycc_module(), times = 3L),
+    median_elapsed(build_callme_module(), times = 3L)
+  )
+)
+
+compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
+compile_times
+#>   implementation seconds milliseconds
+#> 1        Rtinycc   0.024           24
+#> 2         callme   0.172          172
+```
+
+The expected pattern is:
+
+- `Rtinycc` wins clearly on tiny compile latency because it stays
+  in-process and does not shell out to `R CMD SHLIB`
+- `callme` pays the ordinary shared-library toolchain cost
+
+## `noop()` Call Overhead
+
+This is the smallest useful call path. It approximates the lower bound
+on call overhead above a plain
+[`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point.
+
+``` r
+rt_mod <- build_rtinycc_module()
+cm_mod <- build_callme_module()
+
+n_noop <- 50000L
+
+noop_times <- data.frame(
+  implementation = c("Rtinycc", "callme"),
+  seconds = c(
+    median_elapsed(run_noop(rt_mod$noop, n_noop), times = 5L),
+    median_elapsed(run_noop(cm_mod$noop, n_noop), times = 5L)
+  )
+)
+
+noop_times$ns_per_call <- round(noop_times$seconds / n_noop * 1e9, 1)
+noop_times
+#>   implementation seconds ns_per_call
+#> 1        Rtinycc   0.058        1160
+#> 2         callme   0.020         400
+```
+
+Interpretation:
+
+- the `callme` path is close to the cost of a conventional
+  [`.Call()`](https://rdrr.io/r/base/CallExternal.html) wrapper
+- the `Rtinycc` path adds the generated wrapper layer and
+  external-pointer call target
+- the difference here is mostly boundary overhead, not useful
+  computation
+
+## `rand_unif(n)` And Copy Cost
+
+Here the implementation work is still small, but the return path
+differs:
+
+- `callme` fills the final R vector directly
+- `Rtinycc` fills a native buffer, then the wrapper copies into a fresh
+  R vector
+
+We time both a tiny and a larger return size.
+
+``` r
+rand_specs <- data.frame(
+  n = c(1L, 4096L),
+  reps = c(5000L, 300L)
+)
+
+rand_times <- do.call(
+  rbind,
+  lapply(seq_len(nrow(rand_specs)), function(i) {
+    n <- rand_specs$n[[i]]
+    reps <- rand_specs$reps[[i]]
+
+    data.frame(
+      implementation = c("Rtinycc", "callme"),
+      n = n,
+      reps = reps,
+      seconds = c(
+        median_elapsed(run_rand(rt_mod$rand_unif, n, reps), times = 5L),
+        median_elapsed(run_rand(cm_mod$rand_unif, n, reps), times = 5L)
+      )
+    )
+  })
+)
+
+rand_times$us_per_call <- round(rand_times$seconds / rand_times$reps * 1e6, 1)
+rand_times
+#>   implementation    n reps seconds us_per_call
+#> 1        Rtinycc    1 5000   0.011         2.2
+#> 2         callme    1 5000   0.005         1.0
+#> 3        Rtinycc 4096  300   0.042       140.0
+#> 4         callme 4096  300   0.005        16.7
+```
+
+The usual pattern is:
+
+- for `n = 1`, wrapper overhead and return-path mechanics dominate
+- for larger `n`, the copy still matters, but more of the time is spent
+  in the actual loop and RNG generation
+
+## What These Numbers Mean
+
+The benchmark gives a reasonable mental model:
+
+- `Rtinycc` is optimized for low compilation latency and direct
+  interactive use
+- for very small scalar calls, a traditional
+  [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point has
+  lower overhead
+- when `Rtinycc` must copy returned buffers into R vectors, that copy is
+  real and measurable
+- the main way to amortize the boundary cost is to do more work per call
+
+So the package is usually strongest when:
+
+- compile latency matters
+- you want to bind plain C signatures quickly
+- you batch work into array-oriented or coarse-grained calls
+
+It is less ideal when:
+
+- every microsecond of scalar-call overhead matters
+- you can already afford and manage a regular shared-library toolchain
+- you need a direct
+  [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point that
+  writes its final result straight into R-managed objects
