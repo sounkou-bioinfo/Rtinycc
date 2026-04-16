@@ -1,0 +1,6 @@
+^README\.Rmd$
+^README\.html$
+^\.github$
+^Makefile$
+^tccquickr.*tar\.gz$
+^tccquickr\.Rcheck$
