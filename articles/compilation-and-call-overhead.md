@@ -302,8 +302,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc   0.016           16
-#> 2         callme   0.215          215
+#> 1        Rtinycc   0.015           15
+#> 2         callme   0.207          207
 ```
 
 The expected pattern is:
@@ -409,10 +409,11 @@ cat(generated_code)
 #>   int32_t arg1 = (int32_t)_arg1;
 #> 
 #>   // Call and return
-#>    if (!rand_unif(arg1)) return R_NilValue;
+#>    double* __rtinycc_ret = rand_unif(arg1);
+#>    if (!__rtinycc_ret) return R_NilValue;
 #>    SEXP out = PROTECT(allocVector(REALSXP, arg1));
-#>      if (arg1 > 0) memcpy(REAL(out), rand_unif(arg1), sizeof(double) * arg1);
-#>      if (rand_unif(arg1)) free(rand_unif(arg1));
+#>      if (arg1 > 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);
+#>      if (__rtinycc_ret) free(__rtinycc_ret);
 #>      UNPROTECT(1);
 #>      return out;
 #> }
@@ -432,7 +433,7 @@ noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
     Rtinycc = run_noop(rt_mod$noop, n_noop),
     callme = run_noop(cm_mod$noop, n_noop),
     iterations = 20,
-    check = FALSE,
+    check = TRUE,
     memory = TRUE,
     filter_gc = FALSE
   )
@@ -442,8 +443,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.18ms   1.34ms      762.    21.9KB        0
-#> 2 callme     425.44µs 434.61µs     2283.        0B        0
+#> 1 Rtinycc       867µs    925µs     1085.    21.9KB        0
+#> 2 callme        319µs    331µs     3015.        0B        0
 ```
 
 Interpretation:
@@ -454,6 +455,8 @@ Interpretation:
   external-pointer call target
 - the difference here is mostly boundary overhead, not useful
   computation
+- `check = TRUE` is appropriate here because both expressions always
+  return `NULL`
 - `bench` also exposes allocation and GC differences directly, which is
   useful for understanding the cost of boxing and copying
 
@@ -479,8 +482,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.62ms   3.54ms      284.    3.15MB     14.2
-#> 2 callme       2.17ms   2.36ms      406.    3.13MB     20.3
+#> 1 Rtinycc       2.1ms   3.38ms      320.    3.15MB     16.0
+#> 2 callme       1.57ms   1.61ms      561.    3.13MB     28.1
 ```
 
 Interpretation:
@@ -528,14 +531,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.12ms   2.16ms      433.    15.4KB     21.7
-#> 2 callme     808.36µs 833.82µs     1177.        0B      0
+#> 1 Rtinycc      1.33ms   1.38ms      647.    15.4KB     32.4
+#> 2 callme     739.02µs 756.69µs     1321.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      9.49ms  12.85ms      83.7    3.13MB     4.19
-#> 2 callme       2.09ms   2.98ms     332.     3.13MB    16.6
+#> 1 Rtinycc      2.07ms    2.1ms      439.    3.13MB     22.0
+#> 2 callme       1.43ms   1.44ms      633.    3.13MB     31.7
 ```
 
 The usual pattern is:
