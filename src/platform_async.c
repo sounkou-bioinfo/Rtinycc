@@ -9,7 +9,7 @@
 
 /* Shared helper: convert a SEXP result to cb_result_t. */
 static cb_result_t cb_result_from_sexp(SEXP s) {
-    cb_result_t r;
+    cb_result_t r = {0};
     r.kind = CB_RESULT_VOID;
     if (s == R_NilValue) return r;
     if (Rf_isInteger(s) && XLENGTH(s) >= 1) {

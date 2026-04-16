@@ -15,6 +15,9 @@ knitr::opts_chunk$set(
 library(Rtinycc)
 has_callme <- requireNamespace("callme", quietly = TRUE)
 has_bench <- requireNamespace("bench", quietly = TRUE)
+run_overhead_benchmarks <- has_callme &&
+  has_bench &&
+  identical(tolower(Sys.getenv("RTINYCC_RUN_BENCHMARKS", "false")), "true")
 ```
 
 This article measures two different costs:
@@ -251,11 +254,21 @@ are skipped.
 has_bench
 ```
 
+```{r}
+run_overhead_benchmarks
+```
+
+The timed chunks are opt-in and only run when
+`RTINYCC_RUN_BENCHMARKS=true` is set in the environment. This keeps `R CMD
+check` and CRAN-style vignette rebuilds focused on reproducible documentation
+rather than on timing-sensitive subprocess benchmarks that shell out to a
+system compiler.
+
 ## Compilation Latency
 
 This measures module build time, not call time.
 
-```{r, eval = has_callme}
+```{r, eval = run_overhead_benchmarks}
 compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   seconds = c(
@@ -290,7 +303,7 @@ cat(generated_code)
 This is the smallest useful call path. It approximates the lower bound on call
 overhead above a plain `.Call()` entry point.
 
-```{r, eval = has_callme && has_bench}
+```{r, eval = run_overhead_benchmarks}
 rt_mod <- build_rtinycc_module()
 cm_mod <- build_callme_module()
 
@@ -321,7 +334,7 @@ Interpretation:
 This is the fairer vector comparison because both implementations fill an
 existing R numeric vector instead of returning a newly allocated result.
 
-```{r, eval = has_callme && has_bench}
+```{r, eval = run_overhead_benchmarks}
 fill_bench_n4096 <- bench::mark(
   Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
   callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
@@ -349,7 +362,7 @@ Here the implementation work is still small, but the return path differs:
 
 We time both a tiny and a larger return size.
 
-```{r, eval = has_callme && has_bench}
+```{r, eval = run_overhead_benchmarks}
 rand_bench_n1 <- bench::mark(
   Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
   callme = run_rand(cm_mod$rand_unif, 1L, 1000L),

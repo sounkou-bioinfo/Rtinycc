@@ -73,10 +73,10 @@ SEXP RC_unregister_callback(SEXP callback_ext);
 SEXP RC_get_callback_ptr(SEXP callback_ext);
 SEXP RC_callback_is_valid(SEXP callback_ext);
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
-SEXP RC_cleanup_callbacks();
-SEXP RC_callback_async_init();
+SEXP RC_cleanup_callbacks(void);
+SEXP RC_callback_async_init(void);
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
-SEXP RC_callback_async_drain();
+SEXP RC_callback_async_drain(void);
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
 

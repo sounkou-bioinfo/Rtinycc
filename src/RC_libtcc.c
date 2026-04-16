@@ -89,7 +89,7 @@ SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_libtcc_output_file(SEXP ext, SEXP filename);
 SEXP RC_get_external_ptr_addr(SEXP ext);
 SEXP RC_get_external_ptr_hex(SEXP ext);
-SEXP RC_null_pointer();
+SEXP RC_null_pointer(void);
 
 static int RC_tcc_state_is_owned(SEXP ext) {
     SEXP tag = R_ExternalPtrTag(ext);
@@ -137,10 +137,10 @@ SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value);
 SEXP RC_write_f32(SEXP ptr, SEXP offset, SEXP value);
 SEXP RC_write_f64(SEXP ptr, SEXP offset, SEXP value);
 SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value);
-static int RC_callback_find_free_slot();
-SEXP RC_callback_async_init();
+static int RC_callback_find_free_slot(void);
+SEXP RC_callback_async_init(void);
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
-SEXP RC_callback_async_drain();
+SEXP RC_callback_async_drain(void);
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
 void RC_callback_async_drain_loop_c(volatile int *done_flag);
@@ -155,7 +155,7 @@ static SEXP RC_callback_default_sexp(const char *return_type);
 SEXP RC_invoke_callback_internal(int id, SEXP args);
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
 SEXP RC_invoke_callback_id(int id, SEXP args);
-SEXP RC_cleanup_callbacks();
+SEXP RC_cleanup_callbacks(void);
 SEXP RC_libtcc_add_host_symbols(SEXP ext);
 
 // ============================================================================
@@ -633,7 +633,7 @@ SEXP RC_get_external_ptr_hex(SEXP ext) {
  * Protection: none.
  */
 /* Create a NULL external pointer tagged "rtinycc_null". */
-SEXP RC_null_pointer() {
+SEXP RC_null_pointer(void) {
     SEXP ptr = R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
     R_RegisterCFinalizerEx(ptr, RC_null_finalizer, FALSE);
     return ptr;
@@ -1262,7 +1262,7 @@ SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value) {
  * Protection: none.
  */
 // Find a free callback registry slot (returns -1 if none available)
-static int RC_callback_find_free_slot() {
+static int RC_callback_find_free_slot(void) {
     for (int i = 0; i < MAX_CALLBACKS; i++) {
         if (!callback_registry[i].valid && callback_registry[i].fun == NULL) {
             return i;
@@ -1278,7 +1278,7 @@ static int RC_callback_find_free_slot() {
  * can re-init after an unload/reload cycle if needed.
  * @return R_NilValue on success.
  */
-SEXP RC_callback_async_init() {
+SEXP RC_callback_async_init(void) {
     RC_platform_async_init();
     return R_NilValue;
 }
@@ -1347,7 +1347,7 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
  * Drain pending async callbacks on the main thread.
  * @return R_NilValue on success.
  */
-SEXP RC_callback_async_drain() {
+SEXP RC_callback_async_drain(void) {
     RC_platform_async_drain();
     return R_NilValue;
 }
@@ -1845,7 +1845,7 @@ SEXP RC_invoke_callback_id(int id, SEXP args) {
  * Protection: none.
  */
 // Cleanup all callbacks during package unload
-SEXP RC_cleanup_callbacks() {
+SEXP RC_cleanup_callbacks(void) {
     // Clean up all valid callbacks in the registry
     for (int i = 0; i < MAX_CALLBACKS; i++) {
         callback_entry_t *entry = &callback_registry[i];
@@ -1891,27 +1891,41 @@ SEXP RC_cleanup_callbacks() {
 /* Register host symbols that TCC-compiled code may reference.
     On macOS (without -flat_namespace) these are not visible to TCC
     through the dynamic linker, so we must add them explicitly. */
+/* libtcc stores symbol addresses as const void*.  Passing function pointers
+   through that API is required here, but ISO C has no warning-free spell for
+   function-pointer-to-object-pointer conversion.  Keep the cast localized. */
+static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn) {
+    return tcc_add_symbol(s, name, (const void *) fn);
+}
+
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
-    tcc_add_symbol(s, "RC_free_finalizer", RC_free_finalizer);
-    tcc_add_symbol(s, "RC_invoke_callback", RC_invoke_callback);
-    tcc_add_symbol(s, "RC_invoke_callback_id", RC_invoke_callback_id);
-    tcc_add_symbol(s, "RC_callback_async_schedule_c",
-                   RC_callback_async_schedule_c);
-    tcc_add_symbol(s, "RC_callback_async_schedule_sync_c",
-                   RC_callback_async_schedule_sync_c);
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+    RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
+    RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);
+    RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
+    RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_c",
+                               (DL_FUNC) RC_callback_async_schedule_c);
+    RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_sync_c",
+                               (DL_FUNC) RC_callback_async_schedule_sync_c);
     /* Expose drain to TCC-compiled C code so the main-thread C side can
        service pending async callbacks without returning to R. */
-    tcc_add_symbol(s, "RC_callback_async_drain_c",
-                   RC_platform_async_drain);
+    RC_tcc_add_function_symbol(s, "RC_callback_async_drain_c",
+                               (DL_FUNC) RC_platform_async_drain);
     /* Drain loop: blocks main thread servicing callbacks via select()/
        MsgWaitForMultipleObjects until *done_flag becomes non-zero.
        Zero latency wakeup, zero CPU waste while idle. */
-    tcc_add_symbol(s, "RC_callback_async_drain_loop_c",
-                   RC_callback_async_drain_loop_c);
+    RC_tcc_add_function_symbol(s, "RC_callback_async_drain_loop_c",
+                               (DL_FUNC) RC_callback_async_drain_loop_c);
     /* Exec: run func(arg) on a new thread, drain on main thread until done.
        Used by generated wrappers so user code never touches drain. */
-    tcc_add_symbol(s, "RC_callback_async_exec_c",
-                   RC_callback_async_exec_c);
+    RC_tcc_add_function_symbol(s, "RC_callback_async_exec_c",
+                               (DL_FUNC) RC_callback_async_exec_c);
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
     return R_NilValue;
 }
