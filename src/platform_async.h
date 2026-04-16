@@ -91,7 +91,8 @@ void RC_platform_async_drain(void);
 
 /**
  * Drain pending callbacks in a polling loop until *done_flag becomes non-zero.
- * Polls every 10 ms (calibrated per R's Rprof / tcltk conventions).
+ * Uses select() (POSIX) or MsgWaitForMultipleObjects (Windows) for instant
+ * wakeup — zero latency, zero CPU waste while idle.
  * Calls R_CheckUserInterrupt() every ~100 ms to support Ctrl+C.
  * Must be called from the main R thread only.
  * Ownership: none.
@@ -99,6 +100,18 @@ void RC_platform_async_drain(void);
  * Protection: none.
  */
 void RC_platform_async_drain_loop(volatile int *done_flag);
+
+/**
+ * Run func(arg) on a new thread while draining callbacks on the main thread.
+ * Returns after func finishes and the thread is joined.
+ * This is the primitive that generated wrappers use so that user C code
+ * never needs to know about drain mechanics.
+ * Must be called from the main R thread only.
+ * Ownership: none.
+ * Allocation: thread (freed on join).
+ * Protection: none.
+ */
+void RC_platform_async_exec(void (*func)(void *), void *arg);
 
 /**
  * Schedule a synchronous async callback and block until the main thread

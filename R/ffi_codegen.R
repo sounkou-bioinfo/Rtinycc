@@ -150,6 +150,14 @@ generate_c_wrapper <- function(
     "return value"
   )
 
+  # Detect if any argument is callback_async
+  all_arg_types_combined <- c(arg_types, vararg_types)
+  has_async <- any(vapply(
+    all_arg_types_combined,
+    is_callback_async_type,
+    logical(1)
+  ))
+
   # Always use R API mode: SEXP arguments and return
   # Build argument list
   if (n_args > 0) {
@@ -213,9 +221,27 @@ generate_c_wrapper <- function(
   } else {
     input_conversions <- "  // No arguments"
     r_arg_names <- character(0)
+    arg_names <- character(0)
+    all_arg_types <- list()
     call_expr <- sprintf("%s()", symbol_name)
   }
 
+  # ---- Async wrapper path: run function on separate thread, drain on main ----
+  if (has_async) {
+    return(generate_async_exec_wrapper(
+      symbol_name = symbol_name,
+      wrapper_name = wrapper_name,
+      n_args = n_args,
+      arg_names = arg_names,
+      all_arg_types = all_arg_types,
+      r_arg_names = r_arg_names,
+      input_conversions = input_conversions,
+      call_expr = call_expr,
+      return_type = return_type
+    ))
+  }
+
+  # ---- Normal (synchronous) wrapper path ----
   # Return conversion from C type to SEXP
   return_conversion <- generate_c_return(call_expr, return_type, arg_names)
 
@@ -238,6 +264,151 @@ generate_c_wrapper <- function(
   )
 
   paste(wrapper, collapse = "\n")
+}
+
+# Generate async exec wrapper: struct + thread fn + SEXP wrapper.
+# The generated SEXP wrapper:
+#   1. Converts SEXP args to C types on the main thread
+#   2. Packs them into a context struct
+#   3. Calls RC_callback_async_exec_c(thread_fn, &ctx) which spawns a thread
+#      for the real C call and drains callbacks on the main thread
+#   4. Extracts the result from the struct and returns as SEXP
+generate_async_exec_wrapper <- function(
+  symbol_name,
+  wrapper_name,
+  n_args,
+  arg_names,
+  all_arg_types,
+  r_arg_names,
+  input_conversions,
+  call_expr,
+  return_type
+) {
+  return_info <- check_ffi_type(
+    if (is.list(return_type)) return_type$type else return_type,
+    "return value"
+  )
+  is_void <- identical(return_info$c_type, "void")
+
+  # --- Build struct fields ---
+  struct_fields <- character(0)
+  for (i in seq_len(n_args)) {
+    ffi_type <- all_arg_types[[i]]
+    aname <- arg_names[[i]]
+    if (is_callback_type(ffi_type)) {
+      sig <- parse_callback_type(ffi_type)
+      cb_arg_types <- sig$arg_types
+      c_args <- if (length(cb_arg_types) > 0) {
+        paste(c("void*", cb_arg_types), collapse = ", ")
+      } else {
+        "void*"
+      }
+      struct_fields <- c(
+        struct_fields,
+        sprintf("  %s (*%s)(%s);", sig$return_type, aname, c_args)
+      )
+    } else {
+      type_info <- check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
+      struct_fields <- c(
+        struct_fields,
+        sprintf("  %s %s;", type_info$c_type, aname)
+      )
+    }
+  }
+  if (!is_void) {
+    struct_fields <- c(
+      struct_fields,
+      sprintf("  %s result;", return_info$c_type)
+    )
+  }
+
+  struct_name <- paste0("_async_ctx_", wrapper_name)
+  thread_fn_name <- paste0("_async_fn_", wrapper_name)
+
+  # --- Build struct definition ---
+  struct_code <- c(
+    sprintf("typedef struct {"),
+    struct_fields,
+    sprintf("} %s;", struct_name)
+  )
+
+  # --- Build thread function ---
+  # Unpacks the struct and calls the real C function
+  thread_unpack <- character(0)
+  thread_call_args <- character(0)
+  for (i in seq_len(n_args)) {
+    aname <- arg_names[[i]]
+    thread_call_args <- c(thread_call_args, sprintf("ctx->%s", aname))
+  }
+  thread_call <- sprintf(
+    "%s(%s)",
+    symbol_name,
+    paste(thread_call_args, collapse = ", ")
+  )
+  if (is_void) {
+    thread_body <- sprintf("  %s;", thread_call)
+  } else {
+    thread_body <- sprintf("  ctx->result = %s;", thread_call)
+  }
+
+  thread_fn <- c(
+    sprintf("static void %s(void *_p) {", thread_fn_name),
+    sprintf("  %s *ctx = (%s *)_p;", struct_name, struct_name),
+    thread_body,
+    "}"
+  )
+
+  # --- Build SEXP wrapper function ---
+  # Pack struct fields from the local C variables
+  pack_lines <- character(0)
+  for (i in seq_len(n_args)) {
+    aname <- arg_names[[i]]
+    pack_lines <- c(
+      pack_lines,
+      sprintf("  _ctx.%s = %s;", aname, aname)
+    )
+  }
+
+  # Return conversion uses _ctx.result as the value expression
+  if (is_void) {
+    return_code <- "  return R_NilValue;"
+  } else {
+    return_conversion <- generate_c_return("_ctx.result", return_type, arg_names)
+    return_code <- paste0(
+      "  ",
+      strsplit(return_conversion, "\n")[[1]],
+      collapse = "\n"
+    )
+  }
+
+  sexp_wrapper <- c(
+    sprintf(
+      "SEXP %s(%s) {",
+      wrapper_name,
+      if (n_args > 0) {
+        paste0("SEXP ", r_arg_names, collapse = ", ")
+      } else {
+        "void"
+      }
+    ),
+    input_conversions,
+    "",
+    "  // Pack context struct for async exec",
+    sprintf("  %s _ctx;", struct_name),
+    sprintf("  memset(&_ctx, 0, sizeof(_ctx));"),
+    pack_lines,
+    "",
+    "  // Run on thread, drain callbacks on main thread",
+    sprintf("  RC_callback_async_exec_c(%s, &_ctx);", thread_fn_name),
+    "",
+    "  // Return result",
+    return_code,
+    "}"
+  )
+
+  # --- Combine all parts ---
+  all_code <- c(struct_code, "", thread_fn, "", sexp_wrapper)
+  paste(all_code, collapse = "\n")
 }
 
 # Generate header for external library (declare external functions)
@@ -1044,6 +1215,7 @@ generate_ffi_code <- function(
     "#include <stddef.h>",
     "#include <limits.h>",
     "#include <math.h>",
+    "#include <string.h>",
     ""
   )
 
@@ -1076,7 +1248,9 @@ generate_ffi_code <- function(
           "",
           "int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);",
           "/* Drain pending async callbacks from main-thread C code */",
-          "void RC_callback_async_drain_c(void);"
+          "void RC_callback_async_drain_c(void);",
+          "/* Run func(arg) on a new thread, drain callbacks on the main thread */",
+          "void RC_callback_async_exec_c(void (*func)(void *), void *arg);"
         )
       } else {
         NULL

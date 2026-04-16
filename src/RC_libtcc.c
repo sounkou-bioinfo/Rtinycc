@@ -144,6 +144,7 @@ SEXP RC_callback_async_drain();
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
 void RC_callback_async_drain_loop_c(volatile int *done_flag);
+void RC_callback_async_exec_c(void (*func)(void *), void *arg);
 static void RC_callback_finalizer(SEXP ext);
 static void RC_callback_ptr_finalizer(SEXP ext);
 SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threadsafe);
@@ -1407,6 +1408,16 @@ void RC_callback_async_drain_loop_c(volatile int *done_flag) {
 }
 
 /**
+ * Run func(arg) on a new thread while draining callbacks on the main thread.
+ * Returns after func finishes and the thread is joined.
+ * Generated wrappers use this so user C code never touches drain mechanics.
+ */
+void RC_callback_async_exec_c(void (*func)(void *), void *arg) {
+    RC_platform_async_init();
+    RC_platform_async_exec(func, arg);
+}
+
+/**
  * Finalizer for callback tokens.
  * Ownership: releases preserved R function and frees token when refs hit 0.
  * Allocation: frees heap memory (malloc/free).
@@ -1898,5 +1909,9 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
        Zero latency wakeup, zero CPU waste while idle. */
     tcc_add_symbol(s, "RC_callback_async_drain_loop_c",
                    RC_callback_async_drain_loop_c);
+    /* Exec: run func(arg) on a new thread, drain on main thread until done.
+       Used by generated wrappers so user code never touches drain. */
+    tcc_add_symbol(s, "RC_callback_async_exec_c",
+                   RC_callback_async_exec_c);
     return R_NilValue;
 }

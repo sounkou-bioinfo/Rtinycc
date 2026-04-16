@@ -283,6 +283,25 @@ void RC_platform_async_drain_loop(volatile int *done_flag) {
     RC_platform_async_drain();
 }
 
+/* Thread trampoline for RC_platform_async_exec. */
+struct exec_ctx { void (*func)(void *); void *arg; volatile int done; };
+static DWORD WINAPI exec_thread_fn(LPVOID p) {
+    struct exec_ctx *c = (struct exec_ctx *)p;
+    c->func(c->arg);
+    c->done = 1;
+    return 0;
+}
+
+void RC_platform_async_exec(void (*func)(void *), void *arg) {
+    if (!cbq_initialized) RC_platform_async_init();
+    struct exec_ctx ctx = { func, arg, 0 };
+    HANDLE th = CreateThread(NULL, 0, exec_thread_fn, &ctx, 0, NULL);
+    if (!th) { Rf_error("RC_platform_async_exec: CreateThread failed"); return; }
+    RC_platform_async_drain_loop(&ctx.done);
+    WaitForSingleObject(th, INFINITE);
+    CloseHandle(th);
+}
+
 #else  /* POSIX */
 
 #include <R_ext/eventloop.h>
@@ -583,6 +602,27 @@ void RC_platform_async_drain_loop(volatile int *done_flag) {
     char buf[32];
     while (read(cbq_pipe[0], buf, sizeof(buf)) > 0) {}
     cbq_drain_tasks();
+}
+
+/* Thread trampoline for RC_platform_async_exec. */
+struct exec_ctx { void (*func)(void *); void *arg; volatile int done; };
+static void *exec_thread_fn(void *p) {
+    struct exec_ctx *c = (struct exec_ctx *)p;
+    c->func(c->arg);
+    c->done = 1;
+    return NULL;
+}
+
+void RC_platform_async_exec(void (*func)(void *), void *arg) {
+    if (!cbq_initialized) RC_platform_async_init();
+    struct exec_ctx ctx = { .func = func, .arg = arg, .done = 0 };
+    pthread_t th;
+    if (pthread_create(&th, NULL, exec_thread_fn, &ctx) != 0) {
+        Rf_error("RC_platform_async_exec: pthread_create failed");
+        return;
+    }
+    RC_platform_async_drain_loop(&ctx.done);
+    pthread_join(th, NULL);
 }
 
 #endif

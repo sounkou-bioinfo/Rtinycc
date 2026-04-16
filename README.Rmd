@@ -569,6 +569,12 @@ For thread-safe scheduling from worker threads, use
 `callback_async:<signature>` in `tcc_bind()`. The async callback queue
 is initialized automatically at package load.
 
+When a bound function has any `callback_async:` argument, the generated
+wrapper automatically runs your C function on a new thread while draining
+callbacks on the main R thread. Your C code doesn't need to know about
+draining at all — just call the callback as normal and the wrapper handles
+the rest.
+
 **Void return (fire-and-forget):** the callback is enqueued from any
 thread and executed on the main R thread automatically — on Windows via
 R's message pump, on Linux/macOS via R's event loop `addInputHandler`.
@@ -578,22 +584,6 @@ main R thread executes the callback and returns the real result.
 Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
 `u8`, `u16`), floating-point (`double`, `float`), `bool`/`logical`, and
 pointer (`void*`, `T*`).
-
-**C-level drain loop:** TCC-compiled C code running on the main thread can
-call `RC_callback_async_drain_loop_c(&done_flag)` to service pending callbacks
-until a worker sets `done_flag` to non-zero.  Uses `select()` (POSIX) or
-`MsgWaitForMultipleObjects` (Windows) for instant wakeup — zero latency,
-zero CPU waste:
-
-``` c
-// Main-thread C code compiled by tcc_source()
-RC_callback_async_drain_loop_c(&task.done);   /* blocks until worker finishes */
-```
-
-For fire-and-forget (void) callbacks, `RC_callback_async_drain_c()` flushes all
-pending callbacks in a single shot — useful after joining worker threads.
-`tcc_callback_async_drain()` is the R-level equivalent, useful only in
-test harnesses that need deterministic flushing.
 
 ```{r callback-async}
 # Fire-and-forget: void callback accumulated from 100 worker threads
@@ -625,7 +615,6 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
   if (!th) return -2;
   WaitForSingleObject(th, INFINITE);
   CloseHandle(th);
-  RC_callback_async_drain_c();
   return 0;
 }
 #else
@@ -652,7 +641,6 @@ int spawn_async(void (*cb)(void* ctx, int), void* ctx, int value) {
     }
   }
   for (int i = 0; i < n; i++) pthread_join(th[i], NULL);
-  RC_callback_async_drain_c();
   return 0;
 }
 #endif
@@ -677,11 +665,8 @@ hits
 tcc_callback_close(cb_async)
 ```
 
-For non-void return, the worker thread blocks on the sync trampoline until the
-main R thread executes the callback and returns the real value.  Call
-`RC_callback_async_drain_loop_c(&done_flag)` in your C code to service the
-queue until the worker finishes — it uses `select()` (POSIX) or
-`MsgWaitForMultipleObjects` (Windows) for instant wakeup with zero CPU waste:
+Non-void return works the same way — the generated wrapper handles the
+drain loop transparently:
 
 ```{r callback-async-nonvoid}
 cb_triple <- tcc_callback(
@@ -689,52 +674,45 @@ cb_triple <- tcc_callback(
   signature = "int (*)(int)"
 )
 
-# C helper: spawn worker, drain callbacks until done, join and return result.
-# The worker calls the callback_async:int trampoline which blocks until the
-# main thread drains.  RC_callback_async_drain_loop_c handles the drain loop
-# internally — no R-level polling needed.
+# Pure C: the worker calls the sync callback and returns its result.
+# No drain logic needed — the generated wrapper handles it.
 code_sync <- '
 #ifdef _WIN32
 #include <windows.h>
 
-struct itask { int (*cb)(void*,int); void* ctx; int in; volatile int out; volatile int done; };
-static struct itask g_it;
-static HANDLE g_ith = NULL;
+struct itask { int (*cb)(void*,int); void* ctx; int in; int out; };
 
 static DWORD WINAPI iworker(LPVOID p) {
   struct itask* t = (struct itask*)p;
-  t->out  = t->cb(t->ctx, t->in);
-  t->done = 1;
+  t->out = t->cb(t->ctx, t->in);
   return 0;
 }
 int run_worker(int (*cb)(void*,int), void* ctx, int x) {
-  g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -1; g_it.done = 0;
-  g_ith = CreateThread(NULL, 0, iworker, &g_it, 0, NULL);
-  if (!g_ith) return -1;
-  RC_callback_async_drain_loop_c(&g_it.done);
-  WaitForSingleObject(g_ith, INFINITE);
-  CloseHandle(g_ith); g_ith = NULL;
-  return g_it.out;
+  struct itask t;
+  t.cb = cb; t.ctx = ctx; t.in = x; t.out = -1;
+  HANDLE th = CreateThread(NULL, 0, iworker, &t, 0, NULL);
+  if (!th) return -1;
+  WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+  return t.out;
 }
 #else
 #include <pthread.h>
 
-struct itask { int (*cb)(void*,int); void* ctx; int in; volatile int out; volatile int done; };
-static struct itask g_it;
-static pthread_t g_ith;
+struct itask { int (*cb)(void*,int); void* ctx; int in; int out; };
 
 static void* iworker(void* p) {
   struct itask* t = (struct itask*)p;
-  t->out  = t->cb(t->ctx, t->in);
-  t->done = 1;
+  t->out = t->cb(t->ctx, t->in);
   return NULL;
 }
 int run_worker(int (*cb)(void*,int), void* ctx, int x) {
-  g_it.cb = cb; g_it.ctx = ctx; g_it.in = x; g_it.out = -1; g_it.done = 0;
-  if (pthread_create(&g_ith, NULL, iworker, &g_it) != 0) return -1;
-  RC_callback_async_drain_loop_c(&g_it.done);
-  pthread_join(g_ith, NULL);
-  return g_it.out;
+  struct itask t;
+  t.cb = cb; t.ctx = ctx; t.in = x; t.out = -1;
+  pthread_t th;
+  if (pthread_create(&th, NULL, iworker, &t) != 0) return -1;
+  pthread_join(th, NULL);
+  return t.out;
 }
 #endif
 '
