@@ -1,0 +1,128 @@
+# FFI Boundary Semantics
+
+This article is about what actually crosses the R/C boundary in
+`Rtinycc`:
+
+- when values are copied
+- when they are borrowed
+- when they stay as raw addresses
+- when wrappers allocate temporary storage
+
+The statements below are based on the implemented wrapper generator and
+runtime helpers.
+
+## Scalar Inputs Are Converted
+
+Scalar inputs are converted at the boundary. For example:
+
+- `i8`, `i16`, `i32`, `u8`, `u16` use integer coercion plus range checks
+- `i64`, `u32`, `u64` use numeric coercion plus integer-value checks
+- `bool` rejects `NA`
+- `f32` and `f64` are read from R numerics
+
+So scalar arguments are not zero-copy views into R objects. They become
+C scalars inside the wrapper.
+
+## Vector Inputs Are Usually Borrowed
+
+The array input types:
+
+- `raw`
+- `integer_array`
+- `numeric_array`
+- `logical_array`
+
+are passed as direct pointers into the underlying R vector storage.
+
+That means:
+
+- no extra buffer is allocated by the wrapper
+- C sees the existing vector data
+- mutation from C writes into the same memory region
+
+This is the main zero-copy part of the FFI boundary.
+
+## `cstring_array` Is Rebuilt Per Call
+
+`cstring_array` is different. The wrapper allocates a temporary
+`const char **` with `R_alloc()` and fills it by translating each R
+string element.
+
+So:
+
+- the pointer array itself is allocated for the call
+- each element points at translated string data
+- this is not the same as passing a pre-existing C array through
+  unchanged
+
+## Returned Arrays Are Copied into Fresh R Vectors
+
+Array returns are always copied into a newly allocated R vector. The
+wrapper uses the declared `length_arg` to size the R result, then
+`memcpy()` copies the returned C buffer into that vector.
+
+If `free = TRUE`, the wrapper also frees the original returned buffer
+after the copy.
+
+So array returns are not borrowed views into C memory.
+
+## Returned `cstring` Values Are Copied
+
+For `cstring` returns, the wrapper creates an R string with `mkString()`
+when the returned pointer is non-NULL.
+
+That means the resulting R value is a copy in R-managed memory, not a
+retained external pointer to the original C string.
+
+## Returned `ptr` Values Stay as Pointers
+
+For `ptr` returns, the wrapper constructs an external pointer around the
+raw address.
+
+That means:
+
+- no pointee copy is made
+- ownership is not implied
+- the pointer may dangle if the underlying C storage goes away
+
+The same distinction matters for globals and struct fields.
+
+## `sexp` Passes Through Directly
+
+`sexp` is the most direct boundary mode:
+
+- input `sexp` arguments are passed through as `SEXP`
+- returned `sexp` values are returned directly
+
+This is useful when you want the R C API contract rather than the
+stricter FFI conversion layer.
+
+## Owned vs Borrowed Helper Pointers
+
+At the helper level:
+
+- [`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
+  and
+  [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md)
+  create owned external pointers
+- [`tcc_data_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_data_ptr.md)
+  and
+  [`tcc_read_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_ptr.md)
+  return borrowed external pointers
+- struct field address helpers and many raw pointer returns are borrowed
+  views
+
+Use
+[`tcc_ptr_is_owned()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_owned.md)
+when you need to distinguish these cases in R code.
+
+## Serialization Boundary
+
+Compiled `tcc_compiled` objects store enough recipe information to
+recompile after [`serialize()`](https://rdrr.io/r/base/serialize.html) /
+[`unserialize()`](https://rdrr.io/r/base/serialize.html) or
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html).
+
+Raw pointers and raw `tcc_state` objects do not gain that behavior.
+After serialization they are just dead addresses or invalid states, not
+auto-reconstructed resources.

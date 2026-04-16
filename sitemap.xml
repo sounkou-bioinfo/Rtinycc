@@ -1,9 +1,17 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/404.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/AGENTS.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/LICENSE.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/advanced-ffi-types.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/ffi-boundary-semantics.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/ffi-helpers.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/ffi-objects-and-callbacks.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/ffi-types.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/getting-started.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/index.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/internals.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/linking-external-libraries.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/articles/treesitter-header-parsing.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/authors.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/copilot-instructions.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/index.html</loc></url>

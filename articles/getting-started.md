@@ -99,4 +99,6 @@ is for source you provide directly.
 [`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
 is for binding to functions that already exist in a shared library. The
 high-level binding format is the same, so you can move between generated
-code and linked code without changing the R-side calling convention.
+code and linked code without changing the R-side calling convention. See
+the `Linking External Libraries` vignette for the external-linking
+workflow and the platform-specific runtime notes.

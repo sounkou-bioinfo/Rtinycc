@@ -1,0 +1,117 @@
+# Linking External Libraries
+
+[`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
+is the external-library counterpart to
+[`tcc_compile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.md).
+Instead of compiling only the C source you provide, it generates
+wrappers for symbols that already exist in a shared library and links
+those wrappers with TinyCC.
+
+The important contract is:
+
+- you describe the C signatures you want to call from R
+- `Rtinycc` generates the conversion layer
+- TinyCC links that conversion layer against the target shared library
+
+## What `tcc_link()` Is For
+
+Use
+[`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
+when the implementation already exists elsewhere and you want an
+R-facing wrapper with the same calling style as
+[`tcc_compile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.md).
+
+Typical uses are:
+
+- binding a few functions from a system library
+- wrapping part of a third-party C API
+- compiling a small helper function next to external symbols
+
+## A Minimal Linking Example
+
+On Unix-like systems, the math library is a simple example because
+common functions such as [`sqrt()`](https://rdrr.io/r/base/MathFun.html)
+and [`cos()`](https://rdrr.io/r/base/Trig.html) are usually resolved
+from `libm`.
+
+``` r
+math <- tcc_link(
+  "m",
+  symbols = list(
+    sqrt = list(args = list("f64"), returns = "f64"),
+    cos = list(args = list("f64"), returns = "f64")
+  )
+)
+
+math$sqrt(25)
+#> [1] 5
+math$cos(0)
+#> [1] 1
+```
+
+On Windows, the same family of CRT functions is typically provided
+through the UCRT. In `Rtinycc`, that runtime detail is handled by the
+bundled TinyCC setup and `configure.win`; user-facing code should
+generally think in terms of “CRT functions are available” rather than
+depending on a specific historical import library name.
+
+## Adding Helper Code Beside External Symbols
+
+You can include a small amount of helper code in the same TinyCC unit
+while still linking against an external library:
+
+``` r
+math_helpers <- tcc_link(
+  "m",
+  symbols = list(
+    sqrt = list(args = list("f64"), returns = "f64"),
+    hypot2_checked = list(args = list("f64", "f64"), returns = "f64")
+  ),
+  user_code = "
+    #include <math.h>
+
+    double hypot2_checked(double x, double y) {
+      if (x < 0 || y < 0) {
+        return NAN;
+      }
+      return sqrt(x * x + y * y);
+    }
+  "
+)
+
+math_helpers$hypot2_checked(3, 4)
+#> [1] 5
+is.nan(math_helpers$hypot2_checked(-1, 4))
+#> [1] TRUE
+```
+
+This is often enough for:
+
+- argument checks
+- small adapter functions
+- convenience wrappers around an existing library API
+
+## Linking by Name or by Path
+
+[`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
+accepts either:
+
+- a short library name such as `"m"` or `"sqlite3"`
+- a full path to a shared library file
+
+When given a full path, `Rtinycc` derives the containing directory and
+the linker-facing library name automatically. When given a short name,
+TinyCC resolves it through its configured library search paths.
+
+This means the R-side binding declaration stays the same even when
+deployment changes from “use the system copy” to “use this exact shared
+object”.
+
+## Relationship to `tcc_compile()`
+
+Use
+[`tcc_compile()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_compile.md)
+when your primary artifact is new C code shipped from R. Use
+[`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
+when the primary implementation already lives in a shared library and
+you want `Rtinycc` to generate the wrapper layer around it.

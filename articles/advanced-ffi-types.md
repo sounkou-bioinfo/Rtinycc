@@ -1,0 +1,134 @@
+# Advanced FFI Types
+
+This article covers the more structured parts of the FFI surface:
+array-return specifications, callbacks, globals, and generated struct
+helpers.
+
+## Array Returns
+
+Array returns use a structured return specification rather than a bare
+type string. The implemented form is:
+
+- `type`: one of the supported array types
+- `length_arg`: which argument provides the returned length
+- `free`: whether the wrapper should `free()` the returned C buffer
+  after copying
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    #include <stdlib.h>
+
+    int* dup_array(int* x, int n) {
+      if (n <= 0) return NULL;
+      int* out = (int*)malloc(sizeof(int) * n);
+      for (int i = 0; i < n; ++i) out[i] = x[i] * 2;
+      return out;
+    }
+    "
+  ) |>
+  tcc_bind(
+    dup_array = list(
+      args = list("integer_array", "i32"),
+      returns = list(type = "integer_array", length_arg = 2, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+
+ffi$dup_array(as.integer(c(1, 2, 3)), 3L)
+#> [1] 2 4 6
+```
+
+The wrapper copies the returned buffer into a fresh R vector. It does
+not hand that C buffer to R by reference.
+
+## Callbacks
+
+Callback arguments use `callback:<signature>` or
+`callback_async:<signature>`.
+
+``` r
+cb <- tcc_callback(function(x) x * 3, "double (*)(double)")
+cb_ptr <- tcc_callback_ptr(cb)
+
+ffi_cb <- tcc_ffi() |>
+  tcc_source(
+    "
+    double apply_cb(double (*cb)(void* ctx, double), void* ctx, double x) {
+      return cb(ctx, x);
+    }
+    "
+  ) |>
+  tcc_bind(
+    apply_cb = list(
+      args = list("callback:double(double)", "ptr", "f64"),
+      returns = "f64"
+    )
+  ) |>
+  tcc_compile()
+
+ffi_cb$apply_cb(cb, cb_ptr, 5)
+#> [1] 15
+tcc_callback_close(cb)
+```
+
+The callback object owns the registered R function. The callback pointer
+is the user-data token passed into the generated trampoline.
+
+## Globals
+
+[`tcc_global()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_global.md)
+generates getter and setter wrappers for C globals.
+
+``` r
+ffi_global <- tcc_ffi() |>
+  tcc_source(
+    "
+    int global_counter = 7;
+    "
+  ) |>
+  tcc_global("global_counter", "i32") |>
+  tcc_compile()
+
+ffi_global$global_global_counter_get()
+#> [1] 7
+ffi_global$global_global_counter_set(9L)
+#> [1] 9
+ffi_global$global_global_counter_get()
+#> [1] 9
+```
+
+Globals are limited to scalar FFI types. Array globals are rejected by
+the API.
+
+## Struct Helpers
+
+For C structs, `Rtinycc` can generate allocation, getter, setter, and
+free helpers.
+
+``` r
+ffi_struct <- tcc_ffi() |>
+  tcc_source(
+    "
+    struct point {
+      double x;
+      double y;
+    };
+    "
+  ) |>
+  tcc_struct("point", accessors = c(x = "f64", y = "f64")) |>
+  tcc_compile()
+
+pt <- ffi_struct$struct_point_new()
+pt <- ffi_struct$struct_point_set_x(pt, 1.5)
+pt <- ffi_struct$struct_point_set_y(pt, 2.5)
+ffi_struct$struct_point_get_x(pt)
+#> [1] 1.5
+ffi_struct$struct_point_free(pt)
+#> NULL
+```
+
+These helpers are separate from
+[`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
+because they expose storage and layout rather than just call signatures.
