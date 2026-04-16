@@ -13,9 +13,6 @@ knitr::opts_chunk$set(
 )
 has_callme <- requireNamespace("callme", quietly = TRUE)
 has_bench <- requireNamespace("bench", quietly = TRUE)
-run_overhead_benchmarks <- has_callme &&
-  has_bench &&
-  identical(tolower(Sys.getenv("RTINYCC_RUN_BENCHMARKS", "false")), "true")
 ```
 
 # Rtinycc
@@ -240,10 +237,7 @@ The `rand_unif()` case then isolates the extra copy path:
 - `Rtinycc` returns a native `double*`, and the generated wrapper copies that
   buffer into an R vector
 
-These timed chunks are opt-in. Set `RTINYCC_RUN_BENCHMARKS=true` before
-rendering the README if you want to execute them locally.
-
-```{r ffi-overhead, eval = run_overhead_benchmarks}
+```{r ffi-overhead, eval = has_callme && has_bench}
 rtinycc_code <- '
   #include <R.h>
   #include <Rinternals.h>

@@ -43,7 +43,7 @@ Typical uses are:
 On Unix-like systems, the math library is a simple example because common
 functions such as `sqrt()` and `cos()` are usually resolved from `libm`.
 
-```{r, eval = !is_windows}
+```{r, eval = .Platform$OS.type != "windows"}
 math <- tcc_link(
   "m",
   symbols = list(
@@ -67,7 +67,7 @@ library name.
 You can include a small amount of helper code in the same TinyCC unit while
 still linking against an external library:
 
-```{r, eval = !is_windows}
+```{r, eval = .Platform$OS.type != "windows"}
 math_helpers <- tcc_link(
   "m",
   symbols = list(

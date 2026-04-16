@@ -55,14 +55,14 @@ header <- paste(
 
 The lowest-level helpers return parsed declarations from the header:
 
-```{r, eval = has_treesitter}
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
 tcc_treesitter_functions(header)
 ```
 
 For quick inspection of functions only, `tcc_treesitter_bindings()` converts the
 parsed signatures into `tcc_bind()`-ready specs:
 
-```{r, eval = has_treesitter}
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
 tcc_treesitter_bindings(header)
 ```
 
@@ -71,7 +71,7 @@ tcc_treesitter_bindings(header)
 For a fuller workflow, use `tcc_generate_bindings()` on a `tcc_ffi` object that
 already has matching C source attached:
 
-```{r, eval = has_treesitter}
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
 ffi <- tcc_ffi() |>
   tcc_source(
     "
@@ -105,7 +105,7 @@ important when you want to inspect or edit the generated binding plan first.
 
 You can also extract just the generated struct accessors:
 
-```{r, eval = has_treesitter}
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
 tcc_treesitter_struct_accessors("struct point { double x; double y; };")
 ```
 
@@ -117,7 +117,7 @@ generate struct bindings from a header.
 The default mapper is intentionally conservative. In particular, pointer types
 are not automatically treated as C strings unless that is semantically safe.
 
-```{r, eval = has_treesitter}
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
 tcc_map_c_type_to_ffi("int")
 tcc_map_c_type_to_ffi("double")
 tcc_map_c_type_to_ffi("const char *")
@@ -126,7 +126,7 @@ tcc_map_c_type_to_ffi("const char *")
 If you know a specific API uses `const char *` as a real NUL-terminated string,
 you can override the mapping:
 
-```{r, eval = has_treesitter}
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
 string_mapper <- function(type) {
   if (trimws(type) == "const char *") {
     return("cstring")
