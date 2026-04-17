@@ -122,6 +122,36 @@ expect_true(grepl("R_wrap_add", full_code))
 expect_true(grepl("R_wrap_greet", full_code))
 expect_true(grepl("SEXP R_wrap_add", full_code))
 
+# Test 7b: Bool callback trampolines preserve bool argument types
+bool_cb_code <- Rtinycc:::generate_ffi_code(
+  symbols = list(
+    call_bool_cb = list(
+      args = list("callback:bool(bool)", "ptr", "bool"),
+      returns = "bool"
+    )
+  ),
+  c_code = "
+    bool call_bool_cb(bool (*cb)(void*, bool), void* ctx, bool x) {
+      return cb(ctx, x);
+    }
+  ",
+  is_external = FALSE
+)
+expect_true(
+  grepl(
+    "bool trampoline_R_wrap_call_bool_cb_arg1\\(void\\* cb, bool arg1\\)",
+    bool_cb_code
+  ),
+  info = "Bool callback trampoline keeps bool argument type"
+)
+expect_true(
+  grepl(
+    "bool \\(\\*arg1\\)\\(void\\*, bool\\) = trampoline_R_wrap_call_bool_cb_arg1;",
+    bool_cb_code
+  ),
+  info = "Bool callback wrapper declaration matches trampoline signature"
+)
+
 # Test 8: tcc_source stores code as chunks without introducing a leading blank line
 ffi <- tcc_ffi() |>
   tcc_source("int a(void) { return 1; }") |>

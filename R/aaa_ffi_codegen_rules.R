@@ -845,7 +845,7 @@ c_sexp_type_rule("cstring") %as%
 
 c_sexp_type_rule("bool") %as%
   {
-    "int"
+    "bool"
   }
 
 ## ------------------------------------------------------------------
