@@ -207,6 +207,43 @@ build_and_dispose_callme_module <- function() {
   invisible(NULL)
 }
 
+callme_runtime_reason <- NULL
+can_run_callme <- FALSE
+
+if (!has_callme) {
+  callme_runtime_reason <- "`callme` is not installed."
+} else if (.Platform$OS.type == "windows") {
+  callme_runtime_reason <- paste(
+    "`callme` comparisons are skipped on Windows during vignette builds",
+    "because the helper DLL compilation step is not reliable in CI."
+  )
+} else {
+  callme_probe <- tryCatch(
+    {
+      build_and_dispose_callme_module()
+      NULL
+    },
+    error = identity
+  )
+
+  if (inherits(callme_probe, "error")) {
+    callme_runtime_reason <- paste(
+      "`callme` comparisons were skipped because runtime compilation failed:",
+      conditionMessage(callme_probe)
+    )
+  } else {
+    can_run_callme <- TRUE
+  }
+}
+
+can_run_benchmarks <- can_run_callme && has_bench
+
+if (is.null(callme_runtime_reason) && !has_bench) {
+  callme_runtime_reason <- "`bench` is not installed."
+} else if (is.null(callme_runtime_reason)) {
+  callme_runtime_reason <- "Executable comparisons are enabled."
+}
+
 with_benchmark_modules <- function(fun) {
   rt_mod <- build_rtinycc_module()
   cm_mod <- build_callme_module()
@@ -290,18 +327,33 @@ generated_code <- Rtinycc:::generate_ffi_code(
 has_callme
 ```
 
-If `callme` or `bench` is unavailable, the executable runtime benchmarks below
-are skipped.
+If `callme` or `bench` is unavailable, or if the current build environment
+cannot compile the temporary `callme` helper DLL, the executable comparisons
+below are skipped.
 
 ```{r}
 has_bench
+```
+
+```{r}
+can_run_callme
+```
+
+```{r}
+can_run_benchmarks
+```
+
+Current comparison status:
+
+```{r}
+callme_runtime_reason
 ```
 
 ## Compilation Latency
 
 This measures module build time, not call time.
 
-```{r, eval = requireNamespace("callme", quietly = TRUE)}
+```{r, eval = can_run_callme}
 compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   seconds = c(
@@ -336,7 +388,7 @@ cat(generated_code)
 This is the smallest useful call path. It approximates the lower bound on call
 overhead above a plain `.Call()` entry point.
 
-```{r, eval = requireNamespace("callme", quietly = TRUE) && requireNamespace("bench", quietly = TRUE)}
+```{r, eval = can_run_benchmarks}
 noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
   n_noop <- 1000L
 
@@ -369,7 +421,7 @@ Interpretation:
 This is the fairer vector comparison because both implementations fill an
 existing R numeric vector instead of returning a newly allocated result.
 
-```{r, eval = requireNamespace("callme", quietly = TRUE) && requireNamespace("bench", quietly = TRUE)}
+```{r, eval = can_run_benchmarks}
 fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
   bench::mark(
     Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
@@ -399,7 +451,7 @@ Here the implementation work is still small, but the return path differs:
 
 We time both a tiny and a larger return size.
 
-```{r, eval = requireNamespace("callme", quietly = TRUE) && requireNamespace("bench", quietly = TRUE)}
+```{r, eval = can_run_benchmarks}
 rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
   rand_bench_n1 <- bench::mark(
     Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
