@@ -20,3 +20,16 @@ Rtinycc package licensing:
   DESCRIPTION.
 - This notice documents the bundled TinyCC component and does not modify
   the license terms declared for the Rtinycc package itself.
+
+Adapted component: vignette knitr engine helper
+Upstream repository: https://github.com/coolbutuseless/callme
+Upstream source file: R/knitr-engine.R
+
+Upstream copyright:
+- Mike Cheng
+
+Upstream licensing:
+- The original `callme` knitr engine is distributed under the MIT license.
+- Rtinycc includes an adapted version of that helper for vignette rendering.
+- The adapted helper is distributed as part of the GPL (>= 3) Rtinycc package,
+  compatible with the upstream MIT terms.

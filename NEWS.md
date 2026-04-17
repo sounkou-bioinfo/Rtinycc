@@ -35,6 +35,11 @@
 - Add `make vig` and `make vig-md` development targets for rebuilding HTML
   package vignettes and Markdown vignette exports.
 
+- Add an internal knitr engine for reusable C chunks in vignettes, adapted
+  from the `callme` package, and use it in the benchmark vignette while
+  skipping executable `callme` comparisons when the build environment cannot
+  compile the temporary helper DLL.
+
 # Rtinycc 0.1.1
 
 - Fix C compiler warnings in the package sources by using strict prototypes for
