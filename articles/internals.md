@@ -90,8 +90,8 @@ setup, actual C invocation, and return boxing happen.
 The important internal boundary is not “R calls user C directly”. The
 flow is:
 
-1.  an R closure created by `make_callable()` calls `.Call` on a
-    compiled wrapper pointer
+1.  an R closure created by `make_callable()` calls `.Call` with the
+    compiled wrapper’s native symbol external pointer
 2.  that wrapper receives `SEXP` arguments
 3.  wrapper code uses the R C API to decode or borrow data from those
     `SEXP`s

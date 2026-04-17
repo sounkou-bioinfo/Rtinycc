@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,11 +46,16 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.1.2" id="rtinycc-012">Rtinycc 0.1.2<a class="anchor" aria-label="anchor" href="#rtinycc-012"></a></h2>
-<ul><li><p>Fix FFI return code generation so array, <code>cstring</code>, <code>i64</code>, and <code>u64</code> return expressions are evaluated once before boxing/copying. This avoids repeated calls in generated wrappers for side-effectful expressions.</p></li>
+<h2 class="pkg-version" data-toc-text="0.1.3" id="rtinycc-013">Rtinycc 0.1.3<a class="anchor" aria-label="anchor" href="#rtinycc-013"></a></h2>
+<ul><li><p>Tighten FFI boundary handling for wide integers and pointers. Generated wrappers, struct accessors, typed memory writers, and callback return paths now warn or error more consistently when <code>i64</code> / <code>u64</code> values cannot be represented exactly in R numeric vectors, and typed pointer offsets are now validated as non-negative whole numbers instead of truncating through <code>int</code>.</p></li>
+<li><p>Extend async callback support so <code>i64</code>, <code>u32</code>, and <code>u64</code> arguments use the same numeric marshaling path as async returns, with matching documentation of the <code>2^53</code> exactness limit for R doubles.</p></li>
+<li><p>Update array and callback code generation to avoid repeated evaluation in an additional <code>cstring</code> boxing path, use read-only <code>character_array</code> access via <code>STRING_PTR_RO()</code> when available, and improve callback pointer classification for non-string pointer types.</p></li>
+<li><p>Clarify user-facing documentation for callback limits and draining behavior, <code>character_array</code> semantics, serialization of external pointers, and the benchmark vignette’s zero-length array-return example.</p></li>
+<li><p>Fix FFI return code generation so array, <code>cstring</code>, <code>i64</code>, and <code>u64</code> return expressions are evaluated once before boxing/copying. This avoids repeated calls in generated wrappers for side-effectful expressions.</p></li>
 <li><p>Declare the temporary <code>cstring</code> return variable as <code>const char*</code> so the generated wrapper accepts <code>const char*</code>-returning C functions without a const-discarding assignment. This restores vignette builds on macOS and Windows (bundled TinyCC treated the implicit const-discard as a fatal diagnostic rather than a warning).</p></li>
 <li><p>Add regression tests for repeated-evaluation bugs in generated FFI return code.</p></li>
 <li><p>Add <code>make vig</code> and <code>make vig-md</code> development targets for rebuilding HTML package vignettes and Markdown vignette exports.</p></li>
+<li><p>Add an internal knitr engine for reusable C chunks in vignettes, adapted from the <code>callme</code> package, and use it in the benchmark vignette. The executable <code>callme</code> comparisons now degrade gracefully when the build environment cannot compile the temporary helper DLL, which restores passing package checks on Windows CI.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="rtinycc-011">Rtinycc 0.1.1<a class="anchor" aria-label="anchor" href="#rtinycc-011"></a></h2>

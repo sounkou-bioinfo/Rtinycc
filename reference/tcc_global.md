@@ -39,6 +39,9 @@ Scalar conversions follow the same rules as wrapper arguments:
   numeric (double). Values must be integer-valued and within range; for
   `i64`/`u64` only exact integers up to \$2^53\$ are accepted.
 
+- Getter wrappers for `i64`/`u64` warn when the stored value exceeds R's
+  exact integer range for numeric vectors.
+
 - `bool` rejects `NA` logicals.
 
 Ownership notes:

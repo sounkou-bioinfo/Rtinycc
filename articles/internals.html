@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -167,7 +167,8 @@ trampoline setup, actual C invocation, and return boxing happen.</p>
 flow is:</p>
 <ol style="list-style-type: decimal">
 <li>an R closure created by <code>make_callable()</code> calls
-<code>.Call</code> on a compiled wrapper pointer</li>
+<code>.Call</code> with the compiled wrapper’s native symbol external
+pointer</li>
 <li>that wrapper receives <code>SEXP</code> arguments</li>
 <li>wrapper code uses the R C API to decode or borrow data from those
 <code>SEXP</code>s</li>

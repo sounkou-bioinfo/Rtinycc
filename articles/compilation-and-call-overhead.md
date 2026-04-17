@@ -48,102 +48,114 @@ The `rand_unif()` case intentionally stresses the extra copy path:
   wrapper copies that buffer into a fresh R numeric vector before
   freeing the original C allocation
 
+``` c
+#include <R.h>
+#include <Rinternals.h>
+#include <Rmath.h>
+#include <stdlib.h>
+
+void noop(void) {}
+
+void fill_rand(double* out, int n) {
+  if (n < 0) {
+    Rf_error("n must be non-negative");
+  }
+
+  GetRNGstate();
+  for (int i = 0; i < n; ++i) {
+    out[i] = unif_rand();
+  }
+  PutRNGstate();
+}
+
+double* rand_unif(int n) {
+  if (n < 0) {
+    Rf_error("n must be non-negative");
+  }
+  if (n == 0) {
+    return (double*) malloc(sizeof(double));
+  }
+
+  double *out = (double*) malloc(sizeof(double) * (size_t) n);
+  if (!out) {
+    Rf_error("malloc failed");
+  }
+
+  GetRNGstate();
+  for (int i = 0; i < n; ++i) {
+    out[i] = unif_rand();
+  }
+  PutRNGstate();
+  return out;
+}
+```
+
+Click to show R code
+
 ``` r
-rtinycc_code <- '
-  #include <R.h>
-  #include <Rinternals.h>
-  #include <Rmath.h>
-  #include <stdlib.h>
+rtinycc_code <- "#include <R.h>\n#include <Rinternals.h>\n#include <Rmath.h>\n#include <stdlib.h>\n\nvoid noop(void) {}\n\nvoid fill_rand(double* out, int n) {\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n}\n\ndouble* rand_unif(int n) {\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n  if (n == 0) {\n    return (double*) malloc(sizeof(double));\n  }\n\n  double *out = (double*) malloc(sizeof(double) * (size_t) n);\n  if (!out) {\n    Rf_error(\"malloc failed\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n  return out;\n}"
+```
 
-  void noop(void) {}
+``` c
+#include <R.h>
+#include <Rinternals.h>
+#include <Rmath.h>
 
-  void fill_rand(double* out, int n) {
-    if (n < 0) {
-      Rf_error("n must be non-negative");
-    }
+SEXP noop(void) {
+  return R_NilValue;
+}
 
-    GetRNGstate();
-    for (int i = 0; i < n; ++i) {
-      out[i] = unif_rand();
-    }
-    PutRNGstate();
+SEXP fill_rand(SEXP out_, SEXP n_) {
+  int n = asInteger(n_);
+  if (n < 0) {
+    Rf_error("n must be non-negative");
   }
 
-  double* rand_unif(int n) {
-    if (n < 0) {
-      Rf_error("n must be non-negative");
-    }
-    if (n == 0) {
-      return (double*) malloc(sizeof(double));
-    }
-
-    double *out = (double*) malloc(sizeof(double) * (size_t) n);
-    if (!out) {
-      Rf_error("malloc failed");
-    }
-
-    GetRNGstate();
-    for (int i = 0; i < n; ++i) {
-      out[i] = unif_rand();
-    }
-    PutRNGstate();
-    return out;
-  }
-'
-
-callme_code <- '
-  #include <R.h>
-  #include <Rinternals.h>
-  #include <Rmath.h>
-
-  SEXP noop(void) {
-    return R_NilValue;
+  if (TYPEOF(out_) != REALSXP) {
+    Rf_error("out must be a numeric vector");
   }
 
-  SEXP fill_rand(SEXP out_, SEXP n_) {
-    int n = asInteger(n_);
-    if (n < 0) {
-      Rf_error("n must be non-negative");
-    }
-
-    if (TYPEOF(out_) != REALSXP) {
-      Rf_error("out must be a numeric vector");
-    }
-
-    if (XLENGTH(out_) < n) {
-      Rf_error("out is shorter than n");
-    }
-
-    double *out = REAL(out_);
-    GetRNGstate();
-    for (int i = 0; i < n; ++i) {
-      out[i] = unif_rand();
-    }
-    PutRNGstate();
-
-    return out_;
+  if (XLENGTH(out_) < n) {
+    Rf_error("out is shorter than n");
   }
 
-  SEXP rand_unif(SEXP n_) {
-    int n = asInteger(n_);
-    if (n < 0) {
-      Rf_error("n must be non-negative");
-    }
-
-    SEXP out = PROTECT(allocVector(REALSXP, n));
-    double *ptr = REAL(out);
-
-    GetRNGstate();
-    for (int i = 0; i < n; ++i) {
-      ptr[i] = unif_rand();
-    }
-    PutRNGstate();
-
-    UNPROTECT(1);
-    return out;
+  double *out = REAL(out_);
+  GetRNGstate();
+  for (int i = 0; i < n; ++i) {
+    out[i] = unif_rand();
   }
-'
+  PutRNGstate();
 
+  return out_;
+}
+
+SEXP rand_unif(SEXP n_) {
+  int n = asInteger(n_);
+  if (n < 0) {
+    Rf_error("n must be non-negative");
+  }
+
+  SEXP out = PROTECT(allocVector(REALSXP, n));
+  double *ptr = REAL(out);
+
+  GetRNGstate();
+  for (int i = 0; i < n; ++i) {
+    ptr[i] = unif_rand();
+  }
+  PutRNGstate();
+
+  UNPROTECT(1);
+  return out;
+}
+```
+
+Click to show R code
+
+``` r
+callme_code <- "#include <R.h>\n#include <Rinternals.h>\n#include <Rmath.h>\n\nSEXP noop(void) {\n  return R_NilValue;\n}\n\nSEXP fill_rand(SEXP out_, SEXP n_) {\n  int n = asInteger(n_);\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  if (TYPEOF(out_) != REALSXP) {\n    Rf_error(\"out must be a numeric vector\");\n  }\n\n  if (XLENGTH(out_) < n) {\n    Rf_error(\"out is shorter than n\");\n  }\n\n  double *out = REAL(out_);\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n\n  return out_;\n}\n\nSEXP rand_unif(SEXP n_) {\n  int n = asInteger(n_);\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  SEXP out = PROTECT(allocVector(REALSXP, n));\n  double *ptr = REAL(out);\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    ptr[i] = unif_rand();\n  }\n  PutRNGstate();\n\n  UNPROTECT(1);\n  return out;\n}"
+```
+
+``` r
 build_rtinycc_module <- function() {
   tcc_ffi() |>
     tcc_source(rtinycc_code) |>
@@ -192,6 +204,43 @@ build_and_dispose_callme_module <- function() {
   gc()
   unload_callme_dlls(dll_paths)
   invisible(NULL)
+}
+
+callme_runtime_reason <- NULL
+can_run_callme <- FALSE
+
+if (!has_callme) {
+  callme_runtime_reason <- "`callme` is not installed."
+} else if (.Platform$OS.type == "windows") {
+  callme_runtime_reason <- paste(
+    "`callme` comparisons are skipped on Windows during vignette builds",
+    "because the helper DLL compilation step is not reliable in CI."
+  )
+} else {
+  callme_probe <- tryCatch(
+    {
+      build_and_dispose_callme_module()
+      NULL
+    },
+    error = identity
+  )
+
+  if (inherits(callme_probe, "error")) {
+    callme_runtime_reason <- paste(
+      "`callme` comparisons were skipped because runtime compilation failed:",
+      conditionMessage(callme_probe)
+    )
+  } else {
+    can_run_callme <- TRUE
+  }
+}
+
+can_run_benchmarks <- can_run_callme && has_bench
+
+if (is.null(callme_runtime_reason) && !has_bench) {
+  callme_runtime_reason <- "`bench` is not installed."
+} else if (is.null(callme_runtime_reason)) {
+  callme_runtime_reason <- "Executable comparisons are enabled."
 }
 
 with_benchmark_modules <- function(fun) {
@@ -278,12 +327,30 @@ has_callme
 #> [1] TRUE
 ```
 
-If `callme` or `bench` is unavailable, the executable runtime benchmarks
-below are skipped.
+If `callme` or `bench` is unavailable, or if the current build
+environment cannot compile the temporary `callme` helper DLL, the
+executable comparisons below are skipped.
 
 ``` r
 has_bench
 #> [1] TRUE
+```
+
+``` r
+can_run_callme
+#> [1] TRUE
+```
+
+``` r
+can_run_benchmarks
+#> [1] TRUE
+```
+
+Current comparison status:
+
+``` r
+callme_runtime_reason
+#> [1] "Executable comparisons are enabled."
 ```
 
 ## Compilation Latency
@@ -302,8 +369,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc    0.02           20
-#> 2         callme    0.25          250
+#> 1        Rtinycc   0.014           14
+#> 2         callme   0.196          196
 ```
 
 The expected pattern is:
@@ -326,6 +393,9 @@ cat(generated_code)
 #> 
 #> #include <R.h>
 #> #include <Rinternals.h>
+#> #ifndef STRING_PTR_RO
+#> #define STRING_PTR_RO STRING_PTR
+#> #endif
 #> void RC_free_finalizer(SEXP ext);
 #> 
 #> #include <stdint.h>
@@ -336,48 +406,45 @@ cat(generated_code)
 #> #include <string.h>
 #> 
 #> /* User code */
+#> #include <R.h>
+#> #include <Rinternals.h>
+#> #include <Rmath.h>
+#> #include <stdlib.h>
 #> 
+#> void noop(void) {}
 #> 
-#>   #include <R.h>
-#>   #include <Rinternals.h>
-#>   #include <Rmath.h>
-#>   #include <stdlib.h>
-#> 
-#>   void noop(void) {}
-#> 
-#>   void fill_rand(double* out, int n) {
-#>     if (n < 0) {
-#>       Rf_error("n must be non-negative");
-#>     }
-#> 
-#>     GetRNGstate();
-#>     for (int i = 0; i < n; ++i) {
-#>       out[i] = unif_rand();
-#>     }
-#>     PutRNGstate();
+#> void fill_rand(double* out, int n) {
+#>   if (n < 0) {
+#>     Rf_error("n must be non-negative");
 #>   }
 #> 
-#>   double* rand_unif(int n) {
-#>     if (n < 0) {
-#>       Rf_error("n must be non-negative");
-#>     }
-#>     if (n == 0) {
-#>       return (double*) malloc(sizeof(double));
-#>     }
+#>   GetRNGstate();
+#>   for (int i = 0; i < n; ++i) {
+#>     out[i] = unif_rand();
+#>   }
+#>   PutRNGstate();
+#> }
 #> 
-#>     double *out = (double*) malloc(sizeof(double) * (size_t) n);
-#>     if (!out) {
-#>       Rf_error("malloc failed");
-#>     }
-#> 
-#>     GetRNGstate();
-#>     for (int i = 0; i < n; ++i) {
-#>       out[i] = unif_rand();
-#>     }
-#>     PutRNGstate();
-#>     return out;
+#> double* rand_unif(int n) {
+#>   if (n < 0) {
+#>     Rf_error("n must be non-negative");
+#>   }
+#>   if (n == 0) {
+#>     return (double*) malloc(sizeof(double));
 #>   }
 #> 
+#>   double *out = (double*) malloc(sizeof(double) * (size_t) n);
+#>   if (!out) {
+#>     Rf_error("malloc failed");
+#>   }
+#> 
+#>   GetRNGstate();
+#>   for (int i = 0; i < n; ++i) {
+#>     out[i] = unif_rand();
+#>   }
+#>   PutRNGstate();
+#>   return out;
+#> }
 #> 
 #> /* R callable wrappers for bound symbols */
 #> SEXP R_wrap_noop(void) {
@@ -443,8 +510,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.13ms   1.19ms      840.    21.9KB        0
-#> 2 callme     401.19µs 419.62µs     2370.        0B        0
+#> 1 Rtinycc       868µs    920µs     1093.    21.9KB        0
+#> 2 callme        321µs    335µs     2969.        0B        0
 ```
 
 Interpretation:
@@ -482,8 +549,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.87ms   4.36ms      244.    3.15MB     12.2
-#> 2 callme       2.01ms   2.06ms      435.    3.13MB     21.8
+#> 1 Rtinycc      2.22ms    3.4ms      312.    3.15MB     15.6
+#> 2 callme       1.58ms   1.62ms      559.    3.13MB     28.0
 ```
 
 Interpretation:
@@ -531,14 +598,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.74ms   1.79ms      513.    15.4KB     25.7
-#> 2 callme     985.17µs      1ms      993.        0B      0
+#> 1 Rtinycc      1.33ms   1.43ms      649.    15.4KB     32.5
+#> 2 callme     747.91µs 761.31µs     1312.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.57ms   2.66ms      348.    3.13MB     17.4
-#> 2 callme       1.85ms      2ms      471.    3.13MB     23.5
+#> 1 Rtinycc      2.07ms   3.23ms      304.    3.13MB     15.2
+#> 2 callme       1.46ms   2.59ms      376.    3.13MB     18.8
 ```
 
 The usual pattern is:

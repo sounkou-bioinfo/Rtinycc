@@ -1,6 +1,27 @@
 # Changelog
 
-## Rtinycc 0.1.2
+## Rtinycc 0.1.3
+
+- Tighten FFI boundary handling for wide integers and pointers.
+  Generated wrappers, struct accessors, typed memory writers, and
+  callback return paths now warn or error more consistently when `i64` /
+  `u64` values cannot be represented exactly in R numeric vectors, and
+  typed pointer offsets are now validated as non-negative whole numbers
+  instead of truncating through `int`.
+
+- Extend async callback support so `i64`, `u32`, and `u64` arguments use
+  the same numeric marshaling path as async returns, with matching
+  documentation of the `2^53` exactness limit for R doubles.
+
+- Update array and callback code generation to avoid repeated evaluation
+  in an additional `cstring` boxing path, use read-only
+  `character_array` access via `STRING_PTR_RO()` when available, and
+  improve callback pointer classification for non-string pointer types.
+
+- Clarify user-facing documentation for callback limits and draining
+  behavior, `character_array` semantics, serialization of external
+  pointers, and the benchmark vignette’s zero-length array-return
+  example.
 
 - Fix FFI return code generation so array, `cstring`, `i64`, and `u64`
   return expressions are evaluated once before boxing/copying. This
@@ -18,6 +39,12 @@
 
 - Add `make vig` and `make vig-md` development targets for rebuilding
   HTML package vignettes and Markdown vignette exports.
+
+- Add an internal knitr engine for reusable C chunks in vignettes,
+  adapted from the `callme` package, and use it in the benchmark
+  vignette. The executable `callme` comparisons now degrade gracefully
+  when the build environment cannot compile the temporary helper DLL,
+  which restores passing package checks on Windows CI.
 
 ## Rtinycc 0.1.1
 

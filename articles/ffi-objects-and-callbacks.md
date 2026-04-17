@@ -87,6 +87,22 @@ is recommended when you want deterministic invalidation and prompt
 release of the preserved R function. If you simply drop all references,
 finalizers will still clean up the callback eventually.
 
+## Async Callback Caveats
+
+`callback_async:<signature>` is the safe path for worker-thread
+callbacks, but its contract is narrower than the synchronous trampoline
+path:
+
+- the callback registry currently holds at most 256 live callbacks at
+  once
+- `i64`, `u32`, and `u64` async arguments and returns are marshalled
+  through R numeric (`double`), so only exact integer values up to
+  `2^53` are exact
+- queued async callbacks run when the main thread services R’s event
+  loop; in tests or tight compute loops, call
+  [`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
+  explicitly
+
 ## Soundness Notes
 
 The callback contract is deliberately explicit:

@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -186,9 +186,10 @@ raw addresses.</p>
 <li><code>cstring_array</code></li>
 </ul>
 <p>The first four map directly onto R vectors.
-<code>character_array</code> passes string objects, while
-<code>cstring_array</code> builds a temporary <code>const char **</code>
-for the call.</p>
+<code>character_array</code> passes the underlying <code>CHARSXP</code>
+cells as a read-only <code>SEXP *</code>, not a <code>char **</code>.
+Use <code>cstring_array</code> when the C side expects a temporary
+<code>const char **</code>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi_arr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>

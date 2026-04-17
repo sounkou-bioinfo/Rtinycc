@@ -125,4 +125,9 @@ recompile after [`serialize()`](https://rdrr.io/r/base/serialize.html) /
 
 Raw pointers and raw `tcc_state` objects do not gain that behavior.
 After serialization they are just dead addresses or invalid states, not
-auto-reconstructed resources.
+auto-reconstructed resources. The same applies to callback tokens,
+struct/union external pointers, and helper allocations from
+[`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
+or
+[`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md):
+they do not serialize as live native resources.

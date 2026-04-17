@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -149,6 +149,19 @@ not hand that C buffer to R by reference.</p>
 <span><span class="fu"><a href="../reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb</span><span class="op">)</span></span></code></pre></div>
 <p>The callback object owns the registered R function. The callback
 pointer is the user-data token passed into the generated trampoline.</p>
+<p>For <code>callback_async:&lt;signature&gt;</code> specifically:</p>
+<ul>
+<li>the registry currently supports up to 256 live callbacks at
+once</li>
+<li>
+<code>i64</code>, <code>u32</code>, and <code>u64</code> async
+arguments and returns travel through R numeric (<code>double</code>), so
+only exact integer values up to <code>2^53</code> round-trip
+exactly</li>
+<li>async callbacks run when the main thread services R’s event loop, or
+when you call <code><a href="../reference/tcc_callback_async_drain.html">tcc_callback_async_drain()</a></code> explicitly in
+tight loops and tests</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="globals">Globals<a class="anchor" aria-label="anchor" href="#globals"></a>

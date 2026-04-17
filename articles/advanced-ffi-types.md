@@ -76,6 +76,17 @@ tcc_callback_close(cb)
 The callback object owns the registered R function. The callback pointer
 is the user-data token passed into the generated trampoline.
 
+For `callback_async:<signature>` specifically:
+
+- the registry currently supports up to 256 live callbacks at once
+- `i64`, `u32`, and `u64` async arguments and returns travel through R
+  numeric (`double`), so only exact integer values up to `2^53`
+  round-trip exactly
+- async callbacks run when the main thread services R’s event loop, or
+  when you call
+  [`tcc_callback_async_drain()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_async_drain.md)
+  explicitly in tight loops and tests
+
 ## Globals
 
 [`tcc_global()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_global.md)
