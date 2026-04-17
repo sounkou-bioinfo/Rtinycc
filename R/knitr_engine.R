@@ -35,7 +35,8 @@ rtinycc_engine <- function(options) {
   }
 
   code <- paste(options$code, collapse = "\n")
-  assign(object_name, code, envir = knitr::knit_global())
+  knit_env <- knitr::knit_global()
+  assign(object_name, code, envir = knit_env)
 
   c_options <- options
   c_options$engine <- "c"
