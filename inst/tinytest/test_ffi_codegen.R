@@ -4,6 +4,8 @@
 library(Rtinycc)
 library(tinytest)
 
+callback_abi_specs <- Rtinycc:::rtinycc_callback_abi_specs()
+
 # Test 1: Generate C input code for R API mode (SEXP conversion)
 code <- Rtinycc:::generate_c_input("x", "arg1_", "i32")
 expect_true(grepl("int _x = asInteger", code))
@@ -122,50 +124,7 @@ expect_true(grepl("R_wrap_add", full_code))
 expect_true(grepl("R_wrap_greet", full_code))
 expect_true(grepl("SEXP R_wrap_add", full_code))
 
-# Test 7b: Callback trampolines preserve ABI-relevant argument types
-callback_abi_cases <- list(
-  list(
-    name = "call_bool_cb",
-    args = list("callback:bool(bool)", "ptr", "bool"),
-    returns = "bool",
-    c_code = "
-      bool call_bool_cb(bool (*cb)(void*, bool), void* ctx, bool x) {
-        return cb(ctx, x);
-      }
-    ",
-    tramp_pattern = "bool trampoline_R_wrap_call_bool_cb_arg1\\(void\\* cb, bool arg1\\)",
-    decl_pattern = "bool \\(\\*arg1\\)\\(void\\*, bool\\) = trampoline_R_wrap_call_bool_cb_arg1;",
-    info = "Bool callback wrapper preserves bool ABI"
-  ),
-  list(
-    name = "call_i8_cb",
-    args = list("callback:int8_t(int8_t)", "ptr", "i8"),
-    returns = "i8",
-    c_code = "
-      int8_t call_i8_cb(int8_t (*cb)(void*, int8_t), void* ctx, int8_t x) {
-        return cb(ctx, x);
-      }
-    ",
-    tramp_pattern = "int8_t trampoline_R_wrap_call_i8_cb_arg1\\(void\\* cb, int8_t arg1\\)",
-    decl_pattern = "int8_t \\(\\*arg1\\)\\(void\\*, int8_t\\) = trampoline_R_wrap_call_i8_cb_arg1;",
-    info = "int8_t callback wrapper preserves narrow integer ABI"
-  ),
-  list(
-    name = "call_f32_cb",
-    args = list("callback:float(float)", "ptr", "f32"),
-    returns = "f32",
-    c_code = "
-      float call_f32_cb(float (*cb)(void*, float), void* ctx, float x) {
-        return cb(ctx, x);
-      }
-    ",
-    tramp_pattern = "float trampoline_R_wrap_call_f32_cb_arg1\\(void\\* cb, float arg1\\)",
-    decl_pattern = "float \\(\\*arg1\\)\\(void\\*, float\\) = trampoline_R_wrap_call_f32_cb_arg1;",
-    info = "float callback wrapper preserves float ABI"
-  )
-)
-
-for (case in callback_abi_cases) {
+for (case in callback_abi_specs$wrapper) {
   cb_code <- Rtinycc:::generate_ffi_code(
     symbols = setNames(
       list(list(args = case$args, returns = case$returns)),
@@ -174,8 +133,10 @@ for (case in callback_abi_cases) {
     c_code = case$c_code,
     is_external = FALSE
   )
-  expect_true(grepl(case$tramp_pattern, cb_code), info = case$info)
-  expect_true(grepl(case$decl_pattern, cb_code), info = case$info)
+
+  for (pattern in case$patterns) {
+    expect_true(grepl(pattern$pattern, cb_code), info = pattern$info)
+  }
 }
 
 # Test 8: tcc_source stores code as chunks without introducing a leading blank line

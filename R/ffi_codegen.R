@@ -799,7 +799,7 @@ generate_container_of <- function(struct_name, member_name) {
       member_name
     ),
     sprintf(
-      "  return R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), R_NilValue);",
+      "  return R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), ext);",
       struct_name
     ),
     "}",

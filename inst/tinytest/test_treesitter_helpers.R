@@ -3,6 +3,9 @@
 library(tinytest)
 library(Rtinycc)
 
+composite_semantics <- Rtinycc:::rtinycc_composite_semantics()
+bitfield_type <- composite_semantics$bitfield_native$treesitter_bitfield_type
+
 
 if (!requireNamespace("treesitter.c", quietly = TRUE)) {
   message("Skipping treesitter helper tests: treesitter.c not installed")
@@ -42,15 +45,18 @@ expect_true(
   {
     header <- "struct flags { unsigned int flag : 1; unsigned int code : 6; double x; };"
     members <- tcc_treesitter_struct_members(header)
-    accessors <- tcc_treesitter_struct_accessors(header, bitfield_type = "u8")
+    accessors <- tcc_treesitter_struct_accessors(
+      header,
+      bitfield_type = bitfield_type
+    )
 
     has_struct <- "flags" %in% names(accessors)
     acc <- accessors[["flags"]]
 
     has_struct &&
       all(c("flag", "code", "x") %in% names(acc)) &&
-      acc[["flag"]] == "u8" &&
-      acc[["code"]] == "u8" &&
+      acc[["flag"]] == bitfield_type &&
+      acc[["code"]] == bitfield_type &&
       acc[["x"]] == "f64" &&
       nrow(members) >= 3
   },

@@ -34,6 +34,22 @@ rtinycc_ffi_semantics <- function() {
   RTINYCC_FFI_SEMANTICS
 }
 
+rtinycc_callback_semantics <- function() {
+  RTINYCC_CALLBACK_SEMANTICS
+}
+
+rtinycc_callback_abi_specs <- function() {
+  RTINYCC_CALLBACK_ABI_SPECS
+}
+
+rtinycc_composite_semantics <- function() {
+  RTINYCC_COMPOSITE_SEMANTICS
+}
+
+rtinycc_composite_codegen_specs <- function() {
+  RTINYCC_COMPOSITE_CODEGEN_SPECS
+}
+
 rtinycc_soundness_case <- function(label, value, expected = NULL) {
   list(label = label, value = value, expected = expected)
 }
@@ -737,6 +753,455 @@ RTINYCC_FFI_SEMANTICS <- list(
     return = NULL,
     codegen = list(
       input_form = "ptr"
+    )
+  )
+)
+
+RTINYCC_CALLBACK_SEMANTICS <- list(
+  sync = list(
+    kind = "callback_sync",
+    preserves_function = TRUE,
+    preservation_api = "R_PreserveObject",
+    invocation_thread = "main",
+    argument_transport = "stack-to-VECSXP",
+    copies = list(
+      scalars = TRUE,
+      cstring_payload = FALSE,
+      pointer_addresses = FALSE
+    ),
+    borrows = list(
+      callback_token = TRUE,
+      pointer_pointee = TRUE,
+      cstring_payload = TRUE
+    ),
+    returns = list(
+      default_on_error = "NA-like scalar or NULL pointer",
+      mode = "converted_back_to_declared_c_type"
+    ),
+    notes = paste(
+      "Synchronous trampolines allocate a VECSXP argument list on the main",
+      "thread, invoke the preserved R function directly, then convert the",
+      "SEXP result back to the declared C type."
+    )
+  ),
+  async = list(
+    kind = "callback_async",
+    preserves_function = TRUE,
+    preservation_api = "R_PreserveObject",
+    invocation_thread = "scheduled-on-main",
+    scheduler = c(
+      "RC_callback_async_schedule_c",
+      "RC_callback_async_schedule_sync_c"
+    ),
+    copies = list(
+      scalar_values = TRUE,
+      cstring_payload = TRUE,
+      pointer_addresses = TRUE
+    ),
+    borrows = list(
+      callback_token = TRUE,
+      pointer_pointee = TRUE
+    ),
+    returns = list(
+      default_on_error = "NA-like scalar or NULL pointer",
+      nonvoid_mode = "sync-result-channel"
+    ),
+    notes = paste(
+      "Async callbacks marshal arguments into cb_arg_t task payloads,",
+      "duplicate cstring payloads for cross-thread safety, and reconstruct",
+      "fresh R objects on the main thread before invocation."
+    )
+  )
+)
+
+RTINYCC_CALLBACK_ABI_SPECS <- list(
+  trampoline = list(
+    list(
+      name = "tramp_i8",
+      signature = "int8_t (*)(int8_t)",
+      pattern = "int8_t tramp_i8\\(void\\* cb, int8_t arg1\\)",
+      info = "Trampoline keeps int8_t argument ABI"
+    ),
+    list(
+      name = "tramp_i16",
+      signature = "int16_t (*)(int16_t)",
+      pattern = "int16_t tramp_i16\\(void\\* cb, int16_t arg1\\)",
+      info = "Trampoline keeps int16_t argument ABI"
+    ),
+    list(
+      name = "tramp_f32",
+      signature = "float (*)(float)",
+      pattern = "float tramp_f32\\(void\\* cb, float arg1\\)",
+      info = "Trampoline keeps float argument ABI"
+    ),
+    list(
+      name = "tramp_bool_arg",
+      signature = "bool (*)(bool)",
+      pattern = "bool tramp_bool_arg\\(void\\* cb, bool arg1\\)",
+      info = "Trampoline keeps bool argument ABI"
+    ),
+    list(
+      name = "tramp_ptrptr_arg",
+      signature = "void (*)(char **)",
+      pattern = "void tramp_ptrptr_arg\\(void\\* cb, char \\*\\* arg1\\)",
+      info = "Trampoline keeps pointer subtype in argument ABI"
+    )
+  ),
+  async_trampoline = list(
+    list(
+      name = "tramp_async_f32",
+      signature = "callback_async:f32(f32)",
+      patterns = list(
+        list(
+          pattern = "float tramp_async_f32\\(void\\* cb, float arg1\\)",
+          info = "Async trampoline normalizes f32 to float in the C signature"
+        ),
+        list(
+          pattern = "return \\(float\\)result.v.d;",
+          info = "Async trampoline normalizes f32 return casts to float"
+        )
+      )
+    )
+  ),
+  wrapper = list(
+    list(
+      name = "call_bool_cb",
+      args = list("callback:bool(bool)", "ptr", "bool"),
+      returns = "bool",
+      c_code = "
+      bool call_bool_cb(bool (*cb)(void*, bool), void* ctx, bool x) {
+        return cb(ctx, x);
+      }
+    ",
+      patterns = list(
+        list(
+          pattern = "bool trampoline_R_wrap_call_bool_cb_arg1\\(void\\* cb, bool arg1\\)",
+          info = "Bool callback wrapper preserves bool ABI"
+        ),
+        list(
+          pattern = "bool \\(\\*arg1\\)\\(void\\*, bool\\) = trampoline_R_wrap_call_bool_cb_arg1;",
+          info = "Bool callback wrapper declaration matches trampoline ABI"
+        )
+      )
+    ),
+    list(
+      name = "call_i8_cb",
+      args = list("callback:int8_t(int8_t)", "ptr", "i8"),
+      returns = "i8",
+      c_code = "
+      int8_t call_i8_cb(int8_t (*cb)(void*, int8_t), void* ctx, int8_t x) {
+        return cb(ctx, x);
+      }
+    ",
+      patterns = list(
+        list(
+          pattern = "int8_t trampoline_R_wrap_call_i8_cb_arg1\\(void\\* cb, int8_t arg1\\)",
+          info = "int8_t callback wrapper preserves narrow integer ABI"
+        ),
+        list(
+          pattern = "int8_t \\(\\*arg1\\)\\(void\\*, int8_t\\) = trampoline_R_wrap_call_i8_cb_arg1;",
+          info = "int8_t callback wrapper declaration matches trampoline ABI"
+        )
+      )
+    ),
+    list(
+      name = "call_f32_cb",
+      args = list("callback:float(float)", "ptr", "f32"),
+      returns = "f32",
+      c_code = "
+      float call_f32_cb(float (*cb)(void*, float), void* ctx, float x) {
+        return cb(ctx, x);
+      }
+    ",
+      patterns = list(
+        list(
+          pattern = "float trampoline_R_wrap_call_f32_cb_arg1\\(void\\* cb, float arg1\\)",
+          info = "float callback wrapper preserves float ABI"
+        ),
+        list(
+          pattern = "float \\(\\*arg1\\)\\(void\\*, float\\) = trampoline_R_wrap_call_f32_cb_arg1;",
+          info = "float callback wrapper declaration matches trampoline ABI"
+        )
+      )
+    )
+  )
+)
+
+RTINYCC_COMPOSITE_SEMANTICS <- list(
+  struct_owned = list(
+    kind = "struct",
+    helper = "tcc_struct",
+    borrow = FALSE,
+    copy = FALSE,
+    ownership = "owned-native-storage",
+    finalizer = TRUE,
+    notes = paste(
+      "Struct constructors allocate owned native storage and return an",
+      "external pointer tagged with the struct type and a finalizer."
+    )
+  ),
+  struct_field_addr = list(
+    kind = "struct_view",
+    helper = "tcc_field_addr",
+    borrow = TRUE,
+    copy = FALSE,
+    ownership = "borrowed-from-struct",
+    protects_owner = TRUE,
+    notes = paste(
+      "Field-address helpers return borrowed external pointers and keep the",
+      "owner struct in the protected slot so storage stays alive."
+    )
+  ),
+  struct_container_of = list(
+    kind = "struct_view",
+    helper = "tcc_container_of",
+    borrow = TRUE,
+    copy = FALSE,
+    ownership = "borrowed-from-member-owner-chain",
+    protects_owner = TRUE,
+    notes = paste(
+      "container_of recovers a parent struct pointer from a field pointer and",
+      "preserves the incoming external pointer in the protected slot so the",
+      "owner lifetime chain remains intact."
+    )
+  ),
+  struct_raw_access = list(
+    kind = "struct_raw_access",
+    helper = "tcc_struct_raw_access",
+    read_copy = TRUE,
+    write_copy = TRUE,
+    ownership = "struct-owned-storage",
+    notes = paste(
+      "Raw struct helpers copy bytes out to a fresh RAWSXP or copy bytes from",
+      "a RAWSXP back into the struct buffer with memcpy()."
+    )
+  ),
+  struct_array_field = list(
+    kind = "struct_array_field",
+    helper = "tcc_struct",
+    borrow = FALSE,
+    copy = TRUE,
+    ownership = "struct-owned-storage",
+    notes = paste(
+      "Struct array field element helpers copy scalar elements between R and",
+      "the native struct buffer; the struct storage itself remains owned by",
+      "the struct external pointer."
+    )
+  ),
+  union_owned = list(
+    kind = "union",
+    helper = "tcc_union",
+    borrow = FALSE,
+    copy = FALSE,
+    ownership = "owned-native-storage",
+    finalizer = TRUE,
+    notes = paste(
+      "Union constructors allocate owned native storage and expose member",
+      "getters/setters over that shared buffer."
+    )
+  ),
+  union_nested_struct_view = list(
+    kind = "union_view",
+    helper = "tcc_union",
+    borrow = TRUE,
+    copy = FALSE,
+    ownership = "borrowed-from-union",
+    protects_owner = TRUE,
+    notes = paste(
+      "Nested struct getters on unions return borrowed external pointers and",
+      "keep the union owner in the protected slot."
+    )
+  ),
+  enum_i32 = list(
+    kind = "enum",
+    helper = "tcc_enum",
+    boundary_mode = "i32-like",
+    borrow = FALSE,
+    copy = TRUE,
+    ownership = "R",
+    notes = paste(
+      "Enums cross the wrapper boundary as integer-like values and constant",
+      "helpers box them into fresh scalar integer SEXPs."
+    )
+  ),
+  global_scalar = list(
+    kind = "global",
+    helper = "tcc_global",
+    scalar_only = TRUE,
+    arrays_forbidden = TRUE,
+    borrow = FALSE,
+    copy = TRUE,
+    ownership = "compiled-unit",
+    notes = paste(
+      "Global helpers are limited to scalar types and reuse the same wrapper",
+      "input/output coercion rules as ordinary scalar bindings."
+    )
+  ),
+  bitfield_native = list(
+    kind = "bitfield",
+    helper = "tcc_struct/tcc_treesitter_struct_accessors",
+    compiler_managed = TRUE,
+    default_ffi_type = "u8",
+    treesitter_bitfield_type = "u8",
+    include_bitfields = TRUE,
+    notes = paste(
+      "Bitfields are stored and masked by the C compiler; helper accessors",
+      "treat them as scalar fields and treesitter defaults them to u8 unless",
+      "the caller overrides bitfield_type."
+    )
+  ),
+  treesitter_header_bindings = list(
+    kind = "header_codegen",
+    helper = "tcc_generate_bindings",
+    include_bitfields = TRUE,
+    bitfield_type = "u8",
+    generates = c("functions", "structs", "unions", "enums", "globals"),
+    notes = paste(
+      "Treesitter helpers project parsed header declarations into the same",
+      "FFI helper surface, including optional bitfield accessors and global",
+      "getter/setter bindings."
+    )
+  )
+)
+
+RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
+  list(
+    name = "struct_field_addr_owner",
+    info = "field_addr helper preserves owner in protected slot",
+    generate_args = list(
+      symbols = list(),
+      c_code = "struct student { int id; double grade; };",
+      structs = list(student = c(id = "i32", grade = "f64")),
+      field_addr = list(student = "id")
+    ),
+    patterns = list(
+      list(
+        pattern = "SEXP R_wrap_struct_student_id_addr(SEXP ext) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "return R_MakeExternalPtr(field_ptr, R_NilValue, ext);",
+        fixed = TRUE
+      )
+    )
+  ),
+  list(
+    name = "struct_container_of_owner",
+    info = "container_of helper preserves owner chain in protected slot",
+    generate_args = list(
+      symbols = list(),
+      c_code = "struct student { int id; double grade; };",
+      structs = list(student = c(id = "i32", grade = "f64")),
+      container_of = list(student = "id")
+    ),
+    patterns = list(
+      list(
+        pattern = "SEXP R_wrap_struct_student_from_id(SEXP ext) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "return R_MakeExternalPtr(p, Rf_install(\"struct_student\"), ext);",
+        fixed = TRUE
+      )
+    )
+  ),
+  list(
+    name = "struct_raw_access_copy",
+    info = "struct raw access helpers use memcpy copy paths",
+    generate_args = list(
+      symbols = list(),
+      c_code = "struct packet { unsigned char data[8]; };",
+      structs = list(
+        packet = list(data = list(type = "u8", size = 8, array = TRUE))
+      ),
+      struct_raw_access = "packet"
+    ),
+    patterns = list(
+      list(
+        pattern = "SEXP R_wrap_struct_packet_get_raw(SEXP ext, SEXP len) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "memcpy(RAW(raw), p,",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "SEXP R_wrap_struct_packet_set_raw(SEXP ext, SEXP raw) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "memcpy(p, RAW(raw),",
+        fixed = TRUE
+      )
+    )
+  ),
+  list(
+    name = "union_nested_struct_owner",
+    info = "union nested struct getters preserve union owner",
+    generate_args = list(
+      symbols = list(),
+      c_code = "union wrapper { struct { int x; } inner; int raw; };",
+      unions = list(
+        wrapper = list(
+          members = list(inner = list(type = "struct"), raw = "i32"),
+          active = "raw"
+        )
+      )
+    ),
+    patterns = list(
+      list(
+        pattern = "return R_MakeExternalPtr(&p->inner, R_NilValue, ext);",
+        fixed = TRUE
+      )
+    )
+  ),
+  list(
+    name = "enum_constant_and_sizeof",
+    info = "enum helpers expose constants and sizeof introspection",
+    generate_args = list(
+      symbols = list(),
+      c_code = "enum color { RED = 1, BLUE = 2 };",
+      enums = list(
+        color = list(constants = c("RED", "BLUE"), export_constants = TRUE)
+      ),
+      introspect = TRUE
+    ),
+    patterns = list(
+      list(
+        pattern = "SEXP R_wrap_enum_color_RED(void) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "return ScalarInteger(RED);",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "SEXP R_wrap_enum_color_sizeof(void) {",
+        fixed = TRUE
+      )
+    )
+  ),
+  list(
+    name = "global_get_set_helpers",
+    info = "global helpers generate scalar getter and setter wrappers",
+    generate_args = list(
+      symbols = list(),
+      c_code = "int32_t global_counter = 0;",
+      globals = list(global_counter = "i32")
+    ),
+    patterns = list(
+      list(
+        pattern = "SEXP R_wrap_global_global_counter_get(void) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "SEXP R_wrap_global_global_counter_set(SEXP value_) {",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "global_counter = value;",
+        fixed = FALSE
+      )
     )
   )
 )
