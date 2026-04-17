@@ -4,6 +4,13 @@
 library(tinytest)
 library(Rtinycc)
 
+force_gc <- function(rounds = 3L) {
+  for (i in seq_len(rounds)) {
+    gc(verbose = FALSE)
+  }
+  invisible(NULL)
+}
+
 # Test 1: Simple struct allocation and field access
 expect_true(
   {
@@ -199,4 +206,93 @@ expect_true(
     warned_i64 && warned_u64 && is.numeric(signed_v) && is.numeric(unsigned_v)
   },
   info = "Struct i64/u64 getters warn when R numeric loses precision"
+)
+
+# Test 6: field_addr borrowed view keeps owner alive across GC
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct student {
+        int id;
+        double grade;
+      };
+    "
+      ) |>
+      tcc_struct("student", accessors = c(id = "i32", grade = "f64")) |>
+      tcc_field_addr("student", "id") |>
+      tcc_bind()
+
+    compiled <- tcc_compile(ffi)
+    ok <- TRUE
+
+    for (i in seq_len(50)) {
+      student <- compiled$struct_student_new()
+      student <- compiled$struct_student_set_id(student, as.integer(i))
+
+      id_ptr <- compiled$struct_student_id_addr(student)
+      rm(student)
+      force_gc()
+
+      id_val <- tcc_read_i32(id_ptr)
+      if (!identical(id_val, as.integer(i))) {
+        ok <- FALSE
+        break
+      }
+
+      rm(id_ptr)
+      force_gc()
+    }
+
+    ok
+  },
+  info = "field_addr borrowed view survives GC after owner reference is dropped"
+)
+
+# Test 7: container_of chain keeps recovered parent alive across GC
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct student {
+        int id;
+        double grade;
+      };
+    "
+      ) |>
+      tcc_struct("student", accessors = c(id = "i32", grade = "f64")) |>
+      tcc_container_of("student", "id") |>
+      tcc_field_addr("student", "id") |>
+      tcc_bind()
+
+    compiled <- tcc_compile(ffi)
+    ok <- TRUE
+
+    for (i in seq_len(50)) {
+      student <- compiled$struct_student_new()
+      student <- compiled$struct_student_set_id(student, as.integer(i))
+      student <- compiled$struct_student_set_grade(student, i / 10)
+
+      id_ptr <- compiled$struct_student_id_addr(student)
+      recovered <- compiled$struct_student_from_id(id_ptr)
+
+      rm(student, id_ptr)
+      force_gc()
+
+      id_val <- compiled$struct_student_get_id(recovered)
+      grade_val <- compiled$struct_student_get_grade(recovered)
+      if (!identical(id_val, as.integer(i)) || abs(grade_val - i / 10) > 1e-12) {
+        ok <- FALSE
+        break
+      }
+
+      rm(recovered)
+      force_gc()
+    }
+
+    ok
+  },
+  info = "container_of recovered parent survives GC through protected-slot owner chain"
 )

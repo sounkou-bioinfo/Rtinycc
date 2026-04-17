@@ -947,6 +947,8 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "borrowed-from-struct",
     protects_owner = TRUE,
+    lifetime_model = "owner protected slot",
+    survives_gc_with_live_view = TRUE,
     notes = paste(
       "Field-address helpers return borrowed external pointers and keep the",
       "owner struct in the protected slot so storage stays alive."
@@ -959,6 +961,8 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "borrowed-from-member-owner-chain",
     protects_owner = TRUE,
+    lifetime_model = "protected-slot owner chain",
+    survives_gc_with_live_view = TRUE,
     notes = paste(
       "container_of recovers a parent struct pointer from a field pointer and",
       "preserves the incoming external pointer in the protected slot so the",
@@ -1007,6 +1011,8 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "borrowed-from-union",
     protects_owner = TRUE,
+    lifetime_model = "owner protected slot",
+    survives_gc_with_live_view = TRUE,
     notes = paste(
       "Nested struct getters on unions return borrowed external pointers and",
       "keep the union owner in the protected slot."
@@ -1044,6 +1050,7 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     default_ffi_type = "u8",
     treesitter_bitfield_type = "u8",
     include_bitfields = TRUE,
+    survives_forced_gc = TRUE,
     notes = paste(
       "Bitfields are stored and masked by the C compiler; helper accessors",
       "treat them as scalar fields and treesitter defaults them to u8 unless",

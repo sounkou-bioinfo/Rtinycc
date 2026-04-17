@@ -64,13 +64,39 @@ expect_true(
   info = "field_addr semantics records owner protection"
 )
 expect_true(
+  identical(
+    composite_semantics$struct_field_addr$lifetime_model,
+    "owner protected slot"
+  ) &&
+    isTRUE(composite_semantics$struct_field_addr$survives_gc_with_live_view),
+  info = "field_addr semantics records GC-safe borrowed-view lifetime"
+)
+expect_true(
   isTRUE(composite_semantics$struct_container_of$protects_owner),
   info = "container_of semantics records owner protection"
+)
+expect_true(
+  identical(
+    composite_semantics$struct_container_of$lifetime_model,
+    "protected-slot owner chain"
+  ) &&
+    isTRUE(composite_semantics$struct_container_of$survives_gc_with_live_view),
+  info = "container_of semantics records GC-safe owner chain"
 )
 expect_true(
   isTRUE(composite_semantics$struct_raw_access$read_copy) &&
     isTRUE(composite_semantics$struct_raw_access$write_copy),
   info = "struct raw access semantics records explicit copy-in/copy-out"
+)
+expect_true(
+  identical(
+    composite_semantics$union_nested_struct_view$lifetime_model,
+    "owner protected slot"
+  ) &&
+    isTRUE(
+      composite_semantics$union_nested_struct_view$survives_gc_with_live_view
+    ),
+  info = "union nested struct semantics records GC-safe borrowed-view lifetime"
 )
 expect_true(
   identical(composite_semantics$enum_i32$boundary_mode, "i32-like"),
@@ -89,6 +115,10 @@ expect_identical(
   composite_semantics$bitfield_native$treesitter_bitfield_type,
   "u8",
   info = "bitfield semantics records treesitter default ffi type"
+)
+expect_true(
+  isTRUE(composite_semantics$bitfield_native$survives_forced_gc),
+  info = "bitfield semantics records forced-GC stability expectation"
 )
 expect_true(
   all(

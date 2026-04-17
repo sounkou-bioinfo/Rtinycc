@@ -4,6 +4,13 @@
 library(tinytest)
 library(Rtinycc)
 
+force_gc <- function(rounds = 3L) {
+  for (i in seq_len(rounds)) {
+    gc(verbose = FALSE)
+  }
+  invisible(NULL)
+}
+
 # Test 1: Basic union
 expect_true(
   {
@@ -70,4 +77,57 @@ expect_true(
     v1 == 100L && v2 == 200L
   },
   info = "Multiple unions"
+)
+
+# Test 4: Nested struct view keeps union owner alive across GC
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct inner {
+        int x;
+        double y;
+      };
+
+      union wrapper {
+        struct inner inner;
+        int raw;
+      };
+    "
+      ) |>
+      tcc_struct("inner", accessors = c(x = "i32", y = "f64")) |>
+      tcc_union(
+        "wrapper",
+        members = list(inner = list(type = "struct"), raw = "i32"),
+        active = "raw"
+      ) |>
+      tcc_bind()
+
+    compiled <- tcc_compile(ffi)
+    ok <- TRUE
+
+    for (i in seq_len(50)) {
+      u <- compiled$union_wrapper_new()
+      inner <- compiled$union_wrapper_get_inner(u)
+      inner <- compiled$struct_inner_set_x(inner, as.integer(i))
+      inner <- compiled$struct_inner_set_y(inner, i / 10)
+
+      rm(u)
+      force_gc()
+
+      x_val <- compiled$struct_inner_get_x(inner)
+      y_val <- compiled$struct_inner_get_y(inner)
+      if (!identical(x_val, as.integer(i)) || abs(y_val - i / 10) > 1e-12) {
+        ok <- FALSE
+        break
+      }
+
+      rm(inner)
+      force_gc()
+    }
+
+    ok
+  },
+  info = "Nested union struct view survives GC after union owner reference is dropped"
 )

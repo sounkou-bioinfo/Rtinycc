@@ -1025,19 +1025,29 @@ tcc_compiled_object <- function(
       )
       # getters and setters for members
       for (mem_name in names(union_def$members)) {
+        mem_spec <- union_def$members[[mem_name]]
+        is_nested_struct <- is.list(mem_spec) &&
+          identical(mem_spec$type %||% NULL, "struct")
+
         helper_names <- c(
           helper_names,
-          paste0("union_", union_name, "_get_", mem_name),
-          paste0("union_", union_name, "_set_", mem_name)
+          paste0("union_", union_name, "_get_", mem_name)
         )
         helper_specs[[paste0("union_", union_name, "_get_", mem_name)]] <- list(
           args = list("sexp"),
           returns = "sexp"
         )
-        helper_specs[[paste0("union_", union_name, "_set_", mem_name)]] <- list(
-          args = list("sexp", "sexp"),
-          returns = "sexp"
-        )
+
+        if (!is_nested_struct) {
+          helper_names <- c(
+            helper_names,
+            paste0("union_", union_name, "_set_", mem_name)
+          )
+          helper_specs[[paste0("union_", union_name, "_set_", mem_name)]] <- list(
+            args = list("sexp", "sexp"),
+            returns = "sexp"
+          )
+        }
       }
       # introspection
       if (!is.null(introspect) && introspect) {
