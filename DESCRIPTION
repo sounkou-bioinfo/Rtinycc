@@ -1,9 +1,11 @@
 Package: Rtinycc
 Title: Builds the 'TinyCC' CLI and Library for 'C' Scripting in 'R'
-Version: 0.1.2
+Version: 0.1.3
 Authors@R: c(
     person(given = "Sounkou Mahamane", family = "Toure", 
     email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
+    person(given = "Mike", family = "Cheng", role = c("cph"),
+    comment = "Adapted parts of the vignette knitr engine from the callme package"),
     person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
     comment = "Tinycc Compiler (tinycc) authors and COPYRIGHT holders")
     )

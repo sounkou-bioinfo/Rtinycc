@@ -144,3 +144,59 @@ expect_true(
   },
   info = "Array element accessors"
 )
+
+# Test 5: Wide integer struct getters warn on precision loss
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct bigvals {
+        int64_t signed_v;
+        uint64_t unsigned_v;
+      };
+
+      void fill_bigvals(struct bigvals* p) {
+        p->signed_v = (int64_t)9007199254740994LL;
+        p->unsigned_v = (uint64_t)9007199254740994ULL;
+      }
+    "
+      ) |>
+      tcc_struct(
+        "bigvals",
+        accessors = c(signed_v = "i64", unsigned_v = "u64")
+      ) |>
+      tcc_bind(fill_bigvals = list(args = list("ptr"), returns = "void")) |>
+      tcc_compile()
+
+    p <- ffi$struct_bigvals_new()
+    ffi$fill_bigvals(p)
+
+    warned_i64 <- FALSE
+    warned_u64 <- FALSE
+
+    signed_v <- withCallingHandlers(
+      ffi$struct_bigvals_get_signed_v(p),
+      warning = function(w) {
+        if (grepl("i64 precision loss", conditionMessage(w), fixed = TRUE)) {
+          warned_i64 <<- TRUE
+        }
+        invokeRestart("muffleWarning")
+      }
+    )
+    unsigned_v <- withCallingHandlers(
+      ffi$struct_bigvals_get_unsigned_v(p),
+      warning = function(w) {
+        if (grepl("u64 precision loss", conditionMessage(w), fixed = TRUE)) {
+          warned_u64 <<- TRUE
+        }
+        invokeRestart("muffleWarning")
+      }
+    )
+
+    ffi$struct_bigvals_free(p)
+
+    warned_i64 && warned_u64 && is.numeric(signed_v) && is.numeric(unsigned_v)
+  },
+  info = "Struct i64/u64 getters warn when R numeric loses precision"
+)

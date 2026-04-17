@@ -148,7 +148,7 @@ tcc_read_u8 <- function(ptr, n = NULL, offset = 0L) {
     raw <- tcc_read_bytes(ptr, n)
     return(readBin(raw, integer(), n = length(raw), size = 1, signed = FALSE))
   }
-  .Call(RC_read_u8_typed, ptr, as.integer(offset))
+  .Call(RC_read_u8_typed, ptr, offset)
 }
 
 #' Read signed 8-bit integer
@@ -157,7 +157,7 @@ tcc_read_u8 <- function(ptr, n = NULL, offset = 0L) {
 #' @return Integer scalar
 #' @export
 tcc_read_i8 <- function(ptr, offset = 0L) {
-  .Call(RC_read_i8, ptr, as.integer(offset))
+  .Call(RC_read_i8, ptr, offset)
 }
 
 #' Read signed 16-bit integer
@@ -166,7 +166,7 @@ tcc_read_i8 <- function(ptr, offset = 0L) {
 #' @return Integer scalar
 #' @export
 tcc_read_i16 <- function(ptr, offset = 0L) {
-  .Call(RC_read_i16, ptr, as.integer(offset))
+  .Call(RC_read_i16, ptr, offset)
 }
 
 #' Read unsigned 16-bit integer
@@ -175,7 +175,7 @@ tcc_read_i16 <- function(ptr, offset = 0L) {
 #' @return Integer scalar
 #' @export
 tcc_read_u16 <- function(ptr, offset = 0L) {
-  .Call(RC_read_u16, ptr, as.integer(offset))
+  .Call(RC_read_u16, ptr, offset)
 }
 
 #' Read signed 32-bit integers from a pointer
@@ -192,7 +192,7 @@ tcc_read_i32 <- function(ptr, n = NULL, offset = 0L) {
     raw <- tcc_read_bytes(ptr, n * 4L)
     return(readBin(raw, integer(), n = n, size = 4, signed = TRUE))
   }
-  .Call(RC_read_i32_typed, ptr, as.integer(offset))
+  .Call(RC_read_i32_typed, ptr, offset)
 }
 
 #' Read unsigned 32-bit integer
@@ -201,7 +201,7 @@ tcc_read_i32 <- function(ptr, n = NULL, offset = 0L) {
 #' @return Numeric scalar (double, exact up to 2^32-1).
 #' @export
 tcc_read_u32 <- function(ptr, offset = 0L) {
-  .Call(RC_read_u32, ptr, as.integer(offset))
+  .Call(RC_read_u32, ptr, offset)
 }
 
 #' Read signed 64-bit integer
@@ -210,7 +210,7 @@ tcc_read_u32 <- function(ptr, offset = 0L) {
 #' @return Numeric scalar (double, exact up to 2^53).
 #' @export
 tcc_read_i64 <- function(ptr, offset = 0L) {
-  .Call(RC_read_i64, ptr, as.integer(offset))
+  .Call(RC_read_i64, ptr, offset)
 }
 
 #' Read unsigned 64-bit integer
@@ -219,7 +219,7 @@ tcc_read_i64 <- function(ptr, offset = 0L) {
 #' @return Numeric scalar (double, exact up to 2^53).
 #' @export
 tcc_read_u64 <- function(ptr, offset = 0L) {
-  .Call(RC_read_u64, ptr, as.integer(offset))
+  .Call(RC_read_u64, ptr, offset)
 }
 
 #' Read 32-bit float
@@ -228,7 +228,7 @@ tcc_read_u64 <- function(ptr, offset = 0L) {
 #' @return Numeric scalar (promoted to double).
 #' @export
 tcc_read_f32 <- function(ptr, offset = 0L) {
-  .Call(RC_read_f32, ptr, as.integer(offset))
+  .Call(RC_read_f32, ptr, offset)
 }
 
 #' Read 64-bit doubles from a pointer
@@ -245,7 +245,7 @@ tcc_read_f64 <- function(ptr, n = NULL, offset = 0L) {
     raw <- tcc_read_bytes(ptr, n * 8L)
     return(readBin(raw, numeric(), n = n, size = 8, endian = .Platform$endian))
   }
-  .Call(RC_read_f64_typed, ptr, as.integer(offset))
+  .Call(RC_read_f64_typed, ptr, offset)
 }
 
 #' Read a pointer at byte offset
@@ -259,7 +259,7 @@ tcc_read_f64 <- function(ptr, n = NULL, offset = 0L) {
 #' @return External pointer
 #' @export
 tcc_read_ptr <- function(ptr, offset = 0L) {
-  .Call(RC_read_ptr, ptr, as.integer(offset))
+  .Call(RC_read_ptr, ptr, offset)
 }
 
 #' Write a signed 8-bit integer
@@ -269,70 +269,70 @@ tcc_read_ptr <- function(ptr, offset = 0L) {
 #' @return `NULL` (invisibly).
 #' @export
 tcc_write_i8 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_i8, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_i8, ptr, offset, value))
 }
 
 #' Write an unsigned 8-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_u8 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_u8, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_u8, ptr, offset, value))
 }
 
 #' Write a signed 16-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_i16 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_i16, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_i16, ptr, offset, value))
 }
 
 #' Write an unsigned 16-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_u16 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_u16, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_u16, ptr, offset, value))
 }
 
 #' Write a signed 32-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_i32 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_i32, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_i32, ptr, offset, value))
 }
 
 #' Write an unsigned 32-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_u32 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_u32, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_u32, ptr, offset, value))
 }
 
 #' Write a signed 64-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_i64 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_i64, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_i64, ptr, offset, value))
 }
 
 #' Write an unsigned 64-bit integer
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_u64 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_u64, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_u64, ptr, offset, value))
 }
 
 #' Write a 32-bit float
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_f32 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_f32, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_f32, ptr, offset, value))
 }
 
 #' Write a 64-bit double
 #' @inheritParams tcc_write_i8
 #' @export
 tcc_write_f64 <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_f64, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_f64, ptr, offset, value))
 }
 
 #' Write a pointer at byte offset
@@ -342,7 +342,7 @@ tcc_write_f64 <- function(ptr, offset, value) {
 #' @return `NULL` (invisibly).
 #' @export
 tcc_write_ptr <- function(ptr, offset, value) {
-  invisible(.Call(RC_write_ptr, ptr, as.integer(offset), value))
+  invisible(.Call(RC_write_ptr, ptr, offset, value))
 }
 
 #' Allocate memory buffer

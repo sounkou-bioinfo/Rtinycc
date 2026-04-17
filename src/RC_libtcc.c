@@ -12,6 +12,7 @@
 #include <R_ext/Parse.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -599,31 +600,34 @@ SEXP RC_get_external_ptr_addr(SEXP ext) {
     return Rf_ScalarReal((double)(uintptr_t)addr);
 }
 
+static const char *RC_extptr_tag_name(SEXP tag) {
+    if (tag == R_NilValue) {
+        return "<nil>";
+    }
+    if (TYPEOF(tag) == SYMSXP) {
+        return CHAR(PRINTNAME(tag));
+    }
+    return "<non-symbol>";
+}
+
 /**
  * Return pointer address as a hex string ("0x...").
  * Ownership: returns a new R string (R-managed).
- * Allocation: R_Calloc buffer, freed via R_Free.
+ * Allocation: R string allocation only.
  * Protection: none.
  */
 /* Return pointer address as a hex string ("0x..."). */
 SEXP RC_get_external_ptr_hex(SEXP ext) {
     void *raw = R_ExternalPtrAddr(ext);
     uintptr_t addr = (uintptr_t) raw;
-    /* Buffer size: '0x' + two chars per byte + NUL */
-    size_t buf_size = 2 + (sizeof(uintptr_t) * 2) + 1;
-    char *buf = (char*) R_Calloc(buf_size, char);
-    if (!buf) {
-        Rf_error("memory allocation failed");
-    }
+    char buf[2 + (sizeof(uintptr_t) * 2) + 1];
     /* Use PRIxPTR for portable formatting */
     if (raw == NULL) {
-        snprintf(buf, buf_size, "0x0");
+        snprintf(buf, sizeof(buf), "0x0");
     } else {
-        snprintf(buf, buf_size, "0x%" PRIxPTR, addr);
+        snprintf(buf, sizeof(buf), "0x%" PRIxPTR, addr);
     }
-    SEXP res = Rf_mkString(buf);
-    R_Free(buf);
-    return res;
+    return Rf_mkString(buf);
 }
 
 /**
@@ -678,7 +682,10 @@ SEXP RC_free(SEXP ptr) {
 
     SEXP tag = R_ExternalPtrTag(ptr);
     if (!Rf_isNull(tag) && tag != Rf_install("rtinycc_owned")) {
-        Rf_error("Pointer is not owned by Rtinycc; refusing to free");
+        Rf_error(
+            "Pointer tag '%s' is not owned by Rtinycc; refusing to free",
+            RC_extptr_tag_name(tag)
+        );
     }
     
     void *data = R_ExternalPtrAddr(ptr);
@@ -871,14 +878,7 @@ SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes) {
         return out;
     }
 
-    char *buf = (char*) R_Calloc((size_t)n + 1, char);
-    if (!buf) {
-        Rf_error("memory allocation failed");
-    }
-    memcpy(buf, data, (size_t)n);
-    buf[n] = '\0';
-    SET_STRING_ELT(out, 0, Rf_mkCharCE(buf, CE_UTF8));
-    R_Free(buf);
+    SET_STRING_ELT(out, 0, Rf_mkCharLenCE(data, n, CE_UTF8));
     UNPROTECT(1);
     return out;
 }
@@ -955,6 +955,65 @@ SEXP RC_write_bytes(SEXP ptr, SEXP raw) {
 // Typed read/write helpers (Bun-style)
 // ============================================================================
 
+static size_t rtinycc_offset_to_size_t(SEXP offset) {
+    double off = Rf_asReal(offset);
+    if (ISNA(off) || ISNAN(off)) {
+        Rf_error("offset must be a finite non-negative whole number");
+    }
+    if (off < 0 || trunc(off) != off) {
+        Rf_error("offset must be a finite non-negative whole number");
+    }
+    if (off > (double)SIZE_MAX) {
+        Rf_error("offset out of range");
+    }
+    return (size_t)off;
+}
+
+static uint32_t rtinycc_as_u32_value(SEXP value) {
+    double v = Rf_asReal(value);
+    if (ISNA(v) || ISNAN(v)) {
+        Rf_error("numeric value is NA");
+    }
+    if (v < 0 || v > (double)UINT32_MAX) {
+        Rf_error("u32 out of range");
+    }
+    if (trunc(v) != v) {
+        Rf_error("u32 requires integer value");
+    }
+    return (uint32_t)v;
+}
+
+static int64_t rtinycc_as_i64_value(SEXP value) {
+    double v = Rf_asReal(value);
+    if (ISNA(v) || ISNAN(v)) {
+        Rf_error("numeric value is NA");
+    }
+    if (fabs(v) > 9007199254740992.0) {
+        Rf_error("i64 requires exact integer (|x| <= 2^53)");
+    }
+    if (trunc(v) != v) {
+        Rf_error("i64 requires integer value");
+    }
+    return (int64_t)v;
+}
+
+static uint64_t rtinycc_as_u64_value(SEXP value) {
+    double v = Rf_asReal(value);
+    if (ISNA(v) || ISNAN(v)) {
+        Rf_error("numeric value is NA");
+    }
+    if (v < 0) {
+        Rf_error("u64 out of range");
+    }
+    if (v > 9007199254740992.0) {
+        Rf_error("u64 requires exact integer (|x| <= 2^53)");
+    }
+    if (trunc(v) != v) {
+        Rf_error("u64 requires integer value");
+    }
+    return (uint64_t)v;
+}
+
 /**
  * Helper: validate external pointer and compute base + byte_offset.
  * Ownership: borrowed pointer.
@@ -966,7 +1025,7 @@ static inline unsigned char *ptr_at(SEXP ptr, SEXP offset) {
     if (TYPEOF(ptr) != EXTPTRSXP) Rf_error("Expected external pointer");
     unsigned char *base = (unsigned char *)R_ExternalPtrAddr(ptr);
     if (!base) Rf_error("Pointer is NULL");
-    return base + (size_t)Rf_asInteger(offset);
+    return base + rtinycc_offset_to_size_t(offset);
 }
 
 /* --- scalar reads -------------------------------------------------------- */
@@ -1173,7 +1232,7 @@ SEXP RC_write_i32(SEXP ptr, SEXP offset, SEXP value) {
  * Protection: none.
  */
 SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value) {
-    uint32_t v = (uint32_t)Rf_asReal(value);
+    uint32_t v = rtinycc_as_u32_value(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
@@ -1185,7 +1244,7 @@ SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value) {
  * Protection: none.
  */
 SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value) {
-    int64_t v = (int64_t)Rf_asReal(value);
+    int64_t v = rtinycc_as_i64_value(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
@@ -1197,7 +1256,7 @@ SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value) {
  * Protection: none.
  */
 SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value) {
-    uint64_t v = (uint64_t)Rf_asReal(value);
+    uint64_t v = rtinycc_as_u64_value(value);
     memcpy(ptr_at(ptr, offset), &v, sizeof(v));
     return R_NilValue;
 }
@@ -1322,6 +1381,8 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
             } else if (TYPEOF(val) == STRSXP) {
                 const char *s = Rf_translateCharUTF8(STRING_ELT(val, 0));
                 cb_args[i].kind = CB_ARG_CSTRING;
+                /* Safe borrowed window: no R allocations happen before the
+                 * platform layer duplicates CSTRING args for cross-thread use. */
                 cb_args[i].v.s = (char*) s;
             } else if (TYPEOF(val) == EXTPTRSXP) {
                 cb_args[i].kind = CB_ARG_PTR;
@@ -1630,6 +1691,29 @@ SEXP RC_callback_is_valid(SEXP callback_ext) {
  * Allocation: R allocations only.
  * Protection: none.
  */
+static int rtinycc_is_cstring_type_name(const char *type_name) {
+    if (!type_name) {
+        return 0;
+    }
+    return strcmp(type_name, "string") == 0 ||
+           strcmp(type_name, "cstring") == 0 ||
+           strcmp(type_name, "char*") == 0 ||
+           strcmp(type_name, "char *") == 0 ||
+           strcmp(type_name, "const char*") == 0 ||
+           strcmp(type_name, "const char *") == 0;
+}
+
+static int rtinycc_is_pointer_type_name(const char *type_name) {
+    if (!type_name) {
+        return 0;
+    }
+    return strcmp(type_name, "ptr") == 0 ||
+           strcmp(type_name, "void*") == 0 ||
+           strcmp(type_name, "void *") == 0 ||
+           (strstr(type_name, "*") != NULL &&
+            !rtinycc_is_cstring_type_name(type_name));
+}
+
 static SEXP RC_callback_default_sexp(const char *return_type) {
     if (return_type == NULL) {
         return R_NilValue;
@@ -1676,18 +1760,12 @@ static SEXP RC_callback_default_sexp(const char *return_type) {
         return R_NilValue;
     }
 
-    if (strcmp(return_type, "string") == 0 ||
-        strcmp(return_type, "cstring") == 0 ||
-        strcmp(return_type, "char*") == 0 ||
-        strcmp(return_type, "const char*") == 0) {
+    if (rtinycc_is_cstring_type_name(return_type)) {
         return Rf_ScalarString(NA_STRING);
     }
 
-    if (strcmp(return_type, "ptr") == 0 ||
-        strcmp(return_type, "void*") == 0 ||
-        strcmp(return_type, "void *") == 0 ||
-        (strstr(return_type, "*") != NULL && strstr(return_type, "char") == NULL)) {
-        return R_MakeExternalPtr(NULL, R_NilValue, R_NilValue);
+    if (rtinycc_is_pointer_type_name(return_type)) {
+        return R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
     }
 
     return R_NilValue;
@@ -1769,7 +1847,22 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
                strcmp(entry->return_type, "f64") == 0 ||
                strcmp(entry->return_type, "float") == 0 ||
                strcmp(entry->return_type, "f32") == 0) {
-        converted = Rf_ScalarReal(Rf_asReal(result));
+        double numeric_result = Rf_asReal(result);
+        if ((strcmp(entry->return_type, "i64") == 0 ||
+             strcmp(entry->return_type, "int64_t") == 0) &&
+            !ISNA(numeric_result) &&
+            !ISNAN(numeric_result) &&
+            fabs(numeric_result) > 9007199254740992.0) {
+            Rf_warning("callback i64 precision loss in R numeric");
+        }
+        if ((strcmp(entry->return_type, "u64") == 0 ||
+             strcmp(entry->return_type, "uint64_t") == 0) &&
+            !ISNA(numeric_result) &&
+            !ISNAN(numeric_result) &&
+            numeric_result > 9007199254740992.0) {
+            Rf_warning("callback u64 precision loss in R numeric");
+        }
+        converted = Rf_ScalarReal(numeric_result);
     } else if (strcmp(entry->return_type, "u8") == 0 ||
                strcmp(entry->return_type, "uint8_t") == 0 ||
                strcmp(entry->return_type, "u16") == 0 ||
@@ -1781,20 +1874,13 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
     } else if (strcmp(entry->return_type, "sexp") == 0 ||
                strcmp(entry->return_type, "SEXP") == 0) {
         converted = result;
-    } else if (strcmp(entry->return_type, "string") == 0 ||
-               strcmp(entry->return_type, "cstring") == 0 ||
-               strcmp(entry->return_type, "char*") == 0 ||
-               strcmp(entry->return_type, "const char*") == 0) {
+    } else if (rtinycc_is_cstring_type_name(entry->return_type)) {
         if (Rf_isString(result)) {
             converted = result;
         } else {
             converted = Rf_ScalarString(Rf_asChar(result));
         }
-    } else if (strcmp(entry->return_type, "ptr") == 0 ||
-               strcmp(entry->return_type, "void*") == 0 ||
-               strcmp(entry->return_type, "void *") == 0 ||
-               (strstr(entry->return_type, "*") != NULL &&
-                strstr(entry->return_type, "char") == NULL)) {
+    } else if (rtinycc_is_pointer_type_name(entry->return_type)) {
         if (TYPEOF(result) != EXTPTRSXP) {
             UNPROTECT(2);
             Rf_warning("Callback return is not an external pointer");

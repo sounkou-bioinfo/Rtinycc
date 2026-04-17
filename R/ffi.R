@@ -183,6 +183,8 @@ tcc_library <- function(ffi, library) {
 #' - Large integer types (`i64`, `u32`, `u64`) are mediated through R numeric
 #'   (double). Values must be integer-valued and within range; for `i64`/`u64`
 #'   only exact integers up to $2^53$ are accepted.
+#' - Getter wrappers for `i64`/`u64` warn when the stored value exceeds R's
+#'   exact integer range for numeric vectors.
 #' - `bool` rejects `NA` logicals.
 #'
 #' Ownership notes:
@@ -261,7 +263,7 @@ tcc_source <- function(ffi, code) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
   }
-  ffi$c_code <- paste(ffi$c_code, code, sep = "\n")
+  ffi$c_code <- c(ffi$c_code, as.character(code))
   ffi
 }
 

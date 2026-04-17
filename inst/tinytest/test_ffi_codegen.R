@@ -26,6 +26,9 @@ expect_true(grepl("int32_t[*] arr = INTEGER", code))
 code <- Rtinycc:::generate_c_input("nums", "arg1_", "numeric_array")
 expect_true(grepl("double[*] nums = REAL", code))
 
+code <- Rtinycc:::generate_c_input("chars", "arg1_", "character_array")
+expect_true(grepl("STRING_PTR_RO", code, fixed = TRUE))
+
 # Test 3: Generate C return code
 rc <- Rtinycc:::generate_c_return("result", "i32")
 expect_true(grepl("ScalarInteger", rc))
@@ -61,6 +64,10 @@ rc <- Rtinycc:::generate_c_return("next_str()", "cstring")
 expect_true(grepl("char\\* __rtinycc_ret = next_str\\(\\);", rc))
 expect_true(grepl("mkString\\(__rtinycc_ret\\)", rc))
 expect_false(grepl("next_str\\(\\).+next_str\\(\\)", rc))
+
+sexp_call <- Rtinycc:::get_sexp_constructor_call("const char*", "next_str()")
+expect_true(grepl("__rtinycc_tmp = next_str\\(\\);", sexp_call))
+expect_false(grepl("next_str\\(\\).+next_str\\(\\)", sexp_call))
 
 # Test 4: Generate full wrapper function
 wrapper <- Rtinycc:::generate_c_wrapper(
@@ -108,8 +115,18 @@ full_code <- Rtinycc:::generate_ffi_code(
 expect_true(grepl("#define _Complex", full_code))
 expect_true(grepl("#include <R.h>", full_code))
 expect_true(grepl("#include <Rinternals.h>", full_code))
+expect_true(grepl("#ifndef STRING_PTR_RO", full_code))
 expect_true(grepl("#include <stdint.h>", full_code))
 expect_true(grepl("#include <stdbool.h>", full_code))
 expect_true(grepl("R_wrap_add", full_code))
 expect_true(grepl("R_wrap_greet", full_code))
 expect_true(grepl("SEXP R_wrap_add", full_code))
+
+# Test 8: tcc_source stores code as chunks without introducing a leading blank line
+ffi <- tcc_ffi() |>
+  tcc_source("int a(void) { return 1; }") |>
+  tcc_source("int b(void) { return 2; }")
+expect_equal(
+  ffi$c_code,
+  c("int a(void) { return 1; }", "int b(void) { return 2; }")
+)

@@ -1206,6 +1206,9 @@ generate_ffi_code <- function(
     parts,
     "#include <R.h>",
     "#include <Rinternals.h>",
+    "#ifndef STRING_PTR_RO",
+    "#define STRING_PTR_RO STRING_PTR",
+    "#endif",
     "void RC_free_finalizer(SEXP ext);",
     ""
   )
@@ -1303,8 +1306,9 @@ generate_ffi_code <- function(
 
   # User C code
   if (!is.null(c_code) && length(c_code) > 0) {
-    if (nzchar(c_code) > 0) {
-      parts <- c(parts, "/* User code */", c_code, "")
+    c_code_lines <- c_code[nzchar(c_code)]
+    if (length(c_code_lines) > 0) {
+      parts <- c(parts, "/* User code */", c_code_lines, "")
     }
   }
 

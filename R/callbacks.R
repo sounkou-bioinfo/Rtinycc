@@ -205,20 +205,20 @@ parse_arg_list <- function(args_str) {
     return(character(0))
   }
 
-  chars <- strsplit(args_str, "", fixed = TRUE)[[1]]
   args <- character(0)
-  current <- character(0)
   depth_paren <- 0L
   depth_bracket <- 0L
+  start <- 1L
+  n <- nchar(args_str, type = "chars")
 
-  for (ch in chars) {
+  for (i in seq_len(n)) {
+    ch <- substr(args_str, i, i)
     if (ch == "," && depth_paren == 0L && depth_bracket == 0L) {
-      args <- c(args, trimws(paste(current, collapse = "")))
-      current <- character(0)
+      args <- c(args, trimws(substr(args_str, start, i - 1L)))
+      start <- i + 1L
       next
     }
 
-    current <- c(current, ch)
     if (ch == "(") {
       depth_paren <- depth_paren + 1L
     } else if (ch == ")") {
@@ -229,7 +229,8 @@ parse_arg_list <- function(args_str) {
       depth_bracket <- max(0L, depth_bracket - 1L)
     }
   }
-  args <- c(args, trimws(paste(current, collapse = "")))
+
+  args <- c(args, trimws(substr(args_str, start, n)))
   args <- args[nzchar(args)]
 
   # Remove parameter names (keep only type)
@@ -590,7 +591,7 @@ async_result_kind <- function(return_type) {
   if (rt %in% c("bool", "logical")) {
     return("logical")
   }
-  if (grepl("\\*", rt) && !grepl("char", rt)) {
+  if (is_ptr_type(rt)) {
     return("ptr")
   }
   NULL

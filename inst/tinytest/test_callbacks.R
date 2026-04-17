@@ -246,16 +246,17 @@ expect_silent(
   info = "Async callback allows non-void return signatures"
 )
 
-msg_i64 <- tryCatch(
-  {
-    mk_tramps("callback_async:void(int64_t)")
-    ""
-  },
-  error = function(e) conditionMessage(e)
+expect_silent(
+  mk_tramps("callback_async:void(int64_t)"),
+  info = "Async callback accepts i64 arguments through the real slot"
 )
-expect_true(
-  grepl("unsupported argument type", msg_i64, fixed = TRUE),
-  info = "Async callback rejects unsupported wide integer args"
+expect_silent(
+  mk_tramps("callback_async:void(uint32_t)"),
+  info = "Async callback accepts u32 arguments through the real slot"
+)
+expect_silent(
+  mk_tramps("callback_async:void(uint64_t)"),
+  info = "Async callback accepts u64 arguments through the real slot"
 )
 
 expect_silent(
