@@ -227,6 +227,45 @@ expect_true(
   info = "Trampoline guards NA logical returns"
 )
 
+tramp_sig_cases <- list(
+  list(
+    name = "tramp_i8",
+    signature = "int8_t (*)(int8_t)",
+    pattern = "int8_t tramp_i8\\(void\\* cb, int8_t arg1\\)",
+    info = "Trampoline keeps int8_t argument ABI"
+  ),
+  list(
+    name = "tramp_i16",
+    signature = "int16_t (*)(int16_t)",
+    pattern = "int16_t tramp_i16\\(void\\* cb, int16_t arg1\\)",
+    info = "Trampoline keeps int16_t argument ABI"
+  ),
+  list(
+    name = "tramp_f32",
+    signature = "float (*)(float)",
+    pattern = "float tramp_f32\\(void\\* cb, float arg1\\)",
+    info = "Trampoline keeps float argument ABI"
+  ),
+  list(
+    name = "tramp_bool_arg",
+    signature = "bool (*)(bool)",
+    pattern = "bool tramp_bool_arg\\(void\\* cb, bool arg1\\)",
+    info = "Trampoline keeps bool argument ABI"
+  ),
+  list(
+    name = "tramp_ptrptr_arg",
+    signature = "void (*)(char **)",
+    pattern = "void tramp_ptrptr_arg\\(void\\* cb, char \\*\\* arg1\\)",
+    info = "Trampoline keeps pointer subtype in argument ABI"
+  )
+)
+
+for (case in tramp_sig_cases) {
+  sig <- Rtinycc:::parse_callback_signature(case$signature)
+  tramp <- Rtinycc:::generate_trampoline(case$name, sig)
+  expect_true(grepl(case$pattern, tramp), info = case$info)
+}
+
 # ==========================================================================
 # Test 17: Async trampoline validation (supported args, pointer handling)
 # ==========================================================================
@@ -273,4 +312,21 @@ expect_true(
 expect_true(
   grepl(".v.p = arg1;", tramp_ptrptr, fixed = TRUE),
   info = "Async callback stores char** in pointer slot"
+)
+
+sig_async_f32 <- Rtinycc:::parse_callback_type("callback_async:f32(f32)")
+tramp_async_f32 <- Rtinycc:::generate_async_trampoline(
+  "tramp_async_f32",
+  sig_async_f32
+)
+expect_true(
+  grepl(
+    "float tramp_async_f32\\(void\\* cb, float arg1\\)",
+    tramp_async_f32
+  ),
+  info = "Async trampoline normalizes f32 to float in the C signature"
+)
+expect_true(
+  grepl("return \\(float\\)result.v.d;", tramp_async_f32),
+  info = "Async trampoline normalizes f32 return casts to float"
 )

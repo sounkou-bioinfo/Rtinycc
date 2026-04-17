@@ -123,13 +123,16 @@ generate_variadic_type_sequences <- function(allowed_types, n_varargs) {
 callback_funptr_decl <- function(arg_name, sig, trampoline_name) {
   arg_types <- sig$arg_types
   c_args <- if (length(arg_types) > 0) {
-    paste(c("void*", arg_types), collapse = ", ")
+    paste(
+      c("void*", vapply(arg_types, callback_c_decl_type, character(1))),
+      collapse = ", "
+    )
   } else {
     "void*"
   }
   sprintf(
     "  %s (*%s)(%s) = %s;",
-    sig$return_type,
+    callback_c_decl_type(sig$return_type),
     arg_name,
     c_args,
     trampoline_name

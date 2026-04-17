@@ -122,35 +122,61 @@ expect_true(grepl("R_wrap_add", full_code))
 expect_true(grepl("R_wrap_greet", full_code))
 expect_true(grepl("SEXP R_wrap_add", full_code))
 
-# Test 7b: Bool callback trampolines preserve bool argument types
-bool_cb_code <- Rtinycc:::generate_ffi_code(
-  symbols = list(
-    call_bool_cb = list(
-      args = list("callback:bool(bool)", "ptr", "bool"),
-      returns = "bool"
-    )
+# Test 7b: Callback trampolines preserve ABI-relevant argument types
+callback_abi_cases <- list(
+  list(
+    name = "call_bool_cb",
+    args = list("callback:bool(bool)", "ptr", "bool"),
+    returns = "bool",
+    c_code = "
+      bool call_bool_cb(bool (*cb)(void*, bool), void* ctx, bool x) {
+        return cb(ctx, x);
+      }
+    ",
+    tramp_pattern = "bool trampoline_R_wrap_call_bool_cb_arg1\\(void\\* cb, bool arg1\\)",
+    decl_pattern = "bool \\(\\*arg1\\)\\(void\\*, bool\\) = trampoline_R_wrap_call_bool_cb_arg1;",
+    info = "Bool callback wrapper preserves bool ABI"
   ),
-  c_code = "
-    bool call_bool_cb(bool (*cb)(void*, bool), void* ctx, bool x) {
-      return cb(ctx, x);
-    }
-  ",
-  is_external = FALSE
-)
-expect_true(
-  grepl(
-    "bool trampoline_R_wrap_call_bool_cb_arg1\\(void\\* cb, bool arg1\\)",
-    bool_cb_code
+  list(
+    name = "call_i8_cb",
+    args = list("callback:int8_t(int8_t)", "ptr", "i8"),
+    returns = "i8",
+    c_code = "
+      int8_t call_i8_cb(int8_t (*cb)(void*, int8_t), void* ctx, int8_t x) {
+        return cb(ctx, x);
+      }
+    ",
+    tramp_pattern = "int8_t trampoline_R_wrap_call_i8_cb_arg1\\(void\\* cb, int8_t arg1\\)",
+    decl_pattern = "int8_t \\(\\*arg1\\)\\(void\\*, int8_t\\) = trampoline_R_wrap_call_i8_cb_arg1;",
+    info = "int8_t callback wrapper preserves narrow integer ABI"
   ),
-  info = "Bool callback trampoline keeps bool argument type"
+  list(
+    name = "call_f32_cb",
+    args = list("callback:float(float)", "ptr", "f32"),
+    returns = "f32",
+    c_code = "
+      float call_f32_cb(float (*cb)(void*, float), void* ctx, float x) {
+        return cb(ctx, x);
+      }
+    ",
+    tramp_pattern = "float trampoline_R_wrap_call_f32_cb_arg1\\(void\\* cb, float arg1\\)",
+    decl_pattern = "float \\(\\*arg1\\)\\(void\\*, float\\) = trampoline_R_wrap_call_f32_cb_arg1;",
+    info = "float callback wrapper preserves float ABI"
+  )
 )
-expect_true(
-  grepl(
-    "bool \\(\\*arg1\\)\\(void\\*, bool\\) = trampoline_R_wrap_call_bool_cb_arg1;",
-    bool_cb_code
-  ),
-  info = "Bool callback wrapper declaration matches trampoline signature"
-)
+
+for (case in callback_abi_cases) {
+  cb_code <- Rtinycc:::generate_ffi_code(
+    symbols = setNames(
+      list(list(args = case$args, returns = case$returns)),
+      case$name
+    ),
+    c_code = case$c_code,
+    is_external = FALSE
+  )
+  expect_true(grepl(case$tramp_pattern, cb_code), info = case$info)
+  expect_true(grepl(case$decl_pattern, cb_code), info = case$info)
+}
 
 # Test 8: tcc_source stores code as chunks without introducing a leading blank line
 ffi <- tcc_ffi() |>
