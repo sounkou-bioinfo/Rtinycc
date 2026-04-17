@@ -18,6 +18,7 @@ src/*.o
 ^CLAUDE.md$
 ^config\.log$
 ^copilot-instructions\.md$
+^review_claude_opus_four_dot_seven\.md$
 ^GCF_.*$
 ^mutations$
 ^mutations/.*$

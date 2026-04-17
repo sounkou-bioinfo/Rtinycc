@@ -87,8 +87,6 @@ rtinycc_code <- '
       Rf_error("n must be non-negative");
     }
     if (n == 0) {
-      /* The wrapper uses free = TRUE, so this zero-length buffer is copied
-         as length 0 and then freed by the generated return path. */
       return (double*) malloc(sizeof(double));
     }
 
