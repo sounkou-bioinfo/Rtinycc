@@ -575,7 +575,7 @@ ffi_return_rule("cstring", value_expr) %as%
   {
     sprintf(
       paste(
-        "char* __rtinycc_ret = %s;",
+        "const char* __rtinycc_ret = %s;",
         "if (__rtinycc_ret) {",
         "    SEXP out = PROTECT(mkString(__rtinycc_ret));",
         "    UNPROTECT(1);",
