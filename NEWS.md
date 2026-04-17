@@ -1,4 +1,4 @@
-# Rtinycc 0.1.2
+# Rtinycc 0.1.3
 
 - Tighten FFI boundary handling for wide integers and pointers. Generated
   wrappers, struct accessors, typed memory writers, and callback return paths
@@ -36,9 +36,10 @@
   package vignettes and Markdown vignette exports.
 
 - Add an internal knitr engine for reusable C chunks in vignettes, adapted
-  from the `callme` package, and use it in the benchmark vignette while
-  skipping executable `callme` comparisons when the build environment cannot
-  compile the temporary helper DLL.
+  from the `callme` package, and use it in the benchmark vignette. The
+  executable `callme` comparisons now degrade gracefully when the build
+  environment cannot compile the temporary helper DLL, which restores passing
+  package checks on Windows CI.
 
 # Rtinycc 0.1.1
 
