@@ -7,6 +7,12 @@
   avoids repeated calls in generated wrappers for side-effectful
   expressions.
 
+- Declare the temporary `cstring` return variable as `const char*` so
+  the generated wrapper accepts `const char*`-returning C functions
+  without a const-discarding assignment. This restores vignette builds
+  on macOS and Windows (bundled TinyCC treated the implicit
+  const-discard as a fatal diagnostic rather than a warning).
+
 - Add regression tests for repeated-evaluation bugs in generated FFI
   return code.
 

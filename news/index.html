@@ -48,6 +48,7 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.2" id="rtinycc-012">Rtinycc 0.1.2<a class="anchor" aria-label="anchor" href="#rtinycc-012"></a></h2>
 <ul><li><p>Fix FFI return code generation so array, <code>cstring</code>, <code>i64</code>, and <code>u64</code> return expressions are evaluated once before boxing/copying. This avoids repeated calls in generated wrappers for side-effectful expressions.</p></li>
+<li><p>Declare the temporary <code>cstring</code> return variable as <code>const char*</code> so the generated wrapper accepts <code>const char*</code>-returning C functions without a const-discarding assignment. This restores vignette builds on macOS and Windows (bundled TinyCC treated the implicit const-discard as a fatal diagnostic rather than a warning).</p></li>
 <li><p>Add regression tests for repeated-evaluation bugs in generated FFI return code.</p></li>
 <li><p>Add <code>make vig</code> and <code>make vig-md</code> development targets for rebuilding HTML package vignettes and Markdown vignette exports.</p></li>
 </ul></div>
