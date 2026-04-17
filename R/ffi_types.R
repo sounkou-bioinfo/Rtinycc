@@ -120,13 +120,13 @@ FFI_TYPES <- list(
     c_element = "int"
   ),
 
-  # R character vector → SEXP (STRING_PTR for R >= 3.5)
+  # R character vector → read-only CHARSXP cells (STRING_PTR_RO when available)
   character_array = list(
     c_type = "SEXP*",
     r_type = "character",
     size = NA_integer_,
     kind = "array",
-    r_accessor = "STRING_PTR",
+    r_accessor = "STRING_PTR_RO",
     c_element = "SEXP"
   ),
 

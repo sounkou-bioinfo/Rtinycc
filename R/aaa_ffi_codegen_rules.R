@@ -182,13 +182,11 @@ ffi_input_rule("u64", arg_name, r_name) %as%
         "  if (_%s < 0) Rf_error(\"u64 out of range\");",
         "  if (fabs(_%s) > 9007199254740992.0) Rf_error(\"u64 requires exact integer (|x| <= 2^53)\");",
         "  if (trunc(_%s) != _%s) Rf_error(\"u64 requires integer value\");",
-        "  if (_%s > (double)UINT64_MAX) Rf_error(\"u64 out of range\");",
         "  uint64_t %s = (uint64_t)_%s;",
         sep = "\n"
       ),
       arg_name,
       r_name,
-      arg_name,
       arg_name,
       arg_name,
       arg_name,
@@ -279,7 +277,7 @@ ffi_input_rule("logical_array", arg_name, r_name) %as%
 
 ffi_input_rule("character_array", arg_name, r_name) %as%
   {
-    sprintf("  SEXP* %s = STRING_PTR(%s);", arg_name, r_name)
+    sprintf("  const SEXP* %s = STRING_PTR_RO(%s);", arg_name, r_name)
   }
 
 ffi_input_rule("cstring_array", arg_name, r_name) %as%
@@ -520,7 +518,7 @@ ffi_return_rule("i64", value_expr) %as%
     sprintf(
       paste(
         "  int64_t __rtinycc_ret = %s;",
-        "  if (fabs((double)__rtinycc_ret) > 9007199254740992.0) Rf_warning(\"i64 precision loss in R numeric\");",
+        "  if (__rtinycc_ret > INT64_C(9007199254740992) || __rtinycc_ret < -INT64_C(9007199254740992)) Rf_warning(\"i64 precision loss in R numeric\");",
         "  return ScalarReal((double)__rtinycc_ret);",
         sep = "\n"
       ),
@@ -548,7 +546,7 @@ ffi_return_rule("u64", value_expr) %as%
     sprintf(
       paste(
         "  uint64_t __rtinycc_ret = %s;",
-        "  if ((double)__rtinycc_ret > 9007199254740992.0) Rf_warning(\"u64 precision loss in R numeric\");",
+        "  if (__rtinycc_ret > UINT64_C(9007199254740992)) Rf_warning(\"u64 precision loss in R numeric\");",
         "  return ScalarReal((double)__rtinycc_ret);",
         sep = "\n"
       ),
@@ -714,7 +712,11 @@ struct_field_getter_rule("i32", field_name) %as%
 
 struct_field_getter_rule("i64", field_name) %as%
   {
-    sprintf("return ScalarReal((double)p->%s);", field_name)
+    c(
+      sprintf("  int64_t __rtinycc_ret = p->%s;", field_name),
+      "  if (__rtinycc_ret > INT64_C(9007199254740992) || __rtinycc_ret < -INT64_C(9007199254740992)) Rf_warning(\"i64 precision loss in R numeric\");",
+      "  return ScalarReal((double)__rtinycc_ret);"
+    )
   }
 
 struct_field_getter_rule("u8", field_name) %as%
@@ -734,7 +736,11 @@ struct_field_getter_rule("u32", field_name) %as%
 
 struct_field_getter_rule("u64", field_name) %as%
   {
-    sprintf("return ScalarReal((double)p->%s);", field_name)
+    c(
+      sprintf("  uint64_t __rtinycc_ret = p->%s;", field_name),
+      "  if (__rtinycc_ret > UINT64_C(9007199254740992)) Rf_warning(\"u64 precision loss in R numeric\");",
+      "  return ScalarReal((double)__rtinycc_ret);"
+    )
   }
 
 struct_field_getter_rule("f32", field_name) %as%
@@ -798,7 +804,11 @@ struct_array_field_getter_rule("i32", field_name) %as%
 
 struct_array_field_getter_rule("i64", field_name) %as%
   {
-    sprintf("return ScalarReal((double)p->%s[idx]);", field_name)
+    c(
+      sprintf("  int64_t __rtinycc_ret = p->%s[idx];", field_name),
+      "  if (__rtinycc_ret > INT64_C(9007199254740992) || __rtinycc_ret < -INT64_C(9007199254740992)) Rf_warning(\"i64 precision loss in R numeric\");",
+      "  return ScalarReal((double)__rtinycc_ret);"
+    )
   }
 
 struct_array_field_getter_rule("u8", field_name) %as%
@@ -818,7 +828,11 @@ struct_array_field_getter_rule("u32", field_name) %as%
 
 struct_array_field_getter_rule("u64", field_name) %as%
   {
-    sprintf("return ScalarReal((double)p->%s[idx]);", field_name)
+    c(
+      sprintf("  uint64_t __rtinycc_ret = p->%s[idx];", field_name),
+      "  if (__rtinycc_ret > UINT64_C(9007199254740992)) Rf_warning(\"u64 precision loss in R numeric\");",
+      "  return ScalarReal((double)__rtinycc_ret);"
+    )
   }
 
 struct_array_field_getter_rule("f32", field_name) %as%
@@ -1266,7 +1280,10 @@ sexp_constructor_call_rule("ptr", arg_expr) %as%
 
 sexp_constructor_call_rule("cstring", arg_expr) %as%
   {
-    sprintf("(%s ? mkString(%s) : R_NilValue)", arg_expr, arg_expr)
+    sprintf(
+      "({ const char* __rtinycc_tmp = %s; __rtinycc_tmp ? mkString(__rtinycc_tmp) : R_NilValue; })",
+      arg_expr
+    )
   }
 
 sexp_constructor_call_rule("int", arg_expr) %as%
@@ -1640,6 +1657,30 @@ cb_kind_key_rule("f64", FALSE) %as%
     "real"
   }
 cb_kind_key_rule("f32", FALSE) %as%
+  {
+    "real"
+  }
+cb_kind_key_rule("int64_t", FALSE) %as%
+  {
+    "real"
+  }
+cb_kind_key_rule("i64", FALSE) %as%
+  {
+    "real"
+  }
+cb_kind_key_rule("uint32_t", FALSE) %as%
+  {
+    "real"
+  }
+cb_kind_key_rule("u32", FALSE) %as%
+  {
+    "real"
+  }
+cb_kind_key_rule("uint64_t", FALSE) %as%
+  {
+    "real"
+  }
+cb_kind_key_rule("u64", FALSE) %as%
   {
     "real"
   }

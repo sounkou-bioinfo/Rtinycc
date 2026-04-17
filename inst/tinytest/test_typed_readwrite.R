@@ -32,6 +32,19 @@ expect_equal(tcc_read_i64(buf, 16L), -123456789, info = "i64 round-trip")
 tcc_write_u64(buf, 24L, 2^52)
 expect_equal(tcc_read_u64(buf, 24L), 2^52, info = "u64 round-trip")
 
+expect_error(
+  tcc_write_i64(buf, 16L, 2^53 + 2),
+  info = "i64 writer rejects lossy numeric input"
+)
+expect_error(
+  tcc_write_u64(buf, 24L, -1),
+  info = "u64 writer rejects negative input"
+)
+expect_error(
+  tcc_write_u32(buf, 12L, NaN),
+  info = "u32 writer rejects NA/NaN-like numeric input"
+)
+
 # --- f32 / f64 -------------------------------------------------------------
 tcc_write_f32(buf, 32L, 3.14)
 expect_true(
@@ -80,5 +93,14 @@ expect_equal(
 # --- default offset = 0 ----------------------------------------------------
 tcc_write_u8(buf, 0L, 77L)
 expect_equal(tcc_read_u8(buf), 77L, info = "u8 default offset=0")
+
+expect_error(
+  tcc_read_u8(buf, offset = -1),
+  info = "typed reads reject negative offsets"
+)
+expect_error(
+  tcc_write_i32(buf, offset = 0.5, value = 1L),
+  info = "typed writes reject fractional offsets"
+)
 
 tcc_free(buf)

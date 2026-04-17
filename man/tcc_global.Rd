@@ -29,6 +29,8 @@ within range; \code{NA} values error.
 \item Large integer types (\code{i64}, \code{u32}, \code{u64}) are mediated through R numeric
 (double). Values must be integer-valued and within range; for \code{i64}/\code{u64}
 only exact integers up to $2^53$ are accepted.
+\item Getter wrappers for \code{i64}/\code{u64} warn when the stored value exceeds R's
+exact integer range for numeric vectors.
 \item \code{bool} rejects \code{NA} logicals.
 }
 

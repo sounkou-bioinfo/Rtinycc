@@ -102,8 +102,9 @@ The implemented array input types are:
 - `character_array`
 - `cstring_array`
 
-The first four map directly onto R vectors. `character_array` passes string
-objects, while `cstring_array` builds a temporary `const char **` for the call.
+The first four map directly onto R vectors. `character_array` passes the
+underlying `CHARSXP` cells as a read-only `SEXP *`, not a `char **`.
+Use `cstring_array` when the C side expects a temporary `const char **`.
 
 ```{r}
 ffi_arr <- tcc_ffi() |>
