@@ -649,6 +649,9 @@ generate_struct_new <- function(struct_name) {
 generate_struct_free <- function(struct_name) {
   c(
     sprintf("SEXP R_wrap_struct_%s_free(SEXP ext) {", struct_name),
+    "  if (R_ExternalPtrProtected(ext) != R_NilValue) {",
+    "    Rf_error(\"Cannot free borrowed view; free the owning object instead\");",
+    "  }",
     "  RC_free_finalizer(ext);",
     "  return R_NilValue;",
     "}",
@@ -940,6 +943,9 @@ generate_union_new <- function(union_name) {
 generate_union_free <- function(union_name) {
   c(
     sprintf("SEXP R_wrap_union_%s_free(SEXP ext) {", union_name),
+    "  if (R_ExternalPtrProtected(ext) != R_NilValue) {",
+    "    Rf_error(\"Cannot free borrowed view; free the owning object instead\");",
+    "  }",
     "  RC_free_finalizer(ext);",
     "  return R_NilValue;",
     "}",
@@ -951,12 +957,17 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
   if (
     is.list(mem_spec) && !is.null(mem_spec$type) && mem_spec$type == "struct"
   ) {
+    struct_name <- mem_spec$struct_name %||% mem_name
     # Nested struct in union
     return(c(
       sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
       sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-      "  return ext;",
+      sprintf(
+        "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
+        mem_name,
+        struct_name
+      ),
       "}",
       ""
     ))

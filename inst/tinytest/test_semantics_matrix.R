@@ -91,12 +91,16 @@ expect_true(
 expect_true(
   identical(
     composite_semantics$union_nested_struct_view$lifetime_model,
-    "owner identity alias"
+    "preserved owner slot"
   ) &&
     isTRUE(
       composite_semantics$union_nested_struct_view$survives_gc_with_live_view
     ),
   info = "union nested struct semantics records GC-safe borrowed-view lifetime"
+)
+expect_true(
+  isTRUE(composite_semantics$union_nested_struct_view$protects_owner),
+  info = "union nested struct semantics records owner protection"
 )
 expect_true(
   identical(composite_semantics$enum_i32$boundary_mode, "i32-like"),

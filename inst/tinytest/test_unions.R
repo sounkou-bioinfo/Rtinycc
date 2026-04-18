@@ -124,7 +124,6 @@ expect_true(
         break
       }
 
-      compiled$union_wrapper_free(inner)
       rm(inner)
       force_gc()
     }
@@ -132,4 +131,38 @@ expect_true(
     ok
   },
   info = "Nested union struct view stays usable across GC after owner reference is dropped"
+)
+
+# Test 5: Nested struct view from union cannot be freed directly
+expect_error(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct inner {
+        int x;
+      };
+
+      union wrapper {
+        struct inner inner;
+        int raw;
+      };
+    "
+      ) |>
+      tcc_struct("inner", accessors = c(x = "i32")) |>
+      tcc_union(
+        "wrapper",
+        members = list(inner = list(type = "struct"), raw = "i32"),
+        active = "raw"
+      ) |>
+      tcc_bind()
+
+    compiled <- tcc_compile(ffi)
+    u <- compiled$union_wrapper_new()
+    inner <- compiled$union_wrapper_get_inner(u)
+    on.exit(rm(inner, u), add = TRUE)
+    compiled$union_wrapper_free(inner)
+  },
+  pattern = "Cannot free borrowed view",
+  info = "Nested union struct view must be released through its owner, not freed directly"
 )

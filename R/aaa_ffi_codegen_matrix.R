@@ -1010,12 +1010,13 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     borrow = TRUE,
     copy = FALSE,
     ownership = "borrowed-from-union",
-    protects_owner = FALSE,
-    lifetime_model = "owner identity alias",
+    protects_owner = TRUE,
+    lifetime_model = "preserved owner slot",
     survives_gc_with_live_view = TRUE,
     notes = paste(
-      "Nested struct getters on unions reuse the owner external pointer",
-      "directly because union members share the same base address."
+      "Nested struct getters on unions return borrowed member views and keep",
+      "the owning union in the protected slot so the shared storage remains",
+      "alive while the view exists."
     )
   ),
   enum_i32 = list(
@@ -1144,7 +1145,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
   ),
   list(
     name = "union_nested_struct_owner",
-    info = "union nested struct getters reuse the union owner external pointer",
+    info = "union nested struct getters return borrowed views that protect the union owner",
     generate_args = list(
       symbols = list(),
       c_code = "union wrapper { struct { int x; } inner; int raw; };",
@@ -1157,7 +1158,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
     ),
     patterns = list(
       list(
-        pattern = "return ext;",
+        pattern = "return RC_make_borrowed_view(&p->inner, Rf_install(\"struct_inner\"), ext);",
         fixed = TRUE
       )
     )
