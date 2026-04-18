@@ -134,54 +134,57 @@ run_gdb_file() {
   local rscript_exe="$2"
   local gdb_exe="$3"
   local rfile_win
-  local -a gdb_args
+  local gdb_cmds
 
   cd "$repo_root"
   rfile_win="$(cygpath -w "$rfile")"
-  gdb_args=(
-    --batch
-    -ex "set pagination off"
-    -ex "set confirm off"
-    -ex "set breakpoint pending on"
-    -ex "set print frame-arguments all"
-    -ex "set print symbol-filename on"
-    -ex "handle SIGSEGV stop print nopass"
-  )
+  gdb_cmds="$(mktemp "${TMPDIR:-/tmp}/rtinycc-gdbcmds-XXXXXX.txt")"
+  trap 'rm -f "$gdb_cmds"' RETURN
+
+  cat >"$gdb_cmds" <<'EOF'
+set pagination off
+set confirm off
+set breakpoint pending on
+set print frame-arguments all
+set print symbol-filename on
+handle SIGSEGV stop print nopass
+EOF
 
   if [ "${RTINYCC_GDB_BREAK_FINALIZERS:-0}" = "1" ]; then
-    gdb_args+=(
-      -ex "break RC_make_borrowed_view"
-      -ex "commands"
-      -ex "silent"
-      -ex "printf \"\\n===== breakpoint RC_make_borrowed_view =====\\n\""
-      -ex "bt 8"
-      -ex "continue"
-      -ex "end"
-      -ex "break RC_borrowed_view_finalizer"
-      -ex "commands"
-      -ex "silent"
-      -ex "printf \"\\n===== breakpoint RC_borrowed_view_finalizer =====\\n\""
-      -ex "bt 8"
-      -ex "continue"
-      -ex "end"
-      -ex "break RC_free_finalizer"
-      -ex "commands"
-      -ex "silent"
-      -ex "printf \"\\n===== breakpoint RC_free_finalizer =====\\n\""
-      -ex "bt 8"
-      -ex "continue"
-      -ex "end"
-    )
+    cat >>"$gdb_cmds" <<'EOF'
+break RC_make_borrowed_view
+commands
+silent
+printf "\n===== breakpoint RC_make_borrowed_view =====\n"
+bt 8
+continue
+end
+break RC_borrowed_view_finalizer
+commands
+silent
+printf "\n===== breakpoint RC_borrowed_view_finalizer =====\n"
+bt 8
+continue
+end
+break RC_free_finalizer
+commands
+silent
+printf "\n===== breakpoint RC_free_finalizer =====\n"
+bt 8
+continue
+end
+EOF
   fi
 
-  gdb_args+=(
-    -ex "run"
-    -ex "printf \"\\n===== gdb backtrace =====\\n\""
-    -ex "thread apply all bt full"
-    --args "$rscript_exe" --vanilla "$rfile_win"
-  )
+  cat >>"$gdb_cmds" <<'EOF'
+run
+printf "\n===== gdb backtrace =====\n"
+thread apply all bt full
+EOF
 
-  "$gdb_exe" "${gdb_args[@]}"
+  "$gdb_exe" --batch -x "$gdb_cmds" --args "$rscript_exe" --vanilla "$rfile_win"
+  rm -f "$gdb_cmds"
+  trap - RETURN
 }
 
 run_with_temp_r() {
