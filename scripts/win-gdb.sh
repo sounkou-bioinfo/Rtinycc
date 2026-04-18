@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 pkg_name="${PKGNAME:-$(sed -n 's/^Package:[[:space:]]*//p' "$repo_root/DESCRIPTION" | head -1)}"
 RTOOLS_WIN_HOME="${RTOOLS_WIN_HOME:-C:\\rtools45}"
+GDB_EXE="${GDB_EXE:-}"
 
 native_windows=0
 case "$(uname -s)" in
@@ -29,6 +30,7 @@ Examples:
 Notes:
   - Intended for native Windows/MSYS with gdb available from Rtools.
   - Preserves current environment variables such as RTINYCC_TRACE_FINALIZERS=1.
+  - `GDB_EXE=/c/rtools45/ucrt64/bin/gdb.exe` overrides auto-detection.
 EOF
 }
 
@@ -40,8 +42,8 @@ require_native_windows() {
 }
 
 find_gdb_exe() {
-  local rtools_home_unix=""
   local candidate
+  local rtools_home_unix=""
 
   if command -v gdb >/dev/null 2>&1; then
     command -v gdb
@@ -53,21 +55,43 @@ find_gdb_exe() {
     return 0
   fi
 
+  if [ -n "$GDB_EXE" ]; then
+    if [ -x "$GDB_EXE" ]; then
+      printf '%s\n' "$GDB_EXE"
+      return 0
+    fi
+    echo "GDB_EXE is set but not executable: $GDB_EXE" >&2
+    exit 1
+  fi
+
   if [ "$native_windows" -eq 1 ]; then
-    rtools_home_unix="$(cygpath -u "$RTOOLS_WIN_HOME" 2>/dev/null || true)"
     for candidate in \
-      "$rtools_home_unix/ucrt64/bin/gdb.exe" \
-      "$rtools_home_unix/mingw64/bin/gdb.exe" \
-      "$rtools_home_unix/x86_64-w64-mingw32.static.posix/bin/gdb.exe"
+      "/c/rtools45/ucrt64/bin/gdb.exe" \
+      "/c/rtools45/mingw64/bin/gdb.exe" \
+      "/c/rtools45/x86_64-w64-mingw32.static.posix/bin/gdb.exe"
     do
-      if [ -x "$candidate" ]; then
+      if [ -n "$candidate" ] && [ -x "$candidate" ]; then
         printf '%s\n' "$candidate"
         return 0
       fi
     done
+
+    if command -v cygpath >/dev/null 2>&1; then
+      rtools_home_unix="$(cygpath -u "$RTOOLS_WIN_HOME" 2>/dev/null || true)"
+      for candidate in \
+        "$rtools_home_unix/ucrt64/bin/gdb.exe" \
+        "$rtools_home_unix/mingw64/bin/gdb.exe" \
+        "$rtools_home_unix/x86_64-w64-mingw32.static.posix/bin/gdb.exe"
+      do
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+          printf '%s\n' "$candidate"
+          return 0
+        fi
+      done
+    fi
   fi
 
-  echo "gdb not found on PATH or under $RTOOLS_WIN_HOME" >&2
+  echo "gdb not found on PATH, under /c/rtools45, or under $RTOOLS_WIN_HOME" >&2
   exit 1
 }
 
