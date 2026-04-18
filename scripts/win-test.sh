@@ -9,7 +9,7 @@ ncpu_expr="${NCPU_EXPR:-${NCPUS_EXPR:-}}"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/win-test.sh [all|deps|install|tinytest|union|smoke|file <path>]
+  scripts/win-test.sh [all|deps|install|tinytest|union|smoke|file <path>|files <path...>]
 
 Defaults:
   all      install deps, install the package, then run tinytest in-process
@@ -21,6 +21,7 @@ Examples:
   scripts/win-test.sh tinytest
   scripts/win-test.sh union
   scripts/win-test.sh file inst/tinytest/test_unions.R
+  scripts/win-test.sh files inst/tinytest/test_structs.R inst/tinytest/test_unions.R
 
 Environment:
   NCPU_EXPR=2L   tinytest worker count expression; unset means in-process
@@ -79,6 +80,29 @@ tinytest::run_test_file(normalizePath("${test_file}", winslash = "/", mustWork =
 EOF
 }
 
+run_test_files() {
+  cd "$repo_root"
+  local files=("$@")
+  local files_r=""
+  local file
+  for file in "${files[@]}"; do
+    if [ -n "$files_r" ]; then
+      files_r="$files_r, "
+    fi
+    files_r="$files_r\"$file\""
+  done
+  run_with_temp_r <<EOF
+files <- c(${files_r})
+files <- normalizePath(files, winslash = "/", mustWork = TRUE)
+results <- list()
+for (f in files) {
+  message("==> ", basename(f))
+  results[[basename(f)]] <- tinytest::run_test_file(f)
+}
+invisible(results)
+EOF
+}
+
 mode="${1:-all}"
 case "$mode" in
   -h|--help)
@@ -116,6 +140,15 @@ case "$mode" in
       exit 1
     }
     run_test_file "$1"
+    ;;
+  files)
+    shift
+    [ $# -ge 1 ] || {
+      echo "missing test file paths" >&2
+      usage >&2
+      exit 1
+    }
+    run_test_files "$@"
     ;;
   *)
     echo "unknown mode: $mode" >&2
