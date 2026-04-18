@@ -204,14 +204,24 @@ static void RC_tcc_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
-        RC_trace_finalizer_event("tcc_state:delete", ext, R_ExternalPtrProtected(ext), NULL);
         // remove from registry before delete
         tcc_state_entry_t *entry = RC_tcc_registry_find(s);
         if (entry) {
             RC_tcc_registry_remove(entry);
         }
+#ifdef _WIN32
+        /* On Windows, libtcc teardown unloads DLL handles during tcc_delete().
+           That is safe at process exit, but repeated GC-driven finalization of
+           relocated states has been observed to crash the live R session. Keep
+           the registry consistent, clear the external pointer, and let process
+           teardown reclaim the state. */
+        RC_trace_finalizer_event("tcc_state:skip_delete_windows", ext, R_ExternalPtrProtected(ext), NULL);
+        R_ClearExternalPtr(ext);
+#else
+        RC_trace_finalizer_event("tcc_state:delete", ext, R_ExternalPtrProtected(ext), NULL);
         tcc_delete(s);
         R_ClearExternalPtr(ext);
+#endif
     }
 }
 
