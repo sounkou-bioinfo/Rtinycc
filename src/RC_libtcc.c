@@ -35,7 +35,7 @@ SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
 
 typedef struct tcc_state_entry {
     TCCState *ptr;
-    SEXP owner_ext; // owning externalptr (preserved)
+    SEXP owner_ext; // owning externalptr (not preserved; removed by finalizer)
     struct tcc_state_entry *next;
 } tcc_state_entry_t;
 
@@ -47,9 +47,6 @@ static void RC_tcc_registry_remove(tcc_state_entry_t *entry) {
     while (*cur) {
         if (*cur == entry) {
             *cur = entry->next;
-            if (entry->owner_ext != R_NilValue) {
-                R_ReleaseObject(entry->owner_ext);
-            }
             free(entry);
             return;
         }
@@ -75,7 +72,6 @@ static void RC_tcc_registry_add(TCCState *ptr, SEXP owner_ext) {
     }
     entry->ptr = ptr;
     entry->owner_ext = owner_ext;
-    R_PreserveObject(entry->owner_ext);
     entry->next = g_tcc_state_registry;
     g_tcc_state_registry = entry;
 }
