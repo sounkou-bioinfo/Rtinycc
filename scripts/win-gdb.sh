@@ -32,7 +32,7 @@ Notes:
   - For meaningful backtraces, build an unstripped DLL first:
       make dev-install-debug-win
   - Preserves current environment variables such as RTINYCC_TRACE_FINALIZERS=1.
-  - `RTINYCC_GDB_BREAK_FINALIZERS=1` adds breakpoint traces for borrowed/free finalizers.
+  - `RTINYCC_GDB_BREAK_FINALIZERS=1` adds breakpoint traces for borrowed/free/tcc/callback finalizers.
   - `GDB_EXE=/c/rtools45/ucrt64/bin/gdb.exe` overrides auto-detection.
 EOF
 }
@@ -170,6 +170,27 @@ break RC_free_finalizer
 commands
 silent
 printf "\n===== breakpoint RC_free_finalizer =====\n"
+bt 8
+continue
+end
+break RC_tcc_finalizer
+commands
+silent
+printf "\n===== breakpoint RC_tcc_finalizer =====\n"
+bt 8
+continue
+end
+break RC_callback_finalizer
+commands
+silent
+printf "\n===== breakpoint RC_callback_finalizer =====\n"
+bt 8
+continue
+end
+break RC_callback_ptr_finalizer
+commands
+silent
+printf "\n===== breakpoint RC_callback_ptr_finalizer =====\n"
 bt 8
 continue
 end
