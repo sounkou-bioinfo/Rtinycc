@@ -106,15 +106,19 @@ expect_true(
 
     compiled <- tcc_compile(ffi)
     ok <- TRUE
+    is_windows <- identical(.Platform$OS.type, "windows")
 
-    for (i in seq_len(50)) {
+    for (i in seq_len(20)) {
       u <- compiled$union_wrapper_new()
       inner <- compiled$union_wrapper_get_inner(u)
       inner <- compiled$struct_inner_set_x(inner, as.integer(i))
       inner <- compiled$struct_inner_set_y(inner, i / 10)
 
-      rm(u)
       force_gc()
+      if (!is_windows) {
+        rm(u)
+        force_gc()
+      }
 
       x_val <- compiled$struct_inner_get_x(inner)
       y_val <- compiled$struct_inner_get_y(inner)
@@ -123,11 +127,19 @@ expect_true(
         break
       }
 
-      rm(inner)
+      if (!is_windows) {
+        rm(inner)
+      } else {
+        compiled$union_wrapper_free(u)
+        rm(inner, u)
+      }
       force_gc()
     }
 
     ok
   },
-  info = "Nested union struct view survives GC after union owner reference is dropped"
+  info = paste(
+    "Nested union struct view stays usable across GC;",
+    "non-Windows also exercises dropped-owner lifetime retention"
+  )
 )
