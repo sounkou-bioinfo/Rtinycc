@@ -956,11 +956,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
       sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
       sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-      sprintf(
-        "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
-        mem_name,
-        mem_name
-      ),
+      "  return ext;",
       "}",
       ""
     ))

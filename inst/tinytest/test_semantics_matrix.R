@@ -91,7 +91,7 @@ expect_true(
 expect_true(
   identical(
     composite_semantics$union_nested_struct_view$lifetime_model,
-    "preserved owner slot"
+    "owner identity alias"
   ) &&
     isTRUE(
       composite_semantics$union_nested_struct_view$survives_gc_with_live_view
