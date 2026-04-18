@@ -96,6 +96,8 @@ expect_true(
     student2 <- compiled$struct_student_from_id(id_ptr)
     id2 <- compiled$struct_student_get_id(student2)
 
+    rm(student2, id_ptr)
+    force_gc()
     compiled$struct_student_free(student)
 
     id2 == 42L
