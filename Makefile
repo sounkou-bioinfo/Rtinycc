@@ -42,9 +42,9 @@ dev-install:
 	R CMD INSTALL --preclean .
 
 test1: 
-	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpus=1L)"
+	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpu=1L)"
 test2: 
-	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpus=2L)"
+	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpu=2L)"
 test: install
 	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest')"
 

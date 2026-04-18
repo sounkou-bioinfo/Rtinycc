@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 pkg_name="${PKGNAME:-$(sed -n 's/^Package:[[:space:]]*//p' "$repo_root/DESCRIPTION" | head -1)}"
-ncpus_expr="${NCPUS_EXPR:-1L}"
+ncpu_expr="${NCPU_EXPR:-${NCPUS_EXPR:-1L}}"
 
 usage() {
   cat <<'EOF'
@@ -23,7 +23,8 @@ Examples:
   scripts/win-test.sh file inst/tinytest/test_unions.R
 
 Environment:
-  NCPUS_EXPR=2L  parallel tinytest worker count expression
+  NCPU_EXPR=2L   tinytest worker count expression
+  NCPUS_EXPR=2L  backward-compatible alias for NCPU_EXPR
   SKIP_DEPS=1    skip dependency installation in `all`
 EOF
 }
@@ -46,7 +47,7 @@ run_with_temp_r() {
 run_installed_tinytest() {
   cd "$repo_root"
   run_with_temp_r <<EOF
-tinytest::test_package("${pkg_name}", testdir = "inst/tinytest", ncpus = ${ncpus_expr})
+tinytest::test_package("${pkg_name}", testdir = "inst/tinytest", ncpu = ${ncpu_expr})
 EOF
 }
 
