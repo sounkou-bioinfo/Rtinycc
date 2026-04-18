@@ -124,6 +124,7 @@ expect_true(
         break
       }
 
+      compiled$union_wrapper_free(inner)
       rm(inner)
       force_gc()
     }
