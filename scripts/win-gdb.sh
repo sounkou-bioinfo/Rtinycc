@@ -29,7 +29,10 @@ Examples:
 
 Notes:
   - Intended for native Windows/MSYS with gdb available from Rtools.
+  - For meaningful backtraces, build an unstripped DLL first:
+      make dev-install-debug-win
   - Preserves current environment variables such as RTINYCC_TRACE_FINALIZERS=1.
+  - `RTINYCC_GDB_BREAK_FINALIZERS=1` adds breakpoint traces for borrowed/free finalizers.
   - `GDB_EXE=/c/rtools45/ucrt64/bin/gdb.exe` overrides auto-detection.
 EOF
 }
@@ -131,17 +134,54 @@ run_gdb_file() {
   local rscript_exe="$2"
   local gdb_exe="$3"
   local rfile_win
+  local -a gdb_args
 
   cd "$repo_root"
   rfile_win="$(cygpath -w "$rfile")"
-  "$gdb_exe" --batch \
-    -ex "set pagination off" \
-    -ex "set confirm off" \
-    -ex "handle SIGSEGV stop print nopass" \
-    -ex "run" \
-    -ex "printf \"\\n===== gdb backtrace =====\\n\"" \
-    -ex "thread apply all bt full" \
+  gdb_args=(
+    --batch
+    -ex "set pagination off"
+    -ex "set confirm off"
+    -ex "set breakpoint pending on"
+    -ex "set print frame-arguments all"
+    -ex "set print symbol-filename on"
+    -ex "handle SIGSEGV stop print nopass"
+  )
+
+  if [ "${RTINYCC_GDB_BREAK_FINALIZERS:-0}" = "1" ]; then
+    gdb_args+=(
+      -ex "break RC_make_borrowed_view"
+      -ex "commands"
+      -ex "silent"
+      -ex "printf \"\\n===== breakpoint RC_make_borrowed_view =====\\n\""
+      -ex "bt 8"
+      -ex "continue"
+      -ex "end"
+      -ex "break RC_borrowed_view_finalizer"
+      -ex "commands"
+      -ex "silent"
+      -ex "printf \"\\n===== breakpoint RC_borrowed_view_finalizer =====\\n\""
+      -ex "bt 8"
+      -ex "continue"
+      -ex "end"
+      -ex "break RC_free_finalizer"
+      -ex "commands"
+      -ex "silent"
+      -ex "printf \"\\n===== breakpoint RC_free_finalizer =====\\n\""
+      -ex "bt 8"
+      -ex "continue"
+      -ex "end"
+    )
+  fi
+
+  gdb_args+=(
+    -ex "run"
+    -ex "printf \"\\n===== gdb backtrace =====\\n\""
+    -ex "thread apply all bt full"
     --args "$rscript_exe" --vanilla "$rfile_win"
+  )
+
+  "$gdb_exe" "${gdb_args[@]}"
 }
 
 run_with_temp_r() {
