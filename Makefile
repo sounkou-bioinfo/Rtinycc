@@ -45,6 +45,8 @@ test1:
 	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpu=1L)"
 test2: 
 	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpu=2L)"
+test0:
+	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest')"
 test: install
 	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest')"
 
