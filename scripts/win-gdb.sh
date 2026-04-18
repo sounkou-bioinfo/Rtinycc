@@ -136,20 +136,23 @@ run_gdb_file() {
   local rfile_win
   local gdb_cmds
   local rc_libtcc_c
+  local rc_src_dir
 
   cd "$repo_root"
   rfile_win="$(cygpath -w "$rfile")"
-  rc_libtcc_c="$(cygpath -m "$repo_root/src/RC_libtcc.c")"
+  rc_libtcc_c="RC_libtcc.c"
+  rc_src_dir="$(cygpath -u "$repo_root/src")"
   gdb_cmds="$(mktemp "${TMPDIR:-/tmp}/rtinycc-gdbcmds-XXXXXX.txt")"
   trap 'rm -f "$gdb_cmds"' RETURN
 
-  cat >"$gdb_cmds" <<'EOF'
+  cat >"$gdb_cmds" <<EOF
 set pagination off
 set confirm off
 set breakpoint pending on
 set print frame-arguments all
 set print symbol-filename on
 set auto-solib-add on
+directory $rc_src_dir
 handle SIGSEGV stop print nopass
 catch load
 commands
