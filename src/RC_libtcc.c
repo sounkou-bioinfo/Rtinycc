@@ -23,6 +23,9 @@
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
 static void RC_borrowed_view_finalizer(SEXP ext);
+static const char *RC_extptr_tag_name(SEXP tag);
+static int RC_trace_finalizers_enabled(void);
+static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail);
 void RC_free_finalizer(SEXP ext);
 SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
 
@@ -198,12 +201,14 @@ typedef struct {
  */
 static void RC_tcc_finalizer(SEXP ext) {
     if (!RC_tcc_state_is_owned(ext)) {
+        RC_trace_finalizer_event("tcc_state:borrowed_clear", ext, R_ExternalPtrProtected(ext), NULL);
         R_ClearExternalPtr(ext);
         return;
     }
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
+        RC_trace_finalizer_event("tcc_state:delete", ext, R_ExternalPtrProtected(ext), NULL);
         // remove from registry before delete
         tcc_state_entry_t *entry = RC_tcc_registry_find(s);
         if (entry) {
@@ -222,6 +227,7 @@ static void RC_tcc_finalizer(SEXP ext) {
  */
 static void RC_null_finalizer(SEXP ext) {
     // NULL pointer doesn't need cleanup
+    RC_trace_finalizer_event("null_clear", ext, R_ExternalPtrProtected(ext), NULL);
     R_ClearExternalPtr(ext);
 }
 
@@ -233,6 +239,7 @@ static void RC_null_finalizer(SEXP ext) {
  */
 static void RC_borrowed_view_finalizer(SEXP ext) {
     SEXP owner = R_ExternalPtrProtected(ext);
+    RC_trace_finalizer_event("borrowed_release", ext, owner, NULL);
     if (owner != R_NilValue) {
         R_ReleaseObject(owner);
         R_SetExternalPtrProtected(ext, R_NilValue);
@@ -249,6 +256,7 @@ static void RC_borrowed_view_finalizer(SEXP ext) {
 void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
+        RC_trace_finalizer_event("free", ext, R_ExternalPtrProtected(ext), NULL);
         free(ptr);
         R_ClearExternalPtr(ext);
     }
@@ -649,6 +657,57 @@ static const char *RC_extptr_tag_name(SEXP tag) {
     return "<non-symbol>";
 }
 
+static int RC_trace_finalizers_enabled(void) {
+    const char *value = getenv("RTINYCC_TRACE_FINALIZERS");
+    if (!value || !value[0]) {
+        return 0;
+    }
+    return strcmp(value, "0") != 0 &&
+        strcmp(value, "false") != 0 &&
+        strcmp(value, "FALSE") != 0 &&
+        strcmp(value, "no") != 0 &&
+        strcmp(value, "NO") != 0;
+}
+
+static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail) {
+    if (!RC_trace_finalizers_enabled()) {
+        return;
+    }
+
+    const char *tag_name = "<non-externalptr>";
+    void *ptr = NULL;
+    if (TYPEOF(ext) == EXTPTRSXP) {
+        ptr = R_ExternalPtrAddr(ext);
+        tag_name = RC_extptr_tag_name(R_ExternalPtrTag(ext));
+    }
+
+    const char *owner_tag = "<nil>";
+    void *owner_ptr = NULL;
+    void *owner_sexp_ptr = NULL;
+    if (owner != R_NilValue) {
+        owner_sexp_ptr = (void *) owner;
+        if (TYPEOF(owner) == EXTPTRSXP) {
+            owner_ptr = R_ExternalPtrAddr(owner);
+            owner_tag = RC_extptr_tag_name(R_ExternalPtrTag(owner));
+        } else {
+            owner_tag = type2char(TYPEOF(owner));
+        }
+    }
+
+    Rprintf(
+        "[RTINYCC_TRACE_FINALIZERS] %s ext=%p ptr=%p tag=%s owner=%p owner_ptr=%p owner_tag=%s%s%s\n",
+        event,
+        (void *) ext,
+        ptr,
+        tag_name,
+        owner_sexp_ptr,
+        owner_ptr,
+        owner_tag,
+        detail ? " detail=" : "",
+        detail ? detail : ""
+    );
+}
+
 /**
  * Return pointer address as a hex string ("0x...").
  * Ownership: returns a new R string (R-managed).
@@ -729,6 +788,7 @@ SEXP RC_free(SEXP ptr) {
     
     void *data = R_ExternalPtrAddr(ptr);
     if (data) {
+        RC_trace_finalizer_event("explicit_free", ptr, R_ExternalPtrProtected(ptr), NULL);
         free(data);
         R_ClearExternalPtr(ptr);
     }
@@ -1527,6 +1587,16 @@ void RC_callback_async_exec_c(void (*func)(void *), void *arg) {
 static void RC_callback_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
+        char detail[128];
+        snprintf(
+            detail,
+            sizeof(detail),
+            "id=%d refs=%d valid=%d",
+            token->id,
+            token->refs,
+            (token->id >= 0 && token->id < MAX_CALLBACKS) ? callback_registry[token->id].valid : 0
+        );
+        RC_trace_finalizer_event("callback_release", ext, R_NilValue, detail);
         // Release the preserved R function
         if (token->id >= 0 && token->id < MAX_CALLBACKS) {
             callback_entry_t *entry = &callback_registry[token->id];
@@ -1568,6 +1638,9 @@ static void RC_callback_finalizer(SEXP ext) {
 static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
+        char detail[128];
+        snprintf(detail, sizeof(detail), "id=%d refs=%d", token->id, token->refs);
+        RC_trace_finalizer_event("callback_ptr_release", ext, R_NilValue, detail);
         token->refs -= 1;
         if (token->refs <= 0) {
             free(token);
