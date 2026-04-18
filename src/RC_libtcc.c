@@ -329,12 +329,6 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
 
     /* Route libtcc diagnostics through R (stdout, sink-able) */
     tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) Rprintf);
-    /* Optional libtcc options via env var (e.g. RTINYCC_TCC_OPTIONS="-Wall"). */
-    /* Note: in bundled TinyCC, -O mainly toggles __OPTIMIZE__ preprocessor state. */
-    const char *rtinycc_opts = getenv("RTINYCC_TCC_OPTIONS");
-    if (rtinycc_opts && rtinycc_opts[0]) {
-        tcc_set_options(s, rtinycc_opts);
-    }
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
