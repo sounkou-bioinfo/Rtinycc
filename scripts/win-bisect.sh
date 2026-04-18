@@ -7,7 +7,7 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/win-bisect.sh [plan|list|left|right|probe|auto] [options]
+  scripts/win-bisect.sh [plan|list|left|right|probe|auto|prefix|threshold] [options]
 
 Purpose:
   Help bisect Windows-only crashes that only reproduce in package-mode
@@ -22,6 +22,9 @@ Modes:
   right  Run the right half of the current suspect range plus the detector tail
   probe  Run the current suspect range plus the detector tail and classify result
   auto   Recursively bisect by running halves and detecting segfaults
+  prefix Run the ordered prefix 1..N plus the detector tail (use --end N)
+  threshold
+         Binary-search the smallest ordered prefix 1..N that segfaults
 
 Options:
   --start N        1-based start index in the suspect prefix
@@ -39,6 +42,8 @@ Examples:
   scripts/win-bisect.sh right
   scripts/win-bisect.sh probe --start 1 --end 11
   scripts/win-bisect.sh auto --start 1 --end 11
+  scripts/win-bisect.sh prefix --end 11
+  scripts/win-bisect.sh threshold --start 1 --end 22
   scripts/win-bisect.sh plan --start 1 --end 11
   scripts/win-bisect.sh left --trace
   scripts/win-bisect.sh plan --tail inst/tinytest/test_unions.R
@@ -51,7 +56,7 @@ case "$mode" in
     usage
     exit 0
     ;;
-  plan|list|left|right|probe|auto)
+  plan|list|left|right|probe|auto|prefix|threshold)
     shift || true
     ;;
   *)
@@ -189,6 +194,11 @@ build_subset() {
   printf '%s\n' "${out[@]}"
 }
 
+build_prefix() {
+  local prefix_end="$1"
+  build_subset 1 "$prefix_end"
+}
+
 mapfile -t left_tests < <(build_subset "$left_start" "$left_end")
 mapfile -t right_tests < <(build_subset "$right_start" "$right_end")
 
@@ -292,6 +302,12 @@ if [ "$mode" = "probe" ]; then
   exit $?
 fi
 
+if [ "$mode" = "prefix" ]; then
+  mapfile -t prefix_run_tests < <(build_prefix "$end")
+  run_subset "prefix:1-${end}" "${prefix_run_tests[@]}"
+  exit $?
+fi
+
 run_auto() {
   local cur_start="$1"
   local cur_end="$2"
@@ -340,6 +356,49 @@ run_auto() {
 
 if [ "$mode" = "auto" ]; then
   run_auto "$start" "$end"
+  exit $?
+fi
+
+run_threshold() {
+  local cur_lo="$1"
+  local cur_hi="$2"
+  local cur_mid
+  local rc
+
+  echo "[win-bisect] validating upper bound prefix 1..${cur_hi}" >&2
+  mapfile -t hi_tests < <(build_prefix "$cur_hi")
+  set +e
+  run_subset "threshold-hi:1-${cur_hi}" "${hi_tests[@]}"
+  rc=$?
+  set -e
+  if [ "$rc" -ne 2 ]; then
+    echo "[win-bisect] upper bound prefix 1..${cur_hi} did not segfault" >&2
+    echo "[win-bisect] threshold search needs a crashing upper bound" >&2
+    return 4
+  fi
+
+  while [ "$cur_lo" -lt "$cur_hi" ]; do
+    cur_mid=$(((cur_lo + cur_hi) / 2))
+    echo "[win-bisect] probing prefix 1..${cur_mid}" >&2
+    mapfile -t mid_tests < <(build_prefix "$cur_mid")
+    set +e
+    run_subset "threshold-mid:1-${cur_mid}" "${mid_tests[@]}"
+    rc=$?
+    set -e
+    if [ "$rc" -eq 2 ]; then
+      cur_hi="$cur_mid"
+    else
+      cur_lo=$((cur_mid + 1))
+    fi
+  done
+
+  echo "[win-bisect] minimal crashing prefix: 1..${cur_lo}" >&2
+  echo "[win-bisect] threshold file: ${prefix_tests[$((cur_lo - 1))]}" >&2
+  return 0
+}
+
+if [ "$mode" = "threshold" ]; then
+  run_threshold "$start" "$end"
   exit $?
 fi
 
