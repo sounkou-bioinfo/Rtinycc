@@ -22,7 +22,9 @@
 
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
+static void RC_borrowed_view_finalizer(SEXP ext);
 void RC_free_finalizer(SEXP ext);
+SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
 
 // ============================================================================
 // TCC state registry (ownership tracking)
@@ -224,6 +226,21 @@ static void RC_null_finalizer(SEXP ext) {
 }
 
 /**
+ * Finalizer for borrowed views that explicitly preserve an owner object.
+ * Ownership: releases preserved owner; does not free pointee storage.
+ * Allocation: none.
+ * Protection: none.
+ */
+static void RC_borrowed_view_finalizer(SEXP ext) {
+    SEXP owner = R_ExternalPtrProtected(ext);
+    if (owner != R_NilValue) {
+        R_ReleaseObject(owner);
+        R_SetExternalPtrProtected(ext, R_NilValue);
+    }
+    R_ClearExternalPtr(ext);
+}
+
+/**
  * Generic finalizer: calls free() on the pointer and clears the EXTPTR.
  * Ownership: frees owned heap memory (malloc/free).
  * Allocation: none.
@@ -235,6 +252,28 @@ void RC_free_finalizer(SEXP ext) {
         free(ptr);
         R_ClearExternalPtr(ext);
     }
+}
+
+/**
+ * Create a borrowed external pointer view with optional owner retention.
+ * Ownership: borrowed; does not free pointee storage.
+ * Allocation: external pointer only.
+ * Protection: preserves owner while the borrowed view is live.
+ */
+SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_borrowed") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+
+    if (owner != R_NilValue) {
+        R_PreserveObject(owner);
+        R_SetExternalPtrProtected(ext, owner);
+        R_RegisterCFinalizerEx(ext, RC_borrowed_view_finalizer, FALSE);
+    } else {
+        R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
+    }
+
+    UNPROTECT(1);
+    return ext;
 }
 
 // ============================================================================
@@ -1987,6 +2026,7 @@ static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn)
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
+    RC_tcc_add_function_symbol(s, "RC_make_borrowed_view", (DL_FUNC) RC_make_borrowed_view);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
     RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_c",

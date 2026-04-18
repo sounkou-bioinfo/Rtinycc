@@ -668,7 +668,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
       sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
       sprintf(
-        "  return R_MakeExternalPtr(p->%s, R_NilValue, ext);",
+        "  return RC_make_borrowed_view(p->%s, Rf_install(\"rtinycc_borrowed\"), ext);",
         field_name
       ),
       "}",
@@ -799,7 +799,7 @@ generate_container_of <- function(struct_name, member_name) {
       member_name
     ),
     sprintf(
-      "  return R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), ext);",
+      "  return RC_make_borrowed_view(p, Rf_install(\"struct_%s\"), ext);",
       struct_name
     ),
     "}",
@@ -818,7 +818,9 @@ generate_field_addr <- function(struct_name, field_name) {
     sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
     sprintf("  if (!p) Rf_error(\"Null pointer\");"),
     sprintf("  void *field_ptr = &p->%s;", field_name),
-    sprintf("  return R_MakeExternalPtr(field_ptr, R_NilValue, ext);"),
+    sprintf(
+      "  return RC_make_borrowed_view(field_ptr, Rf_install(\"rtinycc_borrowed\"), ext);"
+    ),
     "}",
     ""
   )
@@ -954,7 +956,11 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
       sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
       sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-      sprintf("  return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name),
+      sprintf(
+        "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
+        mem_name,
+        mem_name
+      ),
       "}",
       ""
     ))
@@ -1213,6 +1219,7 @@ generate_ffi_code <- function(
     "#define STRING_PTR_RO STRING_PTR",
     "#endif",
     "void RC_free_finalizer(SEXP ext);",
+    "SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);",
     ""
   )
 

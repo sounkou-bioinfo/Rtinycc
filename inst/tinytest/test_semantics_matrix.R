@@ -66,7 +66,7 @@ expect_true(
 expect_true(
   identical(
     composite_semantics$struct_field_addr$lifetime_model,
-    "owner protected slot"
+    "preserved owner slot"
   ) &&
     isTRUE(composite_semantics$struct_field_addr$survives_gc_with_live_view),
   info = "field_addr semantics records GC-safe borrowed-view lifetime"
@@ -78,7 +78,7 @@ expect_true(
 expect_true(
   identical(
     composite_semantics$struct_container_of$lifetime_model,
-    "protected-slot owner chain"
+    "preserved owner chain"
   ) &&
     isTRUE(composite_semantics$struct_container_of$survives_gc_with_live_view),
   info = "container_of semantics records GC-safe owner chain"
@@ -91,7 +91,7 @@ expect_true(
 expect_true(
   identical(
     composite_semantics$union_nested_struct_view$lifetime_model,
-    "owner protected slot"
+    "preserved owner slot"
   ) &&
     isTRUE(
       composite_semantics$union_nested_struct_view$survives_gc_with_live_view

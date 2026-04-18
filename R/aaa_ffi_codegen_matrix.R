@@ -947,11 +947,11 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "borrowed-from-struct",
     protects_owner = TRUE,
-    lifetime_model = "owner protected slot",
+    lifetime_model = "preserved owner slot",
     survives_gc_with_live_view = TRUE,
     notes = paste(
-      "Field-address helpers return borrowed external pointers and keep the",
-      "owner struct in the protected slot so storage stays alive."
+      "Field-address helpers return borrowed external pointers, preserve the",
+      "owner struct, and keep it in the protected slot so storage stays alive."
     )
   ),
   struct_container_of = list(
@@ -961,12 +961,12 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "borrowed-from-member-owner-chain",
     protects_owner = TRUE,
-    lifetime_model = "protected-slot owner chain",
+    lifetime_model = "preserved owner chain",
     survives_gc_with_live_view = TRUE,
     notes = paste(
-      "container_of recovers a parent struct pointer from a field pointer and",
-      "preserves the incoming external pointer in the protected slot so the",
-      "owner lifetime chain remains intact."
+      "container_of recovers a parent struct pointer from a field pointer,",
+      "preserves the incoming external pointer, and keeps it in the protected",
+      "slot so the owner lifetime chain remains intact."
     )
   ),
   struct_raw_access = list(
@@ -1011,11 +1011,11 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "borrowed-from-union",
     protects_owner = TRUE,
-    lifetime_model = "owner protected slot",
+    lifetime_model = "preserved owner slot",
     survives_gc_with_live_view = TRUE,
     notes = paste(
-      "Nested struct getters on unions return borrowed external pointers and",
-      "keep the union owner in the protected slot."
+      "Nested struct getters on unions return borrowed external pointers,",
+      "preserve the union owner, and keep it in the protected slot."
     )
   ),
   enum_i32 = list(
@@ -1074,7 +1074,7 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
 RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
   list(
     name = "struct_field_addr_owner",
-    info = "field_addr helper preserves owner in protected slot",
+    info = "field_addr helper preserves owner through borrowed-view helper",
     generate_args = list(
       symbols = list(),
       c_code = "struct student { int id; double grade; };",
@@ -1087,14 +1087,14 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
         fixed = TRUE
       ),
       list(
-        pattern = "return R_MakeExternalPtr(field_ptr, R_NilValue, ext);",
+        pattern = "return RC_make_borrowed_view(field_ptr, Rf_install(\"rtinycc_borrowed\"), ext);",
         fixed = TRUE
       )
     )
   ),
   list(
     name = "struct_container_of_owner",
-    info = "container_of helper preserves owner chain in protected slot",
+    info = "container_of helper preserves owner chain through borrowed-view helper",
     generate_args = list(
       symbols = list(),
       c_code = "struct student { int id; double grade; };",
@@ -1107,7 +1107,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
         fixed = TRUE
       ),
       list(
-        pattern = "return R_MakeExternalPtr(p, Rf_install(\"struct_student\"), ext);",
+        pattern = "return RC_make_borrowed_view(p, Rf_install(\"struct_student\"), ext);",
         fixed = TRUE
       )
     )
@@ -1144,7 +1144,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
   ),
   list(
     name = "union_nested_struct_owner",
-    info = "union nested struct getters preserve union owner",
+    info = "union nested struct getters preserve union owner through borrowed-view helper",
     generate_args = list(
       symbols = list(),
       c_code = "union wrapper { struct { int x; } inner; int raw; };",
@@ -1157,7 +1157,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
     ),
     patterns = list(
       list(
-        pattern = "return R_MakeExternalPtr(&p->inner, R_NilValue, ext);",
+        pattern = "return RC_make_borrowed_view(&p->inner, Rf_install(\"struct_inner\"), ext);",
         fixed = TRUE
       )
     )
