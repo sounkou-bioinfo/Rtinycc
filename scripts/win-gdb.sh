@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 pkg_name="${PKGNAME:-$(sed -n 's/^Package:[[:space:]]*//p' "$repo_root/DESCRIPTION" | head -1)}"
+RTOOLS_WIN_HOME="${RTOOLS_WIN_HOME:-C:\\rtools45}"
 
 native_windows=0
 case "$(uname -s)" in
@@ -38,11 +39,36 @@ require_native_windows() {
   fi
 }
 
-require_gdb() {
-  command -v gdb >/dev/null 2>&1 || {
-    echo "gdb not found on PATH; install or expose Rtools gdb first" >&2
-    exit 1
-  }
+find_gdb_exe() {
+  local rtools_home_unix=""
+  local candidate
+
+  if command -v gdb >/dev/null 2>&1; then
+    command -v gdb
+    return 0
+  fi
+
+  if command -v gdb.exe >/dev/null 2>&1; then
+    command -v gdb.exe
+    return 0
+  fi
+
+  if [ "$native_windows" -eq 1 ]; then
+    rtools_home_unix="$(cygpath -u "$RTOOLS_WIN_HOME" 2>/dev/null || true)"
+    for candidate in \
+      "$rtools_home_unix/ucrt64/bin/gdb.exe" \
+      "$rtools_home_unix/mingw64/bin/gdb.exe" \
+      "$rtools_home_unix/x86_64-w64-mingw32.static.posix/bin/gdb.exe"
+    do
+      if [ -x "$candidate" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+  fi
+
+  echo "gdb not found on PATH or under $RTOOLS_WIN_HOME" >&2
+  exit 1
 }
 
 find_rscript_exe() {
@@ -79,11 +105,12 @@ find_rscript_exe() {
 run_gdb_file() {
   local rfile="$1"
   local rscript_exe="$2"
+  local gdb_exe="$3"
   local rfile_win
 
   cd "$repo_root"
   rfile_win="$(cygpath -w "$rfile")"
-  gdb --batch \
+  "$gdb_exe" --batch \
     -ex "set pagination off" \
     -ex "set confirm off" \
     -ex "handle SIGSEGV stop print nopass" \
@@ -95,11 +122,12 @@ run_gdb_file() {
 
 run_with_temp_r() {
   local rscript_exe="$1"
+  local gdb_exe="$2"
   local rfile
   rfile="$(mktemp "${TMPDIR:-/tmp}/rtinycc-gdb-XXXXXX.R")"
   trap 'rm -f "$rfile"' RETURN
   cat >"$rfile"
-  run_gdb_file "$rfile" "$rscript_exe"
+  run_gdb_file "$rfile" "$rscript_exe" "$gdb_exe"
   rm -f "$rfile"
   trap - RETURN
 }
@@ -157,18 +185,18 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 fi
 
 require_native_windows
-require_gdb
+gdb_exe="$(find_gdb_exe)"
 rscript_exe="$(find_rscript_exe)"
 
 mode="${1:-tinytest}"
 case "$mode" in
   tinytest)
-    run_with_temp_r "$rscript_exe" <<EOF
+    run_with_temp_r "$rscript_exe" "$gdb_exe" <<EOF
 tinytest::test_package("${pkg_name}", testdir = "inst/tinytest")
 EOF
     ;;
   union)
-    run_with_temp_r "$rscript_exe" <<'EOF'
+    run_with_temp_r "$rscript_exe" "$gdb_exe" <<'EOF'
 tinytest::run_test_file(normalizePath("inst/tinytest/test_unions.R", winslash = "/", mustWork = TRUE))
 EOF
     ;;
@@ -179,7 +207,7 @@ EOF
       usage >&2
       exit 1
     }
-    run_with_temp_r "$rscript_exe" <<EOF
+    run_with_temp_r "$rscript_exe" "$gdb_exe" <<EOF
 tinytest::run_test_file(normalizePath("${1}", winslash = "/", mustWork = TRUE))
 EOF
     ;;
@@ -190,7 +218,7 @@ EOF
       usage >&2
       exit 1
     }
-    run_test_files_expr "$mode" "$@" | run_with_temp_r "$rscript_exe"
+    run_test_files_expr "$mode" "$@" | run_with_temp_r "$rscript_exe" "$gdb_exe"
     ;;
   script)
     shift
@@ -199,7 +227,7 @@ EOF
       usage >&2
       exit 1
     }
-    run_gdb_file "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" "$rscript_exe"
+    run_gdb_file "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" "$rscript_exe" "$gdb_exe"
     ;;
   expr)
     shift
@@ -208,7 +236,7 @@ EOF
       usage >&2
       exit 1
     }
-    printf '%s\n' "$*" | run_with_temp_r "$rscript_exe"
+    printf '%s\n' "$*" | run_with_temp_r "$rscript_exe" "$gdb_exe"
     ;;
   *)
     echo "unknown mode: $mode" >&2
