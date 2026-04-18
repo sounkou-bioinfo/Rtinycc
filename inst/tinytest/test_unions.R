@@ -113,7 +113,6 @@ expect_true(
       inner <- compiled$struct_inner_set_x(inner, as.integer(i))
       inner <- compiled$struct_inner_set_y(inner, i / 10)
 
-      force_gc()
       rm(u)
       force_gc()
 
