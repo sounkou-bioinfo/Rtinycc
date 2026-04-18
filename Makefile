@@ -41,10 +41,16 @@ clean:
 dev-install:
 	R CMD INSTALL --preclean .
 dev-install-debug-win:
-	CFLAGS="-O0 -g3 -fno-omit-frame-pointer" \
-	SHLIB_CXXLDFLAGS="-shared -g" \
-	MAIN_LDFLAGS="-static-libgcc" \
-	R CMD INSTALL --preclean .
+	@tmp_makevars="$$(mktemp /tmp/rtinycc-makevars-win-XXXXXX.mk)"; \
+	printf '%s\n' \
+		'CFLAGS := $$(filter-out -O2,$$(CFLAGS)) -O0 -g3 -fno-omit-frame-pointer' \
+		'MAIN_LDFLAGS := $$(filter-out -s,$$(MAIN_LDFLAGS))' \
+		'SHLIB_LDFLAGS := $$(SHLIB_LDFLAGS) -g' \
+		> "$$tmp_makevars"; \
+	R_MAKEVARS_USER="$$tmp_makevars" R CMD INSTALL --preclean .; \
+	status="$$?"; \
+	rm -f "$$tmp_makevars"; \
+	exit "$$status"
 
 test1: 
 	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpu=1L)"
