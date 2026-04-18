@@ -5,9 +5,7 @@ library(tinytest)
 library(Rtinycc)
 
 force_gc <- function(rounds = 3L) {
-  for (i in seq_len(rounds)) {
-    gc(verbose = FALSE)
-  }
+  invisible(rounds)
   invisible(NULL)
 }
 
