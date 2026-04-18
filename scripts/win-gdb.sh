@@ -147,7 +147,14 @@ set confirm off
 set breakpoint pending on
 set print frame-arguments all
 set print symbol-filename on
+set auto-solib-add on
 handle SIGSEGV stop print nopass
+catch load
+commands
+silent
+sharedlibrary
+continue
+end
 EOF
 
   if [ "${RTINYCC_GDB_BREAK_FINALIZERS:-0}" = "1" ]; then
