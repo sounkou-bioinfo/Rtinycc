@@ -9,7 +9,7 @@ ncpu_expr="${NCPU_EXPR:-${NCPUS_EXPR:-}}"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/win-test.sh [all|deps|install|tinytest|union|smoke|file <path>|files <path...>]
+  scripts/win-test.sh [all|deps|install|tinytest|union|smoke|file <path>|files <path...>|pkgfiles <path...>]
 
 Defaults:
   all      install deps, install the package, then run tinytest in-process
@@ -22,6 +22,7 @@ Examples:
   scripts/win-test.sh union
   scripts/win-test.sh file inst/tinytest/test_unions.R
   scripts/win-test.sh files inst/tinytest/test_structs.R inst/tinytest/test_unions.R
+  scripts/win-test.sh pkgfiles inst/tinytest/test_unions.R inst/tinytest/test_variadic.R
 
 Environment:
   NCPU_EXPR=2L   tinytest worker count expression; unset means in-process
@@ -103,6 +104,35 @@ invisible(results)
 EOF
 }
 
+run_pkg_test_files() {
+  cd "$repo_root"
+  local files=("$@")
+  local files_r=""
+  local file
+  for file in "${files[@]}"; do
+    if [ -n "$files_r" ]; then
+      files_r="$files_r, "
+    fi
+    files_r="$files_r\"$file\""
+  done
+  run_with_temp_r <<EOF
+pkg_name <- "${pkg_name}"
+testdir <- normalizePath("inst/tinytest", winslash = "/", mustWork = TRUE)
+files <- c(${files_r})
+files <- basename(normalizePath(files, winslash = "/", mustWork = TRUE))
+oldwd <- getwd()
+on.exit(setwd(oldwd), add = TRUE)
+setwd(testdir)
+library(pkg_name, character.only = TRUE)
+results <- list()
+for (f in files) {
+  message("==> ", f)
+  results[[f]] <- tinytest::run_test_file(f, at_home = FALSE)
+}
+invisible(results)
+EOF
+}
+
 mode="${1:-all}"
 case "$mode" in
   -h|--help)
@@ -149,6 +179,15 @@ case "$mode" in
       exit 1
     }
     run_test_files "$@"
+    ;;
+  pkgfiles)
+    shift
+    [ $# -ge 1 ] || {
+      echo "missing test file paths" >&2
+      usage >&2
+      exit 1
+    }
+    run_pkg_test_files "$@"
     ;;
   *)
     echo "unknown mode: $mode" >&2
