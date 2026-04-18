@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+pkg_name="${PKGNAME:-$(sed -n 's/^Package:[[:space:]]*//p' "$repo_root/DESCRIPTION" | head -1)}"
+
+native_windows=0
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) native_windows=1 ;;
+esac
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/win-gdb.sh [tinytest|union|file <path>|files <path...>|pkgfiles <path...>|script <path>|expr <R code>]
+
+Purpose:
+  Run Windows Rscript under gdb and print a backtrace on segfault.
+
+Examples:
+  scripts/win-gdb.sh tinytest
+  scripts/win-gdb.sh union
+  scripts/win-gdb.sh file inst/tinytest/test_unions.R
+  scripts/win-gdb.sh pkgfiles inst/tinytest/test_structs.R inst/tinytest/test_unions.R inst/tinytest/test_variadic.R
+  scripts/win-gdb.sh expr "tinytest::test_package('Rtinycc', testdir = 'inst/tinytest')"
+
+Notes:
+  - Intended for native Windows/MSYS with gdb available from Rtools.
+  - Preserves current environment variables such as RTINYCC_TRACE_FINALIZERS=1.
+EOF
+}
+
+require_native_windows() {
+  if [ "$native_windows" -ne 1 ]; then
+    echo "scripts/win-gdb.sh currently supports native Windows/MSYS only" >&2
+    exit 1
+  fi
+}
+
+require_gdb() {
+  command -v gdb >/dev/null 2>&1 || {
+    echo "gdb not found on PATH; install or expose Rtools gdb first" >&2
+    exit 1
+  }
+}
+
+find_rscript_exe() {
+  local r_home_win
+  local r_home_unix
+  local candidate
+
+  r_home_win="$(R RHOME 2>/dev/null | tr -d '\r')"
+  if [ -z "$r_home_win" ]; then
+    echo "failed to resolve R RHOME" >&2
+    exit 1
+  fi
+
+  r_home_unix="$(cygpath -u "$r_home_win")"
+  for candidate in \
+    "$r_home_unix/bin/x64/Rscript.exe" \
+    "$r_home_unix/bin/Rscript.exe"
+  do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v Rscript.exe >/dev/null 2>&1; then
+    command -v Rscript.exe
+    return 0
+  fi
+
+  echo "unable to locate Rscript.exe from R home: $r_home_win" >&2
+  exit 1
+}
+
+run_gdb_file() {
+  local rfile="$1"
+  local rscript_exe="$2"
+  local rfile_win
+
+  cd "$repo_root"
+  rfile_win="$(cygpath -w "$rfile")"
+  gdb --batch \
+    -ex "set pagination off" \
+    -ex "set confirm off" \
+    -ex "handle SIGSEGV stop print nopass" \
+    -ex "run" \
+    -ex "printf \"\\n===== gdb backtrace =====\\n\"" \
+    -ex "thread apply all bt full" \
+    --args "$rscript_exe" --vanilla "$rfile_win"
+}
+
+run_with_temp_r() {
+  local rscript_exe="$1"
+  local rfile
+  rfile="$(mktemp "${TMPDIR:-/tmp}/rtinycc-gdb-XXXXXX.R")"
+  trap 'rm -f "$rfile"' RETURN
+  cat >"$rfile"
+  run_gdb_file "$rfile" "$rscript_exe"
+  rm -f "$rfile"
+  trap - RETURN
+}
+
+run_test_files_expr() {
+  local mode_name="$1"
+  shift
+  local files=("$@")
+  local files_r=""
+  local f
+  for f in "${files[@]}"; do
+    if [ -n "$files_r" ]; then
+      files_r="$files_r, "
+    fi
+    files_r="$files_r\"$f\""
+  done
+
+  case "$mode_name" in
+    files)
+      cat <<EOF
+files <- c(${files_r})
+files <- normalizePath(files, winslash = "/", mustWork = TRUE)
+results <- list()
+for (f in files) {
+  message("==> ", basename(f))
+  results[[basename(f)]] <- tinytest::run_test_file(f)
+}
+invisible(results)
+EOF
+      ;;
+    pkgfiles)
+      cat <<EOF
+pkg_name <- "${pkg_name}"
+testdir <- normalizePath("inst/tinytest", winslash = "/", mustWork = TRUE)
+files <- c(${files_r})
+files <- basename(normalizePath(files, winslash = "/", mustWork = TRUE))
+oldwd <- getwd()
+on.exit(setwd(oldwd), add = TRUE)
+setwd(testdir)
+library(pkg_name, character.only = TRUE)
+results <- list()
+for (f in files) {
+  message("==> ", f)
+  results[[f]] <- tinytest::run_test_file(f, at_home = FALSE)
+}
+invisible(results)
+EOF
+      ;;
+  esac
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+require_native_windows
+require_gdb
+rscript_exe="$(find_rscript_exe)"
+
+mode="${1:-tinytest}"
+case "$mode" in
+  tinytest)
+    run_with_temp_r "$rscript_exe" <<EOF
+tinytest::test_package("${pkg_name}", testdir = "inst/tinytest")
+EOF
+    ;;
+  union)
+    run_with_temp_r "$rscript_exe" <<'EOF'
+tinytest::run_test_file(normalizePath("inst/tinytest/test_unions.R", winslash = "/", mustWork = TRUE))
+EOF
+    ;;
+  file)
+    shift
+    [ $# -ge 1 ] || {
+      echo "missing test file path" >&2
+      usage >&2
+      exit 1
+    }
+    run_with_temp_r "$rscript_exe" <<EOF
+tinytest::run_test_file(normalizePath("${1}", winslash = "/", mustWork = TRUE))
+EOF
+    ;;
+  files|pkgfiles)
+    shift
+    [ $# -ge 1 ] || {
+      echo "missing test file paths" >&2
+      usage >&2
+      exit 1
+    }
+    run_test_files_expr "$mode" "$@" | run_with_temp_r "$rscript_exe"
+    ;;
+  script)
+    shift
+    [ $# -ge 1 ] || {
+      echo "missing R script path" >&2
+      usage >&2
+      exit 1
+    }
+    run_gdb_file "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" "$rscript_exe"
+    ;;
+  expr)
+    shift
+    [ $# -ge 1 ] || {
+      echo "missing R expression" >&2
+      usage >&2
+      exit 1
+    }
+    printf '%s\n' "$*" | run_with_temp_r "$rscript_exe"
+    ;;
+  *)
+    echo "unknown mode: $mode" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
