@@ -41,7 +41,10 @@ clean:
 dev-install:
 	R CMD INSTALL --preclean .
 dev-install-debug-win:
-	RTINYCC_DEBUG_BUILD=1 R CMD INSTALL --preclean .
+	CFLAGS="-O0 -g3 -fno-omit-frame-pointer" \
+	SHLIB_CXXLDFLAGS="-shared -g" \
+	MAIN_LDFLAGS="-static-libgcc" \
+	R CMD INSTALL --preclean .
 
 test1: 
 	R -e "tinytest::test_package('$(PKGNAME)', testdir = 'inst/tinytest', ncpu=1L)"
