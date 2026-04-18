@@ -7,7 +7,7 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/win-bisect.sh [plan|list|left|right] [options]
+  scripts/win-bisect.sh [plan|list|left|right|probe|auto] [options]
 
 Purpose:
   Help bisect Windows-only crashes that only reproduce in package-mode
@@ -20,6 +20,8 @@ Modes:
   list   Print the ordered test list with 1-based indices
   left   Run the left half of the current suspect range plus the detector tail
   right  Run the right half of the current suspect range plus the detector tail
+  probe  Run the current suspect range plus the detector tail and classify result
+  auto   Recursively bisect by running halves and detecting segfaults
 
 Options:
   --start N        1-based start index in the suspect prefix
@@ -35,6 +37,8 @@ Examples:
   scripts/win-bisect.sh plan
   scripts/win-bisect.sh left
   scripts/win-bisect.sh right
+  scripts/win-bisect.sh probe --start 1 --end 11
+  scripts/win-bisect.sh auto --start 1 --end 11
   scripts/win-bisect.sh plan --start 1 --end 11
   scripts/win-bisect.sh left --trace
   scripts/win-bisect.sh plan --tail inst/tinytest/test_unions.R
@@ -47,7 +51,7 @@ case "$mode" in
     usage
     exit 0
     ;;
-  plan|list|left|right)
+  plan|list|left|right|probe|auto)
     shift || true
     ;;
   *)
@@ -193,13 +197,44 @@ run_subset() {
   shift
   local subset=("$@")
   local cmd=("$script_dir/win-test.sh" "$runner")
+  local log_file
+  local status
+  log_file="$(mktemp "${TMPDIR:-/tmp}/rtinycc-bisect-XXXXXX.log")"
+  trap 'rm -f "$log_file"' RETURN
   cmd+=("${subset[@]}")
   cmd+=("${tail_files[@]}")
+
+  set +e
   if [ "$trace" -eq 1 ]; then
-    RTINYCC_TRACE_FINALIZERS=1 "${cmd[@]}"
+    RTINYCC_TRACE_FINALIZERS=1 "${cmd[@]}" >"$log_file" 2>&1
+    status=$?
   else
-    "${cmd[@]}"
+    "${cmd[@]}" >"$log_file" 2>&1
+    status=$?
   fi
+  set -e
+
+  cat "$log_file"
+
+  local classification="pass"
+  if grep -Eq 'Segmentation fault|segmentation fault' "$log_file"; then
+    classification="segfault"
+  elif [ "$status" -eq 139 ] || [ "$status" -eq 35584 ]; then
+    classification="segfault"
+  elif [ "$status" -ne 0 ]; then
+    classification="failure"
+  fi
+
+  echo "[win-bisect] subset=${subset_name} status=${status} classification=${classification}" >&2
+
+  rm -f "$log_file"
+  trap - RETURN
+
+  case "$classification" in
+    pass) return 0 ;;
+    failure) return 1 ;;
+    segfault) return 2 ;;
+  esac
 }
 
 print_cmd() {
@@ -249,6 +284,63 @@ if [ "$mode" = "right" ]; then
   fi
   run_subset right "${right_tests[@]}"
   exit 0
+fi
+
+if [ "$mode" = "probe" ]; then
+  mapfile -t probe_tests < <(build_subset "$start" "$end")
+  run_subset probe "${probe_tests[@]}"
+  exit $?
+fi
+
+run_auto() {
+  local cur_start="$1"
+  local cur_end="$2"
+  local cur_size=$((cur_end - cur_start + 1))
+  local cur_mid=$(((cur_start + cur_end) / 2))
+  local cur_left_start="$cur_start"
+  local cur_left_end="$cur_mid"
+  local cur_right_start=$((cur_mid + 1))
+  local cur_right_end="$cur_end"
+  local rc
+
+  echo "[win-bisect] auto range ${cur_start}..${cur_end} (${cur_size} files)" >&2
+  if [ "$cur_size" -eq 1 ]; then
+    echo "[win-bisect] minimal crashing suspect: ${prefix_tests[$((cur_start - 1))]}" >&2
+    return 0
+  fi
+
+  mapfile -t left_auto_tests < <(build_subset "$cur_left_start" "$cur_left_end")
+  echo "[win-bisect] probing left half ${cur_left_start}..${cur_left_end}" >&2
+  set +e
+  run_subset "auto-left:${cur_left_start}-${cur_left_end}" "${left_auto_tests[@]}"
+  rc=$?
+  set -e
+  if [ "$rc" -eq 2 ]; then
+    run_auto "$cur_left_start" "$cur_left_end"
+    return 0
+  fi
+
+  if [ "$cur_right_start" -le "$cur_right_end" ]; then
+    mapfile -t right_auto_tests < <(build_subset "$cur_right_start" "$cur_right_end")
+    echo "[win-bisect] probing right half ${cur_right_start}..${cur_right_end}" >&2
+    set +e
+    run_subset "auto-right:${cur_right_start}-${cur_right_end}" "${right_auto_tests[@]}"
+    rc=$?
+    set -e
+    if [ "$rc" -eq 2 ]; then
+      run_auto "$cur_right_start" "$cur_right_end"
+      return 0
+    fi
+  fi
+
+  echo "[win-bisect] neither half segfaulted on its own for ${cur_start}..${cur_end}" >&2
+  echo "[win-bisect] this suggests a cumulative interaction across both halves or a flaky crash" >&2
+  return 3
+}
+
+if [ "$mode" = "auto" ]; then
+  run_auto "$start" "$end"
+  exit $?
 fi
 
 echo "Ordered test list before detector tail: $prefix_count files"
