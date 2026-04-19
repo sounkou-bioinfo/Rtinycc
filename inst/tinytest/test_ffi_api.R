@@ -137,7 +137,17 @@ expect_true(inherits(ffi, "tcc_compiled"))
 result <- ffi$dup_array(as.integer(c(1, 2, 3)), 3L)
 expect_equal(result, c(2L, 4L, 6L))
 
-# Test 8: Missing wrapper bindings fail fast (no partially-broken object)
+# Test 8: helper specs are normalized to classed symbol specs too
+ffi_helpers <- tcc_ffi() |>
+  tcc_source("struct point { int x; int y; };") |>
+  tcc_struct("point", accessors = c(x = "i32", y = "i32")) |>
+  tcc_compile()
+helper_specs <- get(".helper_specs", envir = ffi_helpers, inherits = FALSE)
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(helper_specs$struct_point_new))
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(helper_specs$struct_point_get_x))
+expect_identical(Rtinycc:::ffi_type_family(helper_specs$struct_point_get_x$return_spec$type_info), "sexp")
+
+# Test 9: Missing wrapper bindings fail fast (no partially-broken object)
 state_bind_fail <- tcc_state(output = "memory")
 expect_equal(
   tcc_compile_string(

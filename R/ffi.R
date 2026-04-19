@@ -1094,6 +1094,15 @@ tcc_compiled_object <- function(
     }
   }
 
+  if (length(helper_specs) > 0) {
+    helper_specs <- setNames(
+      lapply(names(helper_specs), function(sym_name) {
+        as_rtinycc_bound_symbol(sym_name, helper_specs[[sym_name]])
+      }),
+      names(helper_specs)
+    )
+  }
+
   # Create environment with callable functions
   env <- new.env(parent = emptyenv())
   bind_failures <- character(0)
@@ -1103,7 +1112,6 @@ tcc_compiled_object <- function(
 
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
-    sym$name <- sym_name
 
     if (isTRUE(sym$variadic)) {
       vararg_mode <- sym$varargs_mode %||% "prefix"
@@ -1256,7 +1264,6 @@ tcc_compiled_object <- function(
       add_bind_failure(paste0("Unknown helper symbol '", sym_name, "'"))
       next
     }
-    sym$name <- sym_name
 
     tryCatch(
       {
@@ -1308,6 +1315,7 @@ tcc_compiled_object <- function(
     enums = enums,
     globals = globals
   )
+  env$.helper_specs <- helper_specs
   env$.valid <- TRUE
 
   structure(env, class = "tcc_compiled")

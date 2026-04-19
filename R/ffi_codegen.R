@@ -5,68 +5,90 @@
 # C Wrapper Code Generator for API Mode
 # Generates C code that converts R SEXP to C types and back
 
+normalize_rtinycc_return_spec <- function(x) {
+  if (inherits(x, "rtinycc_symbol_return_spec")) {
+    return(x)
+  }
+  if (is.list(x)) {
+    if (is.null(x$type)) {
+      stop("Return spec missing 'type'", call. = FALSE)
+    }
+    return(new_rtinycc_symbol_return_spec(
+      type = x$type,
+      type_info = check_ffi_type(x$type, "return value"),
+      length_arg = x$length_arg,
+      free = isTRUE(x$free)
+    ))
+  }
+  new_rtinycc_symbol_return_spec(
+    type = x,
+    type_info = check_ffi_type(x, "return value")
+  )
+}
+
+rtinycc_return_type_name <- function(x) {
+  normalize_rtinycc_return_spec(x)$type
+}
+
+rtinycc_return_type_info <- function(x) {
+  normalize_rtinycc_return_spec(x)$type_info
+}
+
 # Generate C code to extract R SEXP to C type
 generate_c_input <- function(arg_name, r_name, ffi_type) {
-  check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
-  special <- ffi_input_special_rule(ffi_type, arg_name, r_name)
+  type_name <- if (is_rtinycc_ffi_type(ffi_type)) ffi_type$name else ffi_type
+  check_ffi_type(type_name, paste0("argument '", arg_name, "'"))
+  special <- ffi_input_special_rule(type_name, arg_name, r_name)
   if (!is.null(special)) {
     return(special)
   }
-  ffi_input_rule(ffi_type, arg_name, r_name)
+  ffi_input_rule(type_name, arg_name, r_name)
 }
 
 # Generate C code to convert C return value to R SEXP
 generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
-  if (is.list(ffi_type)) {
-    if (is.null(ffi_type$type)) {
-      stop("Return spec missing 'type'", call. = FALSE)
+  return_spec <- normalize_rtinycc_return_spec(ffi_type)
+  type_info <- return_spec$type_info
+
+  if (!is.null(type_info$kind) && type_info$kind == "array") {
+    len_arg <- return_spec$length_arg
+    if (is.null(len_arg) || !is.numeric(len_arg)) {
+      stop("Array return requires numeric 'length_arg'", call. = FALSE)
     }
-    base_type <- ffi_type$type
-    type_info <- check_ffi_type(base_type, "return value")
+    if (len_arg < 1 || len_arg > length(arg_names)) {
+      stop("length_arg out of range", call. = FALSE)
+    }
+    len_name <- arg_names[[as.integer(len_arg)]]
+    value_var <- "__rtinycc_ret"
 
-    if (!is.null(type_info$kind) && type_info$kind == "array") {
-      len_arg <- ffi_type$length_arg
-      if (is.null(len_arg) || !is.numeric(len_arg)) {
-        stop("Array return requires numeric 'length_arg'", call. = FALSE)
-      }
-      if (len_arg < 1 || len_arg > length(arg_names)) {
-        stop("length_arg out of range", call. = FALSE)
-      }
-      len_name <- arg_names[[as.integer(len_arg)]]
-      value_var <- "__rtinycc_ret"
+    alloc_line <- array_return_alloc_line(return_spec$type, len_name)
+    copy_line <- array_return_copy_line(return_spec$type, len_name, value_var)
 
-      alloc_line <- array_return_alloc_line(base_type, len_name)
-      copy_line <- array_return_copy_line(base_type, len_name, value_var)
-
-      free_line <- if (isTRUE(ffi_type$free)) {
-        sprintf("  if (%s) free(%s);", value_var, value_var)
-      } else {
-        NULL
-      }
-
-      return(paste(
-        c(
-          sprintf("%s %s = %s;", type_info$c_type, value_var, value_expr),
-          sprintf("if (!%s) return R_NilValue;", value_var),
-          alloc_line,
-          copy_line,
-          free_line,
-          "  UNPROTECT(1);",
-          "  return out;"
-        ),
-        collapse = "\n"
-      ))
+    free_line <- if (isTRUE(return_spec$free)) {
+      sprintf("  if (%s) free(%s);", value_var, value_var)
+    } else {
+      NULL
     }
 
-    ffi_type <- base_type
+    return(paste(
+      c(
+        sprintf("%s %s = %s;", type_info$c_type, value_var, value_expr),
+        sprintf("if (!%s) return R_NilValue;", value_var),
+        alloc_line,
+        copy_line,
+        free_line,
+        "  UNPROTECT(1);",
+        "  return out;"
+      ),
+      collapse = "\n"
+    ))
   }
 
-  check_ffi_type(ffi_type, "return value")
-  special <- ffi_return_special_rule(ffi_type, value_expr)
+  special <- ffi_return_special_rule(return_spec$type, value_expr)
   if (!is.null(special)) {
     return(special)
   }
-  ffi_return_rule(ffi_type, value_expr)
+  ffi_return_rule(return_spec$type, value_expr)
 }
 
 # Callback helper: generate a unique trampoline name per wrapper argument
@@ -150,10 +172,7 @@ generate_c_wrapper <- function(
   is_external = FALSE
 ) {
   n_args <- length(arg_types) + length(vararg_types)
-  return_info <- check_ffi_type(
-    if (is.list(return_type)) return_type$type else return_type,
-    "return value"
-  )
+  return_info <- rtinycc_return_type_info(return_type)
 
   # Detect if any argument is callback_async
   all_arg_types_combined <- c(arg_types, vararg_types)
@@ -289,10 +308,7 @@ generate_async_exec_wrapper <- function(
   call_expr,
   return_type
 ) {
-  return_info <- check_ffi_type(
-    if (is.list(return_type)) return_type$type else return_type,
-    "return value"
-  )
+  return_info <- rtinycc_return_type_info(return_type)
   is_void <- identical(return_info$c_type, "void")
 
   # --- Build struct fields ---
@@ -313,7 +329,7 @@ generate_async_exec_wrapper <- function(
         sprintf("  %s (*%s)(%s);", sig$return_type, aname, c_args)
       )
     } else {
-      type_info <- check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
+      type_info <- if (is_rtinycc_ffi_type(ffi_type)) ffi_type else check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
       struct_fields <- c(
         struct_fields,
         sprintf("  %s %s;", type_info$c_type, aname)
@@ -421,20 +437,24 @@ generate_external_declarations <- function(symbols) {
   decls <- c()
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
-    return_info <- check_ffi_type(
-      if (is.list(sym$returns)) sym$returns$type else sym$returns,
-      paste0("symbol '", sym_name, "' return")
-    )
+    return_info <- if (!is.null(sym$return_spec)) {
+      sym$return_spec$type_info
+    } else {
+      rtinycc_return_type_info(sym$returns)
+    }
 
     arg_types <- sym$args %||% list()
+    arg_info <- sym$arg_type_info %||% list()
     if (length(arg_types) > 0) {
-      arg_info <- lapply(
-        arg_types,
-        check_ffi_type,
-        context = paste0("symbol '", sym_name, "' argument")
-      )
+      if (!length(arg_info)) {
+        arg_info <- lapply(
+          arg_types,
+          check_ffi_type,
+          context = paste0("symbol '", sym_name, "' argument")
+        )
+      }
       arg_decls <- paste(
-        sapply(arg_info, function(x) x$c_type),
+        vapply(arg_info, function(x) x$c_type, character(1)),
         collapse = ", "
       )
     } else {
@@ -1202,6 +1222,15 @@ generate_ffi_code <- function(
   struct_raw_access = NULL,
   introspect = NULL
 ) {
+  if (!is.null(symbols) && length(symbols) > 0) {
+    symbols <- setNames(
+      lapply(names(symbols), function(sym_name) {
+        as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
+      }),
+      names(symbols)
+    )
+  }
+
   parts <- c()
 
   # TinyCC workaround: Define _Complex as empty since TinyCC doesn't support C99 complex types

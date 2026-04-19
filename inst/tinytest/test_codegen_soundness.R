@@ -118,6 +118,39 @@ ffi <- tcc_ffi() |>
 result <- ffi$set_flag(42L)
 expect_true(is.null(result), info = "void return: returns NULL/invisible")
 
+# normalized symbol specs encode soundness-relevant distinctions before codegen
+sym_ptr <- Rtinycc:::as_rtinycc_bound_symbol(
+  "identity_ptr",
+  list(args = list("ptr"), returns = "ptr")
+)
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(sym_ptr),
+            info = "normalized symbol spec is classed")
+expect_identical(Rtinycc:::ffi_type_family(sym_ptr$arg_type_info[[1]]), "ptr",
+                 info = "normalized symbol spec preserves ptr arg family")
+expect_identical(Rtinycc:::ffi_type_family(sym_ptr$return_spec$type_info), "ptr",
+                 info = "normalized symbol spec preserves ptr return family")
+
+sym_arr <- Rtinycc:::as_rtinycc_bound_symbol(
+  "copy_ints",
+  list(
+    args = list("integer_array", "i32"),
+    returns = list(type = "integer_array", length_arg = 2, free = TRUE)
+  )
+)
+expect_identical(sym_arr$return_spec$length_arg, 2,
+                 info = "normalized symbol spec preserves array return length_arg")
+expect_true(isTRUE(sym_arr$return_spec$free),
+            info = "normalized symbol spec preserves array return free flag")
+
+sym_cb <- Rtinycc:::as_rtinycc_bound_symbol(
+  "call_cb",
+  list(args = list("callback:SEXP(SEXP)", "ptr", "sexp"), returns = "sexp")
+)
+expect_identical(Rtinycc:::ffi_type_family(sym_cb$arg_type_info[[1]]), "callback",
+                 info = "normalized symbol spec preserves callback arg family")
+expect_identical(Rtinycc:::ffi_type_family(sym_cb$arg_type_info[[3]]), "sexp",
+                 info = "normalized symbol spec distinguishes callback from sexp pass-through arg")
+
 # ===========================================================================
 # 2. BOUNDARY VALUE TESTS: NA rejection, range errors
 # ===========================================================================
