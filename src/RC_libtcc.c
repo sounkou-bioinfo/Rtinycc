@@ -29,6 +29,8 @@ static int RC_trace_finalizers_enabled(void);
 static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail);
 void RC_free_finalizer(SEXP ext);
 SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
+SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
+SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
 void *RC_host_calloc_c(size_t n, size_t size);
 void RC_host_free_c(void *ptr);
 
@@ -257,6 +259,22 @@ SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner) {
         R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
     }
 
+    UNPROTECT(1);
+    return ext;
+}
+
+SEXP RC_make_owned_ptr(void *ptr, SEXP tag) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_owned") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+    R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);
+    UNPROTECT(1);
+    return ext;
+}
+
+SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_owned") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+    R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);
     UNPROTECT(1);
     return ext;
 }
@@ -2078,6 +2096,8 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
     RC_tcc_add_function_symbol(s, "RC_owned_native_finalizer", (DL_FUNC) RC_owned_native_finalizer);
     RC_tcc_add_function_symbol(s, "RC_make_borrowed_view", (DL_FUNC) RC_make_borrowed_view);
+    RC_tcc_add_function_symbol(s, "RC_make_owned_ptr", (DL_FUNC) RC_make_owned_ptr);
+    RC_tcc_add_function_symbol(s, "RC_make_owned_composite_ptr", (DL_FUNC) RC_make_owned_composite_ptr);
     RC_tcc_add_function_symbol(s, "RC_host_calloc_c", (DL_FUNC) RC_host_calloc_c);
     RC_tcc_add_function_symbol(s, "RC_host_free_c", (DL_FUNC) RC_host_free_c);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);

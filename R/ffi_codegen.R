@@ -635,12 +635,9 @@ generate_struct_new <- function(struct_name) {
     ),
     "  if (!p) Rf_error(\"Out of memory\");",
     sprintf(
-      "  SEXP ext = PROTECT(R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), R_NilValue));",
+      "  return RC_make_owned_composite_ptr(p, Rf_install(\"struct_%s\"));",
       struct_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);",
-    "  UNPROTECT(1);",
-    "  return ext;",
     "}",
     ""
   )
@@ -931,12 +928,9 @@ generate_union_new <- function(union_name) {
     ),
     "  if (!p) Rf_error(\"Out of memory\");",
     sprintf(
-      "  SEXP ext = PROTECT(R_MakeExternalPtr(p, Rf_install(\"union_%s\"), R_NilValue));",
+      "  return RC_make_owned_composite_ptr(p, Rf_install(\"union_%s\"));",
       union_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);",
-    "  UNPROTECT(1);",
-    "  return ext;",
     "}",
     ""
   )
@@ -1230,6 +1224,8 @@ generate_ffi_code <- function(
     "void RC_free_finalizer(SEXP ext);",
     "void RC_owned_native_finalizer(SEXP ext);",
     "SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);",
+    "SEXP RC_make_owned_ptr(void *ptr, SEXP tag);",
+    "SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);",
     ""
   )
 

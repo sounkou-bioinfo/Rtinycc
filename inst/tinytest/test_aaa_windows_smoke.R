@@ -110,7 +110,7 @@ SEXP test_extptr(void) {
   info = "smoke: R_MakeExternalPtr + R_NilValue"
 )
 
-# ---------- 7. R_RegisterCFinalizerEx with RC_free_finalizer -----------------
+# ---------- 7. owned extptr helper via host finalizer registration -----------
 expect_true(
   {
     ffi <- tcc_ffi()
@@ -119,13 +119,12 @@ expect_true(
       "
 #include <stddef.h>
 void *RC_host_calloc_c(size_t n, size_t size);
+SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
 SEXP test_finalizer(void) {
     int *p = (int*)RC_host_calloc_c(1, sizeof(int));
     if (!p) Rf_error(\"OOM\");
     *p = 99;
-    SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
-    R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);
-    return ext;
+    return RC_make_owned_ptr(p, R_NilValue);
 }
 "
     )
@@ -135,7 +134,7 @@ SEXP test_finalizer(void) {
     on.exit(if (inherits(res, "externalptr") && !tcc_ptr_is_null(res)) .Call("RC_free", res, PACKAGE = "Rtinycc"), add = TRUE)
     is(res, "externalptr")
   },
-  info = "smoke: R_RegisterCFinalizerEx + RC_free_finalizer"
+  info = "smoke: host-owned extptr helper"
 )
 
 # ---------- 8. struct: compile only (no call) ---------------------------------
