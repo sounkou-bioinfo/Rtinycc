@@ -10,6 +10,7 @@ TINYCC_SRC="$THISDIR/src/tinycc"
 TINYCC_DEST="$THISDIR/inst/tinycc"
 
 export MSYSTEM=UCRT64
+RTINYCC_DEBUG_BUILD=${RTINYCC_DEBUG_BUILD:-0}
 
 : > "$CONFIG_LOG"
 
@@ -36,6 +37,7 @@ log "Package source directory: $THISDIR"
 log "TinyCC source directory: $TINYCC_SRC"
 log "TinyCC install directory: $TINYCC_DEST"
 log "MSYSTEM=$MSYSTEM"
+log "RTINYCC_DEBUG_BUILD=$RTINYCC_DEBUG_BUILD"
 
 log "Unpacking vendored TinyCC source"
 run_logged "${R_HOME}/bin/Rscript" "$THISDIR/tools/vendortinycc.R" unpack || exit 1
@@ -54,8 +56,14 @@ run_logged mkdir -p "$TINYCC_DEST/lib" "$TINYCC_DEST/include" "$TINYCC_DEST/libt
 cd "$TINYCC_SRC" || exit 1
 log "Building TinyCC in $PWD"
 
-run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" || exit 1
-run_logged "$MAKE" libtcc.dll libtcc.a tcc.exe libtcc1.a || exit 1
+if [ "$RTINYCC_DEBUG_BUILD" = "1" ]; then
+    log "Configuring TinyCC with debug symbols"
+    run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" --debug || exit 1
+    run_logged "$MAKE" CFLAGS='-O0 -g3' libtcc.dll libtcc.a tcc.exe libtcc1.a || exit 1
+else
+    run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" || exit 1
+    run_logged "$MAKE" libtcc.dll libtcc.a tcc.exe libtcc1.a || exit 1
+fi
 
 if [ -f "tcc.exe" ]; then
     run_logged cp -f "tcc.exe" "$TINYCC_DEST/" || exit 1
