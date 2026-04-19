@@ -104,7 +104,7 @@ SEXP test_extptr(void) {
     ffi <- tcc_bind(ffi, test_extptr = list(args = list(), returns = "sexp"))
     compiled <- tcc_compile(ffi)
     res <- compiled$test_extptr()
-    on.exit(if (inherits(res, "externalptr") && !tcc_ptr_is_null(res)) .Call(RC_free, res), add = TRUE)
+    on.exit(if (inherits(res, "externalptr") && !tcc_ptr_is_null(res)) .Call("RC_free", res, PACKAGE = "Rtinycc"), add = TRUE)
     is(res, "externalptr")
   },
   info = "smoke: R_MakeExternalPtr + R_NilValue"
