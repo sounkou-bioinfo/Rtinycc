@@ -127,6 +127,7 @@ static callback_entry_t callback_registry[MAX_CALLBACKS];
 typedef struct {
     int id;                // Index into callback_registry (or -1 when closed)
     int refs;              // Reference count for outstanding external pointers
+    int origin_id;         // Original registry slot for diagnostics after close
 } callback_token_t;
 
 // ============================================================================
@@ -1563,8 +1564,9 @@ static void RC_callback_finalizer(SEXP ext) {
         snprintf(
             detail,
             sizeof(detail),
-            "id=%d refs=%d valid=%d",
+            "id=%d origin_id=%d refs=%d valid=%d",
             token->id,
+            token->origin_id,
             token->refs,
             (token->id >= 0 && token->id < MAX_CALLBACKS) ? callback_registry[token->id].valid : 0
         );
@@ -1611,7 +1613,7 @@ static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
         char detail[128];
-        snprintf(detail, sizeof(detail), "id=%d refs=%d", token->id, token->refs);
+        snprintf(detail, sizeof(detail), "id=%d origin_id=%d refs=%d", token->id, token->origin_id, token->refs);
         RC_trace_finalizer_event("callback_ptr_release", ext, R_NilValue, detail);
         token->refs -= 1;
         if (token->refs <= 0) {
@@ -1685,6 +1687,7 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     }
     token->id = id;
     token->refs = 1;
+    token->origin_id = id;
     
     SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_callback"));

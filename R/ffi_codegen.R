@@ -1250,7 +1250,7 @@ generate_ffi_code <- function(
       parts,
       "",
       "/* Callback trampoline support */",
-      "typedef struct { int id; int refs; } callback_token_t;",
+      "typedef struct { int id; int refs; int origin_id; } callback_token_t;",
       if (cb_tramps$needs_sync) {
         "SEXP RC_invoke_callback_id(int, SEXP);"
       } else {
