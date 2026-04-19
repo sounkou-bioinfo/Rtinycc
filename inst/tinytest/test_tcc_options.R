@@ -24,16 +24,6 @@ compile_probe_low <- function(state) {
   tcc_call_symbol(state, "opt_macro", return = "int")
 }
 
-old_env <- Sys.getenv("RTINYCC_TCC_OPTIONS", unset = NA_character_)
-on.exit({
-  if (is.na(old_env)) {
-    Sys.unsetenv("RTINYCC_TCC_OPTIONS")
-  } else {
-    Sys.setenv(RTINYCC_TCC_OPTIONS = old_env)
-  }
-}, add = TRUE)
-Sys.unsetenv("RTINYCC_TCC_OPTIONS")
-
 # High-level API: options are forwarded into TinyCC state.
 expect_equal(
   compile_probe_high(tcc_ffi() |> tcc_options("-O0")),

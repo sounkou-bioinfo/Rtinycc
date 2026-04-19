@@ -1,3 +1,4 @@
+
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 # Rtinycc
@@ -175,7 +176,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5b397d057dd0"
+#> [1] "0x576a39338dc0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -206,11 +207,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5b3983449de0>
+#> <pointer: 0x576a3f4815f0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5b397d0987b0>
+#> <pointer: 0x576a3b639a50>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5b3983449de0>
+#> <pointer: 0x576a3f4815f0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -576,8 +577,8 @@ rand_bench_n4096 <- rand_results$rand_bench_n4096
 
 compile_times
 #>   implementation milliseconds
-#> 1        Rtinycc         63.0
-#> 2         callme        178.5
+#> 1        Rtinycc           12
+#> 2         callme          207
 cat(generated_code)
 #> /* TinyCC workaround: _Complex not supported */
 #> #define _Complex
@@ -686,26 +687,26 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       699µs    709µs     1400.      12KB       0 
-#> 2 callme        257µs    260µs     2729.        0B     136.
+#> 1 Rtinycc       649µs    676µs     1472.      13KB       0 
+#> 2 callme        252µs    268µs     2685.        0B     134.
 fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.61ms    2.3ms      462.    3.15MB     23.1
-#> 2 callme        1.3ms   1.32ms      706.    3.13MB     35.3
+#> 1 Rtinycc       1.6ms   2.28ms      453.    3.15MB     22.7
+#> 2 callme        1.3ms   1.31ms      719.    3.13MB     36.0
 rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       957µs    987µs     1009.    15.4KB        0
-#> 2 callme        506µs    517µs     1927.        0B        0
+#> 1 Rtinycc       844µs    903µs     1112.    15.4KB        0
+#> 2 callme        497µs    502µs     1988.        0B        0
 rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.57ms   1.59ms      519.    3.13MB     26.0
-#> 2 callme        1.1ms   1.77ms      605.    3.13MB     30.3
+#> 1 Rtinycc      1.56ms   2.19ms      445.    3.13MB     22.2
+#> 2 callme       1.14ms   1.77ms      540.    3.13MB     27.0
 ```
 
 The usual pattern is:
@@ -884,7 +885,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5b3984eaa080 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @576a3de7e900 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -900,7 +901,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5b3984eaa080 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @576a3de7e900 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -927,15 +928,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5b3982ab2100>
+#> <pointer: 0x576a39957560>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5b3982ab2100>
+#> <pointer: 0x576a39957560>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5b397cbc1d80>
+#> <pointer: 0x576a39bbf580>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5b397cbc1d80>
+#> <pointer: 0x576a39bbf580>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -980,9 +981,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5b397c8a3f20>
+#> <pointer: 0x576a3b121050>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5b397c8a3f20>
+#> <pointer: 0x576a3b121050>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -1383,7 +1384,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5b397cf74280>
+#> <pointer: 0x576a3b08d090>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1500,11 +1501,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 44.47ms 44.47ms      22.5    6.33MB     22.5     1     1     44.5ms
-#> 2 vroom_df_…  6.45ms   6.6ms     152.     1.22MB      0       2     0     13.2ms
-#> 3 vroom_df_…  6.89ms  7.28ms     137.     2.44MB      0       2     0     14.6ms
-#> 4 c_read_df  21.01ms 21.08ms      47.4    1.22MB      0       2     0     42.2ms
-#> 5 io_uring_…  20.8ms 20.95ms      47.7    1.22MB      0       2     0     41.9ms
+#> 1 read_tabl…  43.9ms 47.41ms      21.1    6.33MB        0     2     0     94.8ms
+#> 2 vroom_df_…  6.31ms  6.45ms     155.     1.22MB        0     2     0     12.9ms
+#> 3 vroom_df_…  6.63ms     7ms     143.     2.44MB        0     2     0       14ms
+#> 4 c_read_df  21.08ms 21.34ms      46.9    1.22MB        0     2     0     42.7ms
+#> 5 io_uring_… 20.96ms 20.98ms      47.7    1.22MB        0     2     0       42ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1610,9 +1611,9 @@ ffi$struct_inner_free(i) ffi$struct_outer_free(o)
 
     b <- ffi$struct_buf_new()
     ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-    #> <pointer: 0x5b39853a0d80>
+    #> <pointer: 0x576a3f4b3470>
     ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-    #> <pointer: 0x5b39853a0d80>
+    #> <pointer: 0x576a3f4b3470>
     ffi$struct_buf_get_data_elt(b, 0L)
     #> [1] 202
     ffi$struct_buf_get_data_elt(b, 1L)
