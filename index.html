@@ -169,7 +169,7 @@
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x576a39338dc0"</span></span>
+<span><span class="co">#&gt; [1] "0x620041a79650"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -190,11 +190,11 @@
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a3f4815f0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x620044f87ef0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a3b639a50&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x62004746ebc0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a3f4815f0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x620044f87ef0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -230,459 +230,10 @@
 <span><span class="co">#&gt; [1] 8</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="compilation-and-call-overhead">Compilation and call overhead<a class="anchor" aria-label="anchor" href="#compilation-and-call-overhead"></a>
-</h3>
-<p>To get a rough sense of cost, it is useful to compare <code>Rtinycc</code> against a conventional <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> shared-library workflow. The snippet below uses the <a href="https://cran.r-project.org/package=callme" class="external-link"><code>callme</code></a> package as the baseline. That means <code>callme</code> is compiling through <code>R CMD SHLIB</code> with the platform compiler toolchain (<code>gcc</code>/<code>clang</code> on the usual Unix-like targets), so better steady-state optimization than TinyCC is expected.</p>
-<p>Three small cases are enough to make the main point:</p>
-<ul>
-<li>
-<code>noop()</code>: takes nothing and returns nothing</li>
-<li>
-<code>fill_rand(out, n)</code>: fills a caller-provided numeric vector in place</li>
-<li>
-<code>rand_unif(n)</code>: generates <code>n</code> random doubles</li>
-</ul>
-<p>The <code>fill_rand()</code> case is the fairer array-oriented comparison:</p>
-<ul>
-<li>
-<code>Rtinycc</code> uses the <code>numeric_array</code> input path and borrows the backing R buffer</li>
-<li>
-<code>callme</code> writes into <code>REAL(vec)</code> directly</li>
-</ul>
-<p>The <code>rand_unif()</code> case then isolates the extra copy path:</p>
-<ul>
-<li>
-<code>callme</code> allocates the final R vector directly with the R C API</li>
-<li>
-<code>Rtinycc</code> returns a native <code>double*</code>, and the generated wrapper copies that buffer into an R vector</li>
-</ul>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">rtinycc_code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">  #include &lt;R.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rmath.h&gt;</span></span>
-<span><span class="st">  #include &lt;stdlib.h&gt;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  void noop(void) {}</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  void fill_rand(double* out, int n) {</span></span>
-<span><span class="st">    if (n &lt; 0) {</span></span>
-<span><span class="st">      Rf_error("n must be non-negative");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    GetRNGstate();</span></span>
-<span><span class="st">    for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="st">      out[i] = unif_rand();</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    PutRNGstate();</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  double* rand_unif(int n) {</span></span>
-<span><span class="st">    if (n &lt; 0) {</span></span>
-<span><span class="st">      Rf_error("n must be non-negative");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    if (n == 0) {</span></span>
-<span><span class="st">      return (double*) malloc(sizeof(double));</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    double *out = (double*) malloc(sizeof(double) * (size_t) n);</span></span>
-<span><span class="st">    if (!out) {</span></span>
-<span><span class="st">      Rf_error("malloc failed");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    GetRNGstate();</span></span>
-<span><span class="st">    for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="st">      out[i] = unif_rand();</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    PutRNGstate();</span></span>
-<span><span class="st">    return out;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">callme_code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
-<span><span class="st">  #include &lt;R.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="st">  #include &lt;Rmath.h&gt;</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  SEXP noop(void) {</span></span>
-<span><span class="st">    return R_NilValue;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  SEXP fill_rand(SEXP out_, SEXP n_) {</span></span>
-<span><span class="st">    int n = asInteger(n_);</span></span>
-<span><span class="st">    if (n &lt; 0) {</span></span>
-<span><span class="st">      Rf_error("n must be non-negative");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    if (TYPEOF(out_) != REALSXP) {</span></span>
-<span><span class="st">      Rf_error("out must be a numeric vector");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    if (XLENGTH(out_) &lt; n) {</span></span>
-<span><span class="st">      Rf_error("out is shorter than n");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    double *out = REAL(out_);</span></span>
-<span><span class="st">    GetRNGstate();</span></span>
-<span><span class="st">    for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="st">      out[i] = unif_rand();</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    PutRNGstate();</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    return out_;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">  SEXP rand_unif(SEXP n_) {</span></span>
-<span><span class="st">    int n = asInteger(n_);</span></span>
-<span><span class="st">    if (n &lt; 0) {</span></span>
-<span><span class="st">      Rf_error("n must be non-negative");</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    SEXP out = PROTECT(allocVector(REALSXP, n));</span></span>
-<span><span class="st">    double *ptr = REAL(out);</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    GetRNGstate();</span></span>
-<span><span class="st">    for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="st">      ptr[i] = unif_rand();</span></span>
-<span><span class="st">    }</span></span>
-<span><span class="st">    PutRNGstate();</span></span>
-<span><span class="st"></span></span>
-<span><span class="st">    UNPROTECT(1);</span></span>
-<span><span class="st">    return out;</span></span>
-<span><span class="st">  }</span></span>
-<span><span class="st">'</span></span>
-<span></span>
-<span><span class="va">build_rtinycc_module</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">rtinycc_code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>      noop <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>      fill_rand <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"numeric_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>      rand_unif <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>        returns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"numeric_array"</span>, length_arg <span class="op">=</span> <span class="fl">1</span>, free <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">build_callme_module</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">before</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/getLoadedDLLs.html" class="external-link">getLoadedDLLs</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">mod</span> <span class="op">&lt;-</span> <span class="fu">callme</span><span class="fu">::</span><span class="fu"><a href="https://coolbutuseless.github.io/package/callme/reference/compile.html" class="external-link">compile</a></span><span class="op">(</span><span class="va">callme_code</span>, env <span class="op">=</span> <span class="cn">NULL</span>, verbosity <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
-<span>  <span class="va">dlls</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/getLoadedDLLs.html" class="external-link">getLoadedDLLs</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">new_names</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">dlls</span><span class="op">)</span>, <span class="va">before</span><span class="op">)</span></span>
-<span>  <span class="va">new_names</span> <span class="op">&lt;-</span> <span class="va">new_names</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/startsWith.html" class="external-link">startsWith</a></span><span class="op">(</span><span class="va">new_names</span>, <span class="st">"callme_"</span><span class="op">)</span><span class="op">]</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">mod</span>, <span class="st">"dll_paths"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span></span>
-<span>    <span class="va">dlls</span><span class="op">[</span><span class="va">new_names</span><span class="op">]</span>,</span>
-<span>    <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span><span class="op">[[</span><span class="st">"path"</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
-<span>  <span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">mod</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">unload_callme_dlls</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span> <span class="op">||</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">dll_path</span> <span class="kw">in</span> <span class="va">dll_paths</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">is.character</a></span><span class="op">(</span><span class="va">dll_path</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">dll_path</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">dll_path</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dynload.html" class="external-link">dyn.unload</a></span><span class="op">(</span><span class="va">dll_path</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>    <span class="op">}</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">build_and_dispose_callme_module</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">mod</span>, <span class="st">"dll_paths"</span>, exact <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">mod</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu">unload_callme_dlls</span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">with_benchmark_modules</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fun</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">rt_mod</span> <span class="op">&lt;-</span> <span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">cm_mod</span> <span class="op">&lt;-</span> <span class="fu">build_callme_module</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">dll_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">cm_mod</span>, <span class="st">"dll_paths"</span>, exact <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>    <span class="fu">unload_callme_dlls</span><span class="op">(</span><span class="va">dll_paths</span><span class="op">)</span></span>
-<span>  <span class="op">}</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="fu">fun</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">median_elapsed</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">expr</span>, <span class="va">times</span> <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">expr</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/substitute.html" class="external-link">substitute</a></span><span class="op">(</span><span class="va">expr</span><span class="op">)</span></span>
-<span>  <span class="va">env</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sys.parent.html" class="external-link">parent.frame</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">replicate</a></span><span class="op">(</span></span>
-<span>    <span class="va">times</span>,</span>
-<span>    <span class="op">{</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>      <span class="va">t0</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html" class="external-link">proc.time</a></span><span class="op">(</span><span class="op">)</span><span class="op">[[</span><span class="st">"elapsed"</span><span class="op">]</span><span class="op">]</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">eval</a></span><span class="op">(</span><span class="va">expr</span>, envir <span class="op">=</span> <span class="va">env</span><span class="op">)</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html" class="external-link">proc.time</a></span><span class="op">(</span><span class="op">)</span><span class="op">[[</span><span class="st">"elapsed"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">t0</span></span>
-<span>    <span class="op">}</span></span>
-<span>  <span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">run_noop</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fun</span>, <span class="va">n</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu">fun</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">run_rand</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fun</span>, <span class="va">n</span>, <span class="va">reps</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">reps</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu">fun</span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">run_fill</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fun</span>, <span class="va">n</span>, <span class="va">reps</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">reps</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu">fun</span><span class="op">(</span><span class="va">out</span>, <span class="va">n</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">rtinycc_recipe</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="va">rtinycc_code</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
-<span>    noop <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>    fill_rand <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"numeric_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"void"</span><span class="op">)</span>,</span>
-<span>    rand_unif <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>,</span>
-<span>      returns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"numeric_array"</span>, length_arg <span class="op">=</span> <span class="fl">1</span>, free <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
-<span></span>
-<span><span class="va">generated_code</span> <span class="op">&lt;-</span> <span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">generate_ffi_code</span><span class="op">(</span></span>
-<span>  symbols <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">symbols</span>,</span>
-<span>  headers <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">headers</span>,</span>
-<span>  c_code <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">c_code</span>,</span>
-<span>  is_external <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  structs <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">structs</span>,</span>
-<span>  unions <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">unions</span>,</span>
-<span>  enums <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">enums</span>,</span>
-<span>  globals <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">globals</span>,</span>
-<span>  container_of <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">container_of</span>,</span>
-<span>  field_addr <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">field_addr</span>,</span>
-<span>  struct_raw_access <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">struct_raw_access</span>,</span>
-<span>  introspect <span class="op">=</span> <span class="va">rtinycc_recipe</span><span class="op">$</span><span class="va">introspect</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">compile_times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  implementation <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Rtinycc"</span>, <span class="st">"callme"</span><span class="op">)</span>,</span>
-<span>  milliseconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">build_rtinycc_module</span><span class="op">(</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">2L</span><span class="op">)</span>,</span>
-<span>    <span class="fu">median_elapsed</span><span class="op">(</span><span class="fu">build_and_dispose_callme_module</span><span class="op">(</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">2L</span><span class="op">)</span></span>
-<span>  <span class="op">)</span> <span class="op">*</span> <span class="fl">1000</span>, <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">noop_bench</span> <span class="op">&lt;-</span> <span class="fu">with_benchmark_modules</span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">n_noop</span> <span class="op">&lt;-</span> <span class="fl">1000L</span></span>
-<span>  <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
-<span>    Rtinycc <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
-<span>    callme <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
-<span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>    check <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">fill_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">with_benchmark_modules</span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
-<span>    Rtinycc <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
-<span>    callme <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
-<span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">rand_results</span> <span class="op">&lt;-</span> <span class="fu">with_benchmark_modules</span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">rt_mod</span>, <span class="va">cm_mod</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">rand_bench_n1</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
-<span>    Rtinycc <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
-<span>    callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
-<span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">rand_bench_n4096</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
-<span>    Rtinycc <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">rt_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
-<span>    callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
-<span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>rand_bench_n1 <span class="op">=</span> <span class="va">rand_bench_n1</span>, rand_bench_n4096 <span class="op">=</span> <span class="va">rand_bench_n4096</span><span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">rand_bench_n1</span> <span class="op">&lt;-</span> <span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n1</span></span>
-<span><span class="va">rand_bench_n4096</span> <span class="op">&lt;-</span> <span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n4096</span></span>
-<span></span>
-<span><span class="va">compile_times</span></span>
-<span><span class="co">#&gt;   implementation milliseconds</span></span>
-<span><span class="co">#&gt; 1        Rtinycc           12</span></span>
-<span><span class="co">#&gt; 2         callme          207</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">generated_code</span><span class="op">)</span></span>
-<span><span class="co">#&gt; /* TinyCC workaround: _Complex not supported */</span></span>
-<span><span class="co">#&gt; #define _Complex</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; #include &lt;R.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="co">#&gt; #ifndef STRING_PTR_RO</span></span>
-<span><span class="co">#&gt; #define STRING_PTR_RO STRING_PTR</span></span>
-<span><span class="co">#&gt; #endif</span></span>
-<span><span class="co">#&gt; void RC_free_finalizer(SEXP ext);</span></span>
-<span><span class="co">#&gt; void RC_owned_native_finalizer(SEXP ext);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_owned_ptr(void *ptr, SEXP tag);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; #include &lt;stdint.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;stdbool.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;stddef.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;limits.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;math.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;string.h&gt;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; /* User code */</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   #include &lt;R.h&gt;</span></span>
-<span><span class="co">#&gt;   #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="co">#&gt;   #include &lt;Rmath.h&gt;</span></span>
-<span><span class="co">#&gt;   #include &lt;stdlib.h&gt;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   void noop(void) {}</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   void fill_rand(double* out, int n) {</span></span>
-<span><span class="co">#&gt;     if (n &lt; 0) {</span></span>
-<span><span class="co">#&gt;       Rf_error("n must be non-negative");</span></span>
-<span><span class="co">#&gt;     }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     GetRNGstate();</span></span>
-<span><span class="co">#&gt;     for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="co">#&gt;       out[i] = unif_rand();</span></span>
-<span><span class="co">#&gt;     }</span></span>
-<span><span class="co">#&gt;     PutRNGstate();</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   double* rand_unif(int n) {</span></span>
-<span><span class="co">#&gt;     if (n &lt; 0) {</span></span>
-<span><span class="co">#&gt;       Rf_error("n must be non-negative");</span></span>
-<span><span class="co">#&gt;     }</span></span>
-<span><span class="co">#&gt;     if (n == 0) {</span></span>
-<span><span class="co">#&gt;       return (double*) malloc(sizeof(double));</span></span>
-<span><span class="co">#&gt;     }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     double *out = (double*) malloc(sizeof(double) * (size_t) n);</span></span>
-<span><span class="co">#&gt;     if (!out) {</span></span>
-<span><span class="co">#&gt;       Rf_error("malloc failed");</span></span>
-<span><span class="co">#&gt;     }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     GetRNGstate();</span></span>
-<span><span class="co">#&gt;     for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="co">#&gt;       out[i] = unif_rand();</span></span>
-<span><span class="co">#&gt;     }</span></span>
-<span><span class="co">#&gt;     PutRNGstate();</span></span>
-<span><span class="co">#&gt;     return out;</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; /* R callable wrappers for bound symbols */</span></span>
-<span><span class="co">#&gt; SEXP R_wrap_noop(void) {</span></span>
-<span><span class="co">#&gt;   // No arguments</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   // Call and return</span></span>
-<span><span class="co">#&gt;    noop();</span></span>
-<span><span class="co">#&gt;      return R_NilValue;</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; SEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {</span></span>
-<span><span class="co">#&gt;   double* arg1 = REAL(arg1_);</span></span>
-<span><span class="co">#&gt;   int _arg2 = asInteger(arg2_);</span></span>
-<span><span class="co">#&gt;   if (_arg2 == NA_INTEGER) Rf_error("integer value is NA");</span></span>
-<span><span class="co">#&gt;   if (_arg2 &lt; INT32_MIN || _arg2 &gt; INT32_MAX) Rf_error("i32 out of range");</span></span>
-<span><span class="co">#&gt;   int32_t arg2 = (int32_t)_arg2;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   // Call and return</span></span>
-<span><span class="co">#&gt;    fill_rand(arg1, arg2);</span></span>
-<span><span class="co">#&gt;      return R_NilValue;</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; SEXP R_wrap_rand_unif(SEXP arg1_) {</span></span>
-<span><span class="co">#&gt;   int _arg1 = asInteger(arg1_);</span></span>
-<span><span class="co">#&gt;   if (_arg1 == NA_INTEGER) Rf_error("integer value is NA");</span></span>
-<span><span class="co">#&gt;   if (_arg1 &lt; INT32_MIN || _arg1 &gt; INT32_MAX) Rf_error("i32 out of range");</span></span>
-<span><span class="co">#&gt;   int32_t arg1 = (int32_t)_arg1;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   // Call and return</span></span>
-<span><span class="co">#&gt;    double* __rtinycc_ret = rand_unif(arg1);</span></span>
-<span><span class="co">#&gt;    if (!__rtinycc_ret) return R_NilValue;</span></span>
-<span><span class="co">#&gt;    SEXP out = PROTECT(allocVector(REALSXP, arg1));</span></span>
-<span><span class="co">#&gt;      if (arg1 &gt; 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);</span></span>
-<span><span class="co">#&gt;      if (__rtinycc_ret) free(__rtinycc_ret);</span></span>
-<span><span class="co">#&gt;      UNPROTECT(1);</span></span>
-<span><span class="co">#&gt;      return out;</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="va">noop_bench</span></span>
-<span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc       649µs    676µs     1472.      13KB       0 </span></span>
-<span><span class="co">#&gt; 2 callme        252µs    268µs     2685.        0B     134.</span></span>
-<span><span class="va">fill_bench_n4096</span></span>
-<span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc       1.6ms   2.28ms      453.    3.15MB     22.7</span></span>
-<span><span class="co">#&gt; 2 callme        1.3ms   1.31ms      719.    3.13MB     36.0</span></span>
-<span><span class="va">rand_bench_n1</span></span>
-<span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc       844µs    903µs     1112.    15.4KB        0</span></span>
-<span><span class="co">#&gt; 2 callme        497µs    502µs     1988.        0B        0</span></span>
-<span><span class="va">rand_bench_n4096</span></span>
-<span><span class="co">#&gt; # A tibble: 2 × 6</span></span>
-<span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
-<span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt; 1 Rtinycc      1.56ms   2.19ms      445.    3.13MB     22.2</span></span>
-<span><span class="co">#&gt; 2 callme       1.14ms   1.77ms      540.    3.13MB     27.0</span></span></code></pre></div>
-<p>The usual pattern is:</p>
-<ul>
-<li>
-<code>Rtinycc</code> compiles tiny modules much faster because it stays in-process</li>
-<li>a regular <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> module has lower minimal call overhead</li>
-<li>the zero-copy <code>fill_rand()</code> case is the fairer vector benchmark for <code>Rtinycc</code>
-</li>
-<li>when <code>Rtinycc</code> returns a native buffer that must be copied into an R vector, that copy is measurable</li>
-<li>part of the runtime gap is also expected backend quality: <code>callme</code> is using the system compiler, while <code>Rtinycc</code> is using TinyCC</li>
-</ul>
-<p>For performance-sensitive paths, the main mitigation is to move more work into each call. One large array-oriented call is usually a much better fit than many tiny scalar crossings. The full benchmark discussion is in the <code>Compilation and Call Overhead</code> vignette.</p>
-</div>
-<div class="section level3">
 <h3 id="variadic-calls-eg-rprintf-style">Variadic calls (e.g. <code>Rprintf</code> style)<a class="anchor" aria-label="anchor" href="#variadic-calls-eg-rprintf-style"></a>
 </h3>
 <p>Rtinycc supports two ways to bind variadic tails. The legacy approach uses <code>varargs</code> as a typed prefix tail, while the bounded dynamic approach uses <code>varargs_types</code> together with <code>varargs_min</code> and <code>varargs_max</code>. In the bounded mode, wrappers are generated across the allowed arity and type combinations, and runtime dispatch selects the matching wrapper from the scalar tail values provided at call time.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi_var</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">"#include &lt;R_ext/Print.h&gt;"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
@@ -735,7 +286,7 @@
 <h3 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
 </h3>
 <p>We can bind directly to symbols in shared libraries. Here we link against <code>libm</code>.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">math</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"m"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
@@ -756,7 +307,7 @@
 <h3 id="compiler-options">Compiler options<a class="anchor" aria-label="anchor" href="#compiler-options"></a>
 </h3>
 <p>Use <code><a href="reference/tcc_options.html">tcc_options()</a></code> to pass raw TinyCC options in the high-level FFI pipeline. For low-level states, use <code><a href="reference/tcc_set_options.html">tcc_set_options()</a></code> directly.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi_opt_off</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_options.html">tcc_options</a></span><span class="op">(</span><span class="st">"-O0"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
@@ -794,7 +345,7 @@
 <h3 id="working-with-arrays">Working with arrays<a class="anchor" aria-label="anchor" href="#working-with-arrays"></a>
 </h3>
 <p>R vectors are passed to C with zero copy. Mutations in C are visible in R.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    #include &lt;stdlib.h&gt;</span></span>
@@ -826,7 +377,7 @@
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @576a3de7e900 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @6200455c83f8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -842,7 +393,7 @@
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @576a3de7e900 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @6200455c83f8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -852,7 +403,7 @@
 <h3 id="structs-and-unions">Structs and unions<a class="anchor" aria-label="anchor" href="#structs-and-unions"></a>
 </h3>
 <p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> to generate allocation and accessor helpers. Free instances when done.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    #include &lt;math.h&gt;</span></span>
@@ -869,15 +420,15 @@
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a39957560&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x62004323dbe0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a39957560&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x62004323dbe0&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a39bbf580&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x62004227eda0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a39bbf580&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x62004227eda0&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -891,7 +442,7 @@
 <h3 id="enums">Enums<a class="anchor" aria-label="anchor" href="#enums"></a>
 </h3>
 <p>Enums are exposed as helper functions that return integer constants.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"enum color { RED = 0, GREEN = 1, BLUE = 2 };"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_enum.html">tcc_enum</a></span><span class="op">(</span><span class="st">"color"</span>, constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"RED"</span>, <span class="st">"GREEN"</span>, <span class="st">"BLUE"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -906,7 +457,7 @@
 <h3 id="bitfields">Bitfields<a class="anchor" aria-label="anchor" href="#bitfields"></a>
 </h3>
 <p>Bitfields are handled by TCC. Accessors read and write them like normal fields.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    struct flags {</span></span>
@@ -919,9 +470,9 @@
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a3b121050&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x620047d4e610&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a3b121050&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x620047d4e610&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -933,7 +484,7 @@
 <h3 id="global-getters-and-setters">Global getters and setters<a class="anchor" aria-label="anchor" href="#global-getters-and-setters"></a>
 </h3>
 <p>C globals can be exposed with explicit getter/setter helpers.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    int counter = 7;</span></span>
@@ -956,7 +507,7 @@
 <h3 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
 </h3>
 <p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Specify a <code>callback:&lt;signature&gt;</code> argument in <code><a href="reference/tcc_bind.html">tcc_bind()</a></code> so the trampoline is generated automatically. Call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when you want deterministic invalidation and earlier release of the preserved R function.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="va">x</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
@@ -983,7 +534,7 @@
 <h3 id="callback-errors">Callback errors<a class="anchor" aria-label="anchor" href="#callback-errors"></a>
 </h3>
 <p>If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate sentinel instead of unwinding through C. In practice this means NA-like numeric or integer values, <code>NA</code> logical, <code>NA</code> string, or a null external pointer depending on the declared return type.</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"boom"</span><span class="op">)</span>,</span>
 <span>  signature <span class="op">=</span> <span class="st">"double (*)(double)"</span></span>
@@ -1026,7 +577,7 @@
 <p>When a bound function has any <code>callback_async:</code> argument, the generated wrapper automatically runs your C function on a new thread while draining callbacks on the main R thread. Your C code doesn’t need to know about draining at all — just call the callback as normal and the wrapper handles the rest.</p>
 <p><strong>Void return (fire-and-forget):</strong> the callback is enqueued from any thread and executed on the main R thread automatically — on Windows via R’s message pump, on Linux/macOS via R’s event loop <code>addInputHandler</code>.</p>
 <p><strong>Non-void return (synchronous):</strong> the worker thread blocks until the main R thread executes the callback and returns the real result. Supported return types: integer variants (<code>int</code>, <code>int32_t</code>, <code>i8</code>, <code>i16</code>, <code>u8</code>, <code>u16</code>), floating-point (<code>double</code>, <code>float</code>), <code>bool</code>/<code>logical</code>, and pointer (<code>void*</code>, <code>T*</code>).</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Fire-and-forget: void callback accumulated from 100 worker threads</span></span>
 <span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
 <span><span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
@@ -1106,7 +657,7 @@
 <span><span class="co">#&gt; [1] 200</span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span></code></pre></div>
 <p>Non-void return works the same way — the generated wrapper handles the drain loop transparently:</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb_triple</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">3L</span>,</span>
 <span>  signature <span class="op">=</span> <span class="st">"int (*)(int)"</span></span>
@@ -1174,7 +725,7 @@
 <h3 id="sqlite-a-complete-example">SQLite: a complete example<a class="anchor" aria-label="anchor" href="#sqlite-a-complete-example"></a>
 </h3>
 <p>This example ties together external library linking, callbacks, and pointer dereferencing. We open an in-memory SQLite database, execute queries, and collect rows through an R callback that reads <code>char**</code> arrays using <code>tcc_read_ptr</code> and <code>tcc_read_cstring</code>.</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ptr_size</span> <span class="op">&lt;-</span> <span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span></span>
 <span></span>
 <span><span class="va">read_string_array</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">ptr</span>, <span class="va">n</span><span class="op">)</span> <span class="op">{</span></span>
@@ -1239,7 +790,7 @@
 </h2>
 <p>For header-driven bindings, we use <code>treesitter.c</code> to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, <code><a href="reference/tcc_generate_bindings.html">tcc_generate_bindings()</a></code> handles the code generation.</p>
 <p>The default mapper is conservative for pointers: <code>char*</code> is treated as <code>ptr</code> because C does not guarantee NUL-terminated strings. If you know a parameter is a C string, provide a custom mapper that returns <code>cstring</code> for that type.</p>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">header</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">double sqrt(double x);</span></span>
 <span><span class="st">double sin(double x);</span></span>
@@ -1279,7 +830,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x576a3b08d090&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6200485513e0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -1289,7 +840,7 @@
 <h2 id="io_uring-demo">io_uring Demo<a class="anchor" aria-label="anchor" href="#io_uring-demo"></a>
 </h2>
 <p><code>CSV</code> parser using <a href="https://en.wikipedia.org/wiki/Io_uring" class="external-link"><code>io_uring</code></a> on linux</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.info.html" class="external-link">Sys.info</a></span><span class="op">(</span><span class="op">)</span><span class="op">[[</span><span class="st">"sysname"</span><span class="op">]</span><span class="op">]</span> <span class="op">==</span> <span class="st">"Linux"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">c_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"c_examples"</span>, <span class="st">"io_uring_csv.c"</span>, package <span class="op">=</span> <span class="st">"Rtinycc"</span><span class="op">)</span></span>
 <span></span>
@@ -1394,11 +945,11 @@
 <span><span class="co">#&gt; # A tibble: 5 × 13</span></span>
 <span><span class="co">#&gt;   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:t&gt; &lt;bch:t&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;   &lt;bch:tm&gt;</span></span>
-<span><span class="co">#&gt; 1 read_tabl…  43.9ms 47.41ms      21.1    6.33MB        0     2     0     94.8ms</span></span>
-<span><span class="co">#&gt; 2 vroom_df_…  6.31ms  6.45ms     155.     1.22MB        0     2     0     12.9ms</span></span>
-<span><span class="co">#&gt; 3 vroom_df_…  6.63ms     7ms     143.     2.44MB        0     2     0       14ms</span></span>
-<span><span class="co">#&gt; 4 c_read_df  21.08ms 21.34ms      46.9    1.22MB        0     2     0     42.7ms</span></span>
-<span><span class="co">#&gt; 5 io_uring_… 20.96ms 20.98ms      47.7    1.22MB        0     2     0       42ms</span></span>
+<span><span class="co">#&gt; 1 read_tabl… 49.48ms 49.48ms      20.2    6.33MB     20.2     1     1     49.5ms</span></span>
+<span><span class="co">#&gt; 2 vroom_df_…  6.42ms  6.65ms     150.     1.22MB      0       2     0     13.3ms</span></span>
+<span><span class="co">#&gt; 3 vroom_df_…  6.96ms  7.23ms     138.     2.44MB      0       2     0     14.5ms</span></span>
+<span><span class="co">#&gt; 4 c_read_df     21ms 21.01ms      47.6    1.22MB      0       2     0       42ms</span></span>
+<span><span class="co">#&gt; 5 io_uring_… 19.66ms 19.74ms      50.7    1.22MB      0       2     0     39.5ms</span></span>
 <span><span class="co">#&gt; # ℹ 4 more variables: result &lt;list&gt;, memory &lt;list&gt;, time &lt;list&gt;, gc &lt;list&gt;</span></span></code></pre></div>
 <p><img src="reference/figures/README-io_uring-demo-1.png" alt="" width="100%"></p>
 </div>
@@ -1415,7 +966,7 @@
 <h3 id="id_64-bit-integer-precision">64-bit integer precision<a class="anchor" aria-label="anchor" href="#id_64-bit-integer-precision"></a>
 </h3>
 <p>R represents <code>i64</code> and <code>u64</code> values as <code>double</code>, which loses precision beyond <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mn>53</mn></msup><annotation encoding="application/x-tex">2^{53}</annotation></semantics></math>. Values that differ only past that threshold become indistinguishable.</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53:     %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "2^53:     9007199254740992"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53 + 1: %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span></span>
@@ -1428,7 +979,7 @@
 <h3 id="nested-structs">Nested structs<a class="anchor" aria-label="anchor" href="#nested-structs"></a>
 </h3>
 <p>Named nested struct fields can now be declared explicitly with <code>struct:&lt;name&gt;</code>. Getters return borrowed nested views and setters copy bytes from another struct object of the declared nested type.</p>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    struct inner { int a; };</span></span>
@@ -1451,7 +1002,7 @@
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 <p>For treesitter-generated bindings, nested struct fields currently still fall back to ptr-like accessors. The richer <code>struct:&lt;name&gt;</code> form is available when you declare the nested field accessors explicitly.</p>
 <p>Bitfields are a separate case: they use scalar helper accessors, but <code>field_addr()</code> and <code>container_of()</code> reject bitfield members because bitfields do not have ordinary addressable field semantics.</p>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct flags { unsigned int flag : 1; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"flags"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>flag <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"u8"</span>, bitfield <span class="op">=</span> <span class="cn">TRUE</span>, width <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
@@ -1472,36 +1023,36 @@
 </h1>
 <p>ffi<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mi>t</mi><mi>r</mi><mi>u</mi><mi>c</mi><msub><mi>t</mi><mi>o</mi></msub><mi>u</mi><mi>t</mi><mi>e</mi><msub><mi>r</mi><mi>i</mi></msub><msub><mi>n</mi><mi>a</mi></msub><mi>d</mi><mi>d</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>o</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo stretchy="true" form="prefix">|</mo><mo>&gt;</mo><mi>t</mi><mi>c</mi><msub><mi>c</mi><mi>d</mi></msub><mi>a</mi><mi>t</mi><msub><mi>a</mi><mi>p</mi></msub><mi>t</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><mo stretchy="true" form="postfix">)</mo></mrow><mo stretchy="true" form="postfix">|</mo></mrow><mo>&gt;</mo><mi>f</mi><mi>f</mi><mi>i</mi></mrow><annotation encoding="application/x-tex">struct_outer_in_addr(o) |&gt;  tcc_data_ptr() |&gt;  ffi</annotation></semantics></math>struct_inner_get_a()</p>
 <p>ffi<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mi>t</mi><mi>r</mi><mi>u</mi><mi>c</mi><msub><mi>t</mi><mi>i</mi></msub><mi>n</mi><mi>n</mi><mi>e</mi><msub><mi>r</mi><mi>f</mi></msub><mi>r</mi><mi>e</mi><mi>e</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>f</mi><mi>f</mi><mi>i</mi></mrow><annotation encoding="application/x-tex">struct_inner_free(i) ffi</annotation></semantics></math>struct_outer_free(o)</p>
-<div class="sourceCode" id="cb28"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="do">### Array fields in structs</span></span>
-<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a></span>
-<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a>Array fields require the <span class="st">`</span><span class="at">list(type = ..., size = N, array = TRUE)</span><span class="st">`</span> syntax <span class="cf">in</span> <span class="st">`</span><span class="at">tcc_struct()</span><span class="st">`</span>, which generates element<span class="sc">-</span>wise accessors.</span>
-<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a></span>
-<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a></span>
-<span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a><span class="st">```</span><span class="at"> r</span></span>
-<span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a><span class="at">ffi &lt;- tcc_ffi() |&gt;</span></span>
-<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a><span class="at">  tcc_source('struct buf { unsigned char data[16]; };') |&gt;</span></span>
-<span id="cb28-9"><a href="#cb28-9" tabindex="-1"></a><span class="at">  tcc_struct("buf", accessors = list(</span></span>
-<span id="cb28-10"><a href="#cb28-10" tabindex="-1"></a><span class="at">    data = list(type = "u8", size = 16, array = TRUE)</span></span>
-<span id="cb28-11"><a href="#cb28-11" tabindex="-1"></a><span class="at">  )) |&gt;</span></span>
-<span id="cb28-12"><a href="#cb28-12" tabindex="-1"></a><span class="at">  tcc_compile()</span></span>
-<span id="cb28-13"><a href="#cb28-13" tabindex="-1"></a></span>
-<span id="cb28-14"><a href="#cb28-14" tabindex="-1"></a><span class="at">b &lt;- ffi$struct_buf_new()</span></span>
-<span id="cb28-15"><a href="#cb28-15" tabindex="-1"></a><span class="at">ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)</span></span>
-<span id="cb28-16"><a href="#cb28-16" tabindex="-1"></a><span class="at">#&gt; &lt;pointer: 0x576a3f4b3470&gt;</span></span>
-<span id="cb28-17"><a href="#cb28-17" tabindex="-1"></a><span class="at">ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)</span></span>
-<span id="cb28-18"><a href="#cb28-18" tabindex="-1"></a><span class="at">#&gt; &lt;pointer: 0x576a3f4b3470&gt;</span></span>
-<span id="cb28-19"><a href="#cb28-19" tabindex="-1"></a><span class="at">ffi$struct_buf_get_data_elt(b, 0L)</span></span>
-<span id="cb28-20"><a href="#cb28-20" tabindex="-1"></a><span class="at">#&gt; [1] 202</span></span>
-<span id="cb28-21"><a href="#cb28-21" tabindex="-1"></a><span class="at">ffi$struct_buf_get_data_elt(b, 1L)</span></span>
-<span id="cb28-22"><a href="#cb28-22" tabindex="-1"></a><span class="at">#&gt; [1] 254</span></span>
-<span id="cb28-23"><a href="#cb28-23" tabindex="-1"></a><span class="at">ffi$struct_buf_free(b)</span></span>
-<span id="cb28-24"><a href="#cb28-24" tabindex="-1"></a><span class="at">#&gt; NULL</span></span></code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="do">### Array fields in structs</span></span>
+<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a></span>
+<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a>Array fields require the <span class="st">`</span><span class="at">list(type = ..., size = N, array = TRUE)</span><span class="st">`</span> syntax <span class="cf">in</span> <span class="st">`</span><span class="at">tcc_struct()</span><span class="st">`</span>, which generates element<span class="sc">-</span>wise accessors.</span>
+<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a></span>
+<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a></span>
+<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a><span class="st">```</span><span class="at"> r</span></span>
+<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a><span class="at">ffi &lt;- tcc_ffi() |&gt;</span></span>
+<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a><span class="at">  tcc_source('struct buf { unsigned char data[16]; };') |&gt;</span></span>
+<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a><span class="at">  tcc_struct("buf", accessors = list(</span></span>
+<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a><span class="at">    data = list(type = "u8", size = 16, array = TRUE)</span></span>
+<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a><span class="at">  )) |&gt;</span></span>
+<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a><span class="at">  tcc_compile()</span></span>
+<span id="cb27-13"><a href="#cb27-13" tabindex="-1"></a></span>
+<span id="cb27-14"><a href="#cb27-14" tabindex="-1"></a><span class="at">b &lt;- ffi$struct_buf_new()</span></span>
+<span id="cb27-15"><a href="#cb27-15" tabindex="-1"></a><span class="at">ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)</span></span>
+<span id="cb27-16"><a href="#cb27-16" tabindex="-1"></a><span class="at">#&gt; &lt;pointer: 0x62004e5c4f80&gt;</span></span>
+<span id="cb27-17"><a href="#cb27-17" tabindex="-1"></a><span class="at">ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)</span></span>
+<span id="cb27-18"><a href="#cb27-18" tabindex="-1"></a><span class="at">#&gt; &lt;pointer: 0x62004e5c4f80&gt;</span></span>
+<span id="cb27-19"><a href="#cb27-19" tabindex="-1"></a><span class="at">ffi$struct_buf_get_data_elt(b, 0L)</span></span>
+<span id="cb27-20"><a href="#cb27-20" tabindex="-1"></a><span class="at">#&gt; [1] 202</span></span>
+<span id="cb27-21"><a href="#cb27-21" tabindex="-1"></a><span class="at">ffi$struct_buf_get_data_elt(b, 1L)</span></span>
+<span id="cb27-22"><a href="#cb27-22" tabindex="-1"></a><span class="at">#&gt; [1] 254</span></span>
+<span id="cb27-23"><a href="#cb27-23" tabindex="-1"></a><span class="at">ffi$struct_buf_free(b)</span></span>
+<span id="cb27-24"><a href="#cb27-24" tabindex="-1"></a><span class="at">#&gt; NULL</span></span></code></pre></div>
 <div class="section level2">
 <h2 id="serialization-and-fork-safety">Serialization and fork safety<a class="anchor" aria-label="anchor" href="#serialization-and-fork-safety"></a>
 </h2>
 <p>Compiled FFI objects are fork-safe: <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> and other <code>fork()</code>-based parallelism work out of the box because TCC’s compiled code lives in memory mappings that survive <code>fork()</code> via copy-on-write.</p>
 <p>Serialization is also supported. Each <code>tcc_compiled</code> object stores its FFI recipe internally, so after <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> / <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> (or <code><a href="https://rdrr.io/r/base/serialize.html" class="external-link">serialize()</a></code> / <code><a href="https://rdrr.io/r/base/serialize.html" class="external-link">unserialize()</a></code>), the first <code>$</code> access detects the dead TCC state pointer and recompiles transparently.</p>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"int square(int x) { return x * x; }"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>square <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -1520,6 +1071,20 @@
 <span><span class="co">#&gt; [Rtinycc] Recompiling FFI bindings after deserialization</span></span>
 <span><span class="co">#&gt; [1] 49</span></span></code></pre></div>
 <p>For explicit control, use <code><a href="reference/tcc_recompile.html">tcc_recompile()</a></code>. Note that raw <code>tcc_state</code> objects and bare pointers from <code><a href="reference/tcc_malloc.html">tcc_malloc()</a></code> do not carry a recipe and remain dead after deserialization.</p>
+</div>
+<div class="section level2">
+<h2 id="performance-and-benchmarking">Performance and benchmarking<a class="anchor" aria-label="anchor" href="#performance-and-benchmarking"></a>
+</h2>
+<p><code>Rtinycc</code> is optimized for fast in-process compilation and convenient FFI workflows, not for winning every microbenchmark against a conventional precompiled <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> shared library.</p>
+<p>In practice, the usual pattern is:</p>
+<ul>
+<li>
+<code>Rtinycc</code> compiles tiny modules very quickly</li>
+<li>a regular <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> module can have lower minimal per-call overhead</li>
+<li>array-oriented zero-copy inputs are a much better fit than many tiny scalar crossings</li>
+<li>return paths that copy native buffers back into fresh R vectors make that copy cost visible</li>
+</ul>
+<p>If you want the benchmark details rather than the high-level summary, see the <code>Compilation and Call Overhead</code> vignette.</p>
 </div>
 <div class="section level2">
 <h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
