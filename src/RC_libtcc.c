@@ -182,7 +182,7 @@ static void RC_null_finalizer(SEXP ext) {
 
 /**
  * Finalizer for borrowed views that explicitly preserve an owner object.
- * Ownership: releases preserved owner; does not free pointee storage.
+ * Ownership: drops the owner link; does not free pointee storage.
  * Allocation: none.
  * Protection: none.
  */
@@ -190,7 +190,6 @@ static void RC_borrowed_view_finalizer(SEXP ext) {
     SEXP owner = R_ExternalPtrProtected(ext);
     RC_trace_finalizer_event("borrowed_release", ext, owner, NULL);
     if (owner != R_NilValue) {
-        R_ReleaseObject(owner);
         R_SetExternalPtrProtected(ext, R_NilValue);
     }
     R_ClearExternalPtr(ext);
@@ -215,14 +214,13 @@ void RC_free_finalizer(SEXP ext) {
  * Create a borrowed external pointer view with optional owner retention.
  * Ownership: borrowed; does not free pointee storage.
  * Allocation: external pointer only.
- * Protection: preserves owner while the borrowed view is live.
+ * Protection: attaches owner in the external pointer protected slot.
  */
 SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner) {
     SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_borrowed") : tag;
     SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
 
     if (owner != R_NilValue) {
-        R_PreserveObject(owner);
         R_SetExternalPtrProtected(ext, owner);
         R_RegisterCFinalizerEx(ext, RC_borrowed_view_finalizer, FALSE);
     } else {
