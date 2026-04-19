@@ -923,6 +923,58 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
           info = "float callback wrapper declaration matches trampoline ABI"
         )
       )
+    ),
+    list(
+      name = "call_ptr_cb",
+      args = list("callback:void*(void*)", "ptr", "ptr"),
+      returns = "ptr",
+      c_code = "
+      void* call_ptr_cb(void* (*cb)(void*, void*), void* ctx, void* x) {
+        return cb(ctx, x);
+      }
+    ",
+      patterns = list(
+        list(
+          pattern = "SET_VECTOR_ELT\\(args, 0, RC_make_unowned_ptr\\(arg1, R_NilValue\\)\\);",
+          info = "Pointer callback trampoline boxes pointer args through host unowned helper"
+        ),
+        list(
+          pattern = "return R_ExternalPtrAddr\\(result\\);",
+          info = "Pointer callback trampoline converts R result back to native address"
+        ),
+        list(
+          pattern = "return RC_make_unowned_ptr\\(call_ptr_cb\\(arg1, arg2, arg3\\), R_NilValue\\);",
+          info = "Pointer callback wrapper return boxes raw pointers through host unowned helper"
+        )
+      )
+    ),
+    list(
+      name = "call_sexp_cb",
+      args = list("callback:SEXP(SEXP)", "ptr", "sexp"),
+      returns = "sexp",
+      c_code = "
+      SEXP call_sexp_cb(SEXP (*cb)(void*, SEXP), void* ctx, SEXP x) {
+        return cb(ctx, x);
+      }
+    ",
+      patterns = list(
+        list(
+          pattern = "SEXP trampoline_R_wrap_call_sexp_cb_arg1\\(void\\* cb, SEXP arg1\\)",
+          info = "SEXP callback trampoline preserves SEXP ABI"
+        ),
+        list(
+          pattern = "SET_VECTOR_ELT\\(args, 0, arg1\\);",
+          info = "SEXP callback trampoline passes SEXP arguments through directly"
+        ),
+        list(
+          pattern = "return result;",
+          info = "SEXP callback trampoline returns the callback result SEXP directly"
+        ),
+        list(
+          pattern = "SEXP \\(\\*arg1\\)\\(void\\*, SEXP\\) = trampoline_R_wrap_call_sexp_cb_arg1;",
+          info = "SEXP callback wrapper declaration matches trampoline ABI"
+        )
+      )
     )
   )
 )

@@ -100,6 +100,27 @@ expect_error(tcc_free(out), info = "Pointer callback return wrapper is not expli
 tcc_free(buf)
 close_if_valid(cb_ptr_rt)
 
+# Test: SEXP callbacks pass SEXP objects through directly
+cb_sexp <- tcc_callback(function(x) x, signature = "SEXP (*)(SEXP)")
+cb_ptr_sexp <- tcc_callback_ptr(cb_sexp)
+
+code_sexp <- "\n#define _Complex\n\nSEXP echo_sexp(SEXP (*cb)(void* ctx, SEXP x), void* ctx, SEXP x) {\n  return cb(ctx, x);\n}\n"
+
+ffi_sexp <- tcc_ffi() |>
+  tcc_source(code_sexp) |>
+  tcc_bind(
+    echo_sexp = list(
+      args = list("callback:SEXP(SEXP)", "ptr", "sexp"),
+      returns = "sexp"
+    )
+  ) |>
+  tcc_compile()
+
+payload <- list(alpha = 1:3, beta = "ok")
+out_sexp <- ffi_sexp$echo_sexp(cb_sexp, cb_ptr_sexp, payload)
+expect_identical(out_sexp, payload, info = "SEXP callback path passes objects through directly")
+close_if_valid(cb_sexp)
+
 # Test: ptr handle stays alive but callback is invalid after close
 cb_closed <- tcc_callback(function(x) x, signature = "double (*)(double)")
 cb_ptr_closed <- tcc_callback_ptr(cb_closed)

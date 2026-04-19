@@ -926,6 +926,11 @@ sexp_constructor_rule("bool") %as%
     "ScalarLogical"
   }
 
+sexp_constructor_rule("sexp") %as%
+  {
+    "identity"
+  }
+
 ## ------------------------------------------------------------------
 ## SEXP constructor call forms
 ##
@@ -960,6 +965,11 @@ sexp_constructor_call_rule("bool", arg_expr) %as%
     sprintf("ScalarLogical(%s)", arg_expr)
   }
 
+sexp_constructor_call_rule("sexp", arg_expr) %as%
+  {
+    sprintf("%s", arg_expr)
+  }
+
 ## ------------------------------------------------------------------
 ## R -> C converter helpers
 ##
@@ -989,6 +999,11 @@ r_to_c_converter_rule("cstring") %as%
 r_to_c_converter_rule("bool") %as%
   {
     "asLogical"
+  }
+
+r_to_c_converter_rule("sexp") %as%
+  {
+    "identity"
   }
 
 ## ------------------------------------------------------------------
@@ -1650,6 +1665,14 @@ sexp_ctor_key_rule("_Bool", FALSE) %as%
   {
     "bool"
   }
+sexp_ctor_key_rule("SEXP", FALSE) %as%
+  {
+    "sexp"
+  }
+sexp_ctor_key_rule("sexp", FALSE) %as%
+  {
+    "sexp"
+  }
 sexp_ctor_key_rule(type_name, is_ptr) %as%
   {
     "ptr"
@@ -1793,6 +1816,14 @@ r_to_c_key_rule("bool", FALSE) %as%
 r_to_c_key_rule("_Bool", FALSE) %as%
   {
     "bool"
+  }
+r_to_c_key_rule("SEXP", FALSE) %as%
+  {
+    "sexp"
+  }
+r_to_c_key_rule("sexp", FALSE) %as%
+  {
+    "sexp"
   }
 r_to_c_key_rule(type_name, is_ptr) %as%
   {
@@ -2016,6 +2047,14 @@ sexp_type_key_rule("bool", FALSE) %as%
 sexp_type_key_rule("_Bool", FALSE) %as%
   {
     "bool"
+  }
+sexp_type_key_rule("SEXP", FALSE) %as%
+  {
+    "sexp"
+  }
+sexp_type_key_rule("sexp", FALSE) %as%
+  {
+    "sexp"
   }
 sexp_type_key_rule(type_name, is_ptr) %as%
   {
