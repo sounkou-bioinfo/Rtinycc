@@ -54,6 +54,7 @@ jobs:
         run: |
           chmod +x scripts/win-gdb.sh
           export RTINYCC_GDB_BREAK_FINALIZERS=1
+          export RTINYCC_TRACE_FINALIZERS=1
           scripts/win-gdb.sh pkgfiles \
             inst/tinytest/test_structs.R \
             inst/tinytest/test_tcc_options.R \

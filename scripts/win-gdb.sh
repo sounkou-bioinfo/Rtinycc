@@ -135,12 +135,10 @@ run_gdb_file() {
   local gdb_exe="$3"
   local rfile_win
   local gdb_cmds
-  local rc_libtcc_c
   local rc_src_dir
 
   cd "$repo_root"
   rfile_win="$(cygpath -w "$rfile")"
-  rc_libtcc_c="RC_libtcc.c"
   rc_src_dir="$(cygpath -u "$repo_root/src")"
   gdb_cmds="$(mktemp "${TMPDIR:-/tmp}/rtinycc-gdbcmds-XXXXXX.txt")"
   trap 'rm -f "$gdb_cmds"' RETURN
@@ -164,42 +162,42 @@ EOF
 
   if [ "${RTINYCC_GDB_BREAK_FINALIZERS:-0}" = "1" ]; then
     cat >>"$gdb_cmds" <<EOF
-break $rc_libtcc_c:271
+break RC_make_borrowed_view
 commands
 silent
 printf "\n===== breakpoint RC_make_borrowed_view =====\n"
 bt 8
 continue
 end
-break $rc_libtcc_c:240
+break RC_borrowed_view_finalizer
 commands
 silent
 printf "\n===== breakpoint RC_borrowed_view_finalizer =====\n"
 bt 8
 continue
 end
-break $rc_libtcc_c:256
+break RC_free_finalizer
 commands
 silent
 printf "\n===== breakpoint RC_free_finalizer =====\n"
 bt 8
 continue
 end
-break $rc_libtcc_c:202
+break RC_tcc_finalizer
 commands
 silent
 printf "\n===== breakpoint RC_tcc_finalizer =====\n"
 bt 8
 continue
 end
-break $rc_libtcc_c:1581
+break RC_callback_finalizer
 commands
 silent
 printf "\n===== breakpoint RC_callback_finalizer =====\n"
 bt 8
 continue
 end
-break $rc_libtcc_c:1632
+break RC_callback_ptr_finalizer
 commands
 silent
 printf "\n===== breakpoint RC_callback_ptr_finalizer =====\n"
