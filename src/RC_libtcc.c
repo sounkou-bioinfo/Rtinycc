@@ -47,19 +47,6 @@ SEXP RC_get_external_ptr_addr(SEXP ext);
 SEXP RC_get_external_ptr_hex(SEXP ext);
 SEXP RC_null_pointer(void);
 
-static int RC_tcc_state_is_owned(SEXP ext) {
-    SEXP tag = R_ExternalPtrTag(ext);
-    if (tag == R_NilValue) {
-        return 1;
-    }
-    if (TYPEOF(tag) == SYMSXP) {
-        const char *nm = CHAR(PRINTNAME(tag));
-        return strcmp(nm, "rtinycc_tcc_state_borrowed") != 0;
-    }
-    return 1;
-}
-
- 
 SEXP RC_malloc(SEXP size);
 SEXP RC_free(SEXP ptr);
 SEXP RC_data_ptr(SEXP ptr_ref);
