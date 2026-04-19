@@ -17,6 +17,10 @@ ffi <- tcc_ffi() |>
 
 expect_equal(length(ffi$symbols), 1)
 expect_true("add" %in% names(ffi$symbols))
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(ffi$symbols$add))
+expect_equal(ffi$symbols$add$name, "add")
+expect_true(all(vapply(ffi$symbols$add$arg_type_info, Rtinycc:::is_rtinycc_ffi_type, logical(1))))
+expect_equal(Rtinycc:::ffi_type_family(ffi$symbols$add$return_spec$type_info), "i32")
 
 # Test 3: Compile and call simple function
 ffi <- tcc_ffi() |>
@@ -102,13 +106,20 @@ expect_true(any(grepl("tcc_ffi", output)))
 expect_true(any(grepl("foo", output)))
 
 # Test 7: Array return type
-ffi <- tcc_ffi() |>
+ffi_spec <- tcc_ffi() |>
   tcc_bind(
     dup_array = list(
       args = list("integer_array", "i32"),
       returns = list(type = "integer_array", length_arg = 2, free = TRUE)
     )
-  ) |>
+  )
+
+expect_true(inherits(ffi_spec$symbols$dup_array$return_spec, "rtinycc_symbol_return_spec"))
+expect_equal(ffi_spec$symbols$dup_array$return_spec$type, "integer_array")
+expect_equal(ffi_spec$symbols$dup_array$return_spec$length_arg, 2)
+expect_true(isTRUE(ffi_spec$symbols$dup_array$return_spec$free))
+
+ffi <- ffi_spec |>
   tcc_source(
     "
     #include <stdlib.h>

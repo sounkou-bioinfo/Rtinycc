@@ -5,7 +5,10 @@ library(Rtinycc)
 
 # Test 1: Generate and compile simple FFI code
 symbols <- list(
-  forty_two = list(args = list(), returns = "i32")
+  forty_two = Rtinycc:::as_rtinycc_bound_symbol(
+    "forty_two",
+    list(args = list(), returns = "i32")
+  )
 )
 
 code <- Rtinycc:::generate_ffi_code(
@@ -48,7 +51,10 @@ expect_true(inherits(sym_ptr, "tcc_symbol"))
 
 # Test 2: Verify array type code generation compiles
 symbols <- list(
-  sum_ints = list(args = list("integer_array", "i32"), returns = "i64")
+  sum_ints = Rtinycc:::as_rtinycc_bound_symbol(
+    "sum_ints",
+    list(args = list("integer_array", "i32"), returns = "i64")
+  )
 )
 
 code <- Rtinycc:::generate_ffi_code(

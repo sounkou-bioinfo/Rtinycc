@@ -6,6 +6,287 @@
 # Bun-style FFI with API mode compilation
 
 # FFI object class
+new_rtinycc_symbol_return_spec <- function(type, type_info, length_arg = NULL, free = NULL) {
+  structure(
+    list(
+      type = type,
+      type_info = type_info,
+      length_arg = length_arg,
+      free = free
+    ),
+    class = c("rtinycc_symbol_return_spec", "rtinycc_symbol_spec_component")
+  )
+}
+
+new_rtinycc_bound_symbol <- function(
+  name,
+  args,
+  arg_type_info,
+  returns,
+  return_spec,
+  variadic = FALSE,
+  varargs = NULL,
+  varargs_types = NULL,
+  varargs_type_info = NULL,
+  varargs_min = NULL,
+  varargs_max = NULL,
+  varargs_mode = NULL
+) {
+  structure(
+    list(
+      name = name,
+      args = args,
+      arg_type_info = arg_type_info,
+      returns = returns,
+      return_spec = return_spec,
+      variadic = variadic,
+      varargs = varargs,
+      varargs_types = varargs_types,
+      varargs_type_info = varargs_type_info,
+      varargs_min = varargs_min,
+      varargs_max = varargs_max,
+      varargs_mode = varargs_mode
+    ),
+    class = c("rtinycc_bound_symbol", "rtinycc_symbol_spec")
+  )
+}
+
+is_rtinycc_bound_symbol <- function(x) {
+  inherits(x, "rtinycc_bound_symbol")
+}
+
+as_rtinycc_bound_symbol <- function(sym_name, sym) {
+  if (is_rtinycc_bound_symbol(sym)) {
+    return(sym)
+  }
+
+  if (is.null(sym$args)) {
+    sym$args <- list()
+  }
+
+  variadic <- isTRUE(sym$variadic)
+  has_varargs <- !is.null(sym$varargs)
+  has_varargs_types <- !is.null(sym$varargs_types)
+
+  if (
+    !is.null(sym$variadic) &&
+      (!is.logical(sym$variadic) || length(sym$variadic) != 1)
+  ) {
+    stop(
+      "Symbol '",
+      sym_name,
+      "' variadic must be TRUE/FALSE",
+      call. = FALSE
+    )
+  }
+
+  if (variadic) {
+    if (length(sym$args) == 0) {
+      stop(
+        "Symbol '",
+        sym_name,
+        "' variadic functions need at least one fixed argument",
+        call. = FALSE
+      )
+    }
+
+    if (has_varargs && has_varargs_types) {
+      stop(
+        "Symbol '",
+        sym_name,
+        "' cannot set both 'varargs' and 'varargs_types'",
+        call. = FALSE
+      )
+    }
+
+    if (!has_varargs && !has_varargs_types) {
+      stop(
+        "Symbol '",
+        sym_name,
+        "' variadic functions require 'varargs' or 'varargs_types'",
+        call. = FALSE
+      )
+    }
+  } else if (
+    has_varargs ||
+      has_varargs_types ||
+      !is.null(sym$varargs_min) ||
+      !is.null(sym$varargs_max)
+  ) {
+    stop(
+      "Symbol '",
+      sym_name,
+      "' has variadic fields but variadic is not TRUE",
+      call. = FALSE
+    )
+  }
+
+  arg_type_info <- lapply(seq_along(sym$args), function(i) {
+    check_ffi_type(sym$args[[i]], paste0("symbol '", sym_name, "' argument ", i))
+  })
+
+  if (!"returns" %in% names(sym)) {
+    stop(
+      "Symbol '",
+      sym_name,
+      "' missing 'returns' specification",
+      call. = FALSE
+    )
+  }
+
+  if (is.list(sym$returns)) {
+    if (is.null(sym$returns$type)) {
+      stop(
+        "Symbol '",
+        sym_name,
+        "' return must include 'type'",
+        call. = FALSE
+      )
+    }
+    ret_type <- sym$returns$type
+    ret_info <- check_ffi_type(ret_type, paste0("symbol '", sym_name, "' return"))
+    if (!is.null(ret_info$kind) && ret_info$kind == "array") {
+      if (is.null(sym$returns$length_arg)) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' array return requires 'length_arg'",
+          call. = FALSE
+        )
+      }
+      if (!is.null(sym$args) && length(sym$args) > 0) {
+        if (
+          sym$returns$length_arg < 1 ||
+            sym$returns$length_arg > length(sym$args)
+        ) {
+          stop(
+            "Symbol '",
+            sym_name,
+            "' array return length_arg out of range",
+            call. = FALSE
+          )
+        }
+      }
+    }
+    return_spec <- new_rtinycc_symbol_return_spec(
+      type = ret_type,
+      type_info = ret_info,
+      length_arg = sym$returns$length_arg,
+      free = isTRUE(sym$returns$free)
+    )
+  } else {
+    ret_info <- check_ffi_type(sym$returns, paste0("symbol '", sym_name, "' return"))
+    return_spec <- new_rtinycc_symbol_return_spec(
+      type = sym$returns,
+      type_info = ret_info
+    )
+  }
+
+  varargs_type_info <- NULL
+  if (variadic) {
+    if (has_varargs_types) {
+      if (length(sym$varargs_types) == 0) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' varargs_types must be non-empty",
+          call. = FALSE
+        )
+      }
+
+      varargs_type_info <- lapply(seq_along(sym$varargs_types), function(i) {
+        vtype <- sym$varargs_types[[i]]
+        vinfo <- check_ffi_type(vtype, paste0("symbol '", sym_name, "' varargs_types ", i))
+        if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
+          stop(
+            "Symbol '", sym_name, "' varargs_types ", i,
+            " must be a scalar FFI type",
+            call. = FALSE
+          )
+        }
+        if (ffi_type_family(vinfo) %in% c("callback", "callback_async") || identical(vtype, "sexp")) {
+          stop(
+            "Symbol '", sym_name, "' varargs_types ", i,
+            " cannot be callback/sexp",
+            call. = FALSE
+          )
+        }
+        vinfo
+      })
+
+      if (is.null(sym$varargs_min)) {
+        sym$varargs_min <- 0L
+      }
+      if (is.null(sym$varargs_max)) {
+        sym$varargs_max <- sym$varargs_min
+      }
+      if (!is.numeric(sym$varargs_min) || length(sym$varargs_min) != 1 || is.na(sym$varargs_min) || sym$varargs_min < 0 || sym$varargs_min != as.integer(sym$varargs_min)) {
+        stop("Symbol '", sym_name, "' varargs_min must be a non-negative integer", call. = FALSE)
+      }
+      if (!is.numeric(sym$varargs_max) || length(sym$varargs_max) != 1 || is.na(sym$varargs_max) || sym$varargs_max < 0 || sym$varargs_max != as.integer(sym$varargs_max)) {
+        stop("Symbol '", sym_name, "' varargs_max must be a non-negative integer", call. = FALSE)
+      }
+      sym$varargs_min <- as.integer(sym$varargs_min)
+      sym$varargs_max <- as.integer(sym$varargs_max)
+      if (sym$varargs_min > sym$varargs_max) {
+        stop("Symbol '", sym_name, "' varargs_min must be <= varargs_max", call. = FALSE)
+      }
+      sym$varargs_mode <- "types"
+      sym$varargs <- NULL
+    } else {
+      if (length(sym$varargs) == 0) {
+        stop(
+          "Symbol '", sym_name,
+          "' variadic functions require non-empty 'varargs' type list",
+          call. = FALSE
+        )
+      }
+      max_varargs <- length(sym$varargs)
+      if (is.null(sym$varargs_min)) {
+        sym$varargs_min <- max_varargs
+      }
+      if (!is.numeric(sym$varargs_min) || length(sym$varargs_min) != 1 || is.na(sym$varargs_min) || sym$varargs_min < 0 || sym$varargs_min > max_varargs || sym$varargs_min != as.integer(sym$varargs_min)) {
+        stop("Symbol '", sym_name, "' varargs_min must be a single integer between 0 and length(varargs)", call. = FALSE)
+      }
+      sym$varargs_min <- as.integer(sym$varargs_min)
+      sym$varargs_max <- max_varargs
+      varargs_type_info <- lapply(seq_along(sym$varargs), function(i) {
+        vtype <- sym$varargs[[i]]
+        vinfo <- check_ffi_type(vtype, paste0("symbol '", sym_name, "' vararg ", i))
+        if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
+          stop("Symbol '", sym_name, "' vararg ", i, " must be a scalar FFI type", call. = FALSE)
+        }
+        if (ffi_type_family(vinfo) %in% c("callback", "callback_async") || identical(vtype, "sexp")) {
+          stop("Symbol '", sym_name, "' vararg ", i, " cannot be callback/sexp", call. = FALSE)
+        }
+        vinfo
+      })
+      sym$varargs_mode <- "prefix"
+      sym$varargs_types <- NULL
+    }
+  } else {
+    sym$varargs_min <- NULL
+    sym$varargs_max <- NULL
+    sym$varargs_types <- NULL
+    sym$varargs_mode <- NULL
+  }
+
+  new_rtinycc_bound_symbol(
+    name = sym_name,
+    args = sym$args,
+    arg_type_info = arg_type_info,
+    returns = sym$returns,
+    return_spec = return_spec,
+    variadic = variadic,
+    varargs = sym$varargs,
+    varargs_types = sym$varargs_types,
+    varargs_type_info = varargs_type_info,
+    varargs_min = sym$varargs_min,
+    varargs_max = sym$varargs_max,
+    varargs_mode = sym$varargs_mode
+  )
+}
+
 tcc_ffi_object <- function() {
   structure(
     list(
@@ -306,311 +587,9 @@ tcc_bind <- function(ffi, ...) {
 
   symbols <- list(...)
 
-  # Validate each symbol definition
+  # Validate and normalize each symbol definition into a classed spec.
   for (sym_name in names(symbols)) {
-    sym <- symbols[[sym_name]]
-
-    if (is.null(sym$args)) {
-      sym$args <- list()
-    }
-
-    variadic <- isTRUE(sym$variadic)
-    has_varargs <- !is.null(sym$varargs)
-    has_varargs_types <- !is.null(sym$varargs_types)
-
-    if (
-      !is.null(sym$variadic) &&
-        (!is.logical(sym$variadic) || length(sym$variadic) != 1)
-    ) {
-      stop(
-        "Symbol '",
-        sym_name,
-        "' variadic must be TRUE/FALSE",
-        call. = FALSE
-      )
-    }
-
-    if (variadic) {
-      if (length(sym$args) == 0) {
-        stop(
-          "Symbol '",
-          sym_name,
-          "' variadic functions need at least one fixed argument",
-          call. = FALSE
-        )
-      }
-
-      if (has_varargs && has_varargs_types) {
-        stop(
-          "Symbol '",
-          sym_name,
-          "' cannot set both 'varargs' and 'varargs_types'",
-          call. = FALSE
-        )
-      }
-
-      if (!has_varargs && !has_varargs_types) {
-        stop(
-          "Symbol '",
-          sym_name,
-          "' variadic functions require 'varargs' or 'varargs_types'",
-          call. = FALSE
-        )
-      }
-
-      if (has_varargs_types) {
-        if (length(sym$varargs_types) == 0) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' varargs_types must be non-empty",
-            call. = FALSE
-          )
-        }
-
-        for (i in seq_along(sym$varargs_types)) {
-          vtype <- sym$varargs_types[[i]]
-          vinfo <- check_ffi_type(
-            vtype,
-            paste0("symbol '", sym_name, "' varargs_types ", i)
-          )
-          if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
-            stop(
-              "Symbol '",
-              sym_name,
-              "' varargs_types ",
-              i,
-              " must be a scalar FFI type",
-              call. = FALSE
-            )
-          }
-          if (startsWith(vtype, "callback") || identical(vtype, "sexp")) {
-            stop(
-              "Symbol '",
-              sym_name,
-              "' varargs_types ",
-              i,
-              " cannot be callback/sexp",
-              call. = FALSE
-            )
-          }
-        }
-
-        if (is.null(sym$varargs_min)) {
-          sym$varargs_min <- 0L
-        }
-        if (is.null(sym$varargs_max)) {
-          sym$varargs_max <- sym$varargs_min
-        }
-
-        if (
-          !is.numeric(sym$varargs_min) ||
-            length(sym$varargs_min) != 1 ||
-            is.na(sym$varargs_min) ||
-            sym$varargs_min < 0 ||
-            sym$varargs_min != as.integer(sym$varargs_min)
-        ) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' varargs_min must be a non-negative integer",
-            call. = FALSE
-          )
-        }
-        if (
-          !is.numeric(sym$varargs_max) ||
-            length(sym$varargs_max) != 1 ||
-            is.na(sym$varargs_max) ||
-            sym$varargs_max < 0 ||
-            sym$varargs_max != as.integer(sym$varargs_max)
-        ) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' varargs_max must be a non-negative integer",
-            call. = FALSE
-          )
-        }
-
-        sym$varargs_min <- as.integer(sym$varargs_min)
-        sym$varargs_max <- as.integer(sym$varargs_max)
-        if (sym$varargs_min > sym$varargs_max) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' varargs_min must be <= varargs_max",
-            call. = FALSE
-          )
-        }
-
-        sym$varargs_mode <- "types"
-        sym$varargs <- NULL
-      } else {
-        if (length(sym$varargs) == 0) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' variadic functions require non-empty 'varargs' type list",
-            call. = FALSE
-          )
-        }
-
-        max_varargs <- length(sym$varargs)
-        if (is.null(sym$varargs_min)) {
-          sym$varargs_min <- max_varargs
-        }
-        if (
-          !is.numeric(sym$varargs_min) ||
-            length(sym$varargs_min) != 1 ||
-            is.na(sym$varargs_min) ||
-            sym$varargs_min < 0 ||
-            sym$varargs_min > max_varargs ||
-            sym$varargs_min != as.integer(sym$varargs_min)
-        ) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' varargs_min must be a single integer between 0 and length(varargs)",
-            call. = FALSE
-          )
-        }
-        sym$varargs_min <- as.integer(sym$varargs_min)
-        sym$varargs_max <- max_varargs
-
-        for (i in seq_along(sym$varargs)) {
-          vtype <- sym$varargs[[i]]
-          vinfo <- check_ffi_type(
-            vtype,
-            paste0("symbol '", sym_name, "' vararg ", i)
-          )
-          if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
-            stop(
-              "Symbol '",
-              sym_name,
-              "' vararg ",
-              i,
-              " must be a scalar FFI type",
-              call. = FALSE
-            )
-          }
-          if (startsWith(vtype, "callback") || identical(vtype, "sexp")) {
-            stop(
-              "Symbol '",
-              sym_name,
-              "' vararg ",
-              i,
-              " cannot be callback/sexp",
-              call. = FALSE
-            )
-          }
-        }
-
-        sym$varargs_mode <- "prefix"
-        sym$varargs_types <- NULL
-      }
-    } else if (
-      has_varargs ||
-        has_varargs_types ||
-        !is.null(sym$varargs_min) ||
-        !is.null(sym$varargs_max)
-    ) {
-      stop(
-        "Symbol '",
-        sym_name,
-        "' has variadic fields but variadic is not TRUE",
-        call. = FALSE
-      )
-    } else {
-      sym$varargs_min <- NULL
-      sym$varargs_max <- NULL
-      sym$varargs_types <- NULL
-      sym$varargs_mode <- NULL
-    }
-
-    # Check required fields
-    if (!"returns" %in% names(sym)) {
-      stop(
-        "Symbol '",
-        sym_name,
-        "' missing 'returns' specification",
-        call. = FALSE
-      )
-    }
-
-    # Validate return type
-    if (is.list(sym$returns)) {
-      if (is.null(sym$returns$type)) {
-        stop(
-          "Symbol '",
-          sym_name,
-          "' return must include 'type'",
-          call. = FALSE
-        )
-      }
-      ret_type <- sym$returns$type
-      ret_info <- check_ffi_type(
-        ret_type,
-        paste0("symbol '", sym_name, "' return")
-      )
-      if (!is.null(ret_info$kind) && ret_info$kind == "array") {
-        if (is.null(sym$returns$length_arg)) {
-          stop(
-            "Symbol '",
-            sym_name,
-            "' array return requires 'length_arg'",
-            call. = FALSE
-          )
-        }
-        if (!is.null(sym$args) && length(sym$args) > 0) {
-          if (
-            sym$returns$length_arg < 1 ||
-              sym$returns$length_arg > length(sym$args)
-          ) {
-            stop(
-              "Symbol '",
-              sym_name,
-              "' array return length_arg out of range",
-              call. = FALSE
-            )
-          }
-        }
-      }
-    } else {
-      check_ffi_type(sym$returns, paste0("symbol '", sym_name, "' return"))
-    }
-
-    # Validate argument types
-    if ("args" %in% names(sym)) {
-      for (i in seq_along(sym$args)) {
-        check_ffi_type(
-          sym$args[[i]],
-          paste0("symbol '", sym_name, "' argument ", i)
-        )
-      }
-    }
-
-    if (variadic) {
-      if (identical(sym$varargs_mode, "types")) {
-        for (i in seq_along(sym$varargs_types)) {
-          check_ffi_type(
-            sym$varargs_types[[i]],
-            paste0("symbol '", sym_name, "' varargs_types ", i)
-          )
-        }
-      } else {
-        for (i in seq_along(sym$varargs)) {
-          check_ffi_type(
-            sym$varargs[[i]],
-            paste0("symbol '", sym_name, "' vararg ", i)
-          )
-        }
-      }
-    }
-
-    sym$variadic <- variadic
-
-    # Store the symbol
-    ffi$symbols[[sym_name]] <- sym
+    ffi$symbols[[sym_name]] <- as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
   }
 
   ffi
@@ -1798,19 +1777,9 @@ tcc_link <- function(
     ffi <- tcc_library(ffi, path)
   }
 
-  # Store symbols
+  # Store symbols as classed specs
   for (sym_name in names(symbols)) {
-    sym <- symbols[[sym_name]]
-
-    # Validate
-    check_ffi_type(sym$returns, paste0("symbol '", sym_name, "' return"))
-    if ("args" %in% names(sym)) {
-      for (i in seq_along(sym$args)) {
-        check_ffi_type(sym$args[[i]], paste0("symbol '", sym_name, "' arg ", i))
-      }
-    }
-
-    ffi$symbols[[sym_name]] <- sym
+    ffi$symbols[[sym_name]] <- as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
   }
 
   # Mark as external library bindings
