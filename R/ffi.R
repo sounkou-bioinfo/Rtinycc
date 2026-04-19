@@ -1216,7 +1216,7 @@ tcc_compiled_object <- function(
   }
 
   if (length(helper_specs) > 0) {
-    helper_specs <- setNames(
+    helper_specs <- stats::setNames(
       lapply(names(helper_specs), function(sym_name) {
         helper_kind <- if (startsWith(sym_name, "struct_")) {
           "struct"

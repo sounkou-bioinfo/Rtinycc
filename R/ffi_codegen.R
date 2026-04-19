@@ -1262,7 +1262,7 @@ generate_ffi_code <- function(
   introspect = NULL
 ) {
   if (!is.null(symbols) && length(symbols) > 0) {
-    symbols <- setNames(
+    symbols <- stats::setNames(
       lapply(names(symbols), function(sym_name) {
         as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
       }),

@@ -11,6 +11,8 @@ src/*.o
 ^LICENSE\.md$
 ^Rtinycc*tar\.gz$
 ^Rtinycc\.Rcheck$
+^Windows-.*\.zip$
+^tccquickr_.*\.tar\.gz$
 ^tinycc/*$
 ^\.vscode$
 ^Makefile$
