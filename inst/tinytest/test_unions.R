@@ -34,6 +34,32 @@ expect_true(
   info = "Basic union"
 )
 
+# Helper operation-kind metadata for union helpers
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source("union probe { int i; float f; unsigned char b[4]; };") |>
+      tcc_union(
+        "probe",
+        members = list(i = "i32", f = "f32", b = list(type = "raw", size = 4)),
+        active = "i"
+      ) |>
+      tcc_introspect() |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    identical(Rtinycc:::helper_symbol_kind(helper_specs$union_probe_new), "union") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_new), "constructor") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_free), "destructor") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_get_i), "getter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_set_i), "setter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_sizeof), "introspection") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_alignof), "introspection")
+  },
+  info = "Union helper specs carry operation-kind metadata"
+)
+
 # Test 2: Union introspection
 expect_true(
   {

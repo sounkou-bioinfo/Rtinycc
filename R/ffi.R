@@ -1197,6 +1197,10 @@ tcc_compiled_object <- function(
           "array_setter"
         } else if (grepl("_get_.*_elt$", sym_name)) {
           "array_getter"
+        } else if (grepl("_set$", sym_name)) {
+          "setter"
+        } else if (grepl("_get$", sym_name)) {
+          "getter"
         } else if (grepl("_set_", sym_name, fixed = TRUE)) {
           "setter"
         } else if (grepl("_get_", sym_name, fixed = TRUE)) {
