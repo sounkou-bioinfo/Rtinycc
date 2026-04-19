@@ -426,12 +426,18 @@ struct_field_getter_rule("cstring", field_name) %as%
 
 struct_field_getter_rule("ptr", field_name) %as%
   {
-    sprintf("return R_MakeExternalPtr(p->%s, R_NilValue, ext);", field_name)
+    sprintf(
+      "return RC_make_borrowed_view(p->%s, Rf_install(\"rtinycc_borrowed\"), ext);",
+      field_name
+    )
   }
 
 struct_field_getter_rule(type_name, field_name) %as%
   {
-    sprintf("return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", field_name)
+    sprintf(
+      "return RC_make_borrowed_view(&p->%s, Rf_install(\"rtinycc_borrowed\"), ext);",
+      field_name
+    )
   }
 
 ## ------------------------------------------------------------------
@@ -928,7 +934,7 @@ sexp_constructor_rule("bool") %as%
 ## ------------------------------------------------------------------
 sexp_constructor_call_rule("ptr", arg_expr) %as%
   {
-    sprintf("R_MakeExternalPtr(%s, R_NilValue, R_NilValue)", arg_expr)
+    sprintf("RC_make_unowned_ptr(%s, R_NilValue)", arg_expr)
   }
 
 sexp_constructor_call_rule("cstring", arg_expr) %as%

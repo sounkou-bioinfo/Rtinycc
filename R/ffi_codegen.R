@@ -1224,6 +1224,7 @@ generate_ffi_code <- function(
     "void RC_free_finalizer(SEXP ext);",
     "void RC_owned_native_finalizer(SEXP ext);",
     "SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);",
+    "SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);",
     "SEXP RC_make_owned_ptr(void *ptr, SEXP tag);",
     "SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);",
     ""

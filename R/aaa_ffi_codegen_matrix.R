@@ -1377,7 +1377,7 @@ rtinycc_scalar_return_rule_body <- function(type, value_expr) {
       values
     ),
     ptr = rtinycc_render_template(
-      "return R_MakeExternalPtr({{value_expr}}, R_NilValue, R_NilValue);",
+      "return RC_make_unowned_ptr({{value_expr}}, R_NilValue);",
       values
     ),
     sexp = rtinycc_render_template(
