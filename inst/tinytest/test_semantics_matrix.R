@@ -140,6 +140,44 @@ expect_true(
   info = "treesitter semantics records generated binding surface"
 )
 
+helper_classification_ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    struct bitbox { unsigned int flag : 1; };
+    struct inner { int x; };
+    union wrapper { struct inner inner; int raw; };
+    enum color { RED = 0, BLUE = 1 };
+  "
+  ) |>
+  tcc_struct("bitbox", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))) |>
+  tcc_struct("inner", accessors = c(x = "i32")) |>
+  tcc_union("wrapper", members = list(inner = list(type = "struct"), raw = "i32"), active = "raw") |>
+  tcc_enum("color", constants = c("RED", "BLUE")) |>
+  tcc_introspect() |>
+  tcc_bind() |>
+  tcc_compile()
+helper_specs <- get(".helper_specs", envir = helper_classification_ffi, inherits = FALSE)
+expect_identical(
+  Rtinycc:::helper_symbol_operation(helper_specs$struct_bitbox_get_flag),
+  "bitfield_getter",
+  info = "helper metadata classifies bitfield getters explicitly"
+)
+expect_identical(
+  Rtinycc:::helper_symbol_operation(helper_specs$struct_bitbox_set_flag),
+  "bitfield_setter",
+  info = "helper metadata classifies bitfield setters explicitly"
+)
+expect_identical(
+  Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_inner),
+  "nested_view",
+  info = "helper metadata classifies nested union struct getters as nested views"
+)
+expect_identical(
+  Rtinycc:::helper_symbol_operation(helper_specs$enum_color_RED),
+  "constant",
+  info = "helper metadata classifies enum constant helpers explicitly"
+)
+
 render_composite_codegen <- function(spec) {
   do.call(Rtinycc:::generate_ffi_code, spec$generate_args)
 }

@@ -55,8 +55,14 @@ expect_true(
 
     has_struct &&
       all(c("flag", "code", "x") %in% names(acc)) &&
-      acc[["flag"]] == bitfield_type &&
-      acc[["code"]] == bitfield_type &&
+      is.list(acc[["flag"]]) &&
+      identical(acc[["flag"]]$type, bitfield_type) &&
+      isTRUE(acc[["flag"]]$bitfield) &&
+      identical(acc[["flag"]]$width, 1L) &&
+      is.list(acc[["code"]]) &&
+      identical(acc[["code"]]$type, bitfield_type) &&
+      isTRUE(acc[["code"]]$bitfield) &&
+      identical(acc[["code"]]$width, 6L) &&
       acc[["x"]] == "f64" &&
       nrow(members) >= 3
   },
@@ -110,10 +116,11 @@ expect_true(
 # Test 5: unions, globals, and defines
 expect_true(
   {
-    header <- "union data { int i; double d; };\nint global_counter = 0;"
+    header <- "union data { int i; double d; struct { int x; } inner; };\nint global_counter = 0;"
     unions <- tcc_treesitter_unions(header)
     globals <- tcc_treesitter_globals(header)
     union_members <- tcc_treesitter_union_members(header)
+    union_accessors <- tcc_treesitter_union_accessors(header)
     global_types <- tcc_treesitter_global_types(header)
 
     tmp <- tempfile(fileext = ".h")
@@ -122,15 +129,17 @@ expect_true(
 
     has_union <- "data" %in% unions$text
     has_global <- "global_counter" %in% globals$text
-    has_union_members <- all(c("i", "d") %in% union_members$member_name)
+    has_union_members <- all(c("i", "d", "inner") %in% union_members$member_name)
+    has_nested_union_type <- is.list(union_accessors$data$inner) &&
+      identical(union_accessors$data$inner$type, "struct")
     has_global_types <- any(
       global_types$text == "global_counter" & grepl("int", global_types$c_type)
     )
     has_defs <- all(c("FOO", "BAR") %in% defs)
 
-    has_union && has_global && has_union_members && has_global_types && has_defs
+    has_union && has_global && has_union_members && has_nested_union_type && has_global_types && has_defs
   },
-  info = "Parse unions, globals, and macro defines"
+  info = "Parse unions, globals, nested union structs, and macro defines"
 )
 
 # Test 6: enum members and generate bindings

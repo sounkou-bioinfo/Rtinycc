@@ -444,7 +444,11 @@ tcc_treesitter_struct_accessors <- function(
 
       mtype <- row$member_type
       if (is_bitfield) {
-        ffi_type <- bitfield_type
+        ffi_type <- list(
+          type = bitfield_type,
+          bitfield = TRUE,
+          width = as.integer(row$bitfield)
+        )
       } else if (is.na(mtype) || !nzchar(mtype)) {
         stop(
           "Missing struct member type for '",
@@ -454,7 +458,7 @@ tcc_treesitter_struct_accessors <- function(
           "'",
           call. = FALSE
         )
-      } else if (mtype %in% c("struct", "struct (anonymous)")) {
+      } else if (grepl("^struct\\b", mtype)) {
         ffi_type <- "ptr"
       } else {
         ffi_type <- mapper(mtype)
@@ -509,7 +513,11 @@ tcc_treesitter_union_accessors <- function(
 
       mtype <- row$member_type
       if (is_bitfield) {
-        ffi_type <- bitfield_type
+        ffi_type <- list(
+          type = bitfield_type,
+          bitfield = TRUE,
+          width = as.integer(row$bitfield)
+        )
       } else if (is.na(mtype) || !nzchar(mtype)) {
         stop(
           "Missing union member type for '",
@@ -519,8 +527,8 @@ tcc_treesitter_union_accessors <- function(
           "'",
           call. = FALSE
         )
-      } else if (mtype %in% c("struct", "struct (anonymous)")) {
-        ffi_type <- "ptr"
+      } else if (grepl("^struct\\b", mtype)) {
+        ffi_type <- list(type = "struct")
       } else {
         ffi_type <- mapper(mtype)
       }
