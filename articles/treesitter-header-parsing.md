@@ -134,6 +134,60 @@ That output is what `Rtinycc` feeds into
 [`tcc_struct()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.md)
 when you ask it to generate struct bindings from a header.
 
+Bitfields now stay explicit in the accessor metadata rather than
+collapsing to a bare scalar type:
+
+``` r
+tcc_treesitter_struct_accessors(
+  "struct flags { unsigned int flag : 1; unsigned int code : 6; };"
+)
+#> $flags
+#> $flags$flag
+#> $flags$flag$type
+#> [1] "u8"
+#> 
+#> $flags$flag$bitfield
+#> [1] TRUE
+#> 
+#> $flags$flag$width
+#> [1] 1
+#> 
+#> 
+#> $flags$code
+#> $flags$code$type
+#> [1] "u8"
+#> 
+#> $flags$code$bitfield
+#> [1] TRUE
+#> 
+#> $flags$code$width
+#> [1] 6
+```
+
+Nested struct fields in structs currently still fall back to ptr-like
+accessors:
+
+``` r
+tcc_treesitter_struct_accessors(
+  "struct child { int x; }; struct outer { struct child child; int y; };"
+)
+#> $child
+#> $child$x
+#> [1] "i32"
+#> 
+#> 
+#> $outer
+#> $outer$child
+#> [1] "ptr"
+#> 
+#> $outer$y
+#> [1] "i32"
+```
+
+For unions, nested struct members preserve `list(type = "struct", ...)`
+so the generated helper remains a borrowed nested view rather than an
+opaque raw pointer.
+
 ## Conservative Type Mapping
 
 The default mapper is intentionally conservative. In particular, pointer

@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,8 +41,8 @@
     <li><a class="dropdown-item" href="../articles/linking-external-libraries.html">Linking External Libraries</a></li>
     <li><a class="dropdown-item" href="../articles/ffi-objects-and-callbacks.html">FFI Objects, Structs, and Callbacks</a></li>
     <li><a class="dropdown-item" href="../articles/treesitter-header-parsing.html">Header Parsing with treesitter.c</a></li>
-    <li><a class="dropdown-item" href="../articles/internals.html">Internals</a></li>
     <li><a class="dropdown-item" href="../articles/compilation-and-call-overhead.html">Compilation and Call Overhead</a></li>
+    <li><a class="dropdown-item" href="../articles/internals.html">Internals</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -199,9 +199,30 @@ owned external pointers</li>
 borrowed external pointers</li>
 <li>struct field address helpers and many raw pointer returns are
 borrowed views</li>
+<li>named nested struct getters such as
+<code>struct_outer_get_child()</code> return borrowed nested views into
+the owning struct storage</li>
 </ul>
 <p>Use <code><a href="../reference/tcc_ptr_is_owned.html">tcc_ptr_is_owned()</a></code> when you need to distinguish
 these cases in R code.</p>
+</div>
+<div class="section level2">
+<h2 id="bitfields-are-scalar-helpers-not-addressable-views">Bitfields Are Scalar Helpers, Not Addressable Views<a class="anchor" aria-label="anchor" href="#bitfields-are-scalar-helpers-not-addressable-views"></a>
+</h2>
+<p>Bitfield helpers behave like scalar getter/setter helpers at the R
+boundary, but that does <strong>not</strong> make them ordinary
+addressable fields.</p>
+<p>In particular:</p>
+<ul>
+<li>bitfield getters return copied scalar values</li>
+<li>bitfield setters write scalar values back through the
+compiler-managed bitfield storage</li>
+<li>
+<code><a href="../reference/tcc_field_addr.html">tcc_field_addr()</a></code> and <code><a href="../reference/tcc_container_of.html">tcc_container_of()</a></code>
+reject bitfield members</li>
+</ul>
+<p>So bitfields are intentionally excluded from the borrowed-address
+helper model.</p>
 </div>
 <div class="section level2">
 <h2 id="serialization-boundary">Serialization Boundary<a class="anchor" aria-label="anchor" href="#serialization-boundary"></a>

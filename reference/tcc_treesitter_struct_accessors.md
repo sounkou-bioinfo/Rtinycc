@@ -33,7 +33,10 @@ tcc_treesitter_struct_accessors(
 
 ## Value
 
-Named list of accessors by struct name.
+Named list of accessors by struct name. Bitfields are returned as lists
+with `type`, `bitfield = TRUE`, and `width`. Named nested struct fields
+are returned as `"struct:<name>"`; ambiguous or anonymous nested structs
+fall back to `"ptr"`.
 
 ## Examples
 

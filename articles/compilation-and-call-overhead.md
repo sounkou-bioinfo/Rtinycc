@@ -397,6 +397,11 @@ cat(generated_code)
 #> #define STRING_PTR_RO STRING_PTR
 #> #endif
 #> void RC_free_finalizer(SEXP ext);
+#> void RC_owned_native_finalizer(SEXP ext);
+#> SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
+#> SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
+#> SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
+#> SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
 #> 
 #> #include <stdint.h>
 #> #include <stdbool.h>
@@ -510,8 +515,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       1.2ms   1.23ms      815.    21.9KB        0
-#> 2 callme      456.6µs 467.25µs     2137.        0B        0
+#> 1 Rtinycc       1.2ms   1.22ms      818.    21.9KB        0
+#> 2 callme      452.6µs  463.1µs     2148.        0B        0
 ```
 
 Interpretation:
@@ -549,8 +554,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.78ms   3.96ms      265.    3.15MB     13.3
-#> 2 callme          2ms   2.08ms      441.    3.13MB     22.0
+#> 1 Rtinycc      2.79ms      4ms      263.    3.15MB     13.2
+#> 2 callme       2.05ms   2.08ms      444.    3.13MB     22.2
 ```
 
 Interpretation:
@@ -598,14 +603,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.76ms   1.83ms      515.    15.4KB     25.8
-#> 2 callme     940.61µs 955.57µs     1043.        0B      0
+#> 1 Rtinycc      1.75ms   1.82ms      517.    15.4KB     25.8
+#> 2 callme     956.13µs 967.48µs     1030.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.78ms   4.02ms      245.    3.13MB     12.2
-#> 2 callme       1.81ms   3.08ms      318.    3.13MB     15.9
+#> 1 Rtinycc      2.82ms   4.08ms      240.    3.13MB     12.0
+#> 2 callme        1.8ms   3.07ms      316.    3.13MB     15.8
 ```
 
 The usual pattern is:

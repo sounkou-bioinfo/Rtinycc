@@ -178,7 +178,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x602d09972630"
+#> [1] "0x576a39338dc0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -209,11 +209,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x602d0af9dcf0>
+#> <pointer: 0x576a3f4815f0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x602d0b45a720>
+#> <pointer: 0x576a3b639a50>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x602d0af9dcf0>
+#> <pointer: 0x576a3f4815f0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -270,57 +270,465 @@ ffi <- tcc_ffi() |>
 
 ffi$add(5L, 3L)
 #> [1] 8
+```
 
-# Compare to the R builtin `+` in a tight loop.
-# Each FFI call boxes the return value into a fresh SEXP.
-# In tight scalar loops this creates allocation churn, so GC pressure is expected.
-# R's allocator for SEXP arguments/returns at the R<->C boundary.
-r_p <- sample(10000)
-timings_ffi_scalar <- bench::mark(
-  Rtinycc = { for ( i in seq_along(r_p)) ffi$add(i, 1) },
-  Rbuiltin = { for ( i in seq_along(r_p)) i + 1 }
+### Compilation and call overhead
+
+To get a rough sense of cost, it is useful to compare `Rtinycc` against
+a conventional [`.Call()`](https://rdrr.io/r/base/CallExternal.html)
+shared-library workflow. The snippet below uses the
+[`callme`](https://cran.r-project.org/package=callme) package as the
+baseline. That means `callme` is compiling through `R CMD SHLIB` with
+the platform compiler toolchain (`gcc`/`clang` on the usual Unix-like
+targets), so better steady-state optimization than TinyCC is expected.
+
+Three small cases are enough to make the main point:
+
+- `noop()`: takes nothing and returns nothing
+- `fill_rand(out, n)`: fills a caller-provided numeric vector in place
+- `rand_unif(n)`: generates `n` random doubles
+
+The `fill_rand()` case is the fairer array-oriented comparison:
+
+- `Rtinycc` uses the `numeric_array` input path and borrows the backing
+  R buffer
+- `callme` writes into `REAL(vec)` directly
+
+The `rand_unif()` case then isolates the extra copy path:
+
+- `callme` allocates the final R vector directly with the R C API
+- `Rtinycc` returns a native `double*`, and the generated wrapper copies
+  that buffer into an R vector
+
+``` r
+rtinycc_code <- '
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <Rmath.h>
+  #include <stdlib.h>
+
+  void noop(void) {}
+
+  void fill_rand(double* out, int n) {
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+  }
+
+  double* rand_unif(int n) {
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+    if (n == 0) {
+      return (double*) malloc(sizeof(double));
+    }
+
+    double *out = (double*) malloc(sizeof(double) * (size_t) n);
+    if (!out) {
+      Rf_error("malloc failed");
+    }
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+    return out;
+  }
+'
+
+callme_code <- '
+  #include <R.h>
+  #include <Rinternals.h>
+  #include <Rmath.h>
+
+  SEXP noop(void) {
+    return R_NilValue;
+  }
+
+  SEXP fill_rand(SEXP out_, SEXP n_) {
+    int n = asInteger(n_);
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    if (TYPEOF(out_) != REALSXP) {
+      Rf_error("out must be a numeric vector");
+    }
+
+    if (XLENGTH(out_) < n) {
+      Rf_error("out is shorter than n");
+    }
+
+    double *out = REAL(out_);
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      out[i] = unif_rand();
+    }
+    PutRNGstate();
+
+    return out_;
+  }
+
+  SEXP rand_unif(SEXP n_) {
+    int n = asInteger(n_);
+    if (n < 0) {
+      Rf_error("n must be non-negative");
+    }
+
+    SEXP out = PROTECT(allocVector(REALSXP, n));
+    double *ptr = REAL(out);
+
+    GetRNGstate();
+    for (int i = 0; i < n; ++i) {
+      ptr[i] = unif_rand();
+    }
+    PutRNGstate();
+
+    UNPROTECT(1);
+    return out;
+  }
+'
+
+build_rtinycc_module <- function() {
+  tcc_ffi() |>
+    tcc_source(rtinycc_code) |>
+    tcc_bind(
+      noop = list(args = list(), returns = "void"),
+      fill_rand = list(args = list("numeric_array", "i32"), returns = "void"),
+      rand_unif = list(
+        args = list("i32"),
+        returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
+      )
+    ) |>
+    tcc_compile()
+}
+
+build_callme_module <- function() {
+  before <- names(getLoadedDLLs())
+  mod <- callme::compile(callme_code, env = NULL, verbosity = 0)
+  dlls <- getLoadedDLLs()
+  new_names <- setdiff(names(dlls), before)
+  new_names <- new_names[startsWith(new_names, "callme_")]
+  attr(mod, "dll_paths") <- unname(vapply(
+    dlls[new_names],
+    function(x) x[["path"]],
+    character(1)
+  ))
+  mod
+}
+
+unload_callme_dlls <- function(dll_paths) {
+  dll_paths <- rev(unique(dll_paths))
+  if (is.null(dll_paths) || !length(dll_paths)) {
+    return(invisible(NULL))
+  }
+  for (dll_path in dll_paths) {
+    if (is.character(dll_path) && nzchar(dll_path) && file.exists(dll_path)) {
+      try(dyn.unload(dll_path), silent = TRUE)
+    }
+  }
+  invisible(NULL)
+}
+
+build_and_dispose_callme_module <- function() {
+  mod <- build_callme_module()
+  dll_paths <- attr(mod, "dll_paths", exact = TRUE)
+  rm(mod)
+  gc()
+  unload_callme_dlls(dll_paths)
+  invisible(NULL)
+}
+
+with_benchmark_modules <- function(fun) {
+  rt_mod <- build_rtinycc_module()
+  cm_mod <- build_callme_module()
+  dll_paths <- attr(cm_mod, "dll_paths", exact = TRUE)
+
+  on.exit({
+    rm(rt_mod, cm_mod)
+    gc()
+    unload_callme_dlls(dll_paths)
+  }, add = TRUE)
+
+  fun(rt_mod, cm_mod)
+}
+
+median_elapsed <- function(expr, times = 3L) {
+  expr <- substitute(expr)
+  env <- parent.frame()
+  stats::median(replicate(
+    times,
+    {
+      gc()
+      t0 <- proc.time()[["elapsed"]]
+      eval(expr, envir = env)
+      proc.time()[["elapsed"]] - t0
+    }
+  ))
+}
+
+run_noop <- function(fun, n) {
+  for (i in seq_len(n)) {
+    fun()
+  }
+  invisible(NULL)
+}
+
+run_rand <- function(fun, n, reps) {
+  for (i in seq_len(reps)) {
+    invisible(fun(n))
+  }
+  invisible(NULL)
+}
+
+run_fill <- function(fun, n, reps) {
+  for (i in seq_len(reps)) {
+    out <- numeric(n)
+    invisible(fun(out, n))
+  }
+  invisible(NULL)
+}
+
+rtinycc_recipe <- tcc_ffi() |>
+  tcc_source(rtinycc_code) |>
+  tcc_bind(
+    noop = list(args = list(), returns = "void"),
+    fill_rand = list(args = list("numeric_array", "i32"), returns = "void"),
+    rand_unif = list(
+      args = list("i32"),
+      returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
+    )
+  )
+
+generated_code <- Rtinycc:::generate_ffi_code(
+  symbols = rtinycc_recipe$symbols,
+  headers = rtinycc_recipe$headers,
+  c_code = rtinycc_recipe$c_code,
+  is_external = FALSE,
+  structs = rtinycc_recipe$structs,
+  unions = rtinycc_recipe$unions,
+  enums = rtinycc_recipe$enums,
+  globals = rtinycc_recipe$globals,
+  container_of = rtinycc_recipe$container_of,
+  field_addr = rtinycc_recipe$field_addr,
+  struct_raw_access = rtinycc_recipe$struct_raw_access,
+  introspect = rtinycc_recipe$introspect
 )
-#> Warning: Some expressions had a GC in every iteration; so filtering is
-#> disabled.
-timings_ffi_scalar
+
+compile_times <- data.frame(
+  implementation = c("Rtinycc", "callme"),
+  milliseconds = round(c(
+    median_elapsed(build_rtinycc_module(), times = 2L),
+    median_elapsed(build_and_dispose_callme_module(), times = 2L)
+  ) * 1000, 1)
+)
+
+noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  n_noop <- 1000L
+  bench::mark(
+    Rtinycc = run_noop(rt_mod$noop, n_noop),
+    callme = run_noop(cm_mod$noop, n_noop),
+    iterations = 20,
+    check = TRUE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+})
+
+fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  bench::mark(
+    Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
+    callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+})
+
+rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
+  rand_bench_n1 <- bench::mark(
+    Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
+    callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+
+  rand_bench_n4096 <- bench::mark(
+    Rtinycc = run_rand(rt_mod$rand_unif, 4096L, 100L),
+    callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
+    iterations = 20,
+    check = FALSE,
+    memory = TRUE,
+    filter_gc = FALSE
+  )
+
+  list(rand_bench_n1 = rand_bench_n1, rand_bench_n4096 = rand_bench_n4096)
+})
+
+rand_bench_n1 <- rand_results$rand_bench_n1
+rand_bench_n4096 <- rand_results$rand_bench_n4096
+
+compile_times
+#>   implementation milliseconds
+#> 1        Rtinycc           12
+#> 2         callme          207
+cat(generated_code)
+#> /* TinyCC workaround: _Complex not supported */
+#> #define _Complex
+#> 
+#> #include <R.h>
+#> #include <Rinternals.h>
+#> #ifndef STRING_PTR_RO
+#> #define STRING_PTR_RO STRING_PTR
+#> #endif
+#> void RC_free_finalizer(SEXP ext);
+#> void RC_owned_native_finalizer(SEXP ext);
+#> SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
+#> SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
+#> SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
+#> SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
+#> 
+#> #include <stdint.h>
+#> #include <stdbool.h>
+#> #include <stddef.h>
+#> #include <limits.h>
+#> #include <math.h>
+#> #include <string.h>
+#> 
+#> /* User code */
+#> 
+#>   #include <R.h>
+#>   #include <Rinternals.h>
+#>   #include <Rmath.h>
+#>   #include <stdlib.h>
+#> 
+#>   void noop(void) {}
+#> 
+#>   void fill_rand(double* out, int n) {
+#>     if (n < 0) {
+#>       Rf_error("n must be non-negative");
+#>     }
+#> 
+#>     GetRNGstate();
+#>     for (int i = 0; i < n; ++i) {
+#>       out[i] = unif_rand();
+#>     }
+#>     PutRNGstate();
+#>   }
+#> 
+#>   double* rand_unif(int n) {
+#>     if (n < 0) {
+#>       Rf_error("n must be non-negative");
+#>     }
+#>     if (n == 0) {
+#>       return (double*) malloc(sizeof(double));
+#>     }
+#> 
+#>     double *out = (double*) malloc(sizeof(double) * (size_t) n);
+#>     if (!out) {
+#>       Rf_error("malloc failed");
+#>     }
+#> 
+#>     GetRNGstate();
+#>     for (int i = 0; i < n; ++i) {
+#>       out[i] = unif_rand();
+#>     }
+#>     PutRNGstate();
+#>     return out;
+#>   }
+#> 
+#> 
+#> /* R callable wrappers for bound symbols */
+#> SEXP R_wrap_noop(void) {
+#>   // No arguments
+#> 
+#>   // Call and return
+#>    noop();
+#>      return R_NilValue;
+#> }
+#> 
+#> 
+#> SEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {
+#>   double* arg1 = REAL(arg1_);
+#>   int _arg2 = asInteger(arg2_);
+#>   if (_arg2 == NA_INTEGER) Rf_error("integer value is NA");
+#>   if (_arg2 < INT32_MIN || _arg2 > INT32_MAX) Rf_error("i32 out of range");
+#>   int32_t arg2 = (int32_t)_arg2;
+#> 
+#>   // Call and return
+#>    fill_rand(arg1, arg2);
+#>      return R_NilValue;
+#> }
+#> 
+#> 
+#> SEXP R_wrap_rand_unif(SEXP arg1_) {
+#>   int _arg1 = asInteger(arg1_);
+#>   if (_arg1 == NA_INTEGER) Rf_error("integer value is NA");
+#>   if (_arg1 < INT32_MIN || _arg1 > INT32_MAX) Rf_error("i32 out of range");
+#>   int32_t arg1 = (int32_t)_arg1;
+#> 
+#>   // Call and return
+#>    double* __rtinycc_ret = rand_unif(arg1);
+#>    if (!__rtinycc_ret) return R_NilValue;
+#>    SEXP out = PROTECT(allocVector(REALSXP, arg1));
+#>      if (arg1 > 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);
+#>      if (__rtinycc_ret) free(__rtinycc_ret);
+#>      UNPROTECT(1);
+#>      return out;
+#> }
+noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      24.1ms   26.2ms      29.6   53.98KB     31.5
-#> 2 Rbuiltin    548.1µs  588.8µs    1589.     9.05KB     29.9
-
-# For performance-sensitive code, move the loop into C and operate on arrays
-# (one call over many elements instead of many scalar calls).
-ffi_vec <- tcc_ffi() |>
-  tcc_source(" \
-    void add_vec(int32_t* x, int32_t n) {\
-      for (int32_t i = 0; i < n; i++) x[i] = x[i] + 1;\
-    }\
-  ") |>
-  tcc_bind(add_vec = list(args = list("integer_array", "i32"), returns = "void")) |>
-  tcc_compile()
-
-x <- sample(100000)
-timings_ffi_vec <- bench::mark(
-  Rtinycc_vec = {
-    y <- as.integer(x)
-    y <- y + 0L
-    ffi_vec$add_vec(y, length(y))
-    y
-  },
-  Rbuiltin_vec = {
-    y <- as.integer(x)
-    y <- y + 0L
-    y + 1L
-  }
-)
-timings_ffi_vec
+#> 1 Rtinycc       649µs    676µs     1472.      13KB       0 
+#> 2 callme        252µs    268µs     2685.        0B     134.
+fill_bench_n4096
 #> # A tibble: 2 × 6
-#>   expression        min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr>   <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc_vec     176µs    255µs     3911.     391KB     28.1
-#> 2 Rbuiltin_vec    166µs    170µs     5791.     781KB     93.5
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc       1.6ms   2.28ms      453.    3.15MB     22.7
+#> 2 callme        1.3ms   1.31ms      719.    3.13MB     36.0
+rand_bench_n1
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc       844µs    903µs     1112.    15.4KB        0
+#> 2 callme        497µs    502µs     1988.        0B        0
+rand_bench_n4096
+#> # A tibble: 2 × 6
+#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 Rtinycc      1.56ms   2.19ms      445.    3.13MB     22.2
+#> 2 callme       1.14ms   1.77ms      540.    3.13MB     27.0
 ```
+
+The usual pattern is:
+
+- `Rtinycc` compiles tiny modules much faster because it stays
+  in-process
+- a regular [`.Call()`](https://rdrr.io/r/base/CallExternal.html) module
+  has lower minimal call overhead
+- the zero-copy `fill_rand()` case is the fairer vector benchmark for
+  `Rtinycc`
+- when `Rtinycc` returns a native buffer that must be copied into an R
+  vector, that copy is measurable
+- part of the runtime gap is also expected backend quality: `callme` is
+  using the system compiler, while `Rtinycc` is using TinyCC
+
+For performance-sensitive paths, the main mitigation is to move more
+work into each call. One large array-oriented call is usually a much
+better fit than many tiny scalar crossings. The full benchmark
+discussion is in the `Compilation and Call Overhead` vignette.
 
 ### Variadic calls (e.g. `Rprintf` style)
 
@@ -485,7 +893,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @602d0dc280d8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @576a3de7e900 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -501,7 +909,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @602d0dc280d8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @576a3de7e900 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -529,15 +937,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x602d0b9b7cb0>
+#> <pointer: 0x576a39957560>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x602d0b9b7cb0>
+#> <pointer: 0x576a39957560>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x602d0d679410>
+#> <pointer: 0x576a39bbf580>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x602d0d679410>
+#> <pointer: 0x576a39bbf580>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -582,9 +990,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x602d0df2a8c0>
+#> <pointer: 0x576a3b121050>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x602d0df2a8c0>
+#> <pointer: 0x576a3b121050>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -624,8 +1032,10 @@ R functions can be registered as C function pointers via
 and passed to compiled code. Specify a `callback:<signature>` argument
 in
 [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
-so the trampoline is generated automatically. Always close callbacks
-when done.
+so the trampoline is generated automatically. Call
+[`tcc_callback_close()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_close.md)
+when you want deterministic invalidation and earlier release of the
+preserved R function.
 
 ``` r
 cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
@@ -654,9 +1064,10 @@ tcc_callback_close(cb)
 ### Callback errors
 
 If a callback throws an R error, the trampoline catches it, emits a
-warning, and returns a type-appropriate default (0 for numeric, `FALSE`
-for logical, `NULL` for pointer). This prevents C code from seeing an
-unwound stack.
+warning, and returns a type-appropriate sentinel instead of unwinding
+through C. In practice this means NA-like numeric or integer values,
+`NA` logical, `NA` string, or a null external pointer depending on the
+declared return type.
 
 ``` r
 cb_err <- tcc_callback(
@@ -987,7 +1398,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x602d09ec5be0>
+#> <pointer: 0x576a3b08d090>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1104,11 +1515,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 46.59ms 46.59ms      21.5    6.33MB     21.5     1     1     46.6ms
-#> 2 vroom_df_…  6.36ms  6.54ms     153.     1.22MB      0       2     0     13.1ms
-#> 3 vroom_df_…   9.1ms  9.86ms     101.     2.44MB      0       2     0     19.7ms
-#> 4 c_read_df  21.42ms 21.66ms      46.2    1.22MB      0       2     0     43.3ms
-#> 5 io_uring_… 19.63ms 19.87ms      50.3    1.22MB      0       2     0     39.7ms
+#> 1 read_tabl…  43.9ms 47.41ms      21.1    6.33MB        0     2     0     94.8ms
+#> 2 vroom_df_…  6.31ms  6.45ms     155.     1.22MB        0     2     0     12.9ms
+#> 3 vroom_df_…  6.63ms     7ms     143.     2.44MB        0     2     0       14ms
+#> 4 c_read_df  21.08ms 21.34ms      46.9    1.22MB        0     2     0     42.7ms
+#> 5 io_uring_… 20.96ms 20.98ms      47.7    1.22MB        0     2     0       42ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1144,48 +1555,66 @@ manipulate them through pointers.
 
 ### Nested structs
 
-The accessor generator does not handle nested structs by value. Use
-pointer fields instead and reach inner structs with
-[`tcc_field_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_field_addr.md).
+Named nested struct fields can now be declared explicitly with
+`struct:<name>`. Getters return borrowed nested views and setters copy
+bytes from another struct object of the declared nested type.
 
 ``` r
 ffi <- tcc_ffi() |>
   tcc_source('
     struct inner { int a; };
-    struct outer { struct inner* in; };
+    struct outer { struct inner in; };
   ') |>
   tcc_struct("inner", accessors = c(a = "i32")) |>
-  tcc_struct("outer", accessors = c(`in` = "ptr")) |>
-  tcc_field_addr("outer", "in") |>
+  tcc_struct("outer", accessors = list(`in` = "struct:inner")) |>
   tcc_compile()
 
-o <- ffi$struct_outer_new()
-i <- ffi$struct_inner_new()
-ffi$struct_inner_set_a(i, 42L)
-#> <pointer: 0x602d0f6de2c0>
-
-# Write the inner pointer into the outer struct
-ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-#> <pointer: 0x602d12623a50>
-
-# Read it back through indirection
-ffi$struct_outer_in_addr(o) |>
-  tcc_data_ptr() |>
-  ffi$struct_inner_get_a()
+outer <- ffi$struct_outer_new()
+inner <- ffi$struct_inner_new()
+inner <- ffi$struct_inner_set_a(inner, 42L)
+outer <- ffi$struct_outer_set_in(outer, inner)
+inner_view <- ffi$struct_outer_get_in(outer)
+ffi$struct_inner_get_a(inner_view)
 #> [1] 42
-
-ffi$struct_inner_free(i)
+ffi$struct_inner_free(inner)
 #> NULL
-ffi$struct_outer_free(o)
+ffi$struct_outer_free(outer)
 #> NULL
 ```
 
+For treesitter-generated bindings, nested struct fields currently still
+fall back to ptr-like accessors. The richer `struct:<name>` form is
+available when you declare the nested field accessors explicitly.
+
+Bitfields are a separate case: they use scalar helper accessors, but
+`field_addr()` and `container_of()` reject bitfield members because
+bitfields do not have ordinary addressable field semantics.
+
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('struct flags { unsigned int flag : 1; };') |>
+  tcc_struct("flags", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1)))
+
+# Both of these error intentionally:
+# ffi <- tcc_field_addr(ffi, "flags", "flag")
+# ffi <- tcc_container_of(ffi, "flags", "flag")
+```
+
+# Write the inner pointer into the outer struct
+
+ffi\$struct_outer_in_addr(o) \|\> tcc_ptr_set(i)
+
+# Read it back through indirection
+
+ffi$struct_{o}uter_{i}n_{a}ddr(o)\left| > tcc_{d}ata_{p}tr{()} \right| > ffi$struct_inner_get_a()
+
+ffi$struct_{i}nner_{f}ree(i)ffi$struct_outer_free(o)
+
+``` R
 ### Array fields in structs
 
-Array fields require the `list(type = ..., size = N, array = TRUE)`
-syntax in
-[`tcc_struct()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_struct.md),
-which generates element-wise accessors.
+Array fields require the `list(type = ..., size = N, array = TRUE)` syntax in `tcc_struct()`, which generates element-wise accessors.
+
 
 ``` r
 ffi <- tcc_ffi() |>
@@ -1197,9 +1626,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x602d1140e660>
+#> <pointer: 0x576a3f4b3470>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x602d1140e660>
+#> <pointer: 0x576a3f4b3470>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

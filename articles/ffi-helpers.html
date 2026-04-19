@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,8 +41,8 @@
     <li><a class="dropdown-item" href="../articles/linking-external-libraries.html">Linking External Libraries</a></li>
     <li><a class="dropdown-item" href="../articles/ffi-objects-and-callbacks.html">FFI Objects, Structs, and Callbacks</a></li>
     <li><a class="dropdown-item" href="../articles/treesitter-header-parsing.html">Header Parsing with treesitter.c</a></li>
-    <li><a class="dropdown-item" href="../articles/internals.html">Internals</a></li>
     <li><a class="dropdown-item" href="../articles/compilation-and-call-overhead.html">Compilation and Call Overhead</a></li>
+    <li><a class="dropdown-item" href="../articles/internals.html">Internals</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -143,14 +143,14 @@ helpers for that pattern.</p>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">4</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x561ea6d38fa0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x556c7a96eb10&gt;</span></span>
 <span><span class="fu"><a href="../reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="fu"><a href="../reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "94689712874976"</span></span>
+<span><span class="co">#&gt; [1] "93924415267584"</span></span>
 <span><span class="fu"><a href="../reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "94689712874976"</span></span>
+<span><span class="co">#&gt; [1] "93924415267584"</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="../reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x561ea6d38fa0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x556c7a96eb10&gt;</span></span>
 <span><span class="fu"><a href="../reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="fu"><a href="../reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span></span>

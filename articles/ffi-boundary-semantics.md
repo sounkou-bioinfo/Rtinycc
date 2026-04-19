@@ -111,10 +111,30 @@ At the helper level:
   return borrowed external pointers
 - struct field address helpers and many raw pointer returns are borrowed
   views
+- named nested struct getters such as `struct_outer_get_child()` return
+  borrowed nested views into the owning struct storage
 
 Use
 [`tcc_ptr_is_owned()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_ptr_is_owned.md)
 when you need to distinguish these cases in R code.
+
+## Bitfields Are Scalar Helpers, Not Addressable Views
+
+Bitfield helpers behave like scalar getter/setter helpers at the R
+boundary, but that does **not** make them ordinary addressable fields.
+
+In particular:
+
+- bitfield getters return copied scalar values
+- bitfield setters write scalar values back through the compiler-managed
+  bitfield storage
+- [`tcc_field_addr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_field_addr.md)
+  and
+  [`tcc_container_of()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_container_of.md)
+  reject bitfield members
+
+So bitfields are intentionally excluded from the borrowed-address helper
+model.
 
 ## Serialization Boundary
 

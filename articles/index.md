@@ -27,6 +27,6 @@
 
 ### Internals
 
-- [Internals](https://sounkou-bioinfo.github.io/Rtinycc/articles/internals.md):
 - [Compilation and Call
   Overhead](https://sounkou-bioinfo.github.io/Rtinycc/articles/compilation-and-call-overhead.md):
+- [Internals](https://sounkou-bioinfo.github.io/Rtinycc/articles/internals.md):

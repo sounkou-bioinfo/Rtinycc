@@ -33,7 +33,10 @@ tcc_treesitter_union_accessors(
 
 ## Value
 
-Named list of accessors by union name.
+Named list of accessors by union name. Bitfields are returned as lists
+with `type`, `bitfield = TRUE`, and `width`. Nested struct members are
+returned as `list(type = "struct", struct_name = <name>)` when the
+struct name is available, otherwise `list(type = "struct")`.
 
 ## Examples
 

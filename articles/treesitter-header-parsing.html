@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,8 +41,8 @@
     <li><a class="dropdown-item" href="../articles/linking-external-libraries.html">Linking External Libraries</a></li>
     <li><a class="dropdown-item" href="../articles/ffi-objects-and-callbacks.html">FFI Objects, Structs, and Callbacks</a></li>
     <li><a class="dropdown-item" href="../articles/treesitter-header-parsing.html">Header Parsing with treesitter.c</a></li>
-    <li><a class="dropdown-item" href="../articles/internals.html">Internals</a></li>
     <li><a class="dropdown-item" href="../articles/compilation-and-call-overhead.html">Compilation and Call Overhead</a></li>
+    <li><a class="dropdown-item" href="../articles/internals.html">Internals</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -197,6 +197,53 @@ binding plan first.</p>
 <p>That output is what <code>Rtinycc</code> feeds into
 <code><a href="../reference/tcc_struct.html">tcc_struct()</a></code> when you ask it to generate struct bindings
 from a header.</p>
+<p>Bitfields now stay explicit in the accessor metadata rather than
+collapsing to a bare scalar type:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/tcc_treesitter_struct_accessors.html">tcc_treesitter_struct_accessors</a></span><span class="op">(</span></span>
+<span>  <span class="st">"struct flags { unsigned int flag : 1; unsigned int code : 6; };"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt; $flags</span></span>
+<span><span class="co">#&gt; $flags$flag</span></span>
+<span><span class="co">#&gt; $flags$flag$type</span></span>
+<span><span class="co">#&gt; [1] "u8"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $flags$flag$bitfield</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $flags$flag$width</span></span>
+<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $flags$code</span></span>
+<span><span class="co">#&gt; $flags$code$type</span></span>
+<span><span class="co">#&gt; [1] "u8"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $flags$code$bitfield</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $flags$code$width</span></span>
+<span><span class="co">#&gt; [1] 6</span></span></code></pre></div>
+<p>Nested struct fields in structs currently still fall back to ptr-like
+accessors:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/tcc_treesitter_struct_accessors.html">tcc_treesitter_struct_accessors</a></span><span class="op">(</span></span>
+<span>  <span class="st">"struct child { int x; }; struct outer { struct child child; int y; };"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt; $child</span></span>
+<span><span class="co">#&gt; $child$x</span></span>
+<span><span class="co">#&gt; [1] "i32"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $outer</span></span>
+<span><span class="co">#&gt; $outer$child</span></span>
+<span><span class="co">#&gt; [1] "ptr"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $outer$y</span></span>
+<span><span class="co">#&gt; [1] "i32"</span></span></code></pre></div>
+<p>For unions, nested struct members preserve
+<code>list(type = "struct", ...)</code> so the generated helper remains
+a borrowed nested view rather than an opaque raw pointer.</p>
 </div>
 <div class="section level2">
 <h2 id="conservative-type-mapping">Conservative Type Mapping<a class="anchor" aria-label="anchor" href="#conservative-type-mapping"></a>
@@ -204,7 +251,7 @@ from a header.</p>
 <p>The default mapper is intentionally conservative. In particular,
 pointer types are not automatically treated as C strings unless that is
 semantically safe.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/tcc_map_c_type_to_ffi.html">tcc_map_c_type_to_ffi</a></span><span class="op">(</span><span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "i32"</span></span>
 <span><span class="fu"><a href="../reference/tcc_map_c_type_to_ffi.html">tcc_map_c_type_to_ffi</a></span><span class="op">(</span><span class="st">"double"</span><span class="op">)</span></span>
@@ -213,7 +260,7 @@ semantically safe.</p>
 <span><span class="co">#&gt; [1] "i8"</span></span></code></pre></div>
 <p>If you know a specific API uses <code>const char *</code> as a real
 NUL-terminated string, you can override the mapping:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">string_mapper</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">type</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="va">type</span><span class="op">)</span> <span class="op">==</span> <span class="st">"const char *"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="st">"cstring"</span><span class="op">)</span></span>

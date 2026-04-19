@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -26,8 +26,8 @@
     <li><a class="dropdown-item" href="articles/linking-external-libraries.html">Linking External Libraries</a></li>
     <li><a class="dropdown-item" href="articles/ffi-objects-and-callbacks.html">FFI Objects, Structs, and Callbacks</a></li>
     <li><a class="dropdown-item" href="articles/treesitter-header-parsing.html">Header Parsing with treesitter.c</a></li>
-    <li><a class="dropdown-item" href="articles/internals.html">Internals</a></li>
     <li><a class="dropdown-item" href="articles/compilation-and-call-overhead.html">Compilation and Call Overhead</a></li>
+    <li><a class="dropdown-item" href="articles/internals.html">Internals</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -99,6 +99,8 @@
 <code><a href="reference/tcc_malloc.html">tcc_malloc()</a></code> and <code><a href="reference/tcc_cstring.html">tcc_cstring()</a></code> create owned heap allocations tagged <code>rtinycc_owned</code> and backed by a finalizer.</li>
 <li>
 <code><a href="reference/tcc_data_ptr.html">tcc_data_ptr()</a></code> returns a borrowed pointer tagged <code>rtinycc_borrowed</code>.</li>
+<li>
+<code><a href="reference/tcc_read_ptr.html">tcc_read_ptr()</a></code> copies only the pointer-sized address value out of native memory (effectively <code>memcpy()</code> into a local <code>void *</code>), then wraps that address as a borrowed <code>externalptr</code>. It does not copy the pointee storage, does not infer ownership, and must not free whatever the address points to. If the returned wrapper is GC’d, that only reclaims the R <code>EXTPTRSXP</code> wrapper object, not the pointee.</li>
 <li>
 <code><a href="reference/tcc_read_bytes.html">tcc_read_bytes()</a></code> and <code>tcc_read_cstring_n()</code> copy data into fresh R objects.</li>
 <li>Typed scalar reads copy bytes from the pointed memory into local C scalars with <code>memcpy()</code>, then box those values for R.</li>

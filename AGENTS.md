@@ -77,6 +77,13 @@ semantics, not as an implementation detail.
   finalizer.
 - [`tcc_data_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_data_ptr.md)
   returns a borrowed pointer tagged `rtinycc_borrowed`.
+- [`tcc_read_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_ptr.md)
+  copies only the pointer-sized address value out of native memory
+  (effectively `memcpy()` into a local `void *`), then wraps that
+  address as a borrowed `externalptr`. It does not copy the pointee
+  storage, does not infer ownership, and must not free whatever the
+  address points to. If the returned wrapper is GC’d, that only reclaims
+  the R `EXTPTRSXP` wrapper object, not the pointee.
 - [`tcc_read_bytes()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_read_bytes.md)
   and `tcc_read_cstring_n()` copy data into fresh R objects.
 - Typed scalar reads copy bytes from the pointed memory into local C

@@ -22,7 +22,9 @@ tcc_struct(ffi, name, accessors)
 - accessors:
 
   Named list of field accessors where names are field names and values
-  are FFI types (e.g., list(x="f64", y="f64"))
+  are FFI types (e.g., list(x="f64", y="f64")). Named nested struct
+  fields can use `"struct:<name>"` to generate borrowed nested-view
+  getters and copy-in setters (for example `child = "struct:child"`).
 
 ## Value
 

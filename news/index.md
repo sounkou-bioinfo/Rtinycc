@@ -1,5 +1,30 @@
 # Changelog
 
+## Rtinycc 0.1.4
+
+- Tighten FFI soundness around ownership, helper generation, and nested
+  composite views. Generated wrappers now route pointer and composite
+  wrapper creation through host-side helpers more consistently,
+  borrowed/unowned pointer semantics are enforced more strictly, and
+  callback/SEXP/pointer wrapper invariants are covered with stronger
+  codegen and runtime tests.
+
+- Clarify and extend helper semantics across structs, unions, enums,
+  globals, bitfields, and treesitter-derived bindings. Helper metadata
+  now records both helper family and helper operation more explicitly,
+  bitfield and constant helpers are distinguished from ordinary field
+  helpers, and named nested struct helper accessors support borrowed
+  nested views plus copy-in setters.
+
+- Improve cross-platform robustness for generated
+  external-pointer/finalizer paths and Windows diagnostics, including
+  host-side registration helpers, tighter smoke tests, and CI/debug
+  workflow coverage for the historical Windows GC/finalizer crash path.
+
+- Refresh README, vignettes, and generated reference documentation so
+  the user docs match current FFI semantics for pointers, callbacks,
+  bitfields, nested helpers, and treesitter-derived accessor behavior.
+
 ## Rtinycc 0.1.3
 
 - Tighten FFI boundary handling for wide integers and pointers.
