@@ -203,3 +203,76 @@ expect_true(
   },
   info = "Generate bindings for structs, unions, enums, globals"
 )
+
+# Test 7: treesitter-generated bitfield bindings preserve helper metadata end-to-end
+expect_true(
+  {
+    header <- "struct flags { unsigned int flag : 1; unsigned int code : 6; };"
+    ffi <- tcc_ffi() |>
+      tcc_source(header) |>
+      tcc_treesitter_struct_bindings(header, bitfield_type = bitfield_type) |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    s <- ffi$struct_flags_new()
+    s <- ffi$struct_flags_set_flag(s, 1L)
+    s <- ffi$struct_flags_set_code(s, 17L)
+    ok_runtime <- identical(ffi$struct_flags_get_flag(s), 1L) &&
+      identical(ffi$struct_flags_get_code(s), 17L)
+    ffi$struct_flags_free(s)
+
+    identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_flags_get_flag), "bitfield_getter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_flags_set_flag), "bitfield_setter") &&
+      ok_runtime
+  },
+  info = "treesitter-generated bitfield bindings preserve bitfield helper semantics end-to-end"
+)
+
+# Test 8: treesitter-generated bitfields still reject address-style helpers
+expect_error(
+  {
+    header <- "struct flags { unsigned int flag : 1; };"
+    ffi <- tcc_ffi() |>
+      tcc_source(header) |>
+      tcc_treesitter_struct_bindings(header, bitfield_type = bitfield_type) |>
+      tcc_field_addr("flags", "flag")
+    ffi
+  },
+  info = "treesitter-generated bitfields reject field_addr"
+)
+expect_error(
+  {
+    header <- "struct flags { unsigned int flag : 1; };"
+    ffi <- tcc_ffi() |>
+      tcc_source(header) |>
+      tcc_treesitter_struct_bindings(header, bitfield_type = bitfield_type) |>
+      tcc_container_of("flags", "flag")
+    ffi
+  },
+  info = "treesitter-generated bitfields reject container_of"
+)
+
+# Test 9: treesitter-generated nested union struct bindings preserve nested-view metadata end-to-end
+expect_true(
+  {
+    header <- "struct inner { int x; }; union wrapper { struct inner inner; int raw; };"
+    ffi <- tcc_ffi() |>
+      tcc_source(header) |>
+      tcc_treesitter_struct_bindings(header) |>
+      tcc_treesitter_union_bindings(header) |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    u <- ffi$union_wrapper_new()
+    inner <- ffi$union_wrapper_get_inner(u)
+    inner <- ffi$struct_inner_set_x(inner, 33L)
+    ok_runtime <- identical(ffi$struct_inner_get_x(inner), 33L)
+    ffi$union_wrapper_free(u)
+
+    identical(Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_inner), "nested_view") &&
+      ok_runtime
+  },
+  info = "treesitter-generated nested union struct bindings preserve nested-view semantics end-to-end"
+)
