@@ -96,16 +96,27 @@ SEXP test_extptr(void) {
     int *p = (int*)RC_host_calloc_c(1, sizeof(int));
     if (!p) Rf_error(\"OOM\");
     *p = 42;
-    SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
-    return ext;
+    return R_MakeExternalPtr(p, R_NilValue, R_NilValue);
+}
+void free_extptr(SEXP ext) {
+    void *p = R_ExternalPtrAddr(ext);
+    if (p) {
+        RC_host_free_c(p);
+        R_ClearExternalPtr(ext);
+    }
 }
 "
     )
-    ffi <- tcc_bind(ffi, test_extptr = list(args = list(), returns = "sexp"))
+    ffi <- tcc_bind(
+      ffi,
+      test_extptr = list(args = list(), returns = "sexp"),
+      free_extptr = list(args = list("sexp"), returns = "void")
+    )
     compiled <- tcc_compile(ffi)
     res <- compiled$test_extptr()
-    on.exit(if (inherits(res, "externalptr") && !tcc_ptr_is_null(res)) .Call("RC_free", res, PACKAGE = "Rtinycc"), add = TRUE)
-    is(res, "externalptr")
+    ok <- is(res, "externalptr")
+    compiled$free_extptr(res)
+    ok
   },
   info = "smoke: R_MakeExternalPtr + R_NilValue"
 )
