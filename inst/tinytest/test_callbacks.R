@@ -324,4 +324,26 @@ for (case in callback_abi_specs$async_trampoline) {
   for (pattern in case$patterns) {
     expect_true(grepl(pattern$pattern, tramp), info = pattern$info)
   }
+
+  forbidden <- case$forbidden
+  if (is.null(forbidden)) {
+    forbidden <- list()
+  }
+
+  for (pattern in forbidden) {
+    expect_false(grepl(pattern$pattern, tramp), info = pattern$info)
+  }
 }
+
+expect_error(
+  mk_tramps("callback_async:SEXP(SEXP)"),
+  info = "Async callback rejects SEXP arguments and returns"
+)
+expect_error(
+  mk_tramps("callback_async:SEXP(int)"),
+  info = "Async callback rejects SEXP return type"
+)
+expect_error(
+  mk_tramps("callback_async:void(SEXP)"),
+  info = "Async callback rejects SEXP argument type"
+)

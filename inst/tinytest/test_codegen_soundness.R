@@ -643,9 +643,47 @@ expect_equal(ffi$join_ptr_worker(), 1L,
 tcc_free(buf_async)
 close_if_valid(cb)
 
-# ===========================================================================
+# Wrapper absence invariants: covered wrapper families must not construct
+# external pointers or register finalizers directly in generated code.
+wrapper_absence_cases <- list(
+  list(
+    name = "ptr_identity",
+    symbols = list(identity = list(args = list("ptr"), returns = "ptr")),
+    c_code = "void* identity(void* x) { return x; }",
+    required = list("RC_make_unowned_ptr("),
+    forbidden = list("R_MakeExternalPtr(", "R_RegisterCFinalizerEx(")
+  ),
+  list(
+    name = "callback_ptr_wrapper",
+    symbols = list(call_ptr_cb = list(args = list("callback:void*(void*)", "ptr", "ptr"), returns = "ptr")),
+    c_code = "void* call_ptr_cb(void* (*cb)(void*, void*), void* ctx, void* x) { return cb(ctx, x); }",
+    required = list("RC_make_unowned_ptr("),
+    forbidden = list("R_MakeExternalPtr(", "R_RegisterCFinalizerEx(")
+  ),
+  list(
+    name = "callback_sexp_wrapper",
+    symbols = list(call_sexp_cb = list(args = list("callback:SEXP(SEXP)", "ptr", "sexp"), returns = "sexp")),
+    c_code = "SEXP call_sexp_cb(SEXP (*cb)(void*, SEXP), void* ctx, SEXP x) { return cb(ctx, x); }",
+    required = list("SEXP trampoline_R_wrap_call_sexp_cb_arg1(void* cb, SEXP arg1)"),
+    forbidden = list("R_MakeExternalPtr(", "R_RegisterCFinalizerEx(")
+  )
+)
+
+for (case in wrapper_absence_cases) {
+  code <- Rtinycc:::generate_ffi_code(symbols = case$symbols, c_code = case$c_code)
+  for (pattern in case$required) {
+    expect_true(grepl(pattern, code, fixed = TRUE),
+                info = sprintf("wrapper absence invariant (%s): requires %s", case$name, pattern))
+  }
+  for (pattern in case$forbidden) {
+    expect_false(grepl(pattern, code, fixed = TRUE),
+                 info = sprintf("wrapper absence invariant (%s): forbids %s", case$name, pattern))
+  }
+}
+
+# ==========================================================================
 # 7. GC STRESS: force GC between allocations to catch PROTECT bugs
-# ===========================================================================
+# ==========================================================================
 
 # Generate wrappers for several types, compile, then force GC heavily
 # between calls. If PROTECT is wrong, this will crash or corrupt.

@@ -882,6 +882,20 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
           pattern = "return \\(void\\*\\)result.v.p;",
           info = "Async pointer trampoline returns pointer results through cb_result_t pointer slot"
         )
+      ),
+      forbidden = list(
+        list(
+          pattern = "SET_VECTOR_ELT\\(args, 0, arg1\\);",
+          info = "Async pointer trampoline does not treat pointer args as raw SEXP pass-through"
+        ),
+        list(
+          pattern = "return result;",
+          info = "Async pointer trampoline does not return a raw SEXP result"
+        ),
+        list(
+          pattern = "R_ExternalPtrAddr\\(result\\)",
+          info = "Async pointer trampoline does not use sync-callback external-pointer extraction"
+        )
       )
     )
   ),
