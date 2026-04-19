@@ -117,10 +117,12 @@ expect_true(
 expect_true(
   {
     header <- "union data { int i; double d; struct { int x; } inner; };\nint global_counter = 0;"
+    named_header <- "struct inner { int x; }; union named_data { struct inner payload; int y; };"
     unions <- tcc_treesitter_unions(header)
     globals <- tcc_treesitter_globals(header)
     union_members <- tcc_treesitter_union_members(header)
     union_accessors <- tcc_treesitter_union_accessors(header)
+    named_union_accessors <- tcc_treesitter_union_accessors(named_header)
     global_types <- tcc_treesitter_global_types(header)
 
     tmp <- tempfile(fileext = ".h")
@@ -132,12 +134,16 @@ expect_true(
     has_union_members <- all(c("i", "d", "inner") %in% union_members$member_name)
     has_nested_union_type <- is.list(union_accessors$data$inner) &&
       identical(union_accessors$data$inner$type, "struct")
+    has_named_nested_union_type <- is.list(named_union_accessors$named_data$payload) &&
+      identical(named_union_accessors$named_data$payload$type, "struct") &&
+      identical(named_union_accessors$named_data$payload$struct_name, "inner")
     has_global_types <- any(
       global_types$text == "global_counter" & grepl("int", global_types$c_type)
     )
     has_defs <- all(c("FOO", "BAR") %in% defs)
 
-    has_union && has_global && has_union_members && has_nested_union_type && has_global_types && has_defs
+    has_union && has_global && has_union_members && has_nested_union_type &&
+      has_named_nested_union_type && has_global_types && has_defs
   },
   info = "Parse unions, globals, nested union structs, and macro defines"
 )
@@ -256,7 +262,7 @@ expect_error(
 # Test 9: treesitter-generated nested union struct bindings preserve nested-view metadata end-to-end
 expect_true(
   {
-    header <- "struct inner { int x; }; union wrapper { struct inner inner; int raw; };"
+    header <- "struct inner { int x; }; union wrapper { struct inner payload; int raw; };"
     ffi <- tcc_ffi() |>
       tcc_source(header) |>
       tcc_treesitter_struct_bindings(header) |>
@@ -266,12 +272,12 @@ expect_true(
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
     u <- ffi$union_wrapper_new()
-    inner <- ffi$union_wrapper_get_inner(u)
+    inner <- ffi$union_wrapper_get_payload(u)
     inner <- ffi$struct_inner_set_x(inner, 33L)
     ok_runtime <- identical(ffi$struct_inner_get_x(inner), 33L)
     ffi$union_wrapper_free(u)
 
-    identical(Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_inner), "nested_view") &&
+    identical(Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_payload), "nested_view") &&
       ok_runtime
   },
   info = "treesitter-generated nested union struct bindings preserve nested-view semantics end-to-end"

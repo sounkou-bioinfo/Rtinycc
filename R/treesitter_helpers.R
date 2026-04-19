@@ -535,7 +535,16 @@ tcc_treesitter_union_accessors <- function(
           "'",
           call. = FALSE
         )
-      } else if (grepl("^struct\\b", mtype)) {
+      } else if (grepl("^struct\\s+[A-Za-z_][A-Za-z0-9_]*\\s+[A-Za-z_][A-Za-z0-9_]*$", mtype)) {
+        ffi_type <- list(
+          type = "struct",
+          struct_name = sub(
+            "^struct\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+[A-Za-z_][A-Za-z0-9_]*$",
+            "\\1",
+            mtype
+          )
+        )
+      } else if (mtype %in% c("struct", "struct (anonymous)") || grepl("^struct\\s+[^*]+$", mtype)) {
         ffi_type <- list(type = "struct")
       } else {
         ffi_type <- mapper(mtype)
