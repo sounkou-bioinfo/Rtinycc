@@ -12,11 +12,26 @@ expect_true(
       tcc_compile()
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
-    identical(Rtinycc:::helper_symbol_kind(helper_specs$global_g_count_get), "global") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$global_g_count_get), "getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$global_g_count_set), "setter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$global_g_scale_get), "getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$global_g_scale_set), "setter")
+    identical(
+      Rtinycc:::helper_symbol_kind(helper_specs$global_g_count_get),
+      "global"
+    ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$global_g_count_get),
+        "getter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$global_g_count_set),
+        "setter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$global_g_scale_get),
+        "getter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$global_g_scale_set),
+        "setter"
+      )
   },
   info = "Global helper specs carry operation-kind metadata"
 )

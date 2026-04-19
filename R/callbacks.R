@@ -158,7 +158,12 @@ is_callback_valid <- function(callback) {
   )
 }
 
-new_rtinycc_callback_signature <- function(return_type, arg_types, raw, mode = "sync") {
+new_rtinycc_callback_signature <- function(
+  return_type,
+  arg_types,
+  raw,
+  mode = "sync"
+) {
   structure(
     list(
       return_type = return_type,
@@ -519,7 +524,8 @@ generate_async_trampoline <- function(trampoline_name, sig) {
     ret_kind <- async_result_kind(sig$return_type)
     if (is.null(ret_kind)) {
       stop(
-        "callback_async unsupported return type: ", sig$return_type,
+        "callback_async unsupported return type: ",
+        sig$return_type,
         " (supported: void, int variants, double/float, bool/logical, ptr)",
         call. = FALSE
       )
@@ -610,12 +616,39 @@ generate_async_trampoline <- function(trampoline_name, sig) {
 # Returns NULL if the type cannot be returned from an async sync callback.
 async_result_kind <- function(return_type) {
   rt <- trimws(return_type)
-  if (rt %in% c("int", "i32", "int32_t", "i16", "int16_t",
-                 "i8", "int8_t", "u8", "uint8_t", "u16", "uint16_t")) {
+  if (
+    rt %in%
+      c(
+        "int",
+        "i32",
+        "int32_t",
+        "i16",
+        "int16_t",
+        "i8",
+        "int8_t",
+        "u8",
+        "uint8_t",
+        "u16",
+        "uint16_t"
+      )
+  ) {
     return("int")
   }
-  if (rt %in% c("double", "f64", "float", "f32",
-                 "i64", "int64_t", "u32", "uint32_t", "u64", "uint64_t")) {
+  if (
+    rt %in%
+      c(
+        "double",
+        "f64",
+        "float",
+        "f32",
+        "i64",
+        "int64_t",
+        "u32",
+        "uint32_t",
+        "u64",
+        "uint64_t"
+      )
+  ) {
     return("real")
   }
   if (rt %in% c("bool", "logical")) {
@@ -631,12 +664,17 @@ async_result_kind <- function(return_type) {
 get_async_result_return <- function(return_type) {
   kind <- async_result_kind(return_type)
   rt <- callback_c_decl_type(return_type)
-  switch(kind,
-    "int"     = sprintf("  return (%s)result.v.i;", rt),
-    "real"    = sprintf("  return (%s)result.v.d;", rt),
+  switch(
+    kind,
+    "int" = sprintf("  return (%s)result.v.i;", rt),
+    "real" = sprintf("  return (%s)result.v.d;", rt),
     "logical" = sprintf("  return (%s)result.v.i;", rt),
-    "ptr"     = sprintf("  return (%s)result.v.p;", rt),
-    stop("BUG: unhandled async result kind for return type: ", return_type, call. = FALSE)
+    "ptr" = sprintf("  return (%s)result.v.p;", rt),
+    stop(
+      "BUG: unhandled async result kind for return type: ",
+      return_type,
+      call. = FALSE
+    )
   )
 }
 
@@ -649,19 +687,20 @@ async_type_unsupported <- function(c_type) {
     return(TRUE)
   }
   type_name <- trimws(c_type)
-  !type_name %in% c(
-    "int",
-    "int32_t",
-    "i32",
-    "int16_t",
-    "i16",
-    "int8_t",
-    "i8",
-    "uint8_t",
-    "u8",
-    "uint16_t",
-    "u16"
-  )
+  !type_name %in%
+    c(
+      "int",
+      "int32_t",
+      "i32",
+      "int16_t",
+      "i16",
+      "int8_t",
+      "i8",
+      "uint8_t",
+      "u8",
+      "uint16_t",
+      "u16"
+    )
 }
 
 generate_cb_arg_assignment <- function(index, c_type) {

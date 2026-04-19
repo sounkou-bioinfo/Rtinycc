@@ -329,7 +329,11 @@ generate_async_exec_wrapper <- function(
         sprintf("  %s (*%s)(%s);", sig$return_type, aname, c_args)
       )
     } else {
-      type_info <- if (is_rtinycc_ffi_type(ffi_type)) ffi_type else check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
+      type_info <- if (is_rtinycc_ffi_type(ffi_type)) {
+        ffi_type
+      } else {
+        check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
+      }
       struct_fields <- c(
         struct_fields,
         sprintf("  %s %s;", type_info$c_type, aname)
@@ -394,7 +398,11 @@ generate_async_exec_wrapper <- function(
   if (is_void) {
     return_code <- "  return R_NilValue;"
   } else {
-    return_conversion <- generate_c_return("_ctx.result", return_type, arg_names)
+    return_conversion <- generate_c_return(
+      "_ctx.result",
+      return_type,
+      arg_names
+    )
     return_code <- paste0(
       "  ",
       strsplit(return_conversion, "\n")[[1]],
@@ -815,9 +823,16 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
       ),
       sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-      sprintf("  struct %s *child = R_ExternalPtrAddr(val);", nested_struct_name),
+      sprintf(
+        "  struct %s *child = R_ExternalPtrAddr(val);",
+        nested_struct_name
+      ),
       "  if (!child) Rf_error(\"Null pointer\");",
-      sprintf("  memcpy(&p->%s, child, sizeof(struct %s));", field_name, nested_struct_name),
+      sprintf(
+        "  memcpy(&p->%s, child, sizeof(struct %s));",
+        field_name,
+        nested_struct_name
+      ),
       "  return ext;",
       "}",
       ""

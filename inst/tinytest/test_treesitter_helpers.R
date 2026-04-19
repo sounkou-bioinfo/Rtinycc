@@ -131,10 +131,14 @@ expect_true(
 
     has_union <- "data" %in% unions$text
     has_global <- "global_counter" %in% globals$text
-    has_union_members <- all(c("i", "d", "inner") %in% union_members$member_name)
+    has_union_members <- all(
+      c("i", "d", "inner") %in% union_members$member_name
+    )
     has_nested_union_type <- is.list(union_accessors$data$inner) &&
       identical(union_accessors$data$inner$type, "struct")
-    has_named_nested_union_type <- is.list(named_union_accessors$named_data$payload) &&
+    has_named_nested_union_type <- is.list(
+      named_union_accessors$named_data$payload
+    ) &&
       identical(named_union_accessors$named_data$payload$type, "struct") &&
       identical(named_union_accessors$named_data$payload$struct_name, "inner")
     has_global_types <- any(
@@ -142,8 +146,13 @@ expect_true(
     )
     has_defs <- all(c("FOO", "BAR") %in% defs)
 
-    has_union && has_global && has_union_members && has_nested_union_type &&
-      has_named_nested_union_type && has_global_types && has_defs
+    has_union &&
+      has_global &&
+      has_union_members &&
+      has_nested_union_type &&
+      has_named_nested_union_type &&
+      has_global_types &&
+      has_defs
   },
   info = "Parse unions, globals, nested union structs, and macro defines"
 )
@@ -228,8 +237,14 @@ expect_true(
       identical(ffi$struct_flags_get_code(s), 17L)
     ffi$struct_flags_free(s)
 
-    identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_flags_get_flag), "bitfield_getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_flags_set_flag), "bitfield_setter") &&
+    identical(
+      Rtinycc:::helper_symbol_operation(helper_specs$struct_flags_get_flag),
+      "bitfield_getter"
+    ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_flags_set_flag),
+        "bitfield_setter"
+      ) &&
       ok_runtime
   },
   info = "treesitter-generated bitfield bindings preserve bitfield helper semantics end-to-end"
@@ -277,7 +292,10 @@ expect_true(
     ok_runtime <- identical(ffi$struct_inner_get_x(inner), 33L)
     ffi$union_wrapper_free(u)
 
-    identical(Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_payload), "nested_view") &&
+    identical(
+      Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_payload),
+      "nested_view"
+    ) &&
       ok_runtime
   },
   info = "treesitter-generated nested union struct bindings preserve nested-view semantics end-to-end"

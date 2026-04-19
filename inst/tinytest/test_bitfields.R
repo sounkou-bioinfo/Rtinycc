@@ -34,10 +34,22 @@ expect_true(
       tcc_compile()
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
-    identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_status_get_flag), "bitfield_getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_status_set_flag), "bitfield_setter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_status_get_code), "bitfield_getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_status_set_code), "bitfield_setter")
+    identical(
+      Rtinycc:::helper_symbol_operation(helper_specs$struct_status_get_flag),
+      "bitfield_getter"
+    ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_status_set_flag),
+        "bitfield_setter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_status_get_code),
+        "bitfield_getter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_status_set_code),
+        "bitfield_setter"
+      )
   },
   info = "Bitfield helpers carry explicit bitfield operation kinds"
 )
@@ -45,7 +57,10 @@ expect_true(
 expect_error(
   tcc_ffi() |>
     tcc_source("struct status { unsigned int flag : 1; };") |>
-    tcc_struct("status", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))) |>
+    tcc_struct(
+      "status",
+      accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))
+    ) |>
     tcc_field_addr("status", "flag"),
   info = "field_addr rejects bitfield members"
 )
@@ -53,7 +68,10 @@ expect_error(
 expect_error(
   tcc_ffi() |>
     tcc_source("struct status { unsigned int flag : 1; };") |>
-    tcc_struct("status", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))) |>
+    tcc_struct(
+      "status",
+      accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))
+    ) |>
     tcc_container_of("status", "flag"),
   info = "container_of rejects bitfield members"
 )

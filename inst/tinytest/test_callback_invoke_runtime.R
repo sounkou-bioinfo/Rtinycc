@@ -104,10 +104,22 @@ ffi_ptr <- tcc_ffi() |>
 buf <- tcc_malloc(8)
 out <- ffi_ptr$echo_ptr(cb_ptr_rt, cb_ptr_handle, buf)
 expect_true(inherits(out, "externalptr"))
-expect_true(ptr_arg_seen_externalptr, info = "Pointer callback receives externalptr wrapper")
-expect_true(ptr_arg_seen_unowned, info = "Pointer callback receives non-owned pointer wrapper")
-expect_false(.Call("RC_ptr_is_owned", out, PACKAGE = "Rtinycc"), info = "Pointer callback return wrapper is not owned")
-expect_error(tcc_free(out), info = "Pointer callback return wrapper is not explicitly freeable")
+expect_true(
+  ptr_arg_seen_externalptr,
+  info = "Pointer callback receives externalptr wrapper"
+)
+expect_true(
+  ptr_arg_seen_unowned,
+  info = "Pointer callback receives non-owned pointer wrapper"
+)
+expect_false(
+  .Call("RC_ptr_is_owned", out, PACKAGE = "Rtinycc"),
+  info = "Pointer callback return wrapper is not owned"
+)
+expect_error(
+  tcc_free(out),
+  info = "Pointer callback return wrapper is not explicitly freeable"
+)
 tcc_free(buf)
 close_if_valid(cb_ptr_rt)
 
@@ -129,7 +141,11 @@ ffi_sexp <- tcc_ffi() |>
 
 payload <- list(alpha = 1:3, beta = "ok")
 out_sexp <- ffi_sexp$echo_sexp(cb_sexp, cb_ptr_sexp, payload)
-expect_identical(out_sexp, payload, info = "SEXP callback path passes objects through directly")
+expect_identical(
+  out_sexp,
+  payload,
+  info = "SEXP callback path passes objects through directly"
+)
 close_if_valid(cb_sexp)
 
 # Test: ptr handle stays alive but callback is invalid after close
@@ -266,16 +282,21 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_async_sync <- ffi_async_sync |>
   tcc_bind(
-    start_int_worker  = list(args = list("callback_async:int(int)", "ptr", "i32"), returns = "i32"),
+    start_int_worker = list(
+      args = list("callback_async:int(int)", "ptr", "i32"),
+      returns = "i32"
+    ),
     is_int_worker_done = list(args = list(), returns = "i32"),
-    join_int_worker   = list(args = list(), returns = "i32")
+    join_int_worker = list(args = list(), returns = "i32")
   ) |>
   tcc_compile()
 
 ffi_async_sync$start_int_worker(cb_async_int, cb_ptr_async_int, 7L)
 for (i in seq_len(50)) {
   tcc_callback_async_drain()
-  if (ffi_async_sync$is_int_worker_done() != 0L) break
+  if (ffi_async_sync$is_int_worker_done() != 0L) {
+    break
+  }
   Sys.sleep(0.01)
 }
 result_val <- ffi_async_sync$join_int_worker()
@@ -348,16 +369,21 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_async_dbl <- ffi_async_dbl |>
   tcc_bind(
-    start_dbl_worker   = list(args = list("callback_async:double(double)", "ptr", "f64"), returns = "i32"),
+    start_dbl_worker = list(
+      args = list("callback_async:double(double)", "ptr", "f64"),
+      returns = "i32"
+    ),
     is_dbl_worker_done = list(args = list(), returns = "i32"),
-    join_dbl_worker    = list(args = list(), returns = "f64")
+    join_dbl_worker = list(args = list(), returns = "f64")
   ) |>
   tcc_compile()
 
 ffi_async_dbl$start_dbl_worker(cb_async_dbl, cb_ptr_async_dbl, 2.5)
 for (i in seq_len(50)) {
   tcc_callback_async_drain()
-  if (ffi_async_dbl$is_dbl_worker_done() != 0L) break
+  if (ffi_async_dbl$is_dbl_worker_done() != 0L) {
+    break
+  }
   Sys.sleep(0.01)
 }
 result_dbl <- ffi_async_dbl$join_dbl_worker()
@@ -435,7 +461,10 @@ if (.Platform$OS.type != "windows") {
 }
 ffi_async_ptr <- ffi_async_ptr |>
   tcc_bind(
-    start_ptr_worker = list(args = list("callback_async:void*(void*)", "ptr", "ptr"), returns = "i32"),
+    start_ptr_worker = list(
+      args = list("callback_async:void*(void*)", "ptr", "ptr"),
+      returns = "i32"
+    ),
     is_ptr_worker_done = list(args = list(), returns = "i32"),
     join_ptr_worker = list(args = list(), returns = "i32")
   ) |>
@@ -445,12 +474,24 @@ buf_async_ptr <- tcc_malloc(8)
 ffi_async_ptr$start_ptr_worker(cb_async_ptr, cb_ptr_async_ptr, buf_async_ptr)
 for (i in seq_len(50)) {
   tcc_callback_async_drain()
-  if (ffi_async_ptr$is_ptr_worker_done() != 0L) break
+  if (ffi_async_ptr$is_ptr_worker_done() != 0L) {
+    break
+  }
   Sys.sleep(0.01)
 }
 ptr_same <- ffi_async_ptr$join_ptr_worker()
-expect_true(ptr_async_seen_externalptr, info = "Async pointer callback receives externalptr wrapper")
-expect_true(ptr_async_seen_unowned, info = "Async pointer callback receives non-owned pointer wrapper")
-expect_equal(ptr_same, 1L, info = "Async pointer callback returns the same native address")
+expect_true(
+  ptr_async_seen_externalptr,
+  info = "Async pointer callback receives externalptr wrapper"
+)
+expect_true(
+  ptr_async_seen_unowned,
+  info = "Async pointer callback receives non-owned pointer wrapper"
+)
+expect_equal(
+  ptr_same,
+  1L,
+  info = "Async pointer callback returns the same native address"
+)
 tcc_free(buf_async_ptr)
 close_if_valid(cb_async_ptr)

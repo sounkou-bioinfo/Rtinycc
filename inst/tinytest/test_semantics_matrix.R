@@ -124,7 +124,9 @@ expect_true(
   info = "bitfield semantics records compiler-managed storage"
 )
 expect_true(
-  isTRUE(composite_semantics$bitfield_native$address_helpers_forbidden %||% TRUE),
+  isTRUE(
+    composite_semantics$bitfield_native$address_helpers_forbidden %||% TRUE
+  ),
   info = "bitfield semantics records address-style helper exclusion"
 )
 expect_true(
@@ -148,7 +150,8 @@ expect_true(
   info = "treesitter semantics records generated binding surface"
 )
 expect_identical(
-  composite_semantics$treesitter_header_bindings$nested_struct_mode %||% "ptr-like",
+  composite_semantics$treesitter_header_bindings$nested_struct_mode %||%
+    "ptr-like",
   "ptr-like",
   info = "treesitter semantics records current nested struct accessor mode"
 )
@@ -162,14 +165,25 @@ helper_classification_ffi <- tcc_ffi() |>
     enum color { RED = 0, BLUE = 1 };
   "
   ) |>
-  tcc_struct("bitbox", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))) |>
+  tcc_struct(
+    "bitbox",
+    accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))
+  ) |>
   tcc_struct("inner", accessors = c(x = "i32")) |>
-  tcc_union("wrapper", members = list(inner = list(type = "struct"), raw = "i32"), active = "raw") |>
+  tcc_union(
+    "wrapper",
+    members = list(inner = list(type = "struct"), raw = "i32"),
+    active = "raw"
+  ) |>
   tcc_enum("color", constants = c("RED", "BLUE")) |>
   tcc_introspect() |>
   tcc_bind() |>
   tcc_compile()
-helper_specs <- get(".helper_specs", envir = helper_classification_ffi, inherits = FALSE)
+helper_specs <- get(
+  ".helper_specs",
+  envir = helper_classification_ffi,
+  inherits = FALSE
+)
 expect_identical(
   Rtinycc:::helper_symbol_operation(helper_specs$struct_bitbox_get_flag),
   "bitfield_getter",
@@ -197,14 +211,22 @@ nested_struct_helper_ffi <- tcc_ffi() |>
   tcc_struct("outer", accessors = list(child = "struct:child", y = "i32")) |>
   tcc_bind() |>
   tcc_compile()
-nested_struct_helper_specs <- get(".helper_specs", envir = nested_struct_helper_ffi, inherits = FALSE)
+nested_struct_helper_specs <- get(
+  ".helper_specs",
+  envir = nested_struct_helper_ffi,
+  inherits = FALSE
+)
 expect_identical(
-  Rtinycc:::helper_symbol_operation(nested_struct_helper_specs$struct_outer_get_child),
+  Rtinycc:::helper_symbol_operation(
+    nested_struct_helper_specs$struct_outer_get_child
+  ),
   "nested_view",
   info = "helper metadata classifies named nested struct getters as nested views"
 )
 expect_identical(
-  Rtinycc:::helper_symbol_operation(nested_struct_helper_specs$struct_outer_set_child),
+  Rtinycc:::helper_symbol_operation(
+    nested_struct_helper_specs$struct_outer_set_child
+  ),
   "nested_setter",
   info = "helper metadata classifies named nested struct setters explicitly"
 )

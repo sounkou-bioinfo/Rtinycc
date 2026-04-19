@@ -19,8 +19,17 @@ ffi_var_spec <- tcc_ffi() |>
 expect_true(Rtinycc:::is_rtinycc_bound_symbol(ffi_var_spec$symbols$sum3))
 expect_identical(ffi_var_spec$symbols$sum3$varargs_mode, "prefix")
 expect_equal(length(ffi_var_spec$symbols$sum3$varargs_type_info), 3L)
-expect_true(all(vapply(ffi_var_spec$symbols$sum3$varargs_type_info, Rtinycc:::is_rtinycc_ffi_type, logical(1))))
-expect_identical(Rtinycc:::ffi_type_family(ffi_var_spec$symbols$add_mix$varargs_type_info[[2]]), "f64")
+expect_true(all(vapply(
+  ffi_var_spec$symbols$sum3$varargs_type_info,
+  Rtinycc:::is_rtinycc_ffi_type,
+  logical(1)
+)))
+expect_identical(
+  Rtinycc:::ffi_type_family(ffi_var_spec$symbols$add_mix$varargs_type_info[[
+    2
+  ]]),
+  "f64"
+)
 
 ffi_var <- tcc_ffi() |>
   tcc_source(
@@ -175,7 +184,11 @@ ffi_var_types_spec <- tcc_ffi() |>
 expect_identical(ffi_var_types_spec$symbols$probe_types$varargs_mode, "types")
 expect_equal(ffi_var_types_spec$symbols$probe_types$varargs_min, 1L)
 expect_equal(ffi_var_types_spec$symbols$probe_types$varargs_max, 2L)
-expect_true(all(vapply(ffi_var_types_spec$symbols$probe_types$varargs_type_info, Rtinycc:::is_rtinycc_ffi_type, logical(1))))
+expect_true(all(vapply(
+  ffi_var_types_spec$symbols$probe_types$varargs_type_info,
+  Rtinycc:::is_rtinycc_ffi_type,
+  logical(1)
+)))
 
 ffi_var_types <- tcc_ffi() |>
   tcc_source(

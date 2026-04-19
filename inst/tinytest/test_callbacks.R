@@ -73,11 +73,17 @@ expect_error(
 )
 
 expect_true(
-  Rtinycc:::is_callback_type(Rtinycc:::check_ffi_type("callback:void*(void*)", "test")),
+  Rtinycc:::is_callback_type(Rtinycc:::check_ffi_type(
+    "callback:void*(void*)",
+    "test"
+  )),
   info = "classed callback ffi type is recognized as callback"
 )
 expect_true(
-  Rtinycc:::is_callback_async_type(Rtinycc:::check_ffi_type("callback_async:void*(void*)", "test")),
+  Rtinycc:::is_callback_async_type(Rtinycc:::check_ffi_type(
+    "callback_async:void*(void*)",
+    "test"
+  )),
   info = "classed async callback ffi type is recognized as async callback"
 )
 
@@ -194,8 +200,14 @@ expect_true(tcc_callback_valid(cb_double), info = "Double callback valid")
 expect_true(tcc_callback_valid(cb_bool), info = "Bool callback valid")
 expect_true(tcc_callback_valid(cb_void), info = "Void callback valid")
 expect_true(tcc_callback_valid(cb_ptr), info = "Ptr callback valid")
-expect_false(.Call("RC_ptr_is_owned", cb_ptr, PACKAGE = "Rtinycc"), info = "Callback object itself is not tcc_free-owned")
-expect_error(tcc_free(cb_ptr), info = "Callback object cannot be freed with tcc_free")
+expect_false(
+  .Call("RC_ptr_is_owned", cb_ptr, PACKAGE = "Rtinycc"),
+  info = "Callback object itself is not tcc_free-owned"
+)
+expect_error(
+  tcc_free(cb_ptr),
+  info = "Callback object cannot be freed with tcc_free"
+)
 
 # Close all
 tcc_callback_close(cb_int)

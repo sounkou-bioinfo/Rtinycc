@@ -49,13 +49,34 @@ expect_true(
       tcc_compile()
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
-    identical(Rtinycc:::helper_symbol_kind(helper_specs$union_probe_new), "union") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_new), "constructor") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_free), "destructor") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_get_i), "getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_set_i), "setter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_sizeof), "introspection") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$union_probe_alignof), "introspection")
+    identical(
+      Rtinycc:::helper_symbol_kind(helper_specs$union_probe_new),
+      "union"
+    ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$union_probe_new),
+        "constructor"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$union_probe_free),
+        "destructor"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$union_probe_get_i),
+        "getter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$union_probe_set_i),
+        "setter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$union_probe_sizeof),
+        "introspection"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$union_probe_alignof),
+        "introspection"
+      )
   },
   info = "Union helper specs carry operation-kind metadata"
 )
@@ -131,7 +152,10 @@ expect_true(
       tcc_compile()
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
-    identical(Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_inner), "nested_view")
+    identical(
+      Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_inner),
+      "nested_view"
+    )
   },
   info = "Nested union struct getters carry nested-view helper metadata"
 )

@@ -64,8 +64,14 @@ expect_equal(
   tcc_ptr_addr(inner),
   info = "ptr round-trip"
 )
-expect_false(tcc_ptr_is_owned(read_back), info = "read_ptr returns unowned wrapper")
-expect_error(tcc_free(read_back), info = "read_ptr wrapper is not explicitly freeable")
+expect_false(
+  tcc_ptr_is_owned(read_back),
+  info = "read_ptr returns unowned wrapper"
+)
+expect_error(
+  tcc_free(read_back),
+  info = "read_ptr wrapper is not explicitly freeable"
+)
 tcc_free(inner)
 
 # --- legacy vectorised interface (backward compat) --------------------------

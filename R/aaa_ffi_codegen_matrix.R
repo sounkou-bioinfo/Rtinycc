@@ -1198,8 +1198,14 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
       )
     ),
     forbidden = list(
-      list(pattern = "R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);", fixed = TRUE),
-      list(pattern = "R_MakeExternalPtr(p, Rf_install(\"struct_student\"), R_NilValue)", fixed = TRUE)
+      list(
+        pattern = "R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "R_MakeExternalPtr(p, Rf_install(\"struct_student\"), R_NilValue)",
+        fixed = TRUE
+      )
     )
   ),
   list(
@@ -1292,8 +1298,14 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
       )
     ),
     forbidden = list(
-      list(pattern = "R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);", fixed = TRUE),
-      list(pattern = "R_MakeExternalPtr(p, Rf_install(\"union_wrapper\"), R_NilValue)", fixed = TRUE)
+      list(
+        pattern = "R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);",
+        fixed = TRUE
+      ),
+      list(
+        pattern = "R_MakeExternalPtr(p, Rf_install(\"union_wrapper\"), R_NilValue)",
+        fixed = TRUE
+      )
     )
   ),
   list(
@@ -1413,7 +1425,9 @@ rtinycc_scalar_input_rule_body <- function(type, arg_name, r_name) {
         },
         "  if (fabs(_{{arg_name}}) > 9007199254740992.0) Rf_error(\"{{input_exact_error}}\");",
         "  if (trunc(_{{arg_name}}) != _{{arg_name}}) Rf_error(\"{{input_integer_error}}\");",
-        if (!is.null(codegen$input_range_min) && !is.null(codegen$input_range_max)) {
+        if (
+          !is.null(codegen$input_range_min) && !is.null(codegen$input_range_max)
+        ) {
           "  if (_{{arg_name}} < (double){{input_range_min}} || _{{arg_name}} > (double){{input_range_max}}) Rf_error(\"{{input_range_error}}\");"
         },
         "  {{c_type}} {{arg_name}} = ({{c_type}})_{{arg_name}};"

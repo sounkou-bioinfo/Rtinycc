@@ -125,17 +125,54 @@ expect_true(
       tcc_compile()
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
-    identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_new), "constructor") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_free), "destructor") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_x), "getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_x), "setter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_data_elt), "array_getter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_data_elt), "array_setter") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_x_addr), "field_addr") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_from_x), "container_of") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_raw), "raw_get") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_raw), "raw_set") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_sizeof), "introspection")
+    identical(
+      Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_new),
+      "constructor"
+    ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_free),
+        "destructor"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_x),
+        "getter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_x),
+        "setter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(
+          helper_specs$struct_probe_get_data_elt
+        ),
+        "array_getter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(
+          helper_specs$struct_probe_set_data_elt
+        ),
+        "array_setter"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_x_addr),
+        "field_addr"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_from_x),
+        "container_of"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_raw),
+        "raw_get"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_raw),
+        "raw_set"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_sizeof),
+        "introspection"
+      )
   },
   info = "Struct helper specs carry operation-kind metadata"
 )
@@ -206,7 +243,10 @@ expect_true(
     "
       ) |>
       tcc_struct("child", accessors = c(x = "i32")) |>
-      tcc_struct("outer", accessors = list(child = "struct:child", y = "i32")) |>
+      tcc_struct(
+        "outer",
+        accessors = list(child = "struct:child", y = "i32")
+      ) |>
       tcc_bind() |>
       tcc_compile()
 
@@ -223,8 +263,14 @@ expect_true(
     ffi$struct_outer_free(outer)
 
     identical(x_val, 42L) &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_outer_get_child), "nested_view") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_outer_set_child), "nested_setter")
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_outer_get_child),
+        "nested_view"
+      ) &&
+      identical(
+        Rtinycc:::helper_symbol_operation(helper_specs$struct_outer_set_child),
+        "nested_setter"
+      )
   },
   info = "Named nested struct fields preserve nested-view getter and copy-in setter semantics"
 )
@@ -360,7 +406,9 @@ expect_true(
 
       id_val <- compiled$struct_student_get_id(recovered)
       grade_val <- compiled$struct_student_get_grade(recovered)
-      if (!identical(id_val, as.integer(i)) || abs(grade_val - i / 10) > 1e-12) {
+      if (
+        !identical(id_val, as.integer(i)) || abs(grade_val - i / 10) > 1e-12
+      ) {
         ok <- FALSE
         break
       }

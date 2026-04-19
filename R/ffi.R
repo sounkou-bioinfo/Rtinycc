@@ -6,7 +6,12 @@
 # Bun-style FFI with API mode compilation
 
 # FFI object class
-new_rtinycc_symbol_return_spec <- function(type, type_info, length_arg = NULL, free = NULL) {
+new_rtinycc_symbol_return_spec <- function(
+  type,
+  type_info,
+  length_arg = NULL,
+  free = NULL
+) {
   structure(
     list(
       type = type,
@@ -36,7 +41,11 @@ new_rtinycc_bound_symbol <- function(
 ) {
   classes <- c("rtinycc_bound_symbol", "rtinycc_symbol_spec")
   if (!is.null(helper_kind)) {
-    classes <- c(paste0("rtinycc_helper_symbol_", helper_kind), "rtinycc_helper_symbol", classes)
+    classes <- c(
+      paste0("rtinycc_helper_symbol_", helper_kind),
+      "rtinycc_helper_symbol",
+      classes
+    )
   }
 
   structure(
@@ -93,7 +102,9 @@ rtinycc_nested_struct_type_name <- function(field_spec) {
   } else {
     NULL
   }
-  if (is.null(type_name) || !is.character(type_name) || length(type_name) != 1) {
+  if (
+    is.null(type_name) || !is.character(type_name) || length(type_name) != 1
+  ) {
     return(NULL)
   }
   if (!startsWith(type_name, "struct:")) {
@@ -106,7 +117,12 @@ is_rtinycc_bound_symbol <- function(x) {
   inherits(x, "rtinycc_bound_symbol")
 }
 
-as_rtinycc_helper_symbol <- function(sym_name, sym, helper_kind, helper_operation) {
+as_rtinycc_helper_symbol <- function(
+  sym_name,
+  sym,
+  helper_kind,
+  helper_operation
+) {
   out <- as_rtinycc_bound_symbol(sym_name, sym)
   new_rtinycc_bound_symbol(
     name = out$name,
@@ -193,7 +209,10 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
   }
 
   arg_type_info <- lapply(seq_along(sym$args), function(i) {
-    check_ffi_type(sym$args[[i]], paste0("symbol '", sym_name, "' argument ", i))
+    check_ffi_type(
+      sym$args[[i]],
+      paste0("symbol '", sym_name, "' argument ", i)
+    )
   })
 
   for (i in seq_along(arg_type_info)) {
@@ -205,7 +224,10 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
         any(trimws(sig$arg_types) %in% c("SEXP", "sexp"))
       if (uses_sexp) {
         stop(
-          "Symbol '", sym_name, "' async callback argument ", i,
+          "Symbol '",
+          sym_name,
+          "' async callback argument ",
+          i,
           " cannot use SEXP arguments or return type",
           call. = FALSE
         )
@@ -232,7 +254,10 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
       )
     }
     ret_type <- sym$returns$type
-    ret_info <- check_ffi_type(ret_type, paste0("symbol '", sym_name, "' return"))
+    ret_info <- check_ffi_type(
+      ret_type,
+      paste0("symbol '", sym_name, "' return")
+    )
     if (!is.null(ret_info$kind) && ret_info$kind == "array") {
       if (is.null(sym$returns$length_arg)) {
         stop(
@@ -242,9 +267,16 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
           call. = FALSE
         )
       }
-      if (!is.numeric(sym$returns$length_arg) || length(sym$returns$length_arg) != 1 || is.na(sym$returns$length_arg) || sym$returns$length_arg != as.integer(sym$returns$length_arg)) {
+      if (
+        !is.numeric(sym$returns$length_arg) ||
+          length(sym$returns$length_arg) != 1 ||
+          is.na(sym$returns$length_arg) ||
+          sym$returns$length_arg != as.integer(sym$returns$length_arg)
+      ) {
         stop(
-          "Symbol '", sym_name, "' array return length_arg must be a single integer",
+          "Symbol '",
+          sym_name,
+          "' array return length_arg must be a single integer",
           call. = FALSE
         )
       }
@@ -263,7 +295,9 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
       }
     } else if (!is.null(sym$returns$length_arg) || !is.null(sym$returns$free)) {
       stop(
-        "Symbol '", sym_name, "' non-array return cannot set length_arg/free",
+        "Symbol '",
+        sym_name,
+        "' non-array return cannot set length_arg/free",
         call. = FALSE
       )
     }
@@ -274,7 +308,10 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
       free = isTRUE(sym$returns$free)
     )
   } else {
-    ret_info <- check_ffi_type(sym$returns, paste0("symbol '", sym_name, "' return"))
+    ret_info <- check_ffi_type(
+      sym$returns,
+      paste0("symbol '", sym_name, "' return")
+    )
     return_spec <- new_rtinycc_symbol_return_spec(
       type = sym$returns,
       type_info = ret_info
@@ -295,17 +332,30 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
 
       varargs_type_info <- lapply(seq_along(sym$varargs_types), function(i) {
         vtype <- sym$varargs_types[[i]]
-        vinfo <- check_ffi_type(vtype, paste0("symbol '", sym_name, "' varargs_types ", i))
+        vinfo <- check_ffi_type(
+          vtype,
+          paste0("symbol '", sym_name, "' varargs_types ", i)
+        )
         if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
           stop(
-            "Symbol '", sym_name, "' varargs_types ", i,
+            "Symbol '",
+            sym_name,
+            "' varargs_types ",
+            i,
             " must be a scalar FFI type",
             call. = FALSE
           )
         }
-        if (ffi_type_family(vinfo) %in% c("callback", "callback_async") || identical(vtype, "sexp")) {
+        if (
+          ffi_type_family(vinfo) %in%
+            c("callback", "callback_async") ||
+            identical(vtype, "sexp")
+        ) {
           stop(
-            "Symbol '", sym_name, "' varargs_types ", i,
+            "Symbol '",
+            sym_name,
+            "' varargs_types ",
+            i,
             " cannot be callback/sexp",
             call. = FALSE
           )
@@ -319,23 +369,51 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
       if (is.null(sym$varargs_max)) {
         sym$varargs_max <- sym$varargs_min
       }
-      if (!is.numeric(sym$varargs_min) || length(sym$varargs_min) != 1 || is.na(sym$varargs_min) || sym$varargs_min < 0 || sym$varargs_min != as.integer(sym$varargs_min)) {
-        stop("Symbol '", sym_name, "' varargs_min must be a non-negative integer", call. = FALSE)
+      if (
+        !is.numeric(sym$varargs_min) ||
+          length(sym$varargs_min) != 1 ||
+          is.na(sym$varargs_min) ||
+          sym$varargs_min < 0 ||
+          sym$varargs_min != as.integer(sym$varargs_min)
+      ) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' varargs_min must be a non-negative integer",
+          call. = FALSE
+        )
       }
-      if (!is.numeric(sym$varargs_max) || length(sym$varargs_max) != 1 || is.na(sym$varargs_max) || sym$varargs_max < 0 || sym$varargs_max != as.integer(sym$varargs_max)) {
-        stop("Symbol '", sym_name, "' varargs_max must be a non-negative integer", call. = FALSE)
+      if (
+        !is.numeric(sym$varargs_max) ||
+          length(sym$varargs_max) != 1 ||
+          is.na(sym$varargs_max) ||
+          sym$varargs_max < 0 ||
+          sym$varargs_max != as.integer(sym$varargs_max)
+      ) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' varargs_max must be a non-negative integer",
+          call. = FALSE
+        )
       }
       sym$varargs_min <- as.integer(sym$varargs_min)
       sym$varargs_max <- as.integer(sym$varargs_max)
       if (sym$varargs_min > sym$varargs_max) {
-        stop("Symbol '", sym_name, "' varargs_min must be <= varargs_max", call. = FALSE)
+        stop(
+          "Symbol '",
+          sym_name,
+          "' varargs_min must be <= varargs_max",
+          call. = FALSE
+        )
       }
       sym$varargs_mode <- "types"
       sym$varargs <- NULL
     } else {
       if (length(sym$varargs) == 0) {
         stop(
-          "Symbol '", sym_name,
+          "Symbol '",
+          sym_name,
           "' variadic functions require non-empty 'varargs' type list",
           call. = FALSE
         )
@@ -344,19 +422,52 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
       if (is.null(sym$varargs_min)) {
         sym$varargs_min <- max_varargs
       }
-      if (!is.numeric(sym$varargs_min) || length(sym$varargs_min) != 1 || is.na(sym$varargs_min) || sym$varargs_min < 0 || sym$varargs_min > max_varargs || sym$varargs_min != as.integer(sym$varargs_min)) {
-        stop("Symbol '", sym_name, "' varargs_min must be a single integer between 0 and length(varargs)", call. = FALSE)
+      if (
+        !is.numeric(sym$varargs_min) ||
+          length(sym$varargs_min) != 1 ||
+          is.na(sym$varargs_min) ||
+          sym$varargs_min < 0 ||
+          sym$varargs_min > max_varargs ||
+          sym$varargs_min != as.integer(sym$varargs_min)
+      ) {
+        stop(
+          "Symbol '",
+          sym_name,
+          "' varargs_min must be a single integer between 0 and length(varargs)",
+          call. = FALSE
+        )
       }
       sym$varargs_min <- as.integer(sym$varargs_min)
       sym$varargs_max <- max_varargs
       varargs_type_info <- lapply(seq_along(sym$varargs), function(i) {
         vtype <- sym$varargs[[i]]
-        vinfo <- check_ffi_type(vtype, paste0("symbol '", sym_name, "' vararg ", i))
+        vinfo <- check_ffi_type(
+          vtype,
+          paste0("symbol '", sym_name, "' vararg ", i)
+        )
         if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
-          stop("Symbol '", sym_name, "' vararg ", i, " must be a scalar FFI type", call. = FALSE)
+          stop(
+            "Symbol '",
+            sym_name,
+            "' vararg ",
+            i,
+            " must be a scalar FFI type",
+            call. = FALSE
+          )
         }
-        if (ffi_type_family(vinfo) %in% c("callback", "callback_async") || identical(vtype, "sexp")) {
-          stop("Symbol '", sym_name, "' vararg ", i, " cannot be callback/sexp", call. = FALSE)
+        if (
+          ffi_type_family(vinfo) %in%
+            c("callback", "callback_async") ||
+            identical(vtype, "sexp")
+        ) {
+          stop(
+            "Symbol '",
+            sym_name,
+            "' vararg ",
+            i,
+            " cannot be callback/sexp",
+            call. = FALSE
+          )
         }
         vinfo
       })
@@ -688,7 +799,10 @@ tcc_bind <- function(ffi, ...) {
 
   # Validate and normalize each symbol definition into a classed spec.
   for (sym_name in names(symbols)) {
-    ffi$symbols[[sym_name]] <- as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
+    ffi$symbols[[sym_name]] <- as_rtinycc_bound_symbol(
+      sym_name,
+      symbols[[sym_name]]
+    )
   }
 
   ffi
@@ -1134,7 +1248,11 @@ tcc_compiled_object <- function(
             args = list("sexp"),
             returns = "sexp"
           ),
-          if (is_nested_struct) list(.helper_operation = "nested_view") else list()
+          if (is_nested_struct) {
+            list(.helper_operation = "nested_view")
+          } else {
+            list()
+          }
         )
 
         if (!is_nested_struct) {
@@ -1142,7 +1260,12 @@ tcc_compiled_object <- function(
             helper_names,
             paste0("union_", union_name, "_set_", mem_name)
           )
-          helper_specs[[paste0("union_", union_name, "_set_", mem_name)]] <- list(
+          helper_specs[[paste0(
+            "union_",
+            union_name,
+            "_set_",
+            mem_name
+          )]] <- list(
             args = list("sexp", "sexp"),
             returns = "sexp"
           )
@@ -1229,36 +1352,44 @@ tcc_compiled_object <- function(
         } else {
           "helper"
         }
-        helper_operation <- helper_specs[[sym_name]]$.helper_operation %||% if (grepl("_new$", sym_name)) {
-          "constructor"
-        } else if (grepl("_free$", sym_name)) {
-          "destructor"
-        } else if (grepl("_get_raw$", sym_name)) {
-          "raw_get"
-        } else if (grepl("_set_raw$", sym_name)) {
-          "raw_set"
-        } else if (grepl("_sizeof$", sym_name) || grepl("_alignof$", sym_name)) {
-          "introspection"
-        } else if (grepl("_from_", sym_name, fixed = TRUE)) {
-          "container_of"
-        } else if (grepl("_addr$", sym_name)) {
-          "field_addr"
-        } else if (grepl("_set_.*_elt$", sym_name)) {
-          "array_setter"
-        } else if (grepl("_get_.*_elt$", sym_name)) {
-          "array_getter"
-        } else if (grepl("_set$", sym_name)) {
-          "setter"
-        } else if (grepl("_get$", sym_name)) {
-          "getter"
-        } else if (grepl("_set_", sym_name, fixed = TRUE)) {
-          "setter"
-        } else if (grepl("_get_", sym_name, fixed = TRUE)) {
-          "getter"
-        } else {
-          "helper"
-        }
-        as_rtinycc_helper_symbol(sym_name, helper_specs[[sym_name]], helper_kind, helper_operation)
+        helper_operation <- helper_specs[[sym_name]]$.helper_operation %||%
+          if (grepl("_new$", sym_name)) {
+            "constructor"
+          } else if (grepl("_free$", sym_name)) {
+            "destructor"
+          } else if (grepl("_get_raw$", sym_name)) {
+            "raw_get"
+          } else if (grepl("_set_raw$", sym_name)) {
+            "raw_set"
+          } else if (
+            grepl("_sizeof$", sym_name) || grepl("_alignof$", sym_name)
+          ) {
+            "introspection"
+          } else if (grepl("_from_", sym_name, fixed = TRUE)) {
+            "container_of"
+          } else if (grepl("_addr$", sym_name)) {
+            "field_addr"
+          } else if (grepl("_set_.*_elt$", sym_name)) {
+            "array_setter"
+          } else if (grepl("_get_.*_elt$", sym_name)) {
+            "array_getter"
+          } else if (grepl("_set$", sym_name)) {
+            "setter"
+          } else if (grepl("_get$", sym_name)) {
+            "getter"
+          } else if (grepl("_set_", sym_name, fixed = TRUE)) {
+            "setter"
+          } else if (grepl("_get_", sym_name, fixed = TRUE)) {
+            "getter"
+          } else {
+            "helper"
+          }
+        as_rtinycc_helper_symbol(
+          sym_name,
+          helper_specs[[sym_name]],
+          helper_kind,
+          helper_operation
+        )
       }),
       names(helper_specs)
     )
@@ -1543,7 +1674,11 @@ make_callable <- function(fn_ptr, sym, state) {
     } else {
       list()
     }
-    call_expr <- as.call(c(as.name(".RtinyccCall"), as.name(".call_ptr"), dot_syms))
+    call_expr <- as.call(c(
+      as.name(".RtinyccCall"),
+      as.name(".call_ptr"),
+      dot_syms
+    ))
     body_expr <- bquote({
       n_args <- nargs()
       if (n_args != .(expected_n)) {
@@ -1632,7 +1767,11 @@ make_callable <- function(fn_ptr, sym, state) {
           NULL
         }
       } else {
-        call_ptr <- if (fn_ptr_is_map) fn_ptr[[as.character(n_tail)]] else fn_ptr
+        call_ptr <- if (fn_ptr_is_map) {
+          fn_ptr[[as.character(n_tail)]]
+        } else {
+          fn_ptr
+        }
       }
     }
 
@@ -1948,7 +2087,10 @@ tcc_link <- function(
 
   # Store symbols as classed specs
   for (sym_name in names(symbols)) {
-    ffi$symbols[[sym_name]] <- as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
+    ffi$symbols[[sym_name]] <- as_rtinycc_bound_symbol(
+      sym_name,
+      symbols[[sym_name]]
+    )
   }
 
   # Mark as external library bindings

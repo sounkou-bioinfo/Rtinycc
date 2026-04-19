@@ -64,11 +64,17 @@ expect_equal(
   "enum"
 )
 expect_equal(
-  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type("callback:double(int)", "test")),
+  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type(
+    "callback:double(int)",
+    "test"
+  )),
   "callback"
 )
 expect_equal(
-  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type("callback_async:void*(void*)", "test")),
+  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type(
+    "callback_async:void*(void*)",
+    "test"
+  )),
   "callback_async"
 )
 
