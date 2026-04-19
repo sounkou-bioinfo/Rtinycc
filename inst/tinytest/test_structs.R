@@ -105,6 +105,41 @@ expect_true(
   info = "container_of from member pointer to parent struct"
 )
 
+# Helper operation-kind metadata for struct helpers
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source("struct probe { int x; unsigned char data[4]; };") |>
+      tcc_struct(
+        "probe",
+        accessors = list(
+          x = "i32",
+          data = list(type = "u8", size = 4, array = TRUE)
+        )
+      ) |>
+      tcc_container_of("probe", "x") |>
+      tcc_field_addr("probe", "x") |>
+      tcc_struct_raw_access("probe") |>
+      tcc_introspect() |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_new), "constructor") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_free), "destructor") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_x), "getter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_x), "setter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_data_elt), "array_getter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_data_elt), "array_setter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_x_addr), "field_addr") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_from_x), "container_of") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_raw), "raw_get") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_raw), "raw_set") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_sizeof), "introspection")
+  },
+  info = "Struct helper specs carry operation-kind metadata"
+)
+
 # Test 3: Struct with introspection
 expect_true(
   {

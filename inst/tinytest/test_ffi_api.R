@@ -148,6 +148,8 @@ expect_true(Rtinycc:::is_rtinycc_bound_symbol(helper_specs$struct_point_get_x))
 expect_true(inherits(helper_specs$struct_point_new, "rtinycc_helper_symbol"))
 expect_identical(Rtinycc:::helper_symbol_kind(helper_specs$struct_point_new), "struct")
 expect_identical(Rtinycc:::helper_symbol_kind(helper_specs$struct_point_get_x), "struct")
+expect_identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_point_new), "constructor")
+expect_identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_point_get_x), "getter")
 expect_identical(Rtinycc:::ffi_type_family(helper_specs$struct_point_get_x$return_spec$type_info), "sexp")
 
 # Test 9: Missing wrapper bindings fail fast (no partially-broken object)

@@ -31,7 +31,8 @@ new_rtinycc_bound_symbol <- function(
   varargs_min = NULL,
   varargs_max = NULL,
   varargs_mode = NULL,
-  helper_kind = NULL
+  helper_kind = NULL,
+  helper_operation = NULL
 ) {
   classes <- c("rtinycc_bound_symbol", "rtinycc_symbol_spec")
   if (!is.null(helper_kind)) {
@@ -52,7 +53,8 @@ new_rtinycc_bound_symbol <- function(
       varargs_min = varargs_min,
       varargs_max = varargs_max,
       varargs_mode = varargs_mode,
-      helper_kind = helper_kind
+      helper_kind = helper_kind,
+      helper_operation = helper_operation
     ),
     class = classes
   )
@@ -65,11 +67,18 @@ helper_symbol_kind <- function(x) {
   x$helper_kind
 }
 
+helper_symbol_operation <- function(x) {
+  if (!inherits(x, "rtinycc_helper_symbol")) {
+    stop("Expected rtinycc_helper_symbol object", call. = FALSE)
+  }
+  x$helper_operation
+}
+
 is_rtinycc_bound_symbol <- function(x) {
   inherits(x, "rtinycc_bound_symbol")
 }
 
-as_rtinycc_helper_symbol <- function(sym_name, sym, helper_kind) {
+as_rtinycc_helper_symbol <- function(sym_name, sym, helper_kind, helper_operation) {
   out <- as_rtinycc_bound_symbol(sym_name, sym)
   new_rtinycc_bound_symbol(
     name = out$name,
@@ -84,7 +93,8 @@ as_rtinycc_helper_symbol <- function(sym_name, sym, helper_kind) {
     varargs_min = out$varargs_min,
     varargs_max = out$varargs_max,
     varargs_mode = out$varargs_mode,
-    helper_kind = helper_kind
+    helper_kind = helper_kind,
+    helper_operation = helper_operation
   )
 }
 
@@ -1169,7 +1179,32 @@ tcc_compiled_object <- function(
         } else {
           "helper"
         }
-        as_rtinycc_helper_symbol(sym_name, helper_specs[[sym_name]], helper_kind)
+        helper_operation <- if (grepl("_new$", sym_name)) {
+          "constructor"
+        } else if (grepl("_free$", sym_name)) {
+          "destructor"
+        } else if (grepl("_get_raw$", sym_name)) {
+          "raw_get"
+        } else if (grepl("_set_raw$", sym_name)) {
+          "raw_set"
+        } else if (grepl("_sizeof$", sym_name) || grepl("_alignof$", sym_name)) {
+          "introspection"
+        } else if (grepl("_from_", sym_name, fixed = TRUE)) {
+          "container_of"
+        } else if (grepl("_addr$", sym_name)) {
+          "field_addr"
+        } else if (grepl("_set_.*_elt$", sym_name)) {
+          "array_setter"
+        } else if (grepl("_get_.*_elt$", sym_name)) {
+          "array_getter"
+        } else if (grepl("_set_", sym_name, fixed = TRUE)) {
+          "setter"
+        } else if (grepl("_get_", sym_name, fixed = TRUE)) {
+          "getter"
+        } else {
+          "helper"
+        }
+        as_rtinycc_helper_symbol(sym_name, helper_specs[[sym_name]], helper_kind, helper_operation)
       }),
       names(helper_specs)
     )
