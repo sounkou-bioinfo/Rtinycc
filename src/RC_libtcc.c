@@ -265,7 +265,8 @@ SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner) {
 }
 
 SEXP RC_make_unowned_ptr(void *ptr, SEXP tag) {
-    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, tag, R_NilValue));
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_borrowed") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
     R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
     UNPROTECT(1);
     return ext;
@@ -762,15 +763,16 @@ SEXP RC_malloc(SEXP size) {
  * Allocation: none.
  * Protection: none.
  */
-/* Free an owned pointer. Errors if the tag is not "rtinycc_owned" or NULL
- * (i.e. refuses to free struct or borrowed pointers). */
+/* Free an owned pointer. Errors unless the tag is exactly
+ * "rtinycc_owned" (i.e. refuses borrowed, struct, callback, and other
+ * non-owned pointers). */
 SEXP RC_free(SEXP ptr) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
         Rf_error("Expected external pointer");
     }
 
     SEXP tag = R_ExternalPtrTag(ptr);
-    if (!Rf_isNull(tag) && tag != Rf_install("rtinycc_owned")) {
+    if (tag != Rf_install("rtinycc_owned")) {
         Rf_error(
             "Pointer tag '%s' is not owned by Rtinycc; refusing to free",
             RC_extptr_tag_name(tag)
@@ -1256,9 +1258,7 @@ SEXP RC_read_f64_typed(SEXP ptr, SEXP offset) {
 SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
     void *v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    SEXP out = PROTECT(R_MakeExternalPtr(v, Rf_install("rtinycc_borrowed"), R_NilValue));
-    UNPROTECT(1);
-    return out;
+    return RC_make_unowned_ptr(v, Rf_install("rtinycc_borrowed"));
 }
 
 /* --- scalar writes ------------------------------------------------------- */

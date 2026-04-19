@@ -1,6 +1,7 @@
 library(tinytest)
 library(Rtinycc)
 
+ffi_semantics <- Rtinycc:::rtinycc_ffi_semantics()
 callback_semantics <- Rtinycc:::rtinycc_callback_semantics()
 callback_abi_specs <- Rtinycc:::rtinycc_callback_abi_specs()
 composite_semantics <- Rtinycc:::rtinycc_composite_semantics()
@@ -112,6 +113,13 @@ expect_true(
   info = "global semantics records scalar-only restriction"
 )
 expect_true(
+  identical(ffi_semantics$ptr$input$ownership, "caller-defined") &&
+    identical(ffi_semantics$ptr$return$ownership, "unchanged") &&
+    isTRUE(ffi_semantics$ptr$return$borrow) &&
+    !isTRUE(ffi_semantics$ptr$return$copy),
+  info = "ptr semantics records borrowed address wrapper with unchanged ownership"
+)
+expect_true(
   isTRUE(composite_semantics$bitfield_native$compiler_managed),
   info = "bitfield semantics records compiler-managed storage"
 )
@@ -146,3 +154,12 @@ for (spec in composite_codegen_specs) {
     )
   }
 }
+
+expect_true(
+  grepl(
+    "RC_make_unowned_ptr(value, R_NilValue)",
+    Rtinycc:::rtinycc_scalar_return_rule_body("ptr", "value"),
+    fixed = TRUE
+  ),
+  info = "ptr scalar return codegen routes raw pointer boxing through host helper"
+)

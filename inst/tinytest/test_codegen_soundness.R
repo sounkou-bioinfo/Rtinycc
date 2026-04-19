@@ -104,6 +104,10 @@ buf <- tcc_malloc(8)
 result <- ffi$identity(buf)
 expect_equal(tcc_ptr_addr(result), tcc_ptr_addr(buf),
              info = "ptr round-trip: address preserved")
+expect_false(tcc_ptr_is_owned(result),
+             info = "ptr round-trip: returned wrapper is not owned")
+expect_error(tcc_free(result),
+             info = "ptr round-trip: explicit free refuses unowned wrapper")
 tcc_free(buf)
 
 # --- void ---
