@@ -177,6 +177,7 @@ static void RC_borrowed_view_finalizer(SEXP ext) {
     SEXP owner = R_ExternalPtrProtected(ext);
     RC_trace_finalizer_event("borrowed_release", ext, owner, NULL);
     if (owner != R_NilValue) {
+        R_ReleaseObject(owner);
         R_SetExternalPtrProtected(ext, R_NilValue);
     }
     R_ClearExternalPtr(ext);
@@ -208,6 +209,7 @@ SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner) {
     SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
 
     if (owner != R_NilValue) {
+        R_PreserveObject(owner);
         R_SetExternalPtrProtected(ext, owner);
         R_RegisterCFinalizerEx(ext, RC_borrowed_view_finalizer, FALSE);
     } else {
