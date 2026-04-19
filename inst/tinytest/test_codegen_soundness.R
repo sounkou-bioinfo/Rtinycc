@@ -493,6 +493,156 @@ expect_equal(side_effect, 99L,
              info = "callback void: side effect executed")
 close_if_valid(cb)
 
+# pointer callback
+ptr_arg_seen_externalptr <- FALSE
+ptr_arg_seen_unowned <- FALSE
+cb <- tcc_callback(
+  function(x) {
+    ptr_arg_seen_externalptr <<- inherits(x, "externalptr")
+    ptr_arg_seen_unowned <<- !.Call("RC_ptr_is_owned", x, PACKAGE = "Rtinycc")
+    x
+  },
+  signature = "void* (*)(void*)"
+)
+cb_ptr <- tcc_callback_ptr(cb)
+
+ffi <- tcc_ffi() |>
+  tcc_source("
+    #define _Complex
+    void* call_ptr_cb(void* (*cb)(void*, void*), void* ctx, void* x) {
+      return cb(ctx, x);
+    }
+  ") |>
+  tcc_bind(
+    call_ptr_cb = list(
+      args = list("callback:void*(void*)", "ptr", "ptr"),
+      returns = "ptr"
+    )
+  ) |>
+  tcc_compile()
+
+buf_cb <- tcc_malloc(8)
+out_ptr <- ffi$call_ptr_cb(cb, cb_ptr, buf_cb)
+expect_true(ptr_arg_seen_externalptr,
+            info = "callback ptr round-trip: callback receives externalptr")
+expect_true(ptr_arg_seen_unowned,
+            info = "callback ptr round-trip: callback receives non-owned wrapper")
+expect_equal(tcc_ptr_addr(out_ptr), tcc_ptr_addr(buf_cb),
+             info = "callback ptr round-trip: address preserved")
+expect_false(.Call("RC_ptr_is_owned", out_ptr, PACKAGE = "Rtinycc"),
+             info = "callback ptr round-trip: returned wrapper is not owned")
+expect_error(tcc_free(out_ptr),
+             info = "callback ptr round-trip: explicit free refuses unowned wrapper")
+tcc_free(buf_cb)
+close_if_valid(cb)
+
+# SEXP callback
+payload <- list(alpha = 1:3, beta = "ok")
+cb <- tcc_callback(function(x) x, signature = "SEXP (*)(SEXP)")
+cb_ptr <- tcc_callback_ptr(cb)
+
+ffi <- tcc_ffi() |>
+  tcc_source("
+    #define _Complex
+    SEXP call_sexp_cb(SEXP (*cb)(void*, SEXP), void* ctx, SEXP x) {
+      return cb(ctx, x);
+    }
+  ") |>
+  tcc_bind(
+    call_sexp_cb = list(
+      args = list("callback:SEXP(SEXP)", "ptr", "sexp"),
+      returns = "sexp"
+    )
+  ) |>
+  tcc_compile()
+
+expect_identical(ffi$call_sexp_cb(cb, cb_ptr, payload), payload,
+                 info = "callback SEXP round-trip: object preserved exactly")
+close_if_valid(cb)
+
+# async pointer callback
+ptr_async_seen_externalptr <- FALSE
+ptr_async_seen_unowned <- FALSE
+cb <- tcc_callback(
+  function(x) {
+    ptr_async_seen_externalptr <<- inherits(x, "externalptr")
+    ptr_async_seen_unowned <<- !.Call("RC_ptr_is_owned", x, PACKAGE = "Rtinycc")
+    x
+  },
+  signature = "void* (*)(void*)"
+)
+cb_ptr <- tcc_callback_ptr(cb)
+
+ffi <- tcc_ffi() |>
+  tcc_source("
+    #define _Complex
+    #ifdef _WIN32
+    #include <windows.h>
+    struct ptask { void* (*cb)(void*,void*); void* ctx; void* in; volatile void* out; volatile int done; };
+    static struct ptask g_pt;
+    static HANDLE g_pth = NULL;
+    static DWORD WINAPI pworker(LPVOID p) {
+      struct ptask* t = (struct ptask*) p;
+      t->out = t->cb(t->ctx, t->in);
+      t->done = 1;
+      return 0;
+    }
+    int start_ptr_worker(void* (*cb)(void*,void*), void* ctx, void* x) {
+      g_pt.cb = cb; g_pt.ctx = ctx; g_pt.in = x; g_pt.out = NULL; g_pt.done = 0;
+      g_pth = CreateThread(NULL, 0, pworker, &g_pt, 0, NULL);
+      return g_pth ? 0 : -1;
+    }
+    int is_ptr_worker_done(void) { return g_pt.done; }
+    int join_ptr_worker(void) {
+      if (g_pth) { WaitForSingleObject(g_pth, INFINITE); CloseHandle(g_pth); g_pth = NULL; }
+      return g_pt.out == g_pt.in;
+    }
+    #else
+    #include <pthread.h>
+    struct ptask { void* (*cb)(void*,void*); void* ctx; void* in; volatile void* out; volatile int done; };
+    static struct ptask g_pt;
+    static pthread_t g_pth;
+    static void* pworker(void* p) {
+      struct ptask* t = (struct ptask*) p;
+      t->out = t->cb(t->ctx, t->in);
+      t->done = 1;
+      return NULL;
+    }
+    int start_ptr_worker(void* (*cb)(void*,void*), void* ctx, void* x) {
+      g_pt.cb = cb; g_pt.ctx = ctx; g_pt.in = x; g_pt.out = NULL; g_pt.done = 0;
+      return pthread_create(&g_pth, NULL, pworker, &g_pt) == 0 ? 0 : -1;
+    }
+    int is_ptr_worker_done(void) { return g_pt.done; }
+    int join_ptr_worker(void) { pthread_join(g_pth, NULL); return g_pt.out == g_pt.in; }
+    #endif
+  ")
+if (.Platform$OS.type != "windows") {
+  ffi <- tcc_library(ffi, "pthread")
+}
+ffi <- ffi |>
+  tcc_bind(
+    start_ptr_worker = list(args = list("callback_async:void*(void*)", "ptr", "ptr"), returns = "i32"),
+    is_ptr_worker_done = list(args = list(), returns = "i32"),
+    join_ptr_worker = list(args = list(), returns = "i32")
+  ) |>
+  tcc_compile()
+
+buf_async <- tcc_malloc(8)
+ffi$start_ptr_worker(cb, cb_ptr, buf_async)
+for (i in seq_len(50)) {
+  tcc_callback_async_drain()
+  if (ffi$is_ptr_worker_done() != 0L) break
+  Sys.sleep(0.01)
+}
+expect_true(ptr_async_seen_externalptr,
+            info = "async callback ptr: callback receives externalptr")
+expect_true(ptr_async_seen_unowned,
+            info = "async callback ptr: callback receives non-owned wrapper")
+expect_equal(ffi$join_ptr_worker(), 1L,
+             info = "async callback ptr: returned native address preserved")
+tcc_free(buf_async)
+close_if_valid(cb)
+
 # ===========================================================================
 # 7. GC STRESS: force GC between allocations to catch PROTECT bugs
 # ===========================================================================

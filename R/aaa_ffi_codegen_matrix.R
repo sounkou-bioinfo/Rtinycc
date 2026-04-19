@@ -861,6 +861,28 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
           info = "Async trampoline normalizes f32 return casts to float"
         )
       )
+    ),
+    list(
+      name = "tramp_async_ptr",
+      signature = "callback_async:void*(void*)",
+      patterns = list(
+        list(
+          pattern = "void\\* tramp_async_ptr\\(void\\* cb, void\\* arg1\\)",
+          info = "Async pointer trampoline preserves pointer ABI"
+        ),
+        list(
+          pattern = "args\\[0\\]\\.kind = CB_ARG_PTR;",
+          info = "Async pointer trampoline stores pointer args in CB_ARG_PTR slot"
+        ),
+        list(
+          pattern = "args\\[0\\]\\.v\\.p = arg1;",
+          info = "Async pointer trampoline stores raw pointer value without pointee copy"
+        ),
+        list(
+          pattern = "return \\(void\\*\\)result.v.p;",
+          info = "Async pointer trampoline returns pointer results through cb_result_t pointer slot"
+        )
+      )
     )
   ),
   wrapper = list(

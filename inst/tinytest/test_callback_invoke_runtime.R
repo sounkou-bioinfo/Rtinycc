@@ -366,3 +366,91 @@ expect_true(
   info = "Non-void async callback returns real double value (2.5 + 0.5 = 3.0)"
 )
 close_if_valid(cb_async_dbl)
+
+# Test: non-void async pointer callback preserves non-ownership semantics.
+ptr_async_seen_externalptr <- FALSE
+ptr_async_seen_unowned <- FALSE
+cb_async_ptr <- tcc_callback(
+  function(x) {
+    ptr_async_seen_externalptr <<- inherits(x, "externalptr")
+    ptr_async_seen_unowned <<- !.Call("RC_ptr_is_owned", x, PACKAGE = "Rtinycc")
+    x
+  },
+  signature = "void* (*)(void*)"
+)
+cb_ptr_async_ptr <- tcc_callback_ptr(cb_async_ptr)
+
+code_async_ptr <- "
+#define _Complex
+
+#ifdef _WIN32
+#include <windows.h>
+
+struct ptask { void* (*cb)(void*,void*); void* ctx; void* in; volatile void* out; volatile int done; };
+static struct ptask g_pt;
+static HANDLE g_pth = NULL;
+
+static DWORD WINAPI pworker(LPVOID p) {
+  struct ptask* t = (struct ptask*) p;
+  t->out = t->cb(t->ctx, t->in);
+  t->done = 1;
+  return 0;
+}
+int start_ptr_worker(void* (*cb)(void*,void*), void* ctx, void* x) {
+  g_pt.cb = cb; g_pt.ctx = ctx; g_pt.in = x; g_pt.out = NULL; g_pt.done = 0;
+  g_pth = CreateThread(NULL, 0, pworker, &g_pt, 0, NULL);
+  return g_pth ? 0 : -1;
+}
+int is_ptr_worker_done(void) { return g_pt.done; }
+int join_ptr_worker(void) {
+  if (g_pth) { WaitForSingleObject(g_pth, INFINITE); CloseHandle(g_pth); g_pth = NULL; }
+  return g_pt.out == g_pt.in;
+}
+#else
+#include <pthread.h>
+
+struct ptask { void* (*cb)(void*,void*); void* ctx; void* in; volatile void* out; volatile int done; };
+static struct ptask g_pt;
+static pthread_t g_pth;
+
+static void* pworker(void* p) {
+  struct ptask* t = (struct ptask*) p;
+  t->out = t->cb(t->ctx, t->in);
+  t->done = 1;
+  return NULL;
+}
+int start_ptr_worker(void* (*cb)(void*,void*), void* ctx, void* x) {
+  g_pt.cb = cb; g_pt.ctx = ctx; g_pt.in = x; g_pt.out = NULL; g_pt.done = 0;
+  return pthread_create(&g_pth, NULL, pworker, &g_pt) == 0 ? 0 : -1;
+}
+int is_ptr_worker_done(void) { return g_pt.done; }
+int join_ptr_worker(void) { pthread_join(g_pth, NULL); return g_pt.out == g_pt.in; }
+#endif
+"
+
+ffi_async_ptr <- tcc_ffi() |>
+  tcc_source(code_async_ptr)
+if (.Platform$OS.type != "windows") {
+  ffi_async_ptr <- tcc_library(ffi_async_ptr, "pthread")
+}
+ffi_async_ptr <- ffi_async_ptr |>
+  tcc_bind(
+    start_ptr_worker = list(args = list("callback_async:void*(void*)", "ptr", "ptr"), returns = "i32"),
+    is_ptr_worker_done = list(args = list(), returns = "i32"),
+    join_ptr_worker = list(args = list(), returns = "i32")
+  ) |>
+  tcc_compile()
+
+buf_async_ptr <- tcc_malloc(8)
+ffi_async_ptr$start_ptr_worker(cb_async_ptr, cb_ptr_async_ptr, buf_async_ptr)
+for (i in seq_len(50)) {
+  tcc_callback_async_drain()
+  if (ffi_async_ptr$is_ptr_worker_done() != 0L) break
+  Sys.sleep(0.01)
+}
+ptr_same <- ffi_async_ptr$join_ptr_worker()
+expect_true(ptr_async_seen_externalptr, info = "Async pointer callback receives externalptr wrapper")
+expect_true(ptr_async_seen_unowned, info = "Async pointer callback receives non-owned pointer wrapper")
+expect_equal(ptr_same, 1L, info = "Async pointer callback returns the same native address")
+tcc_free(buf_async_ptr)
+close_if_valid(cb_async_ptr)
