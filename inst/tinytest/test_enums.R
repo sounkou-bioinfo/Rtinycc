@@ -16,8 +16,8 @@ expect_true(
 
     helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
     identical(Rtinycc:::helper_symbol_kind(helper_specs$enum_probe_PROBE_ZERO), "enum") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_PROBE_ZERO), "helper") &&
-      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_PROBE_ONE), "helper") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_PROBE_ZERO), "constant") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_PROBE_ONE), "constant") &&
       identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_sizeof), "introspection")
   },
   info = "Enum helper specs carry operation-kind metadata"

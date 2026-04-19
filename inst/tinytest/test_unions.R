@@ -105,7 +105,38 @@ expect_true(
   info = "Multiple unions"
 )
 
-# Test 4: Nested struct view keeps union owner alive across GC
+# Test 4: Nested union struct getters are classified as nested views
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct inner {
+        int x;
+      };
+
+      union wrapper {
+        struct inner inner;
+        int raw;
+      };
+    "
+      ) |>
+      tcc_struct("inner", accessors = c(x = "i32")) |>
+      tcc_union(
+        "wrapper",
+        members = list(inner = list(type = "struct"), raw = "i32"),
+        active = "raw"
+      ) |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    identical(Rtinycc:::helper_symbol_operation(helper_specs$union_wrapper_get_inner), "nested_view")
+  },
+  info = "Nested union struct getters carry nested-view helper metadata"
+)
+
+# Test 5: Nested struct view keeps union owner alive across GC
 expect_true(
   {
     ffi <- tcc_ffi() |>
@@ -158,7 +189,7 @@ expect_true(
   info = "Nested union struct view stays usable across GC after owner reference is dropped"
 )
 
-# Test 5: Nested struct view from union cannot be freed directly
+# Test 6: Nested struct view from union cannot be freed directly
 expect_error(
   {
     ffi <- tcc_ffi() |>

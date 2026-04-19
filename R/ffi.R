@@ -74,6 +74,17 @@ helper_symbol_operation <- function(x) {
   x$helper_operation
 }
 
+rtinycc_struct_field_spec <- function(ffi, struct_name, field_name) {
+  if (is.null(ffi$structs) || is.null(ffi$structs[[struct_name]])) {
+    return(NULL)
+  }
+  ffi$structs[[struct_name]][[field_name]] %||% NULL
+}
+
+rtinycc_is_bitfield_spec <- function(field_spec) {
+  is.list(field_spec) && isTRUE(field_spec$bitfield)
+}
+
 is_rtinycc_bound_symbol <- function(x) {
   inherits(x, "rtinycc_bound_symbol")
 }
@@ -936,9 +947,12 @@ tcc_compiled_object <- function(
           struct_name,
           "_get_",
           field_name
-        )]] <- list(
-          args = list("sexp"),
-          returns = "sexp"
+        )]] <- c(
+          list(
+            args = list("sexp"),
+            returns = "sexp"
+          ),
+          if (rtinycc_is_bitfield_spec(field_spec)) list(.helper_operation = "bitfield_getter") else list()
         )
 
         if (is_array) {
@@ -977,9 +991,12 @@ tcc_compiled_object <- function(
             struct_name,
             "_set_",
             field_name
-          )]] <- list(
-            args = list("sexp", "sexp"),
-            returns = "sexp"
+          )]] <- c(
+            list(
+              args = list("sexp", "sexp"),
+              returns = "sexp"
+            ),
+            if (rtinycc_is_bitfield_spec(field_spec)) list(.helper_operation = "bitfield_setter") else list()
           )
         }
       }
@@ -1083,9 +1100,12 @@ tcc_compiled_object <- function(
           helper_names,
           paste0("union_", union_name, "_get_", mem_name)
         )
-        helper_specs[[paste0("union_", union_name, "_get_", mem_name)]] <- list(
-          args = list("sexp"),
-          returns = "sexp"
+        helper_specs[[paste0("union_", union_name, "_get_", mem_name)]] <- c(
+          list(
+            args = list("sexp"),
+            returns = "sexp"
+          ),
+          if (is_nested_struct) list(.helper_operation = "nested_view") else list()
         )
 
         if (!is_nested_struct) {
@@ -1139,7 +1159,8 @@ tcc_compiled_object <- function(
           )
           helper_specs[[paste0("enum_", enum_name, "_", const_name)]] <- list(
             args = list(),
-            returns = "sexp"
+            returns = "sexp",
+            .helper_operation = "constant"
           )
         }
       }
@@ -1179,7 +1200,7 @@ tcc_compiled_object <- function(
         } else {
           "helper"
         }
-        helper_operation <- if (grepl("_new$", sym_name)) {
+        helper_operation <- helper_specs[[sym_name]]$.helper_operation %||% if (grepl("_new$", sym_name)) {
           "constructor"
         } else if (grepl("_free$", sym_name)) {
           "destructor"
@@ -2213,6 +2234,11 @@ tcc_container_of <- function(ffi, struct_name, member_name) {
     stop("Expected tcc_ffi object", call. = FALSE)
   }
 
+  field_spec <- rtinycc_struct_field_spec(ffi, struct_name, member_name)
+  if (rtinycc_is_bitfield_spec(field_spec)) {
+    stop("container_of does not support bitfield members", call. = FALSE)
+  }
+
   if (is.null(ffi$container_of)) {
     ffi$container_of <- list()
   }
@@ -2243,6 +2269,13 @@ tcc_container_of <- function(ffi, struct_name, member_name) {
 tcc_field_addr <- function(ffi, struct_name, fields) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
+  }
+
+  for (field_name in fields) {
+    field_spec <- rtinycc_struct_field_spec(ffi, struct_name, field_name)
+    if (rtinycc_is_bitfield_spec(field_spec)) {
+      stop("field_addr does not support bitfield members", call. = FALSE)
+    }
   }
 
   if (is.null(ffi$field_addr)) {
