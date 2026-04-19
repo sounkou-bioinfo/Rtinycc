@@ -95,6 +95,8 @@ ffi_ptr <- tcc_ffi() |>
 buf <- tcc_malloc(8)
 out <- ffi_ptr$echo_ptr(cb_ptr_rt, cb_ptr_handle, buf)
 expect_true(inherits(out, "externalptr"))
+expect_false(.Call("RC_ptr_is_owned", out, PACKAGE = "Rtinycc"), info = "Pointer callback return wrapper is not owned")
+expect_error(tcc_free(out), info = "Pointer callback return wrapper is not explicitly freeable")
 tcc_free(buf)
 close_if_valid(cb_ptr_rt)
 

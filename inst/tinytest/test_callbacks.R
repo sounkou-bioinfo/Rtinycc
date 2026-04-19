@@ -110,6 +110,14 @@ expect_true(
   inherits(ptr, "tcc_callback_ptr"),
   info = "Callback ptr has correct class"
 )
+expect_false(
+  .Call("RC_ptr_is_owned", ptr, PACKAGE = "Rtinycc"),
+  info = "Callback ptr wrapper is not tagged as owned"
+)
+expect_error(
+  tcc_free(ptr),
+  info = "Callback ptr wrapper is not explicitly freeable"
+)
 
 # ============================================================================
 # Test 10: Callback pointer for closed callback
@@ -177,6 +185,8 @@ expect_true(tcc_callback_valid(cb_double), info = "Double callback valid")
 expect_true(tcc_callback_valid(cb_bool), info = "Bool callback valid")
 expect_true(tcc_callback_valid(cb_void), info = "Void callback valid")
 expect_true(tcc_callback_valid(cb_ptr), info = "Ptr callback valid")
+expect_false(.Call("RC_ptr_is_owned", cb_ptr, PACKAGE = "Rtinycc"), info = "Callback object itself is not tcc_free-owned")
+expect_error(tcc_free(cb_ptr), info = "Callback object cannot be freed with tcc_free")
 
 # Close all
 tcc_callback_close(cb_int)

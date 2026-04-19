@@ -153,7 +153,34 @@ for (spec in composite_codegen_specs) {
       info = spec$info
     )
   }
+
+  forbidden <- spec$forbidden
+  if (is.null(forbidden)) {
+    forbidden <- list()
+  }
+
+  for (pattern in forbidden) {
+    expect_false(
+      grepl(pattern$pattern, code, fixed = isTRUE(pattern$fixed)),
+      info = spec$info
+    )
+  }
 }
+
+ptr_wrapper_code <- Rtinycc:::generate_ffi_code(
+  symbols = list(
+    identity = list(args = list("ptr"), returns = "ptr")
+  ),
+  c_code = "void* identity(void* x) { return x; }"
+)
+expect_true(
+  grepl("RC_make_unowned_ptr(", ptr_wrapper_code, fixed = TRUE),
+  info = "ptr wrapper codegen uses host unowned helper"
+)
+expect_false(
+  grepl("return R_MakeExternalPtr(", ptr_wrapper_code, fixed = TRUE),
+  info = "ptr wrapper codegen avoids direct external pointer construction"
+)
 
 expect_true(
   grepl(

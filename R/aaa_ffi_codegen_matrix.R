@@ -1074,6 +1074,25 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
 
 RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
   list(
+    name = "struct_owned_host_helper",
+    info = "struct constructors use host owned-composite helper instead of direct extptr registration",
+    generate_args = list(
+      symbols = list(),
+      c_code = "struct student { int id; double grade; };",
+      structs = list(student = c(id = "i32", grade = "f64"))
+    ),
+    patterns = list(
+      list(
+        pattern = "return RC_make_owned_composite_ptr(p, Rf_install(\"struct_student\"));",
+        fixed = TRUE
+      )
+    ),
+    forbidden = list(
+      list(pattern = "R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);", fixed = TRUE),
+      list(pattern = "R_MakeExternalPtr(p, Rf_install(\"struct_student\"), R_NilValue)", fixed = TRUE)
+    )
+  ),
+  list(
     name = "struct_field_addr_owner",
     info = "field_addr helper preserves owner through borrowed-view helper",
     generate_args = list(
@@ -1141,6 +1160,30 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
         pattern = "memcpy(p, RAW(raw),",
         fixed = TRUE
       )
+    )
+  ),
+  list(
+    name = "union_owned_host_helper",
+    info = "union constructors use host owned-composite helper instead of direct extptr registration",
+    generate_args = list(
+      symbols = list(),
+      c_code = "union wrapper { int raw; double value; };",
+      unions = list(
+        wrapper = list(
+          members = list(raw = "i32", value = "f64"),
+          active = "raw"
+        )
+      )
+    ),
+    patterns = list(
+      list(
+        pattern = "return RC_make_owned_composite_ptr(p, Rf_install(\"union_wrapper\"));",
+        fixed = TRUE
+      )
+    ),
+    forbidden = list(
+      list(pattern = "R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);", fixed = TRUE),
+      list(pattern = "R_MakeExternalPtr(p, Rf_install(\"union_wrapper\"), R_NilValue)", fixed = TRUE)
     )
   ),
   list(
