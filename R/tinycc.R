@@ -134,7 +134,9 @@ blas_lapack_info <- function() {
   }
 
   path_has_name <- function(path, name) {
-    if (!is.character(path) || length(path) != 1 || is.na(path) || !nzchar(path)) {
+    if (
+      !is.character(path) || length(path) != 1 || is.na(path) || !nzchar(path)
+    ) {
       return(FALSE)
     }
     grepl(name, basename(path), ignore.case = TRUE)
@@ -145,7 +147,8 @@ blas_lapack_info <- function() {
   }
 
   has_rblas <- loaded_has_name("Rblas") || path_has_name(blas_path, "Rblas")
-  has_rlapack <- loaded_has_name("Rlapack") || path_has_name(lapack_path, "Rlapack")
+  has_rlapack <- loaded_has_name("Rlapack") ||
+    path_has_name(lapack_path, "Rlapack")
 
   list(
     blas_path = blas_path,
@@ -260,7 +263,9 @@ tcc_add_library <- function(state, library) {
 #' @return Integer status code (`0` on success; negative on parse error).
 #' @export
 tcc_set_options <- function(state, options) {
-  if (!is.character(options) || length(options) != 1 || !nzchar(trimws(options))) {
+  if (
+    !is.character(options) || length(options) != 1 || !nzchar(trimws(options))
+  ) {
     stop("`options` must be a non-empty character scalar", call. = FALSE)
   }
   .Call(RC_libtcc_set_options, state, options)

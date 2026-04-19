@@ -27,7 +27,11 @@ rtinycc_engine <- function(options) {
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
   object_name <- options$object %||% options$name %||% options$label
-  if (!is.character(object_name) || length(object_name) != 1L || !nzchar(object_name)) {
+  if (
+    !is.character(object_name) ||
+      length(object_name) != 1L ||
+      !nzchar(object_name)
+  ) {
     stop(
       "rtinycc_engine() requires a non-empty `object` option or chunk label.",
       call. = FALSE

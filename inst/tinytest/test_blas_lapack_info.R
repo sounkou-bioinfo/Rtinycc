@@ -3,13 +3,16 @@ library(Rtinycc)
 info <- blas_lapack_info()
 
 expect_true(is.list(info))
-expect_true(all(c(
-  "blas_path",
-  "lapack_path",
-  "has_rblas",
-  "has_rlapack",
-  "loaded_dlls"
-) %in% names(info)))
+expect_true(all(
+  c(
+    "blas_path",
+    "lapack_path",
+    "has_rblas",
+    "has_rlapack",
+    "loaded_dlls"
+  ) %in%
+    names(info)
+))
 
 expect_true(is.character(info$blas_path) && length(info$blas_path) == 1L)
 expect_true(is.character(info$lapack_path) && length(info$lapack_path) == 1L)
