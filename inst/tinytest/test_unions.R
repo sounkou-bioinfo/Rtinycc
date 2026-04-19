@@ -29,10 +29,7 @@ expect_true(
     u <- compiled$union_data_set_i(u, 42L)
     v <- compiled$union_data_get_i(u)
     compiled$union_data_free(u)
-    ok <- v == 42L
-    rm(u, compiled, ffi)
-    force_gc()
-    ok
+    v == 42L
   },
   info = "Basic union"
 )
@@ -54,10 +51,7 @@ expect_true(
     compiled <- tcc_compile(ffi)
     s <- compiled$union_data_sizeof()
     a <- compiled$union_data_alignof()
-    ok <- s == 4 && a == 4
-    rm(compiled, ffi)
-    force_gc()
-    ok
+    s == 4 && a == 4
   },
   info = "Union introspection"
 )
@@ -80,10 +74,7 @@ expect_true(
     v2 <- compiled$union_u2_get_i(u2)
     compiled$union_u1_free(u1)
     compiled$union_u2_free(u2)
-    ok <- v1 == 100L && v2 == 200L
-    rm(u1, u2, compiled, ffi)
-    force_gc()
-    ok
+    v1 == 100L && v2 == 200L
   },
   info = "Multiple unions"
 )
