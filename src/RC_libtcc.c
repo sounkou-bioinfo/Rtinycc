@@ -29,52 +29,6 @@ static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, co
 void RC_free_finalizer(SEXP ext);
 SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
 
-// ============================================================================
-// TCC state registry (ownership tracking)
-// ============================================================================
-
-typedef struct tcc_state_entry {
-    TCCState *ptr;
-    SEXP owner_ext; // owning externalptr (not preserved; removed by finalizer)
-    struct tcc_state_entry *next;
-} tcc_state_entry_t;
-
-static tcc_state_entry_t *g_tcc_state_registry = NULL;
-
-static void RC_tcc_registry_remove(tcc_state_entry_t *entry) {
-    if (!entry) return;
-    tcc_state_entry_t **cur = &g_tcc_state_registry;
-    while (*cur) {
-        if (*cur == entry) {
-            *cur = entry->next;
-            free(entry);
-            return;
-        }
-        cur = &(*cur)->next;
-    }
-}
-
-static tcc_state_entry_t *RC_tcc_registry_find(TCCState *ptr) {
-    tcc_state_entry_t *cur = g_tcc_state_registry;
-    while (cur) {
-        if (cur->ptr == ptr) {
-            return cur;
-        }
-        cur = cur->next;
-    }
-    return NULL;
-}
-
-static void RC_tcc_registry_add(TCCState *ptr, SEXP owner_ext) {
-    tcc_state_entry_t *entry = (tcc_state_entry_t *)calloc(1, sizeof(*entry));
-    if (!entry) {
-        Rf_error("Out of memory (tcc registry)");
-    }
-    entry->ptr = ptr;
-    entry->owner_ext = owner_ext;
-    entry->next = g_tcc_state_registry;
-    g_tcc_state_registry = entry;
-}
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
@@ -196,27 +150,16 @@ typedef struct {
  * Protection: none.
  */
 static void RC_tcc_finalizer(SEXP ext) {
-    if (!RC_tcc_state_is_owned(ext)) {
-        RC_trace_finalizer_event("tcc_state:borrowed_clear", ext, R_ExternalPtrProtected(ext), NULL);
-        R_ClearExternalPtr(ext);
-        return;
-    }
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
-        // remove from registry before delete
-        tcc_state_entry_t *entry = RC_tcc_registry_find(s);
-        if (entry) {
-            RC_tcc_registry_remove(entry);
-        }
 #ifdef _WIN32
         /* On Windows, libtcc teardown unloads DLL handles during tcc_delete().
            That is safe at process exit, but repeated GC-driven finalization of
-           relocated states has been observed to crash the live R session. Keep
-           the registry consistent, clear the external pointer, and let process
-           teardown reclaim the state. */
+           relocated states has been observed to crash the live R session.
+           Leave the state untouched here and let process teardown reclaim it. */
         RC_trace_finalizer_event("tcc_state:skip_delete_windows", ext, R_ExternalPtrProtected(ext), NULL);
-        R_ClearExternalPtr(ext);
+        (void)s;
 #else
         RC_trace_finalizer_event("tcc_state:delete", ext, R_ExternalPtrProtected(ext), NULL);
         tcc_delete(s);
@@ -369,18 +312,9 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         tcc_delete(s);
         Rf_error("tcc_set_output_type failed");
     }
-    tcc_state_entry_t *existing = RC_tcc_registry_find(s);
     SEXP ext = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
-    if (existing) {
-        R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_borrowed"));
-        // Keep the owner alive while this borrowed wrapper exists.
-        if (existing->owner_ext != R_NilValue) {
-            R_SetExternalPtrProtected(ext, existing->owner_ext);
-        }
-        R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
-    } else {
-        R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
+    R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
     /* onexit = FALSE: skip tcc_delete() during R shutdown.
        tcc_delete() → tcc_run_free() releases DLLs loaded during JIT
        (FreeLibrary on Windows, dlclose on Unix) and frees JIT memory.
@@ -388,9 +322,7 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
        running these teardown calls while the runtime is shutting down
        causes segfaults (Windows) or is simply pointless (Unix/macOS).
        Normal GC still runs this finalizer while R is alive. */
-        R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, FALSE);
-        RC_tcc_registry_add(s, ext);
-    }
+    R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, FALSE);
     UNPROTECT(1);
     return ext;
 }
