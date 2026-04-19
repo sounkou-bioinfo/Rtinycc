@@ -72,6 +72,15 @@ expect_error(
   info = "tcc_callback rejects multiple signatures"
 )
 
+expect_true(
+  Rtinycc:::is_callback_type(Rtinycc:::check_ffi_type("callback:void*(void*)", "test")),
+  info = "classed callback ffi type is recognized as callback"
+)
+expect_true(
+  Rtinycc:::is_callback_async_type(Rtinycc:::check_ffi_type("callback_async:void*(void*)", "test")),
+  info = "classed async callback ffi type is recognized as async callback"
+)
+
 # ============================================================================
 # Test 7: Close callback
 # ============================================================================

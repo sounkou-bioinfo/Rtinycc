@@ -134,6 +134,32 @@ expect_error(
   info = "variadic varargs must be scalar types"
 )
 
+expect_error(
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs = list("callback:void(int)"),
+        returns = "i32"
+      )
+    ),
+  info = "variadic varargs reject callback families at constructor normalization"
+)
+
+expect_error(
+  tcc_ffi() |>
+    tcc_bind(
+      bad = list(
+        args = list("i32"),
+        variadic = TRUE,
+        varargs_types = list("sexp"),
+        returns = "i32"
+      )
+    ),
+  info = "variadic varargs_types reject sexp at constructor normalization"
+)
+
 # True variadic mode with allowed types + min/max arity
 ffi_var_types_spec <- tcc_ffi() |>
   tcc_bind(

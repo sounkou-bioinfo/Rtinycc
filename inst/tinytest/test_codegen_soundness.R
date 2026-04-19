@@ -151,6 +151,28 @@ expect_identical(Rtinycc:::ffi_type_family(sym_cb$arg_type_info[[1]]), "callback
 expect_identical(Rtinycc:::ffi_type_family(sym_cb$arg_type_info[[3]]), "sexp",
                  info = "normalized symbol spec distinguishes callback from sexp pass-through arg")
 
+expect_error(
+  Rtinycc:::as_rtinycc_bound_symbol(
+    "bad_async_sexp",
+    list(args = list("callback_async:SEXP(int)", "ptr", "i32"), returns = "sexp")
+  ),
+  info = "normalized symbol spec rejects async callback SEXP return before codegen"
+)
+expect_error(
+  Rtinycc:::as_rtinycc_bound_symbol(
+    "bad_async_sexp_arg",
+    list(args = list("callback_async:void(SEXP)", "ptr", "sexp"), returns = "void")
+  ),
+  info = "normalized symbol spec rejects async callback SEXP arg before codegen"
+)
+expect_error(
+  Rtinycc:::as_rtinycc_bound_symbol(
+    "bad_nonarray_meta",
+    list(args = list("i32"), returns = list(type = "i32", length_arg = 1, free = TRUE))
+  ),
+  info = "normalized symbol spec rejects array metadata on non-array returns"
+)
+
 # ===========================================================================
 # 2. BOUNDARY VALUE TESTS: NA rejection, range errors
 # ===========================================================================

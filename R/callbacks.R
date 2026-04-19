@@ -323,6 +323,9 @@ format_signature <- function(sig) {
 #' @param type Type string to check
 #' @return Logical
 is_callback_type <- function(type) {
+  if (is_rtinycc_ffi_type(type)) {
+    return(ffi_type_family(type) %in% c("callback", "callback_async"))
+  }
   if (!is.character(type)) {
     return(FALSE)
   }
@@ -332,6 +335,9 @@ is_callback_type <- function(type) {
 }
 
 is_callback_async_type <- function(type) {
+  if (is_rtinycc_ffi_type(type)) {
+    return(identical(ffi_type_family(type), "callback_async"))
+  }
   if (!is.character(type)) {
     return(FALSE)
   }
@@ -343,6 +349,10 @@ is_callback_async_type <- function(type) {
 #' @param type Type string like "callback:double(int,int)"
 #' @return Parsed signature list or NULL
 parse_callback_type <- function(type) {
+  if (is_rtinycc_ffi_type(type)) {
+    type <- type$name
+  }
+
   if (type == "callback") {
     # Generic callback without signature - will need runtime determination
     return(NULL)

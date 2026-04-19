@@ -30,8 +30,14 @@ new_rtinycc_bound_symbol <- function(
   varargs_type_info = NULL,
   varargs_min = NULL,
   varargs_max = NULL,
-  varargs_mode = NULL
+  varargs_mode = NULL,
+  helper_kind = NULL
 ) {
+  classes <- c("rtinycc_bound_symbol", "rtinycc_symbol_spec")
+  if (!is.null(helper_kind)) {
+    classes <- c(paste0("rtinycc_helper_symbol_", helper_kind), "rtinycc_helper_symbol", classes)
+  }
+
   structure(
     list(
       name = name,
@@ -45,14 +51,41 @@ new_rtinycc_bound_symbol <- function(
       varargs_type_info = varargs_type_info,
       varargs_min = varargs_min,
       varargs_max = varargs_max,
-      varargs_mode = varargs_mode
+      varargs_mode = varargs_mode,
+      helper_kind = helper_kind
     ),
-    class = c("rtinycc_bound_symbol", "rtinycc_symbol_spec")
+    class = classes
   )
+}
+
+helper_symbol_kind <- function(x) {
+  if (!inherits(x, "rtinycc_helper_symbol")) {
+    stop("Expected rtinycc_helper_symbol object", call. = FALSE)
+  }
+  x$helper_kind
 }
 
 is_rtinycc_bound_symbol <- function(x) {
   inherits(x, "rtinycc_bound_symbol")
+}
+
+as_rtinycc_helper_symbol <- function(sym_name, sym, helper_kind) {
+  out <- as_rtinycc_bound_symbol(sym_name, sym)
+  new_rtinycc_bound_symbol(
+    name = out$name,
+    args = out$args,
+    arg_type_info = out$arg_type_info,
+    returns = out$returns,
+    return_spec = out$return_spec,
+    variadic = out$variadic,
+    varargs = out$varargs,
+    varargs_types = out$varargs_types,
+    varargs_type_info = out$varargs_type_info,
+    varargs_min = out$varargs_min,
+    varargs_max = out$varargs_max,
+    varargs_mode = out$varargs_mode,
+    helper_kind = helper_kind
+  )
 }
 
 as_rtinycc_bound_symbol <- function(sym_name, sym) {
@@ -125,6 +158,23 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
     check_ffi_type(sym$args[[i]], paste0("symbol '", sym_name, "' argument ", i))
   })
 
+  for (i in seq_along(arg_type_info)) {
+    type_info <- arg_type_info[[i]]
+    if (is_callback_async_type(type_info)) {
+      sig <- parse_callback_type(type_info)
+      uses_sexp <- identical(trimws(sig$return_type), "SEXP") ||
+        identical(trimws(sig$return_type), "sexp") ||
+        any(trimws(sig$arg_types) %in% c("SEXP", "sexp"))
+      if (uses_sexp) {
+        stop(
+          "Symbol '", sym_name, "' async callback argument ", i,
+          " cannot use SEXP arguments or return type",
+          call. = FALSE
+        )
+      }
+    }
+  }
+
   if (!"returns" %in% names(sym)) {
     stop(
       "Symbol '",
@@ -154,6 +204,12 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
           call. = FALSE
         )
       }
+      if (!is.numeric(sym$returns$length_arg) || length(sym$returns$length_arg) != 1 || is.na(sym$returns$length_arg) || sym$returns$length_arg != as.integer(sym$returns$length_arg)) {
+        stop(
+          "Symbol '", sym_name, "' array return length_arg must be a single integer",
+          call. = FALSE
+        )
+      }
       if (!is.null(sym$args) && length(sym$args) > 0) {
         if (
           sym$returns$length_arg < 1 ||
@@ -167,6 +223,11 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
           )
         }
       }
+    } else if (!is.null(sym$returns$length_arg) || !is.null(sym$returns$free)) {
+      stop(
+        "Symbol '", sym_name, "' non-array return cannot set length_arg/free",
+        call. = FALSE
+      )
     }
     return_spec <- new_rtinycc_symbol_return_spec(
       type = ret_type,
@@ -1097,7 +1158,18 @@ tcc_compiled_object <- function(
   if (length(helper_specs) > 0) {
     helper_specs <- setNames(
       lapply(names(helper_specs), function(sym_name) {
-        as_rtinycc_bound_symbol(sym_name, helper_specs[[sym_name]])
+        helper_kind <- if (startsWith(sym_name, "struct_")) {
+          "struct"
+        } else if (startsWith(sym_name, "union_")) {
+          "union"
+        } else if (startsWith(sym_name, "enum_")) {
+          "enum"
+        } else if (startsWith(sym_name, "global_")) {
+          "global"
+        } else {
+          "helper"
+        }
+        as_rtinycc_helper_symbol(sym_name, helper_specs[[sym_name]], helper_kind)
       }),
       names(helper_specs)
     )
