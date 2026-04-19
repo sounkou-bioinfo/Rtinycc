@@ -185,6 +185,29 @@ expect_identical(
   "nested_view",
   info = "helper metadata classifies nested union struct getters as nested views"
 )
+
+nested_struct_helper_ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    struct child { int x; };
+    struct outer { struct child child; int y; };
+  "
+  ) |>
+  tcc_struct("child", accessors = c(x = "i32")) |>
+  tcc_struct("outer", accessors = list(child = "struct:child", y = "i32")) |>
+  tcc_bind() |>
+  tcc_compile()
+nested_struct_helper_specs <- get(".helper_specs", envir = nested_struct_helper_ffi, inherits = FALSE)
+expect_identical(
+  Rtinycc:::helper_symbol_operation(nested_struct_helper_specs$struct_outer_get_child),
+  "nested_view",
+  info = "helper metadata classifies named nested struct getters as nested views"
+)
+expect_identical(
+  Rtinycc:::helper_symbol_operation(nested_struct_helper_specs$struct_outer_set_child),
+  "nested_setter",
+  info = "helper metadata classifies named nested struct setters explicitly"
+)
 expect_identical(
   Rtinycc:::helper_symbol_operation(helper_specs$enum_color_RED),
   "constant",

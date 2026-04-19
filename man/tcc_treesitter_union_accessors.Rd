@@ -21,7 +21,10 @@ tcc_treesitter_union_accessors(
 \item{include_bitfields}{Whether to include bitfields.}
 }
 \value{
-Named list of accessors by union name.
+Named list of accessors by union name. Bitfields are returned as
+lists with \code{type}, \code{bitfield = TRUE}, and \code{width}. Nested struct members
+are returned as \verb{list(type = "struct", struct_name = <name>)} when the
+struct name is available, otherwise \code{list(type = "struct")}.
 }
 \description{
 Generate tcc_union() accessors from header unions

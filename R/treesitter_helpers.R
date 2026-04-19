@@ -409,7 +409,10 @@ tcc_treesitter_bindings <- function(
 #' @param mapper Function to map C types to FFI types.
 #' @param bitfield_type FFI type to use for bitfields.
 #' @param include_bitfields Whether to include bitfields.
-#' @return Named list of accessors by struct name.
+#' @return Named list of accessors by struct name. Bitfields are returned as
+#'   lists with `type`, `bitfield = TRUE`, and `width`. Named nested struct
+#'   fields are returned as `"struct:<name>"`; ambiguous or anonymous nested
+#'   structs fall back to `"ptr"`.
 #' @export
 #'
 #' @examples
@@ -458,6 +461,8 @@ tcc_treesitter_struct_accessors <- function(
           "'",
           call. = FALSE
         )
+      } else if (grepl("^struct\\s+[A-Za-z_][A-Za-z0-9_]*$", mtype)) {
+        ffi_type <- paste0("struct:", sub("^struct\\s+", "", mtype))
       } else if (grepl("^struct\\b", mtype)) {
         ffi_type <- "ptr"
       } else {
@@ -478,7 +483,10 @@ tcc_treesitter_struct_accessors <- function(
 #' @param mapper Function to map C types to FFI types.
 #' @param bitfield_type FFI type to use for bitfields.
 #' @param include_bitfields Whether to include bitfields.
-#' @return Named list of accessors by union name.
+#' @return Named list of accessors by union name. Bitfields are returned as
+#'   lists with `type`, `bitfield = TRUE`, and `width`. Nested struct members
+#'   are returned as `list(type = "struct", struct_name = <name>)` when the
+#'   struct name is available, otherwise `list(type = "struct")`.
 #' @export
 #'
 #' @examples

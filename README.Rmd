@@ -1246,22 +1246,47 @@ For exact 64-bit arithmetic, keep values in C-allocated storage and manipulate t
 
 ### Nested structs
 
-The accessor generator does not handle nested structs by value. Use pointer fields instead and reach inner structs with `tcc_field_addr()`.
+Named nested struct fields can now be declared explicitly with `struct:<name>`.
+Getters return borrowed nested views and setters copy bytes from another struct
+object of the declared nested type.
 
 ```{r limits-nested}
 ffi <- tcc_ffi() |>
   tcc_source('
     struct inner { int a; };
-    struct outer { struct inner* in; };
+    struct outer { struct inner in; };
   ') |>
   tcc_struct("inner", accessors = c(a = "i32")) |>
-  tcc_struct("outer", accessors = c(`in` = "ptr")) |>
-  tcc_field_addr("outer", "in") |>
+  tcc_struct("outer", accessors = list(`in` = "struct:inner")) |>
   tcc_compile()
 
-o <- ffi$struct_outer_new()
-i <- ffi$struct_inner_new()
-ffi$struct_inner_set_a(i, 42L)
+outer <- ffi$struct_outer_new()
+inner <- ffi$struct_inner_new()
+inner <- ffi$struct_inner_set_a(inner, 42L)
+outer <- ffi$struct_outer_set_in(outer, inner)
+inner_view <- ffi$struct_outer_get_in(outer)
+ffi$struct_inner_get_a(inner_view)
+ffi$struct_inner_free(inner)
+ffi$struct_outer_free(outer)
+```
+
+For treesitter-generated bindings, nested struct fields currently still fall
+back to ptr-like accessors. The richer `struct:<name>` form is available when
+you declare the nested field accessors explicitly.
+
+Bitfields are a separate case: they use scalar helper accessors, but
+`field_addr()` and `container_of()` reject bitfield members because bitfields do
+not have ordinary addressable field semantics.
+
+```{r bitfield-nested-note, eval = FALSE}
+ffi <- tcc_ffi() |>
+  tcc_source('struct flags { unsigned int flag : 1; };') |>
+  tcc_struct("flags", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1)))
+
+# Both of these error intentionally:
+# ffi <- tcc_field_addr(ffi, "flags", "flag")
+# ffi <- tcc_container_of(ffi, "flags", "flag")
+```
 
 # Write the inner pointer into the outer struct
 ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)

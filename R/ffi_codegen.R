@@ -702,6 +702,26 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec
   }
 
+  if (startsWith(type_name, "struct:")) {
+    nested_struct_name <- sub("^struct:", "", type_name)
+    return(c(
+      sprintf(
+        "SEXP R_wrap_struct_%s_get_%s(SEXP ext) {",
+        struct_name,
+        field_name
+      ),
+      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      sprintf(
+        "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
+        field_name,
+        nested_struct_name
+      ),
+      "}",
+      ""
+    ))
+  }
+
   return_code <- struct_field_getter_lines(type_name, field_name)
 
   c(
@@ -783,6 +803,25 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
   } else {
     type_name <- field_spec
     size <- NULL
+  }
+
+  if (startsWith(type_name, "struct:")) {
+    nested_struct_name <- sub("^struct:", "", type_name)
+    return(c(
+      sprintf(
+        "SEXP R_wrap_struct_%s_set_%s(SEXP ext, SEXP val) {",
+        struct_name,
+        field_name
+      ),
+      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      sprintf("  struct %s *child = R_ExternalPtrAddr(val);", nested_struct_name),
+      "  if (!child) Rf_error(\"Null pointer\");",
+      sprintf("  memcpy(&p->%s, child, sizeof(struct %s));", field_name, nested_struct_name),
+      "  return ext;",
+      "}",
+      ""
+    ))
   }
 
   setter_code <- struct_field_setter_lines(type_name, field_name, size)

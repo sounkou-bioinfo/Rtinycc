@@ -57,6 +57,10 @@ ffi_struct$struct_point_free(pt)
 This keeps the C layout explicit while still giving you a usable R-facing
 surface.
 
+Named nested struct fields can also be modeled directly with `struct:<name>`.
+Those getters return borrowed nested views and setters copy bytes from a source
+struct object of the matching nested type.
+
 ## Registering Callbacks
 
 Callbacks let compiled C code invoke an R function through a generated

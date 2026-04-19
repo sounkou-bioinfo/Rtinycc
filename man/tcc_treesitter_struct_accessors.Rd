@@ -21,7 +21,10 @@ tcc_treesitter_struct_accessors(
 \item{include_bitfields}{Whether to include bitfields.}
 }
 \value{
-Named list of accessors by struct name.
+Named list of accessors by struct name. Bitfields are returned as
+lists with \code{type}, \code{bitfield = TRUE}, and \code{width}. Named nested struct
+fields are returned as \code{"struct:<name>"}; ambiguous or anonymous nested
+structs fall back to \code{"ptr"}.
 }
 \description{
 Generate tcc_struct() accessors from header structs

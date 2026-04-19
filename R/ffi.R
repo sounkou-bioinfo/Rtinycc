@@ -85,6 +85,23 @@ rtinycc_is_bitfield_spec <- function(field_spec) {
   is.list(field_spec) && isTRUE(field_spec$bitfield)
 }
 
+rtinycc_nested_struct_type_name <- function(field_spec) {
+  type_name <- if (is.list(field_spec)) {
+    field_spec$type %||% NULL
+  } else if (is.character(field_spec) && length(field_spec) == 1) {
+    field_spec
+  } else {
+    NULL
+  }
+  if (is.null(type_name) || !is.character(type_name) || length(type_name) != 1) {
+    return(NULL)
+  }
+  if (!startsWith(type_name, "struct:")) {
+    return(NULL)
+  }
+  sub("^struct:", "", type_name)
+}
+
 is_rtinycc_bound_symbol <- function(x) {
   inherits(x, "rtinycc_bound_symbol")
 }
@@ -952,7 +969,13 @@ tcc_compiled_object <- function(
             args = list("sexp"),
             returns = "sexp"
           ),
-          if (rtinycc_is_bitfield_spec(field_spec)) list(.helper_operation = "bitfield_getter") else list()
+          if (rtinycc_is_bitfield_spec(field_spec)) {
+            list(.helper_operation = "bitfield_getter")
+          } else if (!is.null(rtinycc_nested_struct_type_name(field_spec))) {
+            list(.helper_operation = "nested_view")
+          } else {
+            list()
+          }
         )
 
         if (is_array) {
@@ -996,7 +1019,13 @@ tcc_compiled_object <- function(
               args = list("sexp", "sexp"),
               returns = "sexp"
             ),
-            if (rtinycc_is_bitfield_spec(field_spec)) list(.helper_operation = "bitfield_setter") else list()
+            if (rtinycc_is_bitfield_spec(field_spec)) {
+              list(.helper_operation = "bitfield_setter")
+            } else if (!is.null(rtinycc_nested_struct_type_name(field_spec))) {
+              list(.helper_operation = "nested_setter")
+            } else {
+              list()
+            }
           )
         }
       }
@@ -2057,7 +2086,9 @@ read_c_string <- function(ptr) {
 #' @param ffi A tcc_ffi object
 #' @param name Struct name (as defined in C header)
 #' @param accessors Named list of field accessors where
-#'   names are field names and values are FFI types (e.g., list(x="f64", y="f64"))
+#'   names are field names and values are FFI types (e.g., list(x="f64", y="f64")).
+#'   Named nested struct fields can use `"struct:<name>"` to generate borrowed
+#'   nested-view getters and copy-in setters (for example `child = "struct:child"`).
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples

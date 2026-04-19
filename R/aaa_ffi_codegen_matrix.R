@@ -1175,8 +1175,9 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     notes = paste(
       "Treesitter helpers project parsed header declarations into the same",
       "FFI helper surface, including optional bitfield accessors and global",
-      "getter/setter bindings; nested struct fields currently stay ptr-like",
-      "unless a richer helper model is added explicitly."
+      "getter/setter bindings; treesitter-generated nested struct fields",
+      "currently stay ptr-like unless a richer parser-level model is added",
+      "explicitly."
     )
   )
 )

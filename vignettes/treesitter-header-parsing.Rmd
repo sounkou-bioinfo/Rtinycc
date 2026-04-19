@@ -112,6 +112,28 @@ tcc_treesitter_struct_accessors("struct point { double x; double y; };")
 That output is what `Rtinycc` feeds into `tcc_struct()` when you ask it to
 generate struct bindings from a header.
 
+Bitfields now stay explicit in the accessor metadata rather than collapsing to a
+bare scalar type:
+
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
+tcc_treesitter_struct_accessors(
+  "struct flags { unsigned int flag : 1; unsigned int code : 6; };"
+)
+```
+
+Nested struct fields in structs currently still fall back to ptr-like
+accessors:
+
+```{r, eval = requireNamespace("treesitter.c", quietly = TRUE) && packageVersion("treesitter.c") >= "0.0.4"}
+tcc_treesitter_struct_accessors(
+  "struct child { int x; }; struct outer { struct child child; int y; };"
+)
+```
+
+For unions, nested struct members preserve `list(type = "struct", ...)` so the
+generated helper remains a borrowed nested view rather than an opaque raw
+pointer.
+
 ## Conservative Type Mapping
 
 The default mapper is intentionally conservative. In particular, pointer types
