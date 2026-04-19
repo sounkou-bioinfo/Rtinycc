@@ -245,6 +245,30 @@ for (case in callback_abi_specs$trampoline) {
   expect_true(grepl(case$pattern, tramp), info = case$info)
 }
 
+for (case in callback_abi_specs$wrapper) {
+  symbols <- setNames(
+    list(list(args = case$args, returns = case$returns)),
+    case$name
+  )
+  code <- Rtinycc:::generate_ffi_code(
+    symbols = symbols,
+    c_code = case$c_code
+  )
+
+  for (pattern in case$patterns) {
+    expect_true(grepl(pattern$pattern, code), info = pattern$info)
+  }
+
+  forbidden <- case$forbidden
+  if (is.null(forbidden)) {
+    forbidden <- list()
+  }
+
+  for (pattern in forbidden) {
+    expect_false(grepl(pattern$pattern, code), info = pattern$info)
+  }
+}
+
 # ==========================================================================
 # Test 17: Async trampoline validation (supported args, pointer handling)
 # ==========================================================================

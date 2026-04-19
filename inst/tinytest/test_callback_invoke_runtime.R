@@ -77,7 +77,16 @@ expect_true(
 close_if_valid(cb_err)
 
 # Test: pointer return and pointer args use externalptr
-cb_ptr_rt <- tcc_callback(function(x) x, signature = "void* (*)(void*)")
+ptr_arg_seen_externalptr <- FALSE
+ptr_arg_seen_unowned <- FALSE
+cb_ptr_rt <- tcc_callback(
+  function(x) {
+    ptr_arg_seen_externalptr <<- inherits(x, "externalptr")
+    ptr_arg_seen_unowned <<- !.Call("RC_ptr_is_owned", x, PACKAGE = "Rtinycc")
+    x
+  },
+  signature = "void* (*)(void*)"
+)
 cb_ptr_handle <- tcc_callback_ptr(cb_ptr_rt)
 
 code_ptr <- "\n#define _Complex\n\nvoid* echo_ptr(void* (*cb)(void* ctx, void* x), void* ctx, void* x) {\n  return cb(ctx, x);\n}\n"
@@ -95,6 +104,8 @@ ffi_ptr <- tcc_ffi() |>
 buf <- tcc_malloc(8)
 out <- ffi_ptr$echo_ptr(cb_ptr_rt, cb_ptr_handle, buf)
 expect_true(inherits(out, "externalptr"))
+expect_true(ptr_arg_seen_externalptr, info = "Pointer callback receives externalptr wrapper")
+expect_true(ptr_arg_seen_unowned, info = "Pointer callback receives non-owned pointer wrapper")
 expect_false(.Call("RC_ptr_is_owned", out, PACKAGE = "Rtinycc"), info = "Pointer callback return wrapper is not owned")
 expect_error(tcc_free(out), info = "Pointer callback return wrapper is not explicitly freeable")
 tcc_free(buf)

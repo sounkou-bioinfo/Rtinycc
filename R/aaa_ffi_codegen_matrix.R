@@ -946,6 +946,12 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
           pattern = "return RC_make_unowned_ptr\\(call_ptr_cb\\(arg1, arg2, arg3\\), R_NilValue\\);",
           info = "Pointer callback wrapper return boxes raw pointers through host unowned helper"
         )
+      ),
+      forbidden = list(
+        list(
+          pattern = "R_MakeExternalPtr",
+          info = "Pointer callback codegen avoids direct external pointer construction"
+        )
       )
     ),
     list(
@@ -973,6 +979,16 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
         list(
           pattern = "SEXP \\(\\*arg1\\)\\(void\\*, SEXP\\) = trampoline_R_wrap_call_sexp_cb_arg1;",
           info = "SEXP callback wrapper declaration matches trampoline ABI"
+        )
+      ),
+      forbidden = list(
+        list(
+          pattern = "RC_make_unowned_ptr\\(arg1, R_NilValue\\)",
+          info = "SEXP callback trampoline does not pointer-box SEXP arguments"
+        ),
+        list(
+          pattern = "R_ExternalPtrAddr\\(result\\)",
+          info = "SEXP callback trampoline does not coerce callback results through external-pointer reads"
         )
       )
     )
