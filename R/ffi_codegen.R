@@ -638,7 +638,7 @@ generate_struct_new <- function(struct_name) {
       "  SEXP ext = PROTECT(R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), R_NilValue));",
       struct_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);",
+    "  R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);",
     "  UNPROTECT(1);",
     "  return ext;",
     "}",
@@ -934,7 +934,7 @@ generate_union_new <- function(union_name) {
       "  SEXP ext = PROTECT(R_MakeExternalPtr(p, Rf_install(\"union_%s\"), R_NilValue));",
       union_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);",
+    "  R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);",
     "  UNPROTECT(1);",
     "  return ext;",
     "}",

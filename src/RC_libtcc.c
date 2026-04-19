@@ -23,6 +23,7 @@
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
 static void RC_borrowed_view_finalizer(SEXP ext);
+void RC_owned_native_finalizer(SEXP ext);
 static const char *RC_extptr_tag_name(SEXP tag);
 static int RC_trace_finalizers_enabled(void);
 static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail);
@@ -196,6 +197,25 @@ void RC_free_finalizer(SEXP ext) {
         free(ptr);
         R_ClearExternalPtr(ext);
     }
+}
+
+/**
+ * Finalizer for owned native allocations created by generated composite helpers.
+ * Ownership: frees owned heap memory on Unix; Windows finalizer clears only.
+ * Allocation: none.
+ * Protection: none.
+ */
+void RC_owned_native_finalizer(SEXP ext) {
+    void *ptr = R_ExternalPtrAddr(ext);
+    if (!ptr) {
+        return;
+    }
+#ifdef _WIN32
+    RC_trace_finalizer_event("owned_native:skip_free_windows", ext, R_ExternalPtrProtected(ext), NULL);
+    R_ClearExternalPtr(ext);
+#else
+    RC_free_finalizer(ext);
+#endif
 }
 
 /**
@@ -2027,6 +2047,7 @@ static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn)
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
+    RC_tcc_add_function_symbol(s, "RC_owned_native_finalizer", (DL_FUNC) RC_owned_native_finalizer);
     RC_tcc_add_function_symbol(s, "RC_make_borrowed_view", (DL_FUNC) RC_make_borrowed_view);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
