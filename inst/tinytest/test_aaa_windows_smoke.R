@@ -89,9 +89,11 @@ expect_true(
     ffi <- tcc_source(
       ffi,
       "
-#include <stdlib.h>
+#include <stddef.h>
+void *RC_host_calloc_c(size_t n, size_t size);
+void RC_host_free_c(void *ptr);
 SEXP test_extptr(void) {
-    int *p = (int*)calloc(1, sizeof(int));
+    int *p = (int*)RC_host_calloc_c(1, sizeof(int));
     if (!p) Rf_error(\"OOM\");
     *p = 42;
     SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
@@ -102,6 +104,7 @@ SEXP test_extptr(void) {
     ffi <- tcc_bind(ffi, test_extptr = list(args = list(), returns = "sexp"))
     compiled <- tcc_compile(ffi)
     res <- compiled$test_extptr()
+    on.exit(if (inherits(res, "externalptr") && !tcc_ptr_is_null(res)) .Call(RC_free, res), add = TRUE)
     is(res, "externalptr")
   },
   info = "smoke: R_MakeExternalPtr + R_NilValue"
@@ -114,9 +117,10 @@ expect_true(
     ffi <- tcc_source(
       ffi,
       "
-#include <stdlib.h>
+#include <stddef.h>
+void *RC_host_calloc_c(size_t n, size_t size);
 SEXP test_finalizer(void) {
-    int *p = (int*)calloc(1, sizeof(int));
+    int *p = (int*)RC_host_calloc_c(1, sizeof(int));
     if (!p) Rf_error(\"OOM\");
     *p = 99;
     SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);

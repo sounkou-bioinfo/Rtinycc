@@ -29,6 +29,8 @@ static int RC_trace_finalizers_enabled(void);
 static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail);
 void RC_free_finalizer(SEXP ext);
 SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
+void *RC_host_calloc_c(size_t n, size_t size);
+void RC_host_free_c(void *ptr);
 
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
@@ -197,6 +199,24 @@ void RC_free_finalizer(SEXP ext) {
         free(ptr);
         R_ClearExternalPtr(ext);
     }
+}
+
+void *RC_host_calloc_c(size_t n, size_t size) {
+    void *ptr = calloc(n, size);
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] host_calloc ptr=%p n=%llu size=%llu\n",
+                ptr,
+                (unsigned long long)n,
+                (unsigned long long)size);
+    }
+    return ptr;
+}
+
+void RC_host_free_c(void *ptr) {
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] host_free ptr=%p\n", ptr);
+    }
+    free(ptr);
 }
 
 /**
@@ -701,6 +721,9 @@ SEXP RC_malloc(SEXP size) {
     }
     
     SEXP ptr = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue));
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] malloc ext=%p ptr=%p size=%d\n", (void*)ptr, data, sz);
+    }
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
     UNPROTECT(1);
     return ptr;
@@ -866,6 +889,9 @@ SEXP RC_create_cstring(SEXP str) {
     strcpy(data, c_str);
     
     SEXP ptr = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue));
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] cstring ext=%p ptr=%p len=%llu\n", (void*)ptr, data, (unsigned long long)strlen(c_str));
+    }
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
     UNPROTECT(1);
     return ptr;
@@ -2049,6 +2075,8 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
     RC_tcc_add_function_symbol(s, "RC_owned_native_finalizer", (DL_FUNC) RC_owned_native_finalizer);
     RC_tcc_add_function_symbol(s, "RC_make_borrowed_view", (DL_FUNC) RC_make_borrowed_view);
+    RC_tcc_add_function_symbol(s, "RC_host_calloc_c", (DL_FUNC) RC_host_calloc_c);
+    RC_tcc_add_function_symbol(s, "RC_host_free_c", (DL_FUNC) RC_host_free_c);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
     RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_c",
