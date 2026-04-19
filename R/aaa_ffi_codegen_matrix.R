@@ -1155,11 +1155,14 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     default_ffi_type = "u8",
     treesitter_bitfield_type = "u8",
     include_bitfields = TRUE,
+    address_helpers_forbidden = TRUE,
+    container_of_forbidden = TRUE,
     survives_forced_gc = TRUE,
     notes = paste(
       "Bitfields are stored and masked by the C compiler; helper accessors",
-      "treat them as scalar fields and treesitter defaults them to u8 unless",
-      "the caller overrides bitfield_type."
+      "treat them as scalar fields, treesitter defaults them to u8 unless",
+      "the caller overrides bitfield_type, and address-style helpers are",
+      "forbidden for bitfield members."
     )
   ),
   treesitter_header_bindings = list(
@@ -1167,11 +1170,13 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     helper = "tcc_generate_bindings",
     include_bitfields = TRUE,
     bitfield_type = "u8",
+    nested_struct_mode = "ptr-like",
     generates = c("functions", "structs", "unions", "enums", "globals"),
     notes = paste(
       "Treesitter helpers project parsed header declarations into the same",
       "FFI helper surface, including optional bitfield accessors and global",
-      "getter/setter bindings."
+      "getter/setter bindings; nested struct fields currently stay ptr-like",
+      "unless a richer helper model is added explicitly."
     )
   )
 )

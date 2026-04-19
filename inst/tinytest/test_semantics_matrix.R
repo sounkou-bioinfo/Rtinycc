@@ -123,6 +123,14 @@ expect_true(
   isTRUE(composite_semantics$bitfield_native$compiler_managed),
   info = "bitfield semantics records compiler-managed storage"
 )
+expect_true(
+  isTRUE(composite_semantics$bitfield_native$address_helpers_forbidden %||% TRUE),
+  info = "bitfield semantics records address-style helper exclusion"
+)
+expect_true(
+  isTRUE(composite_semantics$bitfield_native$container_of_forbidden %||% TRUE),
+  info = "bitfield semantics records container_of exclusion"
+)
 expect_identical(
   composite_semantics$bitfield_native$treesitter_bitfield_type,
   "u8",
@@ -138,6 +146,11 @@ expect_true(
       composite_semantics$treesitter_header_bindings$generates
   ),
   info = "treesitter semantics records generated binding surface"
+)
+expect_identical(
+  composite_semantics$treesitter_header_bindings$nested_struct_mode %||% "ptr-like",
+  "ptr-like",
+  info = "treesitter semantics records current nested struct accessor mode"
 )
 
 helper_classification_ffi <- tcc_ffi() |>

@@ -276,3 +276,15 @@ expect_true(
   },
   info = "treesitter-generated nested union struct bindings preserve nested-view semantics end-to-end"
 )
+
+# Test 10: treesitter-generated nested struct members currently stay explicit ptr-like, not nested struct helpers
+expect_true(
+  {
+    header <- "struct child { int x; }; struct outer { struct child child; int y; };"
+    accessors <- tcc_treesitter_struct_accessors(header)
+    is.character(accessors$outer$child) &&
+      identical(accessors$outer$child, "ptr") &&
+      identical(accessors$outer$y, "i32")
+  },
+  info = "treesitter-generated nested struct members remain explicit ptr-like accessors today"
+)
