@@ -23,5 +23,6 @@ articles:
   - title: Internals
     navbar: ~
     contents:
-      - internals
       - compilation-and-call-overhead
+      - internals
+

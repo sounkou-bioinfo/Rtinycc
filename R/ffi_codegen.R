@@ -5,68 +5,90 @@
 # C Wrapper Code Generator for API Mode
 # Generates C code that converts R SEXP to C types and back
 
+normalize_rtinycc_return_spec <- function(x) {
+  if (inherits(x, "rtinycc_symbol_return_spec")) {
+    return(x)
+  }
+  if (is.list(x)) {
+    if (is.null(x$type)) {
+      stop("Return spec missing 'type'", call. = FALSE)
+    }
+    return(new_rtinycc_symbol_return_spec(
+      type = x$type,
+      type_info = check_ffi_type(x$type, "return value"),
+      length_arg = x$length_arg,
+      free = isTRUE(x$free)
+    ))
+  }
+  new_rtinycc_symbol_return_spec(
+    type = x,
+    type_info = check_ffi_type(x, "return value")
+  )
+}
+
+rtinycc_return_type_name <- function(x) {
+  normalize_rtinycc_return_spec(x)$type
+}
+
+rtinycc_return_type_info <- function(x) {
+  normalize_rtinycc_return_spec(x)$type_info
+}
+
 # Generate C code to extract R SEXP to C type
 generate_c_input <- function(arg_name, r_name, ffi_type) {
-  check_ffi_type(ffi_type, paste0("argument '", arg_name, "'"))
-  special <- ffi_input_special_rule(ffi_type, arg_name, r_name)
+  type_name <- if (is_rtinycc_ffi_type(ffi_type)) ffi_type$name else ffi_type
+  check_ffi_type(type_name, paste0("argument '", arg_name, "'"))
+  special <- ffi_input_special_rule(type_name, arg_name, r_name)
   if (!is.null(special)) {
     return(special)
   }
-  ffi_input_rule(ffi_type, arg_name, r_name)
+  ffi_input_rule(type_name, arg_name, r_name)
 }
 
 # Generate C code to convert C return value to R SEXP
 generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
-  if (is.list(ffi_type)) {
-    if (is.null(ffi_type$type)) {
-      stop("Return spec missing 'type'", call. = FALSE)
+  return_spec <- normalize_rtinycc_return_spec(ffi_type)
+  type_info <- return_spec$type_info
+
+  if (!is.null(type_info$kind) && type_info$kind == "array") {
+    len_arg <- return_spec$length_arg
+    if (is.null(len_arg) || !is.numeric(len_arg)) {
+      stop("Array return requires numeric 'length_arg'", call. = FALSE)
     }
-    base_type <- ffi_type$type
-    type_info <- check_ffi_type(base_type, "return value")
+    if (len_arg < 1 || len_arg > length(arg_names)) {
+      stop("length_arg out of range", call. = FALSE)
+    }
+    len_name <- arg_names[[as.integer(len_arg)]]
+    value_var <- "__rtinycc_ret"
 
-    if (!is.null(type_info$kind) && type_info$kind == "array") {
-      len_arg <- ffi_type$length_arg
-      if (is.null(len_arg) || !is.numeric(len_arg)) {
-        stop("Array return requires numeric 'length_arg'", call. = FALSE)
-      }
-      if (len_arg < 1 || len_arg > length(arg_names)) {
-        stop("length_arg out of range", call. = FALSE)
-      }
-      len_name <- arg_names[[as.integer(len_arg)]]
-      value_var <- "__rtinycc_ret"
+    alloc_line <- array_return_alloc_line(return_spec$type, len_name)
+    copy_line <- array_return_copy_line(return_spec$type, len_name, value_var)
 
-      alloc_line <- array_return_alloc_line(base_type, len_name)
-      copy_line <- array_return_copy_line(base_type, len_name, value_var)
-
-      free_line <- if (isTRUE(ffi_type$free)) {
-        sprintf("  if (%s) free(%s);", value_var, value_var)
-      } else {
-        NULL
-      }
-
-      return(paste(
-        c(
-          sprintf("%s %s = %s;", type_info$c_type, value_var, value_expr),
-          sprintf("if (!%s) return R_NilValue;", value_var),
-          alloc_line,
-          copy_line,
-          free_line,
-          "  UNPROTECT(1);",
-          "  return out;"
-        ),
-        collapse = "\n"
-      ))
+    free_line <- if (isTRUE(return_spec$free)) {
+      sprintf("  if (%s) free(%s);", value_var, value_var)
+    } else {
+      NULL
     }
 
-    ffi_type <- base_type
+    return(paste(
+      c(
+        sprintf("%s %s = %s;", type_info$c_type, value_var, value_expr),
+        sprintf("if (!%s) return R_NilValue;", value_var),
+        alloc_line,
+        copy_line,
+        free_line,
+        "  UNPROTECT(1);",
+        "  return out;"
+      ),
+      collapse = "\n"
+    ))
   }
 
-  check_ffi_type(ffi_type, "return value")
-  special <- ffi_return_special_rule(ffi_type, value_expr)
+  special <- ffi_return_special_rule(return_spec$type, value_expr)
   if (!is.null(special)) {
     return(special)
   }
-  ffi_return_rule(ffi_type, value_expr)
+  ffi_return_rule(return_spec$type, value_expr)
 }
 
 # Callback helper: generate a unique trampoline name per wrapper argument
@@ -123,13 +145,16 @@ generate_variadic_type_sequences <- function(allowed_types, n_varargs) {
 callback_funptr_decl <- function(arg_name, sig, trampoline_name) {
   arg_types <- sig$arg_types
   c_args <- if (length(arg_types) > 0) {
-    paste(c("void*", arg_types), collapse = ", ")
+    paste(
+      c("void*", vapply(arg_types, callback_c_decl_type, character(1))),
+      collapse = ", "
+    )
   } else {
     "void*"
   }
   sprintf(
     "  %s (*%s)(%s) = %s;",
-    sig$return_type,
+    callback_c_decl_type(sig$return_type),
     arg_name,
     c_args,
     trampoline_name
@@ -147,10 +172,7 @@ generate_c_wrapper <- function(
   is_external = FALSE
 ) {
   n_args <- length(arg_types) + length(vararg_types)
-  return_info <- check_ffi_type(
-    if (is.list(return_type)) return_type$type else return_type,
-    "return value"
-  )
+  return_info <- rtinycc_return_type_info(return_type)
 
   # Detect if any argument is callback_async
   all_arg_types_combined <- c(arg_types, vararg_types)
@@ -286,10 +308,7 @@ generate_async_exec_wrapper <- function(
   call_expr,
   return_type
 ) {
-  return_info <- check_ffi_type(
-    if (is.list(return_type)) return_type$type else return_type,
-    "return value"
-  )
+  return_info <- rtinycc_return_type_info(return_type)
   is_void <- identical(return_info$c_type, "void")
 
   # --- Build struct fields ---
@@ -310,7 +329,7 @@ generate_async_exec_wrapper <- function(
         sprintf("  %s (*%s)(%s);", sig$return_type, aname, c_args)
       )
     } else {
-      type_info <- check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
+      type_info <- if (is_rtinycc_ffi_type(ffi_type)) ffi_type else check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
       struct_fields <- c(
         struct_fields,
         sprintf("  %s %s;", type_info$c_type, aname)
@@ -418,20 +437,24 @@ generate_external_declarations <- function(symbols) {
   decls <- c()
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
-    return_info <- check_ffi_type(
-      if (is.list(sym$returns)) sym$returns$type else sym$returns,
-      paste0("symbol '", sym_name, "' return")
-    )
+    return_info <- if (!is.null(sym$return_spec)) {
+      sym$return_spec$type_info
+    } else {
+      rtinycc_return_type_info(sym$returns)
+    }
 
     arg_types <- sym$args %||% list()
+    arg_info <- sym$arg_type_info %||% list()
     if (length(arg_types) > 0) {
-      arg_info <- lapply(
-        arg_types,
-        check_ffi_type,
-        context = paste0("symbol '", sym_name, "' argument")
-      )
+      if (!length(arg_info)) {
+        arg_info <- lapply(
+          arg_types,
+          check_ffi_type,
+          context = paste0("symbol '", sym_name, "' argument")
+        )
+      }
       arg_decls <- paste(
-        sapply(arg_info, function(x) x$c_type),
+        vapply(arg_info, function(x) x$c_type, character(1)),
         collapse = ", "
       )
     } else {
@@ -632,11 +655,9 @@ generate_struct_new <- function(struct_name) {
     ),
     "  if (!p) Rf_error(\"Out of memory\");",
     sprintf(
-      "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), R_NilValue);",
+      "  return RC_make_owned_composite_ptr(p, Rf_install(\"struct_%s\"));",
       struct_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);",
-    "  return ext;",
     "}",
     ""
   )
@@ -646,6 +667,9 @@ generate_struct_new <- function(struct_name) {
 generate_struct_free <- function(struct_name) {
   c(
     sprintf("SEXP R_wrap_struct_%s_free(SEXP ext) {", struct_name),
+    "  if (R_ExternalPtrProtected(ext) != R_NilValue) {",
+    "    Rf_error(\"Cannot free borrowed view; free the owning object instead\");",
+    "  }",
     "  RC_free_finalizer(ext);",
     "  return R_NilValue;",
     "}",
@@ -665,7 +689,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
       sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
       sprintf(
-        "  return R_MakeExternalPtr(p->%s, R_NilValue, ext);",
+        "  return RC_make_borrowed_view(p->%s, Rf_install(\"rtinycc_borrowed\"), ext);",
         field_name
       ),
       "}",
@@ -676,6 +700,26 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
     type_name <- field_spec$type %||% "ptr"
   } else {
     type_name <- field_spec
+  }
+
+  if (startsWith(type_name, "struct:")) {
+    nested_struct_name <- sub("^struct:", "", type_name)
+    return(c(
+      sprintf(
+        "SEXP R_wrap_struct_%s_get_%s(SEXP ext) {",
+        struct_name,
+        field_name
+      ),
+      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      sprintf(
+        "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
+        field_name,
+        nested_struct_name
+      ),
+      "}",
+      ""
+    ))
   }
 
   return_code <- struct_field_getter_lines(type_name, field_name)
@@ -761,6 +805,25 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
     size <- NULL
   }
 
+  if (startsWith(type_name, "struct:")) {
+    nested_struct_name <- sub("^struct:", "", type_name)
+    return(c(
+      sprintf(
+        "SEXP R_wrap_struct_%s_set_%s(SEXP ext, SEXP val) {",
+        struct_name,
+        field_name
+      ),
+      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
+      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      sprintf("  struct %s *child = R_ExternalPtrAddr(val);", nested_struct_name),
+      "  if (!child) Rf_error(\"Null pointer\");",
+      sprintf("  memcpy(&p->%s, child, sizeof(struct %s));", field_name, nested_struct_name),
+      "  return ext;",
+      "}",
+      ""
+    ))
+  }
+
   setter_code <- struct_field_setter_lines(type_name, field_name, size)
 
   c(
@@ -796,7 +859,7 @@ generate_container_of <- function(struct_name, member_name) {
       member_name
     ),
     sprintf(
-      "  return R_MakeExternalPtr(p, Rf_install(\"struct_%s\"), R_NilValue);",
+      "  return RC_make_borrowed_view(p, Rf_install(\"struct_%s\"), ext);",
       struct_name
     ),
     "}",
@@ -815,7 +878,9 @@ generate_field_addr <- function(struct_name, field_name) {
     sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
     sprintf("  if (!p) Rf_error(\"Null pointer\");"),
     sprintf("  void *field_ptr = &p->%s;", field_name),
-    sprintf("  return R_MakeExternalPtr(field_ptr, R_NilValue, ext);"),
+    sprintf(
+      "  return RC_make_borrowed_view(field_ptr, Rf_install(\"rtinycc_borrowed\"), ext);"
+    ),
     "}",
     ""
   )
@@ -922,11 +987,9 @@ generate_union_new <- function(union_name) {
     ),
     "  if (!p) Rf_error(\"Out of memory\");",
     sprintf(
-      "  SEXP ext = R_MakeExternalPtr(p, Rf_install(\"union_%s\"), R_NilValue);",
+      "  return RC_make_owned_composite_ptr(p, Rf_install(\"union_%s\"));",
       union_name
     ),
-    "  R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);",
-    "  return ext;",
     "}",
     ""
   )
@@ -935,6 +998,9 @@ generate_union_new <- function(union_name) {
 generate_union_free <- function(union_name) {
   c(
     sprintf("SEXP R_wrap_union_%s_free(SEXP ext) {", union_name),
+    "  if (R_ExternalPtrProtected(ext) != R_NilValue) {",
+    "    Rf_error(\"Cannot free borrowed view; free the owning object instead\");",
+    "  }",
     "  RC_free_finalizer(ext);",
     "  return R_NilValue;",
     "}",
@@ -946,12 +1012,17 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
   if (
     is.list(mem_spec) && !is.null(mem_spec$type) && mem_spec$type == "struct"
   ) {
+    struct_name <- mem_spec$struct_name %||% mem_name
     # Nested struct in union
     return(c(
       sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
       sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
       sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-      sprintf("  return R_MakeExternalPtr(&p->%s, R_NilValue, ext);", mem_name),
+      sprintf(
+        "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
+        mem_name,
+        struct_name
+      ),
       "}",
       ""
     ))
@@ -1190,6 +1261,15 @@ generate_ffi_code <- function(
   struct_raw_access = NULL,
   introspect = NULL
 ) {
+  if (!is.null(symbols) && length(symbols) > 0) {
+    symbols <- stats::setNames(
+      lapply(names(symbols), function(sym_name) {
+        as_rtinycc_bound_symbol(sym_name, symbols[[sym_name]])
+      }),
+      names(symbols)
+    )
+  }
+
   parts <- c()
 
   # TinyCC workaround: Define _Complex as empty since TinyCC doesn't support C99 complex types
@@ -1210,6 +1290,11 @@ generate_ffi_code <- function(
     "#define STRING_PTR_RO STRING_PTR",
     "#endif",
     "void RC_free_finalizer(SEXP ext);",
+    "void RC_owned_native_finalizer(SEXP ext);",
+    "SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);",
+    "SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);",
+    "SEXP RC_make_owned_ptr(void *ptr, SEXP tag);",
+    "SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);",
     ""
   )
 
@@ -1230,7 +1315,7 @@ generate_ffi_code <- function(
       parts,
       "",
       "/* Callback trampoline support */",
-      "typedef struct { int id; int refs; } callback_token_t;",
+      "typedef struct { int id; int refs; int origin_id; } callback_token_t;",
       if (cb_tramps$needs_sync) {
         "SEXP RC_invoke_callback_id(int, SEXP);"
       } else {

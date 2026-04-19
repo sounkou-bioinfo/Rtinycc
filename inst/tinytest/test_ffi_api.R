@@ -17,6 +17,10 @@ ffi <- tcc_ffi() |>
 
 expect_equal(length(ffi$symbols), 1)
 expect_true("add" %in% names(ffi$symbols))
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(ffi$symbols$add))
+expect_equal(ffi$symbols$add$name, "add")
+expect_true(all(vapply(ffi$symbols$add$arg_type_info, Rtinycc:::is_rtinycc_ffi_type, logical(1))))
+expect_equal(Rtinycc:::ffi_type_family(ffi$symbols$add$return_spec$type_info), "i32")
 
 # Test 3: Compile and call simple function
 ffi <- tcc_ffi() |>
@@ -102,13 +106,20 @@ expect_true(any(grepl("tcc_ffi", output)))
 expect_true(any(grepl("foo", output)))
 
 # Test 7: Array return type
-ffi <- tcc_ffi() |>
+ffi_spec <- tcc_ffi() |>
   tcc_bind(
     dup_array = list(
       args = list("integer_array", "i32"),
       returns = list(type = "integer_array", length_arg = 2, free = TRUE)
     )
-  ) |>
+  )
+
+expect_true(inherits(ffi_spec$symbols$dup_array$return_spec, "rtinycc_symbol_return_spec"))
+expect_equal(ffi_spec$symbols$dup_array$return_spec$type, "integer_array")
+expect_equal(ffi_spec$symbols$dup_array$return_spec$length_arg, 2)
+expect_true(isTRUE(ffi_spec$symbols$dup_array$return_spec$free))
+
+ffi <- ffi_spec |>
   tcc_source(
     "
     #include <stdlib.h>
@@ -126,7 +137,22 @@ expect_true(inherits(ffi, "tcc_compiled"))
 result <- ffi$dup_array(as.integer(c(1, 2, 3)), 3L)
 expect_equal(result, c(2L, 4L, 6L))
 
-# Test 8: Missing wrapper bindings fail fast (no partially-broken object)
+# Test 8: helper specs are normalized to classed symbol specs too
+ffi_helpers <- tcc_ffi() |>
+  tcc_source("struct point { int x; int y; };") |>
+  tcc_struct("point", accessors = c(x = "i32", y = "i32")) |>
+  tcc_compile()
+helper_specs <- get(".helper_specs", envir = ffi_helpers, inherits = FALSE)
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(helper_specs$struct_point_new))
+expect_true(Rtinycc:::is_rtinycc_bound_symbol(helper_specs$struct_point_get_x))
+expect_true(inherits(helper_specs$struct_point_new, "rtinycc_helper_symbol"))
+expect_identical(Rtinycc:::helper_symbol_kind(helper_specs$struct_point_new), "struct")
+expect_identical(Rtinycc:::helper_symbol_kind(helper_specs$struct_point_get_x), "struct")
+expect_identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_point_new), "constructor")
+expect_identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_point_get_x), "getter")
+expect_identical(Rtinycc:::ffi_type_family(helper_specs$struct_point_get_x$return_spec$type_info), "sexp")
+
+# Test 9: Missing wrapper bindings fail fast (no partially-broken object)
 state_bind_fail <- tcc_state(output = "memory")
 expect_equal(
   tcc_compile_string(

@@ -69,6 +69,12 @@ as an implementation detail.
 - `tcc_malloc()` and `tcc_cstring()` create owned heap allocations tagged
   `rtinycc_owned` and backed by a finalizer.
 - `tcc_data_ptr()` returns a borrowed pointer tagged `rtinycc_borrowed`.
+- `tcc_read_ptr()` copies only the pointer-sized address value out of native
+  memory (effectively `memcpy()` into a local `void *`), then wraps that
+  address as a borrowed `externalptr`. It does not copy the pointee storage,
+  does not infer ownership, and must not free whatever the address points to.
+  If the returned wrapper is GC'd, that only reclaims the R `EXTPTRSXP`
+  wrapper object, not the pointee.
 - `tcc_read_bytes()` and `tcc_read_cstring_n()` copy data into fresh R objects.
 - Typed scalar reads copy bytes from the pointed memory into local C scalars
   with `memcpy()`, then box those values for R.

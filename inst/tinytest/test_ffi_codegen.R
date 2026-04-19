@@ -4,6 +4,8 @@
 library(Rtinycc)
 library(tinytest)
 
+callback_abi_specs <- Rtinycc:::rtinycc_callback_abi_specs()
+
 # Test 1: Generate C input code for R API mode (SEXP conversion)
 code <- Rtinycc:::generate_c_input("x", "arg1_", "i32")
 expect_true(grepl("int _x = asInteger", code))
@@ -121,6 +123,21 @@ expect_true(grepl("#include <stdbool.h>", full_code))
 expect_true(grepl("R_wrap_add", full_code))
 expect_true(grepl("R_wrap_greet", full_code))
 expect_true(grepl("SEXP R_wrap_add", full_code))
+
+for (case in callback_abi_specs$wrapper) {
+  cb_code <- Rtinycc:::generate_ffi_code(
+    symbols = setNames(
+      list(list(args = case$args, returns = case$returns)),
+      case$name
+    ),
+    c_code = case$c_code,
+    is_external = FALSE
+  )
+
+  for (pattern in case$patterns) {
+    expect_true(grepl(pattern$pattern, cb_code), info = pattern$info)
+  }
+}
 
 # Test 8: tcc_source stores code as chunks without introducing a leading blank line
 ffi <- tcc_ffi() |>

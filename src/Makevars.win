@@ -4,6 +4,14 @@ TINYCC_DIR = ../inst/tinycc
 # (stdlib.h, stdio.h, math.h …) which conflict with Rtools/MinGW.
 PKG_CPPFLAGS = -I$(TINYCC_DIR)/libtcc
 
+# Opt-in unstripped build for Windows gdb sessions.
+ifeq ($(RTINYCC_DEBUG_BUILD),1)
+override CFLAGS := $(filter-out -O2,$(CFLAGS)) -O0 -g3 -fno-omit-frame-pointer
+override SHLIB_LDFLAGS := -shared -g
+override SHLIB_CXXLDFLAGS := -shared -g
+override DLLFLAGS := -static-libgcc
+endif
+
 # Prefer dynamic linking against libtcc.dll (same strategy as Unix).
 # This keeps _exit/abort/etc. out of Rtinycc.dll — they stay in the
 # companion libtcc.dll which install.libs.R copies next to Rtinycc.dll.

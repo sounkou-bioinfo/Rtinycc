@@ -4,6 +4,25 @@
 library(tinytest)
 library(Rtinycc)
 
+# Helper operation-kind metadata for enum helpers
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source('enum probe { PROBE_ZERO = 0, PROBE_ONE = 1 };') |>
+      tcc_enum("probe", constants = c("PROBE_ZERO", "PROBE_ONE")) |>
+      tcc_introspect() |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    identical(Rtinycc:::helper_symbol_kind(helper_specs$enum_probe_PROBE_ZERO), "enum") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_PROBE_ZERO), "constant") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_PROBE_ONE), "constant") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$enum_probe_sizeof), "introspection")
+  },
+  info = "Enum helper specs carry operation-kind metadata"
+)
+
 # Test 1: Basic enum constants
 expect_true(
   {

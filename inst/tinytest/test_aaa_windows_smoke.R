@@ -89,48 +89,63 @@ expect_true(
     ffi <- tcc_source(
       ffi,
       "
-#include <stdlib.h>
+#include <stddef.h>
+void *RC_host_calloc_c(size_t n, size_t size);
+void RC_host_free_c(void *ptr);
 SEXP test_extptr(void) {
-    int *p = (int*)calloc(1, sizeof(int));
+    int *p = (int*)RC_host_calloc_c(1, sizeof(int));
     if (!p) Rf_error(\"OOM\");
     *p = 42;
-    SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
-    return ext;
+    return R_MakeExternalPtr(p, R_NilValue, R_NilValue);
+}
+void free_extptr(SEXP ext) {
+    void *p = R_ExternalPtrAddr(ext);
+    if (p) {
+        RC_host_free_c(p);
+        R_ClearExternalPtr(ext);
+    }
 }
 "
     )
-    ffi <- tcc_bind(ffi, test_extptr = list(args = list(), returns = "sexp"))
+    ffi <- tcc_bind(
+      ffi,
+      test_extptr = list(args = list(), returns = "sexp"),
+      free_extptr = list(args = list("sexp"), returns = "void")
+    )
     compiled <- tcc_compile(ffi)
     res <- compiled$test_extptr()
-    is(res, "externalptr")
+    ok <- is(res, "externalptr")
+    compiled$free_extptr(res)
+    ok
   },
   info = "smoke: R_MakeExternalPtr + R_NilValue"
 )
 
-# ---------- 7. R_RegisterCFinalizerEx with RC_free_finalizer -----------------
+# ---------- 7. owned extptr helper via host finalizer registration -----------
 expect_true(
   {
     ffi <- tcc_ffi()
     ffi <- tcc_source(
       ffi,
       "
-#include <stdlib.h>
+#include <stddef.h>
+void *RC_host_calloc_c(size_t n, size_t size);
+SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
 SEXP test_finalizer(void) {
-    int *p = (int*)calloc(1, sizeof(int));
+    int *p = (int*)RC_host_calloc_c(1, sizeof(int));
     if (!p) Rf_error(\"OOM\");
     *p = 99;
-    SEXP ext = R_MakeExternalPtr(p, R_NilValue, R_NilValue);
-    R_RegisterCFinalizerEx(ext, RC_free_finalizer, TRUE);
-    return ext;
+    return RC_make_owned_ptr(p, R_NilValue);
 }
 "
     )
     ffi <- tcc_bind(ffi, test_finalizer = list(args = list(), returns = "sexp"))
     compiled <- tcc_compile(ffi)
     res <- compiled$test_finalizer()
+    on.exit(if (inherits(res, "externalptr") && !tcc_ptr_is_null(res)) .Call("RC_free", res, PACKAGE = "Rtinycc"), add = TRUE)
     is(res, "externalptr")
   },
-  info = "smoke: R_RegisterCFinalizerEx + RC_free_finalizer"
+  info = "smoke: host-owned extptr helper"
 )
 
 # ---------- 8. struct: compile only (no call) ---------------------------------

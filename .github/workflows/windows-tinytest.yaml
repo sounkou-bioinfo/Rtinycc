@@ -1,0 +1,79 @@
+on:
+  push:
+    branches: [main, windows_support, soundness]
+  pull_request:
+  workflow_dispatch:
+
+name: windows-tinytest
+
+permissions: read-all
+
+jobs:
+  windows-tinytest:
+    runs-on: windows-latest
+    name: windows-latest (release, tinytest)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::tinytest
+
+      - name: Install package from working tree
+        shell: bash
+        run: |
+          R CMD INSTALL --preclean .
+
+      - name: Run tinytest package suite via R -e
+        id: tinytest
+        shell: bash
+        run: |
+          R -e "tinytest::test_package('Rtinycc', testdir = 'inst/tinytest')"
+
+      - name: Reinstall debug build for post-mortem
+        if: failure() && steps.tinytest.outcome == 'failure'
+        shell: bash
+        run: |
+          RTINYCC_DEBUG_BUILD=1 R CMD INSTALL --preclean .
+
+      - name: GDB repro around union crash
+        if: failure() && steps.tinytest.outcome == 'failure'
+        shell: bash
+        run: |
+          chmod +x scripts/win-gdb.sh
+          export RTINYCC_GDB_BREAK_FINALIZERS=1
+          export RTINYCC_TRACE_FINALIZERS=1
+          scripts/win-gdb.sh pkgfiles \
+            inst/tinytest/test_structs.R \
+            inst/tinytest/test_tcc_options.R \
+            inst/tinytest/test_treesitter_helpers.R \
+            inst/tinytest/test_typed_readwrite.R \
+            inst/tinytest/test_unions.R \
+            2>&1 | tee windows-gdb-union.log
+
+      - name: Upload Windows debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-tinytest-logs
+          path: |
+            windows-gdb-union.log
+            config.log
+            src/*.o
+            src/*.dll
+            src/*.exe
+            inst/tinycc/lib/*.dll
+            inst/tinycc/lib/*.def
+          if-no-files-found: ignore

@@ -22,58 +22,19 @@
 
 static void RC_tcc_finalizer(SEXP ext);
 static void RC_null_finalizer(SEXP ext);
+static void RC_borrowed_view_finalizer(SEXP ext);
+void RC_owned_native_finalizer(SEXP ext);
+static const char *RC_extptr_tag_name(SEXP tag);
+static int RC_trace_finalizers_enabled(void);
+static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail);
 void RC_free_finalizer(SEXP ext);
+SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
+SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
+SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
+SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
+void *RC_host_calloc_c(size_t n, size_t size);
+void RC_host_free_c(void *ptr);
 
-// ============================================================================
-// TCC state registry (ownership tracking)
-// ============================================================================
-
-typedef struct tcc_state_entry {
-    TCCState *ptr;
-    SEXP owner_ext; // owning externalptr (preserved)
-    struct tcc_state_entry *next;
-} tcc_state_entry_t;
-
-static tcc_state_entry_t *g_tcc_state_registry = NULL;
-
-static void RC_tcc_registry_remove(tcc_state_entry_t *entry) {
-    if (!entry) return;
-    tcc_state_entry_t **cur = &g_tcc_state_registry;
-    while (*cur) {
-        if (*cur == entry) {
-            *cur = entry->next;
-            if (entry->owner_ext != R_NilValue) {
-                R_ReleaseObject(entry->owner_ext);
-            }
-            free(entry);
-            return;
-        }
-        cur = &(*cur)->next;
-    }
-}
-
-static tcc_state_entry_t *RC_tcc_registry_find(TCCState *ptr) {
-    tcc_state_entry_t *cur = g_tcc_state_registry;
-    while (cur) {
-        if (cur->ptr == ptr) {
-            return cur;
-        }
-        cur = cur->next;
-    }
-    return NULL;
-}
-
-static void RC_tcc_registry_add(TCCState *ptr, SEXP owner_ext) {
-    tcc_state_entry_t *entry = (tcc_state_entry_t *)calloc(1, sizeof(*entry));
-    if (!entry) {
-        Rf_error("Out of memory (tcc registry)");
-    }
-    entry->ptr = ptr;
-    entry->owner_ext = owner_ext;
-    R_PreserveObject(entry->owner_ext);
-    entry->next = g_tcc_state_registry;
-    g_tcc_state_registry = entry;
-}
 SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type);
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path);
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path);
@@ -92,19 +53,6 @@ SEXP RC_get_external_ptr_addr(SEXP ext);
 SEXP RC_get_external_ptr_hex(SEXP ext);
 SEXP RC_null_pointer(void);
 
-static int RC_tcc_state_is_owned(SEXP ext) {
-    SEXP tag = R_ExternalPtrTag(ext);
-    if (tag == R_NilValue) {
-        return 1;
-    }
-    if (TYPEOF(tag) == SYMSXP) {
-        const char *nm = CHAR(PRINTNAME(tag));
-        return strcmp(nm, "rtinycc_tcc_state_borrowed") != 0;
-    }
-    return 1;
-}
-
- 
 SEXP RC_malloc(SEXP size);
 SEXP RC_free(SEXP ptr);
 SEXP RC_data_ptr(SEXP ptr_ref);
@@ -182,6 +130,7 @@ static callback_entry_t callback_registry[MAX_CALLBACKS];
 typedef struct {
     int id;                // Index into callback_registry (or -1 when closed)
     int refs;              // Reference count for outstanding external pointers
+    int origin_id;         // Original registry slot for diagnostics after close
 } callback_token_t;
 
 // ============================================================================
@@ -195,20 +144,21 @@ typedef struct {
  * Protection: none.
  */
 static void RC_tcc_finalizer(SEXP ext) {
-    if (!RC_tcc_state_is_owned(ext)) {
-        R_ClearExternalPtr(ext);
-        return;
-    }
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
         TCCState *s = (TCCState*)ptr;
-        // remove from registry before delete
-        tcc_state_entry_t *entry = RC_tcc_registry_find(s);
-        if (entry) {
-            RC_tcc_registry_remove(entry);
-        }
+#ifdef _WIN32
+        /* On Windows, libtcc teardown unloads DLL handles during tcc_delete().
+           That is safe at process exit, but repeated GC-driven finalization of
+           relocated states has been observed to crash the live R session.
+           Leave the state untouched here and let process teardown reclaim it. */
+        RC_trace_finalizer_event("tcc_state:skip_delete_windows", ext, R_ExternalPtrProtected(ext), NULL);
+        (void)s;
+#else
+        RC_trace_finalizer_event("tcc_state:delete", ext, R_ExternalPtrProtected(ext), NULL);
         tcc_delete(s);
         R_ClearExternalPtr(ext);
+#endif
     }
 }
 
@@ -220,6 +170,23 @@ static void RC_tcc_finalizer(SEXP ext) {
  */
 static void RC_null_finalizer(SEXP ext) {
     // NULL pointer doesn't need cleanup
+    RC_trace_finalizer_event("null_clear", ext, R_ExternalPtrProtected(ext), NULL);
+    R_ClearExternalPtr(ext);
+}
+
+/**
+ * Finalizer for borrowed views that explicitly preserve an owner object.
+ * Ownership: drops the owner link; does not free pointee storage.
+ * Allocation: none.
+ * Protection: none.
+ */
+static void RC_borrowed_view_finalizer(SEXP ext) {
+    SEXP owner = R_ExternalPtrProtected(ext);
+    RC_trace_finalizer_event("borrowed_release", ext, owner, NULL);
+    if (owner != R_NilValue) {
+        R_ReleaseObject(owner);
+        R_SetExternalPtrProtected(ext, R_NilValue);
+    }
     R_ClearExternalPtr(ext);
 }
 
@@ -232,9 +199,93 @@ static void RC_null_finalizer(SEXP ext) {
 void RC_free_finalizer(SEXP ext) {
     void *ptr = R_ExternalPtrAddr(ext);
     if (ptr) {
+        RC_trace_finalizer_event("free", ext, R_ExternalPtrProtected(ext), NULL);
         free(ptr);
         R_ClearExternalPtr(ext);
     }
+}
+
+void *RC_host_calloc_c(size_t n, size_t size) {
+    void *ptr = calloc(n, size);
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] host_calloc ptr=%p n=%llu size=%llu\n",
+                ptr,
+                (unsigned long long)n,
+                (unsigned long long)size);
+    }
+    return ptr;
+}
+
+void RC_host_free_c(void *ptr) {
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] host_free ptr=%p\n", ptr);
+    }
+    free(ptr);
+}
+
+/**
+ * Finalizer for owned native allocations created by generated composite helpers.
+ * Ownership: frees owned heap memory on Unix; Windows finalizer clears only.
+ * Allocation: none.
+ * Protection: none.
+ */
+void RC_owned_native_finalizer(SEXP ext) {
+    void *ptr = R_ExternalPtrAddr(ext);
+    if (!ptr) {
+        return;
+    }
+#ifdef _WIN32
+    RC_trace_finalizer_event("owned_native:skip_free_windows", ext, R_ExternalPtrProtected(ext), NULL);
+    R_ClearExternalPtr(ext);
+#else
+    RC_free_finalizer(ext);
+#endif
+}
+
+/**
+ * Create a borrowed external pointer view with optional owner retention.
+ * Ownership: borrowed; does not free pointee storage.
+ * Allocation: external pointer only.
+ * Protection: attaches owner in the external pointer protected slot.
+ */
+SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_borrowed") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+
+    if (owner != R_NilValue) {
+        R_PreserveObject(owner);
+        R_SetExternalPtrProtected(ext, owner);
+        R_RegisterCFinalizerEx(ext, RC_borrowed_view_finalizer, FALSE);
+    } else {
+        R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
+    }
+
+    UNPROTECT(1);
+    return ext;
+}
+
+SEXP RC_make_unowned_ptr(void *ptr, SEXP tag) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_borrowed") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+    R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
+    UNPROTECT(1);
+    return ext;
+}
+
+SEXP RC_make_owned_ptr(void *ptr, SEXP tag) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_owned") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+    R_RegisterCFinalizerEx(ext, RC_free_finalizer, FALSE);
+    UNPROTECT(1);
+    return ext;
+}
+
+SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag) {
+    SEXP resolved_tag = tag == R_NilValue ? Rf_install("rtinycc_owned") : tag;
+    SEXP ext = PROTECT(R_MakeExternalPtr(ptr, resolved_tag, R_NilValue));
+    R_RegisterCFinalizerEx(ext, RC_owned_native_finalizer, FALSE);
+    UNPROTECT(1);
+    return ext;
 }
 
 // ============================================================================
@@ -282,12 +333,6 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
 
     /* Route libtcc diagnostics through R (stdout, sink-able) */
     tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) Rprintf);
-    /* Optional libtcc options via env var (e.g. RTINYCC_TCC_OPTIONS="-Wall"). */
-    /* Note: in bundled TinyCC, -O mainly toggles __OPTIMIZE__ preprocessor state. */
-    const char *rtinycc_opts = getenv("RTINYCC_TCC_OPTIONS");
-    if (rtinycc_opts && rtinycc_opts[0]) {
-        tcc_set_options(s, rtinycc_opts);
-    }
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
@@ -322,18 +367,9 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         tcc_delete(s);
         Rf_error("tcc_set_output_type failed");
     }
-    tcc_state_entry_t *existing = RC_tcc_registry_find(s);
     SEXP ext = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
-    if (existing) {
-        R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_borrowed"));
-        // Keep the owner alive while this borrowed wrapper exists.
-        if (existing->owner_ext != R_NilValue) {
-            R_SetExternalPtrProtected(ext, existing->owner_ext);
-        }
-        R_RegisterCFinalizerEx(ext, RC_null_finalizer, FALSE);
-    } else {
-        R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
+    R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
     /* onexit = FALSE: skip tcc_delete() during R shutdown.
        tcc_delete() → tcc_run_free() releases DLLs loaded during JIT
        (FreeLibrary on Windows, dlclose on Unix) and frees JIT memory.
@@ -341,9 +377,7 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
        running these teardown calls while the runtime is shutting down
        causes segfaults (Windows) or is simply pointless (Unix/macOS).
        Normal GC still runs this finalizer while R is alive. */
-        R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, FALSE);
-        RC_tcc_registry_add(s, ext);
-    }
+    R_RegisterCFinalizerEx(ext, RC_tcc_finalizer, FALSE);
     UNPROTECT(1);
     return ext;
 }
@@ -610,6 +644,57 @@ static const char *RC_extptr_tag_name(SEXP tag) {
     return "<non-symbol>";
 }
 
+static int RC_trace_finalizers_enabled(void) {
+    const char *value = getenv("RTINYCC_TRACE_FINALIZERS");
+    if (!value || !value[0]) {
+        return 0;
+    }
+    return strcmp(value, "0") != 0 &&
+        strcmp(value, "false") != 0 &&
+        strcmp(value, "FALSE") != 0 &&
+        strcmp(value, "no") != 0 &&
+        strcmp(value, "NO") != 0;
+}
+
+static void RC_trace_finalizer_event(const char *event, SEXP ext, SEXP owner, const char *detail) {
+    if (!RC_trace_finalizers_enabled()) {
+        return;
+    }
+
+    const char *tag_name = "<non-externalptr>";
+    void *ptr = NULL;
+    if (TYPEOF(ext) == EXTPTRSXP) {
+        ptr = R_ExternalPtrAddr(ext);
+        tag_name = RC_extptr_tag_name(R_ExternalPtrTag(ext));
+    }
+
+    const char *owner_tag = "<nil>";
+    void *owner_ptr = NULL;
+    void *owner_sexp_ptr = NULL;
+    if (owner != R_NilValue) {
+        owner_sexp_ptr = (void *) owner;
+        if (TYPEOF(owner) == EXTPTRSXP) {
+            owner_ptr = R_ExternalPtrAddr(owner);
+            owner_tag = RC_extptr_tag_name(R_ExternalPtrTag(owner));
+        } else {
+            owner_tag = type2char(TYPEOF(owner));
+        }
+    }
+
+    Rprintf(
+        "[RTINYCC_TRACE_FINALIZERS] %s ext=%p ptr=%p tag=%s owner=%p owner_ptr=%p owner_tag=%s%s%s\n",
+        event,
+        (void *) ext,
+        ptr,
+        tag_name,
+        owner_sexp_ptr,
+        owner_ptr,
+        owner_tag,
+        detail ? " detail=" : "",
+        detail ? detail : ""
+    );
+}
+
 /**
  * Return pointer address as a hex string ("0x...").
  * Ownership: returns a new R string (R-managed).
@@ -638,8 +723,9 @@ SEXP RC_get_external_ptr_hex(SEXP ext) {
  */
 /* Create a NULL external pointer tagged "rtinycc_null". */
 SEXP RC_null_pointer(void) {
-    SEXP ptr = R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
+    SEXP ptr = PROTECT(R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue));
     R_RegisterCFinalizerEx(ptr, RC_null_finalizer, FALSE);
+    UNPROTECT(1);
     return ptr;
 }
 
@@ -662,8 +748,12 @@ SEXP RC_malloc(SEXP size) {
         Rf_error("Memory allocation failed");
     }
     
-    SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
+    SEXP ptr = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue));
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] malloc ext=%p ptr=%p size=%d\n", (void*)ptr, data, sz);
+    }
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
+    UNPROTECT(1);
     return ptr;
 }
 
@@ -673,15 +763,16 @@ SEXP RC_malloc(SEXP size) {
  * Allocation: none.
  * Protection: none.
  */
-/* Free an owned pointer. Errors if the tag is not "rtinycc_owned" or NULL
- * (i.e. refuses to free struct or borrowed pointers). */
+/* Free an owned pointer. Errors unless the tag is exactly
+ * "rtinycc_owned" (i.e. refuses borrowed, struct, callback, and other
+ * non-owned pointers). */
 SEXP RC_free(SEXP ptr) {
     if (TYPEOF(ptr) != EXTPTRSXP) {
         Rf_error("Expected external pointer");
     }
 
     SEXP tag = R_ExternalPtrTag(ptr);
-    if (!Rf_isNull(tag) && tag != Rf_install("rtinycc_owned")) {
+    if (tag != Rf_install("rtinycc_owned")) {
         Rf_error(
             "Pointer tag '%s' is not owned by Rtinycc; refusing to free",
             RC_extptr_tag_name(tag)
@@ -690,6 +781,7 @@ SEXP RC_free(SEXP ptr) {
     
     void *data = R_ExternalPtrAddr(ptr);
     if (data) {
+        RC_trace_finalizer_event("explicit_free", ptr, R_ExternalPtrProtected(ptr), NULL);
         free(data);
         R_ClearExternalPtr(ptr);
     }
@@ -712,14 +804,16 @@ SEXP RC_data_ptr(SEXP ptr_ref) {
 
     void *ref = R_ExternalPtrAddr(ptr_ref);
     if (!ref) {
-        SEXP out = R_MakeExternalPtr(NULL, Rf_install("rtinycc_borrowed"), R_NilValue);
+        SEXP out = PROTECT(R_MakeExternalPtr(NULL, Rf_install("rtinycc_borrowed"), R_NilValue));
         R_RegisterCFinalizerEx(out, RC_null_finalizer, FALSE);
+        UNPROTECT(1);
         return out;
     }
 
     void *data = *((void**)ref);
-    SEXP out = R_MakeExternalPtr(data, Rf_install("rtinycc_borrowed"), R_NilValue);
+    SEXP out = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_borrowed"), R_NilValue));
     R_RegisterCFinalizerEx(out, RC_null_finalizer, FALSE);
+    UNPROTECT(1);
     return out;
 }
 
@@ -823,8 +917,12 @@ SEXP RC_create_cstring(SEXP str) {
     
     strcpy(data, c_str);
     
-    SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
+    SEXP ptr = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue));
+    if (RC_trace_finalizers_enabled()) {
+        Rprintf("[RTINYCC_TRACE_FINALIZERS] cstring ext=%p ptr=%p len=%llu\n", (void*)ptr, data, (unsigned long long)strlen(c_str));
+    }
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
+    UNPROTECT(1);
     return ptr;
 }
 
@@ -1160,7 +1258,7 @@ SEXP RC_read_f64_typed(SEXP ptr, SEXP offset) {
 SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
     void *v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return R_MakeExternalPtr(v, Rf_install("rtinycc_borrowed"), R_NilValue);
+    return RC_make_unowned_ptr(v, Rf_install("rtinycc_borrowed"));
 }
 
 /* --- scalar writes ------------------------------------------------------- */
@@ -1488,6 +1586,17 @@ void RC_callback_async_exec_c(void (*func)(void *), void *arg) {
 static void RC_callback_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
+        char detail[128];
+        snprintf(
+            detail,
+            sizeof(detail),
+            "id=%d origin_id=%d refs=%d valid=%d",
+            token->id,
+            token->origin_id,
+            token->refs,
+            (token->id >= 0 && token->id < MAX_CALLBACKS) ? callback_registry[token->id].valid : 0
+        );
+        RC_trace_finalizer_event("callback_release", ext, R_NilValue, detail);
         // Release the preserved R function
         if (token->id >= 0 && token->id < MAX_CALLBACKS) {
             callback_entry_t *entry = &callback_registry[token->id];
@@ -1529,6 +1638,9 @@ static void RC_callback_finalizer(SEXP ext) {
 static void RC_callback_ptr_finalizer(SEXP ext) {
     callback_token_t *token = (callback_token_t*)R_ExternalPtrAddr(ext);
     if (token) {
+        char detail[128];
+        snprintf(detail, sizeof(detail), "id=%d origin_id=%d refs=%d", token->id, token->origin_id, token->refs);
+        RC_trace_finalizer_event("callback_ptr_release", ext, R_NilValue, detail);
         token->refs -= 1;
         if (token->refs <= 0) {
             free(token);
@@ -1601,6 +1713,7 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     }
     token->id = id;
     token->refs = 1;
+    token->origin_id = id;
     
     SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_callback"));
@@ -1765,7 +1878,9 @@ static SEXP RC_callback_default_sexp(const char *return_type) {
     }
 
     if (rtinycc_is_pointer_type_name(return_type)) {
-        return R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
+        SEXP ptr = PROTECT(R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue));
+        UNPROTECT(1);
+        return ptr;
     }
 
     return R_NilValue;
@@ -1987,6 +2102,13 @@ static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn)
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
+    RC_tcc_add_function_symbol(s, "RC_owned_native_finalizer", (DL_FUNC) RC_owned_native_finalizer);
+    RC_tcc_add_function_symbol(s, "RC_make_borrowed_view", (DL_FUNC) RC_make_borrowed_view);
+    RC_tcc_add_function_symbol(s, "RC_make_unowned_ptr", (DL_FUNC) RC_make_unowned_ptr);
+    RC_tcc_add_function_symbol(s, "RC_make_owned_ptr", (DL_FUNC) RC_make_owned_ptr);
+    RC_tcc_add_function_symbol(s, "RC_make_owned_composite_ptr", (DL_FUNC) RC_make_owned_composite_ptr);
+    RC_tcc_add_function_symbol(s, "RC_host_calloc_c", (DL_FUNC) RC_host_calloc_c);
+    RC_tcc_add_function_symbol(s, "RC_host_free_c", (DL_FUNC) RC_host_free_c);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
     RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_c",

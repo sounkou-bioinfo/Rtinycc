@@ -4,6 +4,8 @@
 library(tinytest)
 library(Rtinycc)
 
+callback_abi_specs <- Rtinycc:::rtinycc_callback_abi_specs()
+
 # ============================================================================
 # Test 1: Basic callback creation
 # ============================================================================
@@ -70,6 +72,15 @@ expect_error(
   info = "tcc_callback rejects multiple signatures"
 )
 
+expect_true(
+  Rtinycc:::is_callback_type(Rtinycc:::check_ffi_type("callback:void*(void*)", "test")),
+  info = "classed callback ffi type is recognized as callback"
+)
+expect_true(
+  Rtinycc:::is_callback_async_type(Rtinycc:::check_ffi_type("callback_async:void*(void*)", "test")),
+  info = "classed async callback ffi type is recognized as async callback"
+)
+
 # ============================================================================
 # Test 7: Close callback
 # ============================================================================
@@ -107,6 +118,14 @@ expect_equal(
 expect_true(
   inherits(ptr, "tcc_callback_ptr"),
   info = "Callback ptr has correct class"
+)
+expect_false(
+  .Call("RC_ptr_is_owned", ptr, PACKAGE = "Rtinycc"),
+  info = "Callback ptr wrapper is not tagged as owned"
+)
+expect_error(
+  tcc_free(ptr),
+  info = "Callback ptr wrapper is not explicitly freeable"
 )
 
 # ============================================================================
@@ -175,6 +194,8 @@ expect_true(tcc_callback_valid(cb_double), info = "Double callback valid")
 expect_true(tcc_callback_valid(cb_bool), info = "Bool callback valid")
 expect_true(tcc_callback_valid(cb_void), info = "Void callback valid")
 expect_true(tcc_callback_valid(cb_ptr), info = "Ptr callback valid")
+expect_false(.Call("RC_ptr_is_owned", cb_ptr, PACKAGE = "Rtinycc"), info = "Callback object itself is not tcc_free-owned")
+expect_error(tcc_free(cb_ptr), info = "Callback object cannot be freed with tcc_free")
 
 # Close all
 tcc_callback_close(cb_int)
@@ -227,6 +248,36 @@ expect_true(
   info = "Trampoline guards NA logical returns"
 )
 
+for (case in callback_abi_specs$trampoline) {
+  sig <- Rtinycc:::parse_callback_signature(case$signature)
+  tramp <- Rtinycc:::generate_trampoline(case$name, sig)
+  expect_true(grepl(case$pattern, tramp), info = case$info)
+}
+
+for (case in callback_abi_specs$wrapper) {
+  symbols <- setNames(
+    list(list(args = case$args, returns = case$returns)),
+    case$name
+  )
+  code <- Rtinycc:::generate_ffi_code(
+    symbols = symbols,
+    c_code = case$c_code
+  )
+
+  for (pattern in case$patterns) {
+    expect_true(grepl(pattern$pattern, code), info = pattern$info)
+  }
+
+  forbidden <- case$forbidden
+  if (is.null(forbidden)) {
+    forbidden <- list()
+  }
+
+  for (pattern in forbidden) {
+    expect_false(grepl(pattern$pattern, code), info = pattern$info)
+  }
+}
+
 # ==========================================================================
 # Test 17: Async trampoline validation (supported args, pointer handling)
 # ==========================================================================
@@ -273,4 +324,35 @@ expect_true(
 expect_true(
   grepl(".v.p = arg1;", tramp_ptrptr, fixed = TRUE),
   info = "Async callback stores char** in pointer slot"
+)
+
+for (case in callback_abi_specs$async_trampoline) {
+  sig <- Rtinycc:::parse_callback_type(case$signature)
+  tramp <- Rtinycc:::generate_async_trampoline(case$name, sig)
+
+  for (pattern in case$patterns) {
+    expect_true(grepl(pattern$pattern, tramp), info = pattern$info)
+  }
+
+  forbidden <- case$forbidden
+  if (is.null(forbidden)) {
+    forbidden <- list()
+  }
+
+  for (pattern in forbidden) {
+    expect_false(grepl(pattern$pattern, tramp), info = pattern$info)
+  }
+}
+
+expect_error(
+  mk_tramps("callback_async:SEXP(SEXP)"),
+  info = "Async callback rejects SEXP arguments and returns"
+)
+expect_error(
+  mk_tramps("callback_async:SEXP(int)"),
+  info = "Async callback rejects SEXP return type"
+)
+expect_error(
+  mk_tramps("callback_async:void(SEXP)"),
+  info = "Async callback rejects SEXP argument type"
 )

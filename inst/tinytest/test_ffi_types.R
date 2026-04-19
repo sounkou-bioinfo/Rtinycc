@@ -3,8 +3,11 @@
 
 library(Rtinycc)
 
-# Test 1: FFI type validation works
+# Test 1: FFI type validation works and returns a classed type object
 type_info <- Rtinycc:::check_ffi_type("i32", "test")
+expect_true(Rtinycc:::is_rtinycc_ffi_type(type_info))
+expect_equal(type_info$name, "i32")
+expect_equal(Rtinycc:::ffi_type_family(type_info), "i32")
 expect_equal(type_info$c_type, "int32_t")
 expect_equal(type_info$r_type, "integer")
 expect_equal(type_info$kind, "scalar")
@@ -55,7 +58,22 @@ expect_false(Rtinycc:::is_array_type("i32"))
 expect_true(Rtinycc:::is_scalar_type("i32"))
 expect_false(Rtinycc:::is_scalar_type("raw"))
 
-# Test 6: C type aliases map to expected FFI types
+# Test 6: special type families are classed, not bare stringly metadata
+expect_equal(
+  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type("enum:color", "test")),
+  "enum"
+)
+expect_equal(
+  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type("callback:double(int)", "test")),
+  "callback"
+)
+expect_equal(
+  Rtinycc:::ffi_type_family(Rtinycc:::check_ffi_type("callback_async:void*(void*)", "test")),
+  "callback_async"
+)
+
+# Test 7: C type aliases map to expected FFI types
+
 expect_equal(tcc_map_c_type_to_ffi("size_t"), "u64")
 expect_equal(tcc_map_c_type_to_ffi("ssize_t"), "i64")
 expect_equal(tcc_map_c_type_to_ffi("ptrdiff_t"), "i64")

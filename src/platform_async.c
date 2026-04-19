@@ -7,6 +7,8 @@
 #include <R.h>
 #include <Rinternals.h>
 
+SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
+
 /* Shared helper: convert a SEXP result to cb_result_t. */
 static cb_result_t cb_result_from_sexp(SEXP s) {
     cb_result_t r = {0};
@@ -75,7 +77,7 @@ static SEXP cb_task_to_args(cb_task_t *task) {
                 SET_VECTOR_ELT(args, i, Rf_ScalarLogical(a->v.i));
                 break;
             case CB_ARG_PTR:
-                SET_VECTOR_ELT(args, i, R_MakeExternalPtr(a->v.p, R_NilValue, R_NilValue));
+                SET_VECTOR_ELT(args, i, RC_make_unowned_ptr(a->v.p, R_NilValue));
                 break;
             case CB_ARG_CSTRING:
                 SET_VECTOR_ELT(args, i, Rf_mkString(a->v.s ? a->v.s : ""));
@@ -397,7 +399,7 @@ static SEXP cb_task_to_args(cb_task_t *task) {
                 SET_VECTOR_ELT(args, i, Rf_ScalarLogical(a->v.i));
                 break;
             case CB_ARG_PTR:
-                SET_VECTOR_ELT(args, i, R_MakeExternalPtr(a->v.p, R_NilValue, R_NilValue));
+                SET_VECTOR_ELT(args, i, RC_make_unowned_ptr(a->v.p, R_NilValue));
                 break;
             case CB_ARG_CSTRING:
                 SET_VECTOR_ELT(args, i, Rf_mkString(a->v.s ? a->v.s : ""));

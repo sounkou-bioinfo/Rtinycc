@@ -158,9 +158,28 @@ is_callback_valid <- function(callback) {
   )
 }
 
+new_rtinycc_callback_signature <- function(return_type, arg_types, raw, mode = "sync") {
+  structure(
+    list(
+      return_type = return_type,
+      arg_types = arg_types,
+      raw = raw,
+      mode = mode
+    ),
+    class = c(
+      paste0("rtinycc_callback_signature_", mode),
+      "rtinycc_callback_signature"
+    )
+  )
+}
+
+is_rtinycc_callback_signature <- function(x) {
+  inherits(x, "rtinycc_callback_signature")
+}
+
 # Parse a C function signature string
-# Returns list with return_type and arg_types (character vector)
-parse_callback_signature <- function(signature) {
+# Returns classed signature object with return_type and arg_types.
+parse_callback_signature <- function(signature, mode = "sync") {
   # Remove whitespace
   sig <- gsub("\\s+", " ", trimws(signature))
 
@@ -187,10 +206,11 @@ parse_callback_signature <- function(signature) {
         arg_types <- parse_arg_list(args_str)
       }
 
-      return(list(
+      return(new_rtinycc_callback_signature(
         return_type = return_type,
         arg_types = arg_types,
-        raw = signature
+        raw = signature,
+        mode = mode
       ))
     }
   }
@@ -303,6 +323,9 @@ format_signature <- function(sig) {
 #' @param type Type string to check
 #' @return Logical
 is_callback_type <- function(type) {
+  if (is_rtinycc_ffi_type(type)) {
+    return(ffi_type_family(type) %in% c("callback", "callback_async"))
+  }
   if (!is.character(type)) {
     return(FALSE)
   }
@@ -312,6 +335,9 @@ is_callback_type <- function(type) {
 }
 
 is_callback_async_type <- function(type) {
+  if (is_rtinycc_ffi_type(type)) {
+    return(identical(ffi_type_family(type), "callback_async"))
+  }
   if (!is.character(type)) {
     return(FALSE)
   }
@@ -323,6 +349,10 @@ is_callback_async_type <- function(type) {
 #' @param type Type string like "callback:double(int,int)"
 #' @return Parsed signature list or NULL
 parse_callback_type <- function(type) {
+  if (is_rtinycc_ffi_type(type)) {
+    type <- type$name
+  }
+
   if (type == "callback") {
     # Generic callback without signature - will need runtime determination
     return(NULL)
@@ -331,12 +361,12 @@ parse_callback_type <- function(type) {
   if (startsWith(type, "callback:")) {
     # Extract signature after "callback:"
     sig_str <- sub("^callback:", "", type)
-    return(parse_callback_signature(sig_str))
+    return(parse_callback_signature(sig_str, mode = "sync"))
   }
 
   if (startsWith(type, "callback_async:")) {
     sig_str <- sub("^callback_async:", "", type)
-    return(parse_callback_signature(sig_str))
+    return(parse_callback_signature(sig_str, mode = "async"))
   }
 
   NULL
@@ -399,7 +429,7 @@ generate_trampoline <- function(trampoline_name, sig) {
     for (i in seq_len(n_args)) {
       c_args <- c(
         c_args,
-        sprintf("%s arg%d", map_c_to_sexp_type(sig$arg_types[i]), i)
+        sprintf("%s arg%d", callback_c_decl_type(sig$arg_types[i]), i)
       )
     }
   }
@@ -409,7 +439,7 @@ generate_trampoline <- function(trampoline_name, sig) {
     sprintf("// Trampoline %s", trampoline_name),
     sprintf(
       "%s %s(%s) {",
-      sig$return_type,
+      callback_c_decl_type(sig$return_type),
       trampoline_name,
       if (length(c_args) > 0) paste(c_args, collapse = ", ") else "void"
     ),
@@ -503,7 +533,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
     for (i in seq_len(n_args)) {
       c_args <- c(
         c_args,
-        sprintf("%s arg%d", map_c_to_sexp_type(sig$arg_types[i]), i)
+        sprintf("%s arg%d", callback_c_decl_type(sig$arg_types[i]), i)
       )
     }
   }
@@ -512,7 +542,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
     sprintf("// Async trampoline %s", trampoline_name),
     sprintf(
       "%s %s(%s) {",
-      sig$return_type,
+      callback_c_decl_type(sig$return_type),
       trampoline_name,
       if (length(c_args) > 0) paste(c_args, collapse = ", ") else "void"
     ),
@@ -600,7 +630,7 @@ async_result_kind <- function(return_type) {
 # Generate the C return statement that extracts a value from cb_result_t.
 get_async_result_return <- function(return_type) {
   kind <- async_result_kind(return_type)
-  rt <- trimws(return_type)
+  rt <- callback_c_decl_type(return_type)
   switch(kind,
     "int"     = sprintf("  return (%s)result.v.i;", rt),
     "real"    = sprintf("  return (%s)result.v.d;", rt),
@@ -679,6 +709,42 @@ normalize_default_key <- function(c_type) {
 
 normalize_return_key <- function(c_type) {
   return_key_rule(trimws(c_type), is_ptr_type(trimws(c_type)))
+}
+
+# Normalize callback signature spellings into concrete C declaration types.
+# This keeps trampoline ABI faithful to the declared callback type while still
+# accepting internal alias forms like i8/f32/sexp in callback signatures.
+callback_c_decl_type <- function(c_type) {
+  type_name <- trimws(gsub("\\s+", " ", c_type))
+  if (!nzchar(type_name)) {
+    return(type_name)
+  }
+
+  alias_map <- c(
+    callback = "void*",
+    ptr = "void*",
+    cstring = "const char*",
+    string = "const char*",
+    sexp = "SEXP",
+    logical = "bool",
+    i8 = "int8_t",
+    i16 = "int16_t",
+    i32 = "int32_t",
+    i64 = "int64_t",
+    u8 = "uint8_t",
+    u16 = "uint16_t",
+    u32 = "uint32_t",
+    u64 = "uint64_t",
+    f32 = "float",
+    f64 = "double"
+  )
+
+  if (type_name %in% names(alias_map)) {
+    mapped <- unname(alias_map[[type_name]])
+    return(mapped)
+  }
+
+  type_name
 }
 
 map_c_to_cb_arg_kind <- function(c_type) {

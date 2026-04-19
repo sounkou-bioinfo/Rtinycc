@@ -13,6 +13,28 @@
 #
 # We support both scalar types (with coercion) and array types (zero-copy)
 
+new_rtinycc_ffi_type <- function(name, ..., family = name) {
+  fields <- list(name = name, family = family, ...)
+  structure(
+    fields,
+    class = c(
+      paste0("rtinycc_ffi_type_", fields$kind),
+      "rtinycc_ffi_type"
+    )
+  )
+}
+
+is_rtinycc_ffi_type <- function(x) {
+  inherits(x, "rtinycc_ffi_type")
+}
+
+ffi_type_family <- function(x) {
+  if (!is_rtinycc_ffi_type(x)) {
+    stop("Expected rtinycc_ffi_type object", call. = FALSE)
+  }
+  x$family
+}
+
 FFI_TYPES <- list(
   # Scalar integer types (with range checking)
   i8 = list(c_type = "int8_t", r_type = "integer", size = 1L, kind = "scalar"),
@@ -172,13 +194,31 @@ check_ffi_type <- function(type, context = "argument") {
   # Check for enum:type pattern
   if (startsWith(type, "enum:")) {
     # Enum types are always i32 (int)
-    return(list(c_type = "int", r_type = "integer", size = 4L, kind = "scalar"))
+    return(new_rtinycc_ffi_type(
+      name = type,
+      family = "enum",
+      c_type = "int",
+      r_type = "integer",
+      size = 4L,
+      kind = "scalar"
+    ))
   }
 
   # Check for callback:type pattern (e.g., callback:double(int,int))
-  if (startsWith(type, "callback") || startsWith(type, "callback_async")) {
-    # Callback types are always void* (function pointer)
-    return(list(
+  if (startsWith(type, "callback_async:")) {
+    return(new_rtinycc_ffi_type(
+      name = type,
+      family = "callback_async",
+      c_type = "void*",
+      r_type = "externalptr",
+      size = NA_integer_,
+      kind = "scalar"
+    ))
+  }
+  if (startsWith(type, "callback")) {
+    return(new_rtinycc_ffi_type(
+      name = type,
+      family = "callback",
       c_type = "void*",
       r_type = "externalptr",
       size = NA_integer_,
@@ -197,7 +237,7 @@ check_ffi_type <- function(type, context = "argument") {
       call. = FALSE
     )
   }
-  FFI_TYPES[[type]]
+  do.call(new_rtinycc_ffi_type, c(list(name = type), FFI_TYPES[[type]]))
 }
 
 # Check if type is an array type

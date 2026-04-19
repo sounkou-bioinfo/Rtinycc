@@ -4,6 +4,13 @@
 library(tinytest)
 library(Rtinycc)
 
+force_gc <- function(rounds = 3L) {
+  for (i in seq_len(rounds)) {
+    gc(verbose = FALSE)
+  }
+  invisible(NULL)
+}
+
 # Test 1: Simple struct allocation and field access
 expect_true(
   {
@@ -89,11 +96,48 @@ expect_true(
     student2 <- compiled$struct_student_from_id(id_ptr)
     id2 <- compiled$struct_student_get_id(student2)
 
+    rm(student2, id_ptr)
+    force_gc()
     compiled$struct_student_free(student)
 
     id2 == 42L
   },
   info = "container_of from member pointer to parent struct"
+)
+
+# Helper operation-kind metadata for struct helpers
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source("struct probe { int x; unsigned char data[4]; };") |>
+      tcc_struct(
+        "probe",
+        accessors = list(
+          x = "i32",
+          data = list(type = "u8", size = 4, array = TRUE)
+        )
+      ) |>
+      tcc_container_of("probe", "x") |>
+      tcc_field_addr("probe", "x") |>
+      tcc_struct_raw_access("probe") |>
+      tcc_introspect() |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_new), "constructor") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_free), "destructor") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_x), "getter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_x), "setter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_data_elt), "array_getter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_data_elt), "array_setter") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_x_addr), "field_addr") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_from_x), "container_of") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_get_raw), "raw_get") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_set_raw), "raw_set") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_probe_sizeof), "introspection")
+  },
+  info = "Struct helper specs carry operation-kind metadata"
 )
 
 # Test 3: Struct with introspection
@@ -145,7 +189,47 @@ expect_true(
   info = "Array element accessors"
 )
 
-# Test 5: Wide integer struct getters warn on precision loss
+# Test 5: Named nested struct fields expose nested views and copy-in setters
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct child {
+        int x;
+      };
+
+      struct outer {
+        struct child child;
+        int y;
+      };
+    "
+      ) |>
+      tcc_struct("child", accessors = c(x = "i32")) |>
+      tcc_struct("outer", accessors = list(child = "struct:child", y = "i32")) |>
+      tcc_bind() |>
+      tcc_compile()
+
+    helper_specs <- get(".helper_specs", envir = ffi, inherits = FALSE)
+    child <- ffi$struct_child_new()
+    child <- ffi$struct_child_set_x(child, 42L)
+
+    outer <- ffi$struct_outer_new()
+    outer <- ffi$struct_outer_set_child(outer, child)
+    child_view <- ffi$struct_outer_get_child(outer)
+    x_val <- ffi$struct_child_get_x(child_view)
+
+    ffi$struct_child_free(child)
+    ffi$struct_outer_free(outer)
+
+    identical(x_val, 42L) &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_outer_get_child), "nested_view") &&
+      identical(Rtinycc:::helper_symbol_operation(helper_specs$struct_outer_set_child), "nested_setter")
+  },
+  info = "Named nested struct fields preserve nested-view getter and copy-in setter semantics"
+)
+
+# Test 6: Wide integer struct getters warn on precision loss
 expect_true(
   {
     ffi <- tcc_ffi() |>
@@ -199,4 +283,93 @@ expect_true(
     warned_i64 && warned_u64 && is.numeric(signed_v) && is.numeric(unsigned_v)
   },
   info = "Struct i64/u64 getters warn when R numeric loses precision"
+)
+
+# Test 7: field_addr borrowed view keeps owner alive across GC
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct student {
+        int id;
+        double grade;
+      };
+    "
+      ) |>
+      tcc_struct("student", accessors = c(id = "i32", grade = "f64")) |>
+      tcc_field_addr("student", "id") |>
+      tcc_bind()
+
+    compiled <- tcc_compile(ffi)
+    ok <- TRUE
+
+    for (i in seq_len(50)) {
+      student <- compiled$struct_student_new()
+      student <- compiled$struct_student_set_id(student, as.integer(i))
+
+      id_ptr <- compiled$struct_student_id_addr(student)
+      rm(student)
+      force_gc()
+
+      id_val <- tcc_read_i32(id_ptr)
+      if (!identical(id_val, as.integer(i))) {
+        ok <- FALSE
+        break
+      }
+
+      rm(id_ptr)
+      force_gc()
+    }
+
+    ok
+  },
+  info = "field_addr borrowed view survives GC after owner reference is dropped"
+)
+
+# Test 8: container_of chain keeps recovered parent alive across GC
+expect_true(
+  {
+    ffi <- tcc_ffi() |>
+      tcc_source(
+        "
+      struct student {
+        int id;
+        double grade;
+      };
+    "
+      ) |>
+      tcc_struct("student", accessors = c(id = "i32", grade = "f64")) |>
+      tcc_container_of("student", "id") |>
+      tcc_field_addr("student", "id") |>
+      tcc_bind()
+
+    compiled <- tcc_compile(ffi)
+    ok <- TRUE
+
+    for (i in seq_len(50)) {
+      student <- compiled$struct_student_new()
+      student <- compiled$struct_student_set_id(student, as.integer(i))
+      student <- compiled$struct_student_set_grade(student, i / 10)
+
+      id_ptr <- compiled$struct_student_id_addr(student)
+      recovered <- compiled$struct_student_from_id(id_ptr)
+
+      rm(student, id_ptr)
+      force_gc()
+
+      id_val <- compiled$struct_student_get_id(recovered)
+      grade_val <- compiled$struct_student_get_grade(recovered)
+      if (!identical(id_val, as.integer(i)) || abs(grade_val - i / 10) > 1e-12) {
+        ok <- FALSE
+        break
+      }
+
+      rm(recovered)
+      force_gc()
+    }
+
+    ok
+  },
+  info = "container_of recovered parent survives GC through protected-slot owner chain"
 )

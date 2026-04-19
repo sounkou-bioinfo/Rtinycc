@@ -268,3 +268,27 @@ expect_true(
   inherits(res11, "error"),
   info = "Deserialized TCC state errors on use (no auto-recompile for raw state)"
 )
+
+# --- Test 12: callback tokens do not survive deserialization --------------
+cb <- tcc_callback(function(x) x + 1L, signature = "int (*)(int)")
+cb2 <- unserialize(serialize(cb, NULL))
+expect_false(
+  tcc_callback_valid(cb2),
+  info = "Deserialized callback token is invalid in the new object"
+)
+expect_error(
+  tcc_callback_ptr(cb2),
+  info = "Deserialized callback cannot yield a fresh callback ptr"
+)
+tcc_callback_close(cb)
+
+# --- Test 13: callback ptr wrappers do not survive deserialization --------
+cb <- tcc_callback(function(x) x + 1L, signature = "int (*)(int)")
+cb_ptr <- tcc_callback_ptr(cb)
+cb_ptr2 <- unserialize(serialize(cb_ptr, NULL))
+res13 <- tryCatch(tcc_ptr_is_null(cb_ptr2), error = function(e) e)
+expect_true(
+  inherits(res13, "error") || isTRUE(res13),
+  info = "Deserialized callback ptr errors on use or reads as NULL"
+)
+tcc_callback_close(cb)

@@ -409,7 +409,10 @@ tcc_treesitter_bindings <- function(
 #' @param mapper Function to map C types to FFI types.
 #' @param bitfield_type FFI type to use for bitfields.
 #' @param include_bitfields Whether to include bitfields.
-#' @return Named list of accessors by struct name.
+#' @return Named list of accessors by struct name. Bitfields are returned as
+#'   lists with `type`, `bitfield = TRUE`, and `width`. Named nested struct
+#'   fields are returned as `"struct:<name>"`; ambiguous or anonymous nested
+#'   structs fall back to `"ptr"`.
 #' @export
 #'
 #' @examples
@@ -444,7 +447,11 @@ tcc_treesitter_struct_accessors <- function(
 
       mtype <- row$member_type
       if (is_bitfield) {
-        ffi_type <- bitfield_type
+        ffi_type <- list(
+          type = bitfield_type,
+          bitfield = TRUE,
+          width = as.integer(row$bitfield)
+        )
       } else if (is.na(mtype) || !nzchar(mtype)) {
         stop(
           "Missing struct member type for '",
@@ -454,7 +461,9 @@ tcc_treesitter_struct_accessors <- function(
           "'",
           call. = FALSE
         )
-      } else if (mtype %in% c("struct", "struct (anonymous)")) {
+      } else if (grepl("^struct\\s+[A-Za-z_][A-Za-z0-9_]*$", mtype)) {
+        ffi_type <- paste0("struct:", sub("^struct\\s+", "", mtype))
+      } else if (grepl("^struct\\b", mtype)) {
         ffi_type <- "ptr"
       } else {
         ffi_type <- mapper(mtype)
@@ -474,7 +483,10 @@ tcc_treesitter_struct_accessors <- function(
 #' @param mapper Function to map C types to FFI types.
 #' @param bitfield_type FFI type to use for bitfields.
 #' @param include_bitfields Whether to include bitfields.
-#' @return Named list of accessors by union name.
+#' @return Named list of accessors by union name. Bitfields are returned as
+#'   lists with `type`, `bitfield = TRUE`, and `width`. Nested struct members
+#'   are returned as `list(type = "struct", struct_name = <name>)` when the
+#'   struct name is available, otherwise `list(type = "struct")`.
 #' @export
 #'
 #' @examples
@@ -509,7 +521,11 @@ tcc_treesitter_union_accessors <- function(
 
       mtype <- row$member_type
       if (is_bitfield) {
-        ffi_type <- bitfield_type
+        ffi_type <- list(
+          type = bitfield_type,
+          bitfield = TRUE,
+          width = as.integer(row$bitfield)
+        )
       } else if (is.na(mtype) || !nzchar(mtype)) {
         stop(
           "Missing union member type for '",
@@ -519,8 +535,17 @@ tcc_treesitter_union_accessors <- function(
           "'",
           call. = FALSE
         )
-      } else if (mtype %in% c("struct", "struct (anonymous)")) {
-        ffi_type <- "ptr"
+      } else if (grepl("^struct\\s+[A-Za-z_][A-Za-z0-9_]*\\s+[A-Za-z_][A-Za-z0-9_]*$", mtype)) {
+        ffi_type <- list(
+          type = "struct",
+          struct_name = sub(
+            "^struct\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+[A-Za-z_][A-Za-z0-9_]*$",
+            "\\1",
+            mtype
+          )
+        )
+      } else if (mtype %in% c("struct", "struct (anonymous)") || grepl("^struct\\s+[^*]+$", mtype)) {
+        ffi_type <- list(type = "struct")
       } else {
         ffi_type <- mapper(mtype)
       }

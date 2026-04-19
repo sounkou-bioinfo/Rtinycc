@@ -12,7 +12,9 @@ tcc_struct(ffi, name, accessors)
 \item{name}{Struct name (as defined in C header)}
 
 \item{accessors}{Named list of field accessors where
-names are field names and values are FFI types (e.g., list(x="f64", y="f64"))}
+names are field names and values are FFI types (e.g., list(x="f64", y="f64")).
+Named nested struct fields can use \code{"struct:<name>"} to generate borrowed
+nested-view getters and copy-in setters (for example \code{child = "struct:child"}).}
 }
 \value{
 Updated tcc_ffi object
