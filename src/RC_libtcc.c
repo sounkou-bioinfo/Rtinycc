@@ -653,8 +653,9 @@ SEXP RC_get_external_ptr_hex(SEXP ext) {
  */
 /* Create a NULL external pointer tagged "rtinycc_null". */
 SEXP RC_null_pointer(void) {
-    SEXP ptr = R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
+    SEXP ptr = PROTECT(R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue));
     R_RegisterCFinalizerEx(ptr, RC_null_finalizer, FALSE);
+    UNPROTECT(1);
     return ptr;
 }
 
@@ -677,8 +678,9 @@ SEXP RC_malloc(SEXP size) {
         Rf_error("Memory allocation failed");
     }
     
-    SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
+    SEXP ptr = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue));
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
+    UNPROTECT(1);
     return ptr;
 }
 
@@ -728,14 +730,16 @@ SEXP RC_data_ptr(SEXP ptr_ref) {
 
     void *ref = R_ExternalPtrAddr(ptr_ref);
     if (!ref) {
-        SEXP out = R_MakeExternalPtr(NULL, Rf_install("rtinycc_borrowed"), R_NilValue);
+        SEXP out = PROTECT(R_MakeExternalPtr(NULL, Rf_install("rtinycc_borrowed"), R_NilValue));
         R_RegisterCFinalizerEx(out, RC_null_finalizer, FALSE);
+        UNPROTECT(1);
         return out;
     }
 
     void *data = *((void**)ref);
-    SEXP out = R_MakeExternalPtr(data, Rf_install("rtinycc_borrowed"), R_NilValue);
+    SEXP out = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_borrowed"), R_NilValue));
     R_RegisterCFinalizerEx(out, RC_null_finalizer, FALSE);
+    UNPROTECT(1);
     return out;
 }
 
@@ -839,8 +843,9 @@ SEXP RC_create_cstring(SEXP str) {
     
     strcpy(data, c_str);
     
-    SEXP ptr = R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue);
+    SEXP ptr = PROTECT(R_MakeExternalPtr(data, Rf_install("rtinycc_owned"), R_NilValue));
     R_RegisterCFinalizerEx(ptr, RC_free_finalizer, FALSE);
+    UNPROTECT(1);
     return ptr;
 }
 
@@ -1176,7 +1181,9 @@ SEXP RC_read_f64_typed(SEXP ptr, SEXP offset) {
 SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
     void *v;
     memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return R_MakeExternalPtr(v, Rf_install("rtinycc_borrowed"), R_NilValue);
+    SEXP out = PROTECT(R_MakeExternalPtr(v, Rf_install("rtinycc_borrowed"), R_NilValue));
+    UNPROTECT(1);
+    return out;
 }
 
 /* --- scalar writes ------------------------------------------------------- */
@@ -1794,7 +1801,9 @@ static SEXP RC_callback_default_sexp(const char *return_type) {
     }
 
     if (rtinycc_is_pointer_type_name(return_type)) {
-        return R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue);
+        SEXP ptr = PROTECT(R_MakeExternalPtr(NULL, Rf_install("rtinycc_null"), R_NilValue));
+        UNPROTECT(1);
+        return ptr;
     }
 
     return R_NilValue;
