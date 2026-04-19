@@ -816,6 +816,30 @@ expect_equal(ffi$get_str_calls(), 1L,
              info = "cstring return: C function called exactly once")
 expect_equal(r, "hello", info = "cstring return: correct value")
 
+# wrapper argument single-eval
+ffi <- tcc_ffi() |>
+  tcc_source("int add3(int a, int b, int c) { return a + b + c; }") |>
+  tcc_bind(
+    add3 = list(args = list("i32", "i32", "i32"), returns = "i32")
+  ) |>
+  tcc_compile()
+
+arg_force_count <- 0L
+mk_arg <- function(value) {
+  force(value)
+  function() {
+    arg_force_count <<- arg_force_count + 1L
+    value
+  }
+}
+arg1 <- mk_arg(1L)
+arg2 <- mk_arg(2L)
+arg3 <- mk_arg(3L)
+expect_equal(ffi$add3(arg1(), arg2(), arg3()), 6L,
+             info = "wrapper arg single-eval: correct result")
+expect_equal(arg_force_count, 3L,
+             info = "wrapper arg single-eval: each R argument forced once")
+
 # ===========================================================================
 # 9. CSTRING_ARRAY INPUT: verify element-by-element translation
 # ===========================================================================

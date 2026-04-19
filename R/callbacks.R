@@ -158,9 +158,28 @@ is_callback_valid <- function(callback) {
   )
 }
 
+new_rtinycc_callback_signature <- function(return_type, arg_types, raw, mode = "sync") {
+  structure(
+    list(
+      return_type = return_type,
+      arg_types = arg_types,
+      raw = raw,
+      mode = mode
+    ),
+    class = c(
+      paste0("rtinycc_callback_signature_", mode),
+      "rtinycc_callback_signature"
+    )
+  )
+}
+
+is_rtinycc_callback_signature <- function(x) {
+  inherits(x, "rtinycc_callback_signature")
+}
+
 # Parse a C function signature string
-# Returns list with return_type and arg_types (character vector)
-parse_callback_signature <- function(signature) {
+# Returns classed signature object with return_type and arg_types.
+parse_callback_signature <- function(signature, mode = "sync") {
   # Remove whitespace
   sig <- gsub("\\s+", " ", trimws(signature))
 
@@ -187,10 +206,11 @@ parse_callback_signature <- function(signature) {
         arg_types <- parse_arg_list(args_str)
       }
 
-      return(list(
+      return(new_rtinycc_callback_signature(
         return_type = return_type,
         arg_types = arg_types,
-        raw = signature
+        raw = signature,
+        mode = mode
       ))
     }
   }
@@ -331,12 +351,12 @@ parse_callback_type <- function(type) {
   if (startsWith(type, "callback:")) {
     # Extract signature after "callback:"
     sig_str <- sub("^callback:", "", type)
-    return(parse_callback_signature(sig_str))
+    return(parse_callback_signature(sig_str, mode = "sync"))
   }
 
   if (startsWith(type, "callback_async:")) {
     sig_str <- sub("^callback_async:", "", type)
-    return(parse_callback_signature(sig_str))
+    return(parse_callback_signature(sig_str, mode = "async"))
   }
 
   NULL
