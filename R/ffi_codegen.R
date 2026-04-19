@@ -1228,6 +1228,7 @@ generate_ffi_code <- function(
     "#define STRING_PTR_RO STRING_PTR",
     "#endif",
     "void RC_free_finalizer(SEXP ext);",
+    "void RC_owned_native_finalizer(SEXP ext);",
     "SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);",
     ""
   )
