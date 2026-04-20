@@ -6,6 +6,27 @@
 # The original implementation is MIT-licensed. This version stores the chunk
 # body in a named R object for later vignette use instead of compiling it.
 
+rtinycc_c_block <- function(code, options = list()) {
+  if (!requireNamespace("knitr", quietly = TRUE)) {
+    return(code)
+  }
+
+  opts <- modifyList(
+    list(
+      echo = TRUE,
+      eval = FALSE,
+      engine = "c",
+      class.source = c("rtinycc"),
+      prompt = FALSE,
+      comment = "",
+      tidy = FALSE,
+      highlight = TRUE
+    ),
+    options
+  )
+  knitr::engine_output(opts, code, "")
+}
+
 #' A knitr engine for reusable inline C source chunks in vignettes
 #'
 #' Supported custom chunk options:
@@ -43,9 +64,7 @@ rtinycc_engine <- function(options) {
   assign(object_name, code, envir = knit_env)
 
   c_options <- options
-  c_options$engine <- "c"
-  c_options$class.source <- c("rtinycc")
-  rendered <- knitr::engine_output(c_options, code, "")
+  rendered <- rtinycc_c_block(code, c_options)
 
   if (isFALSE(options$rcode %||% TRUE)) {
     return(rendered)

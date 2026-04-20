@@ -385,8 +385,8 @@ The generated code makes the extra return-path work explicit. In particular, the
 buffer into it, then `free()`s the original buffer. In contrast, `fill_rand()`
 uses the borrowed `numeric_array` input path.
 
-```{r}
-cat(generated_code)
+```{r, results='asis'}
+Rtinycc:::rtinycc_c_block(generated_code)
 ```
 
 ## `noop()` Call Overhead
