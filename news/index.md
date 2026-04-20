@@ -1,5 +1,26 @@
 # Changelog
 
+## Rtinycc 0.1.5
+
+- Fix Debian CRAN incoming failures around external-library linking.
+  Short linker names now stay on the normal linker-name path, and the
+  Unix math-library vignette/test examples now resolve a real runtime
+  library file robustly on both Linux and macOS.
+
+- Improve external library discovery by searching relevant loader and
+  linker environment paths in addition to the built-in platform library
+  path tables.
+
+- Improve vignette rendering of generated C code by reusing the
+  package’s custom knitr C rendering path so highlighted generated code
+  matches other vignette C blocks.
+
+- Clean up README rendering around nested-struct and bitfield
+  limitations.
+
+- Add a Docker helper for reproducing a Debian R-devel CRAN-style check
+  locally.
+
 ## Rtinycc 0.1.4
 
 - Tighten FFI soundness around ownership, helper generation, and nested

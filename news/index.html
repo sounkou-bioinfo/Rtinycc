@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,6 +45,14 @@
       <small>Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.5" id="rtinycc-015">Rtinycc 0.1.5<a class="anchor" aria-label="anchor" href="#rtinycc-015"></a></h2>
+<ul><li><p>Fix Debian CRAN incoming failures around external-library linking. Short linker names now stay on the normal linker-name path, and the Unix math-library vignette/test examples now resolve a real runtime library file robustly on both Linux and macOS.</p></li>
+<li><p>Improve external library discovery by searching relevant loader and linker environment paths in addition to the built-in platform library path tables.</p></li>
+<li><p>Improve vignette rendering of generated C code by reusing the package’s custom knitr C rendering path so highlighted generated code matches other vignette C blocks.</p></li>
+<li><p>Clean up README rendering around nested-struct and bitfield limitations.</p></li>
+<li><p>Add a Docker helper for reproducing a Debian R-devel CRAN-style check locally.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.4" id="rtinycc-014">Rtinycc 0.1.4<a class="anchor" aria-label="anchor" href="#rtinycc-014"></a></h2>
 <ul><li><p>Tighten FFI soundness around ownership, helper generation, and nested composite views. Generated wrappers now route pointer and composite wrapper creation through host-side helpers more consistently, borrowed/unowned pointer semantics are enforced more strictly, and callback/SEXP/pointer wrapper invariants are covered with stronger codegen and runtime tests.</p></li>
