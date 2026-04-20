@@ -141,99 +141,99 @@ C API</li>
 and the generated wrapper copies that buffer into a fresh R numeric
 vector before freeing the original C allocation</li>
 </ul>
-<div class="sourceCode" id="cb1"><pre class="sourceCode c rtinycc"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;R.h&gt;</span></span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rinternals.h&gt;</span></span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rmath.h&gt;</span></span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdlib.h&gt;</span></span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a></span>
-<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="dt">void</span> noop<span class="op">(</span><span class="dt">void</span><span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="dt">void</span> fill_rand<span class="op">(</span><span class="dt">double</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
-<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a></span>
-<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
-<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
-<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
-<span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-19"><a href="#cb1-19" tabindex="-1"></a></span>
-<span id="cb1-20"><a href="#cb1-20" tabindex="-1"></a><span class="dt">double</span><span class="op">*</span> rand_unif<span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-21"><a href="#cb1-21" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-22"><a href="#cb1-22" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
-<span id="cb1-23"><a href="#cb1-23" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb1-24"><a href="#cb1-24" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-25"><a href="#cb1-25" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span><span class="dt">double</span><span class="op">*)</span> malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">));</span></span>
-<span id="cb1-26"><a href="#cb1-26" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb1-27"><a href="#cb1-27" tabindex="-1"></a></span>
-<span id="cb1-28"><a href="#cb1-28" tabindex="-1"></a>  <span class="dt">double</span> <span class="op">*</span>out <span class="op">=</span> <span class="op">(</span><span class="dt">double</span><span class="op">*)</span> malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="dt">size_t</span><span class="op">)</span> n<span class="op">);</span></span>
-<span id="cb1-29"><a href="#cb1-29" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>out<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-30"><a href="#cb1-30" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"malloc failed"</span><span class="op">);</span></span>
-<span id="cb1-31"><a href="#cb1-31" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb1-32"><a href="#cb1-32" tabindex="-1"></a></span>
-<span id="cb1-33"><a href="#cb1-33" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
-<span id="cb1-34"><a href="#cb1-34" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-35"><a href="#cb1-35" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
-<span id="cb1-36"><a href="#cb1-36" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb1-37"><a href="#cb1-37" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
-<span id="cb1-38"><a href="#cb1-38" tabindex="-1"></a>  <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb1-39"><a href="#cb1-39" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre class="rtinycc"><code>#include &lt;R.h&gt;
+#include &lt;Rinternals.h&gt;
+#include &lt;Rmath.h&gt;
+#include &lt;stdlib.h&gt;
+
+void noop(void) {}
+
+void fill_rand(double* out, int n) {
+  if (n &lt; 0) {
+    Rf_error("n must be non-negative");
+  }
+
+  GetRNGstate();
+  for (int i = 0; i &lt; n; ++i) {
+    out[i] = unif_rand();
+  }
+  PutRNGstate();
+}
+
+double* rand_unif(int n) {
+  if (n &lt; 0) {
+    Rf_error("n must be non-negative");
+  }
+  if (n == 0) {
+    return (double*) malloc(sizeof(double));
+  }
+
+  double *out = (double*) malloc(sizeof(double) * (size_t) n);
+  if (!out) {
+    Rf_error("malloc failed");
+  }
+
+  GetRNGstate();
+  for (int i = 0; i &lt; n; ++i) {
+    out[i] = unif_rand();
+  }
+  PutRNGstate();
+  return out;
+}</code></pre>
 <details><summary>
 Click to show R code
 </summary><div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rtinycc_code</span> <span class="op">&lt;-</span> <span class="st">"#include &lt;R.h&gt;\n#include &lt;Rinternals.h&gt;\n#include &lt;Rmath.h&gt;\n#include &lt;stdlib.h&gt;\n\nvoid noop(void) {}\n\nvoid fill_rand(double* out, int n) {\n  if (n &lt; 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i &lt; n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n}\n\ndouble* rand_unif(int n) {\n  if (n &lt; 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n  if (n == 0) {\n    return (double*) malloc(sizeof(double));\n  }\n\n  double *out = (double*) malloc(sizeof(double) * (size_t) n);\n  if (!out) {\n    Rf_error(\"malloc failed\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i &lt; n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n  return out;\n}"</span></span></code></pre></div>
-</details><div class="sourceCode" id="cb3"><pre class="sourceCode c rtinycc"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;R.h&gt;</span></span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rinternals.h&gt;</span></span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rmath.h&gt;</span></span>
-<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>SEXP noop<span class="op">(</span><span class="dt">void</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
-<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>SEXP fill_rand<span class="op">(</span>SEXP out_<span class="op">,</span> SEXP n_<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>  <span class="dt">int</span> n <span class="op">=</span> asInteger<span class="op">(</span>n_<span class="op">);</span></span>
-<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a></span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>TYPEOF<span class="op">(</span>out_<span class="op">)</span> <span class="op">!=</span> REALSXP<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"out must be a numeric vector"</span><span class="op">);</span></span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a></span>
-<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>XLENGTH<span class="op">(</span>out_<span class="op">)</span> <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"out is shorter than n"</span><span class="op">);</span></span>
-<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a>  <span class="dt">double</span> <span class="op">*</span>out <span class="op">=</span> REAL<span class="op">(</span>out_<span class="op">);</span></span>
-<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
-<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
-<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
-<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a></span>
-<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a>  <span class="cf">return</span> out_<span class="op">;</span></span>
-<span id="cb3-31"><a href="#cb3-31" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb3-32"><a href="#cb3-32" tabindex="-1"></a></span>
-<span id="cb3-33"><a href="#cb3-33" tabindex="-1"></a>SEXP rand_unif<span class="op">(</span>SEXP n_<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-34"><a href="#cb3-34" tabindex="-1"></a>  <span class="dt">int</span> n <span class="op">=</span> asInteger<span class="op">(</span>n_<span class="op">);</span></span>
-<span id="cb3-35"><a href="#cb3-35" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-36"><a href="#cb3-36" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
-<span id="cb3-37"><a href="#cb3-37" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb3-38"><a href="#cb3-38" tabindex="-1"></a></span>
-<span id="cb3-39"><a href="#cb3-39" tabindex="-1"></a>  SEXP out <span class="op">=</span> PROTECT<span class="op">(</span>allocVector<span class="op">(</span>REALSXP<span class="op">,</span> n<span class="op">));</span></span>
-<span id="cb3-40"><a href="#cb3-40" tabindex="-1"></a>  <span class="dt">double</span> <span class="op">*</span>ptr <span class="op">=</span> REAL<span class="op">(</span>out<span class="op">);</span></span>
-<span id="cb3-41"><a href="#cb3-41" tabindex="-1"></a></span>
-<span id="cb3-42"><a href="#cb3-42" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
-<span id="cb3-43"><a href="#cb3-43" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-44"><a href="#cb3-44" tabindex="-1"></a>    ptr<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
-<span id="cb3-45"><a href="#cb3-45" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb3-46"><a href="#cb3-46" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
-<span id="cb3-47"><a href="#cb3-47" tabindex="-1"></a></span>
-<span id="cb3-48"><a href="#cb3-48" tabindex="-1"></a>  UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb3-49"><a href="#cb3-49" tabindex="-1"></a>  <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb3-50"><a href="#cb3-50" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</details><pre class="rtinycc"><code>#include &lt;R.h&gt;
+#include &lt;Rinternals.h&gt;
+#include &lt;Rmath.h&gt;
+
+SEXP noop(void) {
+  return R_NilValue;
+}
+
+SEXP fill_rand(SEXP out_, SEXP n_) {
+  int n = asInteger(n_);
+  if (n &lt; 0) {
+    Rf_error("n must be non-negative");
+  }
+
+  if (TYPEOF(out_) != REALSXP) {
+    Rf_error("out must be a numeric vector");
+  }
+
+  if (XLENGTH(out_) &lt; n) {
+    Rf_error("out is shorter than n");
+  }
+
+  double *out = REAL(out_);
+  GetRNGstate();
+  for (int i = 0; i &lt; n; ++i) {
+    out[i] = unif_rand();
+  }
+  PutRNGstate();
+
+  return out_;
+}
+
+SEXP rand_unif(SEXP n_) {
+  int n = asInteger(n_);
+  if (n &lt; 0) {
+    Rf_error("n must be non-negative");
+  }
+
+  SEXP out = PROTECT(allocVector(REALSXP, n));
+  double *ptr = REAL(out);
+
+  GetRNGstate();
+  for (int i = 0; i &lt; n; ++i) {
+    ptr[i] = unif_rand();
+  }
+  PutRNGstate();
+
+  UNPROTECT(1);
+  return out;
+}</code></pre>
 <details><summary>
 Click to show R code
 </summary><div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
@@ -443,7 +443,7 @@ skipped.</p>
 <span><span class="va">compile_times</span></span>
 <span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
 <span><span class="co">#&gt; 1        Rtinycc   0.020           20</span></span>
-<span><span class="co">#&gt; 2         callme   0.238          238</span></span></code></pre></div>
+<span><span class="co">#&gt; 2         callme   0.246          246</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -465,108 +465,9 @@ then <code>free()</code>s the original buffer. In contrast,
 <code>fill_rand()</code> uses the borrowed <code>numeric_array</code>
 input path.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">generated_code</span><span class="op">)</span></span>
-<span><span class="co">#&gt; /* TinyCC workaround: _Complex not supported */</span></span>
-<span><span class="co">#&gt; #define _Complex</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; #include &lt;R.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="co">#&gt; #ifndef STRING_PTR_RO</span></span>
-<span><span class="co">#&gt; #define STRING_PTR_RO STRING_PTR</span></span>
-<span><span class="co">#&gt; #endif</span></span>
-<span><span class="co">#&gt; void RC_free_finalizer(SEXP ext);</span></span>
-<span><span class="co">#&gt; void RC_owned_native_finalizer(SEXP ext);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_owned_ptr(void *ptr, SEXP tag);</span></span>
-<span><span class="co">#&gt; SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; #include &lt;stdint.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;stdbool.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;stddef.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;limits.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;math.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;string.h&gt;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; /* User code */</span></span>
-<span><span class="co">#&gt; #include &lt;R.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;Rinternals.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;Rmath.h&gt;</span></span>
-<span><span class="co">#&gt; #include &lt;stdlib.h&gt;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; void noop(void) {}</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; void fill_rand(double* out, int n) {</span></span>
-<span><span class="co">#&gt;   if (n &lt; 0) {</span></span>
-<span><span class="co">#&gt;     Rf_error("n must be non-negative");</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   GetRNGstate();</span></span>
-<span><span class="co">#&gt;   for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="co">#&gt;     out[i] = unif_rand();</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt;   PutRNGstate();</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; double* rand_unif(int n) {</span></span>
-<span><span class="co">#&gt;   if (n &lt; 0) {</span></span>
-<span><span class="co">#&gt;     Rf_error("n must be non-negative");</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt;   if (n == 0) {</span></span>
-<span><span class="co">#&gt;     return (double*) malloc(sizeof(double));</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   double *out = (double*) malloc(sizeof(double) * (size_t) n);</span></span>
-<span><span class="co">#&gt;   if (!out) {</span></span>
-<span><span class="co">#&gt;     Rf_error("malloc failed");</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   GetRNGstate();</span></span>
-<span><span class="co">#&gt;   for (int i = 0; i &lt; n; ++i) {</span></span>
-<span><span class="co">#&gt;     out[i] = unif_rand();</span></span>
-<span><span class="co">#&gt;   }</span></span>
-<span><span class="co">#&gt;   PutRNGstate();</span></span>
-<span><span class="co">#&gt;   return out;</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; /* R callable wrappers for bound symbols */</span></span>
-<span><span class="co">#&gt; SEXP R_wrap_noop(void) {</span></span>
-<span><span class="co">#&gt;   // No arguments</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   // Call and return</span></span>
-<span><span class="co">#&gt;    noop();</span></span>
-<span><span class="co">#&gt;      return R_NilValue;</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; SEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {</span></span>
-<span><span class="co">#&gt;   double* arg1 = REAL(arg1_);</span></span>
-<span><span class="co">#&gt;   int _arg2 = asInteger(arg2_);</span></span>
-<span><span class="co">#&gt;   if (_arg2 == NA_INTEGER) Rf_error("integer value is NA");</span></span>
-<span><span class="co">#&gt;   if (_arg2 &lt; INT32_MIN || _arg2 &gt; INT32_MAX) Rf_error("i32 out of range");</span></span>
-<span><span class="co">#&gt;   int32_t arg2 = (int32_t)_arg2;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   // Call and return</span></span>
-<span><span class="co">#&gt;    fill_rand(arg1, arg2);</span></span>
-<span><span class="co">#&gt;      return R_NilValue;</span></span>
-<span><span class="co">#&gt; }</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; SEXP R_wrap_rand_unif(SEXP arg1_) {</span></span>
-<span><span class="co">#&gt;   int _arg1 = asInteger(arg1_);</span></span>
-<span><span class="co">#&gt;   if (_arg1 == NA_INTEGER) Rf_error("integer value is NA");</span></span>
-<span><span class="co">#&gt;   if (_arg1 &lt; INT32_MIN || _arg1 &gt; INT32_MAX) Rf_error("i32 out of range");</span></span>
-<span><span class="co">#&gt;   int32_t arg1 = (int32_t)_arg1;</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;   // Call and return</span></span>
-<span><span class="co">#&gt;    double* __rtinycc_ret = rand_unif(arg1);</span></span>
-<span><span class="co">#&gt;    if (!__rtinycc_ret) return R_NilValue;</span></span>
-<span><span class="co">#&gt;    SEXP out = PROTECT(allocVector(REALSXP, arg1));</span></span>
-<span><span class="co">#&gt;      if (arg1 &gt; 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);</span></span>
-<span><span class="co">#&gt;      if (__rtinycc_ret) free(__rtinycc_ret);</span></span>
-<span><span class="co">#&gt;      UNPROTECT(1);</span></span>
-<span><span class="co">#&gt;      return out;</span></span>
-<span><span class="co">#&gt; }</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">rtinycc_c_block</span><span class="op">(</span><span class="va">generated_code</span><span class="op">)</span></span></code></pre></div>
+<p>[1]
+“<code>{.c .rtinycc}\n/* TinyCC workaround: _Complex not supported */\n#define _Complex\n\n#include &lt;R.h&gt;\n#include &lt;Rinternals.h&gt;\n#ifndef STRING_PTR_RO\n#define STRING_PTR_RO STRING_PTR\n#endif\nvoid RC_free_finalizer(SEXP ext);\nvoid RC_owned_native_finalizer(SEXP ext);\nSEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);\nSEXP RC_make_unowned_ptr(void *ptr, SEXP tag);\nSEXP RC_make_owned_ptr(void *ptr, SEXP tag);\nSEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);\n\n#include &lt;stdint.h&gt;\n#include &lt;stdbool.h&gt;\n#include &lt;stddef.h&gt;\n#include &lt;limits.h&gt;\n#include &lt;math.h&gt;\n#include &lt;string.h&gt;\n\n/* User code */\n#include &lt;R.h&gt;\n#include &lt;Rinternals.h&gt;\n#include &lt;Rmath.h&gt;\n#include &lt;stdlib.h&gt;\n\nvoid noop(void) {}\n\nvoid fill_rand(double* out, int n) {\n  if (n &lt; 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i &lt; n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n}\n\ndouble* rand_unif(int n) {\n  if (n &lt; 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n  if (n == 0) {\n    return (double*) malloc(sizeof(double));\n  }\n\n  double *out = (double*) malloc(sizeof(double) * (size_t) n);\n  if (!out) {\n    Rf_error(\"malloc failed\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i &lt; n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n  return out;\n}\n\n/* R callable wrappers for bound symbols */\nSEXP R_wrap_noop(void) {\n  // No arguments\n\n  // Call and return\n   noop();\n     return R_NilValue;\n}\n\n\nSEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {\n  double* arg1 = REAL(arg1_);\n  int _arg2 = asInteger(arg2_);\n  if (_arg2 == NA_INTEGER) Rf_error(\"integer value is NA\");\n  if (_arg2 &lt; INT32_MIN || _arg2 &gt; INT32_MAX) Rf_error(\"i32 out of range\");\n  int32_t arg2 = (int32_t)_arg2;\n\n  // Call and return\n   fill_rand(arg1, arg2);\n     return R_NilValue;\n}\n\n\nSEXP R_wrap_rand_unif(SEXP arg1_) {\n  int _arg1 = asInteger(arg1_);\n  if (_arg1 == NA_INTEGER) Rf_error(\"integer value is NA\");\n  if (_arg1 &lt; INT32_MIN || _arg1 &gt; INT32_MAX) Rf_error(\"i32 out of range\");\n  int32_t arg1 = (int32_t)_arg1;\n\n  // Call and return\n   double* __rtinycc_ret = rand_unif(arg1);\n   if (!__rtinycc_ret) return R_NilValue;\n   SEXP out = PROTECT(allocVector(REALSXP, arg1));\n     if (arg1 &gt; 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);\n     if (__rtinycc_ret) free(__rtinycc_ret);\n     UNPROTECT(1);\n     return out;\n}\n\n\n</code>”</p>
 </div>
 <div class="section level2">
 <h2 id="noop-call-overhead">
@@ -593,8 +494,8 @@ point.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.21ms   1.24ms      808.    21.9KB        0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     447.99µs 461.12µs     <span style="text-decoration: underline;">2</span>177.        0B        0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.12ms   1.18ms      848.    21.9KB        0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     414.05µs 433.11µs     <span style="text-decoration: underline;">2</span>300.        0B        0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -636,8 +537,8 @@ result.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.78ms   4.04ms      261.    3.15MB     13.1</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.08ms    2.1ms      435.    3.13MB     21.8</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.69ms   4.26ms      253.    3.15MB     12.6</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.98ms   1.99ms      451.    3.13MB     22.6</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>both sides now write into ordinary R numeric storage</li>
@@ -687,14 +588,14 @@ into a fresh R vector</li>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.77ms   1.84ms      508.    15.4KB     25.4</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme      944.5µs 958.84µs     <span style="text-decoration: underline;">1</span>039.        0B      0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.74ms   1.83ms      511.    15.4KB     25.6</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     964.67µs 978.05µs     <span style="text-decoration: underline;">1</span>020.        0B      0</span></span>
 <span><span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n4096</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.78ms   4.09ms      239.    3.13MB     11.9</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.82ms   3.08ms      310.    3.13MB     15.5</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.63ms   4.23ms      235.    3.13MB     11.7</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.86ms   3.26ms      298.    3.13MB     14.9</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
 <li>for <code>fill_rand()</code>, the comparison is much closer to

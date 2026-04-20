@@ -48,7 +48,7 @@ The `rand_unif()` case intentionally stresses the extra copy path:
   wrapper copies that buffer into a fresh R numeric vector before
   freeing the original C allocation
 
-``` c
+``` rtinycc
 #include <R.h>
 #include <Rinternals.h>
 #include <Rmath.h>
@@ -96,7 +96,7 @@ Click to show R code
 rtinycc_code <- "#include <R.h>\n#include <Rinternals.h>\n#include <Rmath.h>\n#include <stdlib.h>\n\nvoid noop(void) {}\n\nvoid fill_rand(double* out, int n) {\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n}\n\ndouble* rand_unif(int n) {\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n  if (n == 0) {\n    return (double*) malloc(sizeof(double));\n  }\n\n  double *out = (double*) malloc(sizeof(double) * (size_t) n);\n  if (!out) {\n    Rf_error(\"malloc failed\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n  return out;\n}"
 ```
 
-``` c
+``` rtinycc
 #include <R.h>
 #include <Rinternals.h>
 #include <Rmath.h>
@@ -370,7 +370,7 @@ compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
 #> 1        Rtinycc   0.020           20
-#> 2         callme   0.238          238
+#> 2         callme   0.246          246
 ```
 
 The expected pattern is:
@@ -387,109 +387,11 @@ the native `double*` buffer into it, then `free()`s the original buffer.
 In contrast, `fill_rand()` uses the borrowed `numeric_array` input path.
 
 ``` r
-cat(generated_code)
-#> /* TinyCC workaround: _Complex not supported */
-#> #define _Complex
-#> 
-#> #include <R.h>
-#> #include <Rinternals.h>
-#> #ifndef STRING_PTR_RO
-#> #define STRING_PTR_RO STRING_PTR
-#> #endif
-#> void RC_free_finalizer(SEXP ext);
-#> void RC_owned_native_finalizer(SEXP ext);
-#> SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
-#> SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
-#> SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
-#> SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
-#> 
-#> #include <stdint.h>
-#> #include <stdbool.h>
-#> #include <stddef.h>
-#> #include <limits.h>
-#> #include <math.h>
-#> #include <string.h>
-#> 
-#> /* User code */
-#> #include <R.h>
-#> #include <Rinternals.h>
-#> #include <Rmath.h>
-#> #include <stdlib.h>
-#> 
-#> void noop(void) {}
-#> 
-#> void fill_rand(double* out, int n) {
-#>   if (n < 0) {
-#>     Rf_error("n must be non-negative");
-#>   }
-#> 
-#>   GetRNGstate();
-#>   for (int i = 0; i < n; ++i) {
-#>     out[i] = unif_rand();
-#>   }
-#>   PutRNGstate();
-#> }
-#> 
-#> double* rand_unif(int n) {
-#>   if (n < 0) {
-#>     Rf_error("n must be non-negative");
-#>   }
-#>   if (n == 0) {
-#>     return (double*) malloc(sizeof(double));
-#>   }
-#> 
-#>   double *out = (double*) malloc(sizeof(double) * (size_t) n);
-#>   if (!out) {
-#>     Rf_error("malloc failed");
-#>   }
-#> 
-#>   GetRNGstate();
-#>   for (int i = 0; i < n; ++i) {
-#>     out[i] = unif_rand();
-#>   }
-#>   PutRNGstate();
-#>   return out;
-#> }
-#> 
-#> /* R callable wrappers for bound symbols */
-#> SEXP R_wrap_noop(void) {
-#>   // No arguments
-#> 
-#>   // Call and return
-#>    noop();
-#>      return R_NilValue;
-#> }
-#> 
-#> 
-#> SEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {
-#>   double* arg1 = REAL(arg1_);
-#>   int _arg2 = asInteger(arg2_);
-#>   if (_arg2 == NA_INTEGER) Rf_error("integer value is NA");
-#>   if (_arg2 < INT32_MIN || _arg2 > INT32_MAX) Rf_error("i32 out of range");
-#>   int32_t arg2 = (int32_t)_arg2;
-#> 
-#>   // Call and return
-#>    fill_rand(arg1, arg2);
-#>      return R_NilValue;
-#> }
-#> 
-#> 
-#> SEXP R_wrap_rand_unif(SEXP arg1_) {
-#>   int _arg1 = asInteger(arg1_);
-#>   if (_arg1 == NA_INTEGER) Rf_error("integer value is NA");
-#>   if (_arg1 < INT32_MIN || _arg1 > INT32_MAX) Rf_error("i32 out of range");
-#>   int32_t arg1 = (int32_t)_arg1;
-#> 
-#>   // Call and return
-#>    double* __rtinycc_ret = rand_unif(arg1);
-#>    if (!__rtinycc_ret) return R_NilValue;
-#>    SEXP out = PROTECT(allocVector(REALSXP, arg1));
-#>      if (arg1 > 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);
-#>      if (__rtinycc_ret) free(__rtinycc_ret);
-#>      UNPROTECT(1);
-#>      return out;
-#> }
+Rtinycc:::rtinycc_c_block(generated_code)
 ```
+
+\[1\]
+“`{.c .rtinycc}\n/* TinyCC workaround: _Complex not supported */\n#define _Complex\n\n#include <R.h>\n#include <Rinternals.h>\n#ifndef STRING_PTR_RO\n#define STRING_PTR_RO STRING_PTR\n#endif\nvoid RC_free_finalizer(SEXP ext);\nvoid RC_owned_native_finalizer(SEXP ext);\nSEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);\nSEXP RC_make_unowned_ptr(void *ptr, SEXP tag);\nSEXP RC_make_owned_ptr(void *ptr, SEXP tag);\nSEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);\n\n#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <limits.h>\n#include <math.h>\n#include <string.h>\n\n/* User code */\n#include <R.h>\n#include <Rinternals.h>\n#include <Rmath.h>\n#include <stdlib.h>\n\nvoid noop(void) {}\n\nvoid fill_rand(double* out, int n) {\n if (n < 0) {\n Rf_error(\"n must be non-negative\");\n }\n\n GetRNGstate();\n for (int i = 0; i < n; ++i) {\n out[i] = unif_rand();\n }\n PutRNGstate();\n}\n\ndouble* rand_unif(int n) {\n if (n < 0) {\n Rf_error(\"n must be non-negative\");\n }\n if (n == 0) {\n return (double*) malloc(sizeof(double));\n }\n\n double *out = (double*) malloc(sizeof(double) * (size_t) n);\n if (!out) {\n Rf_error(\"malloc failed\");\n }\n\n GetRNGstate();\n for (int i = 0; i < n; ++i) {\n out[i] = unif_rand();\n }\n PutRNGstate();\n return out;\n}\n\n/* R callable wrappers for bound symbols */\nSEXP R_wrap_noop(void) {\n // No arguments\n\n // Call and return\n noop();\n return R_NilValue;\n}\n\n\nSEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {\n double* arg1 = REAL(arg1_);\n int _arg2 = asInteger(arg2_);\n if (_arg2 == NA_INTEGER) Rf_error(\"integer value is NA\");\n if (_arg2 < INT32_MIN || _arg2 > INT32_MAX) Rf_error(\"i32 out of range\");\n int32_t arg2 = (int32_t)_arg2;\n\n // Call and return\n fill_rand(arg1, arg2);\n return R_NilValue;\n}\n\n\nSEXP R_wrap_rand_unif(SEXP arg1_) {\n int _arg1 = asInteger(arg1_);\n if (_arg1 == NA_INTEGER) Rf_error(\"integer value is NA\");\n if (_arg1 < INT32_MIN || _arg1 > INT32_MAX) Rf_error(\"i32 out of range\");\n int32_t arg1 = (int32_t)_arg1;\n\n // Call and return\n double* __rtinycc_ret = rand_unif(arg1);\n if (!__rtinycc_ret) return R_NilValue;\n SEXP out = PROTECT(allocVector(REALSXP, arg1));\n if (arg1 > 0) memcpy(REAL(out), __rtinycc_ret, sizeof(double) * arg1);\n if (__rtinycc_ret) free(__rtinycc_ret);\n UNPROTECT(1);\n return out;\n}\n\n\n`”
 
 ## `noop()` Call Overhead
 
@@ -515,8 +417,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.21ms   1.24ms      808.    21.9KB        0
-#> 2 callme     447.99µs 461.12µs     2177.        0B        0
+#> 1 Rtinycc      1.12ms   1.18ms      848.    21.9KB        0
+#> 2 callme     414.05µs 433.11µs     2300.        0B        0
 ```
 
 Interpretation:
@@ -554,8 +456,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.78ms   4.04ms      261.    3.15MB     13.1
-#> 2 callme       2.08ms    2.1ms      435.    3.13MB     21.8
+#> 1 Rtinycc      2.69ms   4.26ms      253.    3.15MB     12.6
+#> 2 callme       1.98ms   1.99ms      451.    3.13MB     22.6
 ```
 
 Interpretation:
@@ -603,14 +505,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.77ms   1.84ms      508.    15.4KB     25.4
-#> 2 callme      944.5µs 958.84µs     1039.        0B      0
+#> 1 Rtinycc      1.74ms   1.83ms      511.    15.4KB     25.6
+#> 2 callme     964.67µs 978.05µs     1020.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.78ms   4.09ms      239.    3.13MB     11.9
-#> 2 callme       1.82ms   3.08ms      310.    3.13MB     15.5
+#> 1 Rtinycc      2.63ms   4.23ms      235.    3.13MB     11.7
+#> 2 callme       1.86ms   3.26ms      298.    3.13MB     14.9
 ```
 
 The usual pattern is:
