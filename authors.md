@@ -15,12 +15,12 @@
 Source:
 [`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/main/DESCRIPTION)
 
-Toure S (2026). *Rtinycc: Builds the 'TinyCC' CLI and Library for 'C'
-Scripting in 'R'*. R package version 0.1.4,
+Toure S (2026). *Rtinycc: Builds the 'TinyCC' Command-Line Interface and
+Library for 'C' Scripting in 'R'*. R package version 0.1.4,
 <https://github.com/sounkou-bioinfo/Rtinycc>.
 
     @Manual{,
-      title = {Rtinycc: Builds the 'TinyCC' CLI and Library for 'C' Scripting in 'R'},
+      title = {Rtinycc: Builds the 'TinyCC' Command-Line Interface and Library for 'C' Scripting in 'R'},
       author = {Sounkou Mahamane Toure},
       year = {2026},
       note = {R package version 0.1.4},

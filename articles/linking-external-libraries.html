@@ -104,10 +104,14 @@ as <code><a href="../reference/tcc_compile.html">tcc_compile()</a></code>.</p>
 </h2>
 <p>On Unix-like systems, the math library is a simple example because
 common functions such as <code><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt()</a></code> and <code><a href="https://rdrr.io/r/base/Trig.html" class="external-link">cos()</a></code> are
-usually resolved from <code>libm</code>.</p>
+usually resolved from <code>libm</code>. For robustness across
+distributions, this vignette resolves an actual shared-object filename
+such as <code>libm.so.6</code> instead of relying on the unversioned
+<code>libm.so</code> entry, which may be a linker script on Debian-like
+systems.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">math</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
-<span>  <span class="st">"m"</span>,</span>
+<span>  <span class="va">libm_path</span>,</span>
 <span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span>
 <span>    cos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span>
@@ -132,7 +136,7 @@ name.</p>
 while still linking against an external library:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">math_helpers</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_link.html">tcc_link</a></span><span class="op">(</span></span>
-<span>  <span class="st">"m"</span>,</span>
+<span>  <span class="va">libm_path</span>,</span>
 <span>  symbols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    sqrt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span>,</span>
 <span>    hypot2_checked <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"f64"</span>, <span class="st">"f64"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"f64"</span><span class="op">)</span></span>

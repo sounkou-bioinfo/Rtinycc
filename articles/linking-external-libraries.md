@@ -32,11 +32,14 @@ Typical uses are:
 On Unix-like systems, the math library is a simple example because
 common functions such as [`sqrt()`](https://rdrr.io/r/base/MathFun.html)
 and [`cos()`](https://rdrr.io/r/base/Trig.html) are usually resolved
-from `libm`.
+from `libm`. For robustness across distributions, this vignette resolves
+an actual shared-object filename such as `libm.so.6` instead of relying
+on the unversioned `libm.so` entry, which may be a linker script on
+Debian-like systems.
 
 ``` r
 math <- tcc_link(
-  "m",
+  libm_path,
   symbols = list(
     sqrt = list(args = list("f64"), returns = "f64"),
     cos = list(args = list("f64"), returns = "f64")
@@ -62,7 +65,7 @@ while still linking against an external library:
 
 ``` r
 math_helpers <- tcc_link(
-  "m",
+  libm_path,
   symbols = list(
     sqrt = list(args = list("f64"), returns = "f64"),
     hypot2_checked = list(args = list("f64", "f64"), returns = "f64")

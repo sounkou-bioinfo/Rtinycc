@@ -5,14 +5,14 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Builds the TinyCC CLI and Library for C Scripting in R • Rtinycc</title>
+<title>Builds the TinyCC Command-Line Interface and Library for C Scripting in R • Rtinycc</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
 <script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Builds the TinyCC CLI and Library for C Scripting in R">
-<meta name="description" content="Builds the TinyCC (Tiny C Compiler) CLI and library for package use in R. The package compiles TinyCC from source and provides R functions to interact with the compiler. TinyCC can be used for header preprocessing, just-in-time compilation of C code in R, and lightweight C scripting workflows.">
-<meta property="og:description" content="Builds the TinyCC (Tiny C Compiler) CLI and library for package use in R. The package compiles TinyCC from source and provides R functions to interact with the compiler. TinyCC can be used for header preprocessing, just-in-time compilation of C code in R, and lightweight C scripting workflows.">
+<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Builds the TinyCC Command-Line Interface and Library for C Scripting in R">
+<meta name="description" content="Builds the TinyCC (Tiny C Compiler) command-line interface and library for package use in R. The package compiles TinyCC from source and provides R functions to interact with the compiler. TinyCC can be used for header preprocessing, just-in-time compilation of C code in R, and lightweight C scripting workflows.">
+<meta property="og:description" content="Builds the TinyCC (Tiny C Compiler) command-line interface and library for package use in R. The package compiles TinyCC from source and provides R functions to interact with the compiler. TinyCC can be used for header preprocessing, just-in-time compilation of C code in R, and lightweight C scripting workflows.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -169,7 +169,7 @@
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x620041a79650"</span></span>
+<span><span class="co">#&gt; [1] "0x609774af63c0"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -190,11 +190,11 @@
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x620044f87ef0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x609774b49f50&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x62004746ebc0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097722eb6e0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x620044f87ef0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x609774b49f50&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -377,7 +377,7 @@
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @6200455c83f8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @609772fc4070 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -393,7 +393,7 @@
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @6200455c83f8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @609772fc4070 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -420,15 +420,15 @@
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x62004323dbe0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097757b7bb0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x62004323dbe0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097757b7bb0&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x62004227eda0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097720939d0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x62004227eda0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097720939d0&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -470,9 +470,9 @@
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x620047d4e610&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x609775148360&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x620047d4e610&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x609775148360&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -830,7 +830,7 @@
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x6200485513e0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x60976fb45af0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -945,11 +945,11 @@
 <span><span class="co">#&gt; # A tibble: 5 × 13</span></span>
 <span><span class="co">#&gt;   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:t&gt; &lt;bch:t&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;   &lt;bch:tm&gt;</span></span>
-<span><span class="co">#&gt; 1 read_tabl… 49.48ms 49.48ms      20.2    6.33MB     20.2     1     1     49.5ms</span></span>
-<span><span class="co">#&gt; 2 vroom_df_…  6.42ms  6.65ms     150.     1.22MB      0       2     0     13.3ms</span></span>
-<span><span class="co">#&gt; 3 vroom_df_…  6.96ms  7.23ms     138.     2.44MB      0       2     0     14.5ms</span></span>
-<span><span class="co">#&gt; 4 c_read_df     21ms 21.01ms      47.6    1.22MB      0       2     0       42ms</span></span>
-<span><span class="co">#&gt; 5 io_uring_… 19.66ms 19.74ms      50.7    1.22MB      0       2     0     39.5ms</span></span>
+<span><span class="co">#&gt; 1 read_tabl…  45.4ms 46.73ms      21.4    6.33MB        0     2     0     93.5ms</span></span>
+<span><span class="co">#&gt; 2 vroom_df_…   6.5ms  6.54ms     153.     1.22MB        0     2     0     13.1ms</span></span>
+<span><span class="co">#&gt; 3 vroom_df_…  6.67ms  6.74ms     148.     2.44MB        0     2     0     13.5ms</span></span>
+<span><span class="co">#&gt; 4 c_read_df  21.11ms 21.34ms      46.9    1.22MB        0     2     0     42.7ms</span></span>
+<span><span class="co">#&gt; 5 io_uring_… 20.41ms 20.58ms      48.6    1.22MB        0     2     0     41.2ms</span></span>
 <span><span class="co">#&gt; # ℹ 4 more variables: result &lt;list&gt;, memory &lt;list&gt;, time &lt;list&gt;, gc &lt;list&gt;</span></span></code></pre></div>
 <p><img src="reference/figures/README-io_uring-demo-1.png" alt="" width="100%"></p>
 </div>
@@ -1000,53 +1000,48 @@
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_outer_free</span><span class="op">(</span><span class="va">outer</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
-<p>For treesitter-generated bindings, nested struct fields currently still fall back to ptr-like accessors. The richer <code>struct:&lt;name&gt;</code> form is available when you declare the nested field accessors explicitly.</p>
-<p>Bitfields are a separate case: they use scalar helper accessors, but <code>field_addr()</code> and <code>container_of()</code> reject bitfield members because bitfields do not have ordinary addressable field semantics.</p>
+<p>For treesitter-generated bindings, nested struct fields inside structs still fall back to ptr-like accessors. If you want a borrowed nested view plus a copy-in setter, declare the nested field explicitly with <code>struct:&lt;name&gt;</code>.</p>
+<p>Bitfields are separate from ordinary addressable fields. They use scalar helper accessors, but <code>field_addr()</code> and <code>container_of()</code> reject bitfield members.</p>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct flags { unsigned int flag : 1; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"flags"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>flag <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"u8"</span>, bitfield <span class="op">=</span> <span class="cn">TRUE</span>, width <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span></span>
+<span>    <span class="st">"flags"</span>,</span>
+<span>    accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>flag <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"u8"</span>, bitfield <span class="op">=</span> <span class="cn">TRUE</span>, width <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Both of these error intentionally:</span></span>
-<span><span class="co"># ffi &lt;- tcc_field_addr(ffi, "flags", "flag")</span></span>
-<span><span class="co"># ffi &lt;- tcc_container_of(ffi, "flags", "flag")</span></span></code></pre></div>
+<span><span class="fu"><a href="reference/tcc_field_addr.html">tcc_field_addr</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="st">"flags"</span>, <span class="st">"flag"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Error:</span></span>
+<span><span class="co">#&gt; ! field_addr does not support bitfield members</span></span>
+<span><span class="fu"><a href="reference/tcc_container_of.html">tcc_container_of</a></span><span class="op">(</span><span class="va">ffi</span>, <span class="st">"flags"</span>, <span class="st">"flag"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Error:</span></span>
+<span><span class="co">#&gt; ! container_of does not support bitfield members</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="array-fields-in-structs">Array fields in structs<a class="anchor" aria-label="anchor" href="#array-fields-in-structs"></a>
+</h3>
+<p>Array fields require the <code>list(type = ..., size = N, array = TRUE)</code> syntax in <code><a href="reference/tcc_struct.html">tcc_struct()</a></code>, which generates element-wise accessors.</p>
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct buf { unsigned char data[16]; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"buf"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"u8"</span>, size <span class="op">=</span> <span class="fl">16</span>, array <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">0xCAL</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097711ee6b0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span>, <span class="fl">0xFEL</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6097711ee6b0&gt;</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 202</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 254</span></span>
+<span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_free</span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
+<span><span class="co">#&gt; NULL</span></span></code></pre></div>
 </div>
 </div>
-</div>
-<div class="section level1">
-<h1 id="write-the-inner-pointer-into-the-outer-struct">Write the inner pointer into the outer struct<a class="anchor" aria-label="anchor" href="#write-the-inner-pointer-into-the-outer-struct"></a>
-</h1>
-<p>ffi$struct_outer_in_addr(o) |&gt; tcc_ptr_set(i)</p>
-</div>
-<div class="section level1">
-<h1 id="read-it-back-through-indirection">Read it back through indirection<a class="anchor" aria-label="anchor" href="#read-it-back-through-indirection"></a>
-</h1>
-<p>ffi<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mi>t</mi><mi>r</mi><mi>u</mi><mi>c</mi><msub><mi>t</mi><mi>o</mi></msub><mi>u</mi><mi>t</mi><mi>e</mi><msub><mi>r</mi><mi>i</mi></msub><msub><mi>n</mi><mi>a</mi></msub><mi>d</mi><mi>d</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>o</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo stretchy="true" form="prefix">|</mo><mo>&gt;</mo><mi>t</mi><mi>c</mi><msub><mi>c</mi><mi>d</mi></msub><mi>a</mi><mi>t</mi><msub><mi>a</mi><mi>p</mi></msub><mi>t</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><mo stretchy="true" form="postfix">)</mo></mrow><mo stretchy="true" form="postfix">|</mo></mrow><mo>&gt;</mo><mi>f</mi><mi>f</mi><mi>i</mi></mrow><annotation encoding="application/x-tex">struct_outer_in_addr(o) |&gt;  tcc_data_ptr() |&gt;  ffi</annotation></semantics></math>struct_inner_get_a()</p>
-<p>ffi<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mi>t</mi><mi>r</mi><mi>u</mi><mi>c</mi><msub><mi>t</mi><mi>i</mi></msub><mi>n</mi><mi>n</mi><mi>e</mi><msub><mi>r</mi><mi>f</mi></msub><mi>r</mi><mi>e</mi><mi>e</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>f</mi><mi>f</mi><mi>i</mi></mrow><annotation encoding="application/x-tex">struct_inner_free(i) ffi</annotation></semantics></math>struct_outer_free(o)</p>
-<div class="sourceCode" id="cb27"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="do">### Array fields in structs</span></span>
-<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a></span>
-<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a>Array fields require the <span class="st">`</span><span class="at">list(type = ..., size = N, array = TRUE)</span><span class="st">`</span> syntax <span class="cf">in</span> <span class="st">`</span><span class="at">tcc_struct()</span><span class="st">`</span>, which generates element<span class="sc">-</span>wise accessors.</span>
-<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a></span>
-<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a></span>
-<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a><span class="st">```</span><span class="at"> r</span></span>
-<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a><span class="at">ffi &lt;- tcc_ffi() |&gt;</span></span>
-<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a><span class="at">  tcc_source('struct buf { unsigned char data[16]; };') |&gt;</span></span>
-<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a><span class="at">  tcc_struct("buf", accessors = list(</span></span>
-<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a><span class="at">    data = list(type = "u8", size = 16, array = TRUE)</span></span>
-<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a><span class="at">  )) |&gt;</span></span>
-<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a><span class="at">  tcc_compile()</span></span>
-<span id="cb27-13"><a href="#cb27-13" tabindex="-1"></a></span>
-<span id="cb27-14"><a href="#cb27-14" tabindex="-1"></a><span class="at">b &lt;- ffi$struct_buf_new()</span></span>
-<span id="cb27-15"><a href="#cb27-15" tabindex="-1"></a><span class="at">ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)</span></span>
-<span id="cb27-16"><a href="#cb27-16" tabindex="-1"></a><span class="at">#&gt; &lt;pointer: 0x62004e5c4f80&gt;</span></span>
-<span id="cb27-17"><a href="#cb27-17" tabindex="-1"></a><span class="at">ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)</span></span>
-<span id="cb27-18"><a href="#cb27-18" tabindex="-1"></a><span class="at">#&gt; &lt;pointer: 0x62004e5c4f80&gt;</span></span>
-<span id="cb27-19"><a href="#cb27-19" tabindex="-1"></a><span class="at">ffi$struct_buf_get_data_elt(b, 0L)</span></span>
-<span id="cb27-20"><a href="#cb27-20" tabindex="-1"></a><span class="at">#&gt; [1] 202</span></span>
-<span id="cb27-21"><a href="#cb27-21" tabindex="-1"></a><span class="at">ffi$struct_buf_get_data_elt(b, 1L)</span></span>
-<span id="cb27-22"><a href="#cb27-22" tabindex="-1"></a><span class="at">#&gt; [1] 254</span></span>
-<span id="cb27-23"><a href="#cb27-23" tabindex="-1"></a><span class="at">ffi$struct_buf_free(b)</span></span>
-<span id="cb27-24"><a href="#cb27-24" tabindex="-1"></a><span class="at">#&gt; NULL</span></span></code></pre></div>
 <div class="section level2">
 <h2 id="serialization-and-fork-safety">Serialization and fork safety<a class="anchor" aria-label="anchor" href="#serialization-and-fork-safety"></a>
 </h2>
@@ -1103,7 +1098,6 @@
 </ul>
 </div>
 </div>
-
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
