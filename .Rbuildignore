@@ -17,6 +17,7 @@ src/*.o
 ^\.vscode$
 ^Makefile$
 ^scripts$
+^scripts/.*$
 ^AGENTS.md$
 ^CLAUDE.md$
 ^config\.log$
