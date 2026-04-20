@@ -1,4 +1,3 @@
-
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 # Rtinycc
@@ -127,7 +126,7 @@ tcc_call_symbol(state, "forty_two", return = "int")
 The lower-level API gives full control over include paths, libraries,
 and the R C API. Using `#define _Complex` as a workaround for TCC’s lack
 of [complex type
-support](https://mail.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
+support](https://lists.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
 we can link against R’s headers and call into `libR`.
 
 ``` r
@@ -176,7 +175,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x609774af63c0"
+#> [1] "0x5ed89220dc50"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -207,11 +206,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x609774b49f50>
+#> <pointer: 0x5ed8952bacf0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6097722eb6e0>
+#> <pointer: 0x5ed897497ec0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x609774b49f50>
+#> <pointer: 0x5ed8952bacf0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -429,7 +428,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @609772fc4070 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5ed8955ac528 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -445,7 +444,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @609772fc4070 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5ed8955ac528 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -472,15 +471,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x6097757b7bb0>
+#> <pointer: 0x5ed893f08110>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x6097757b7bb0>
+#> <pointer: 0x5ed893f08110>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x6097720939d0>
+#> <pointer: 0x5ed896fd09b0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x6097720939d0>
+#> <pointer: 0x5ed896fd09b0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -525,9 +524,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x609775148360>
+#> <pointer: 0x5ed893aed890>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x609775148360>
+#> <pointer: 0x5ed893aed890>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -928,7 +927,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x60976fb45af0>
+#> <pointer: 0x5ed895123b00>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1045,11 +1044,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl…  45.4ms 46.73ms      21.4    6.33MB        0     2     0     93.5ms
-#> 2 vroom_df_…   6.5ms  6.54ms     153.     1.22MB        0     2     0     13.1ms
-#> 3 vroom_df_…  6.67ms  6.74ms     148.     2.44MB        0     2     0     13.5ms
-#> 4 c_read_df  21.11ms 21.34ms      46.9    1.22MB        0     2     0     42.7ms
-#> 5 io_uring_… 20.41ms 20.58ms      48.6    1.22MB        0     2     0     41.2ms
+#> 1 read_tabl… 48.33ms 49.71ms      20.1    6.33MB      0       2     0     99.4ms
+#> 2 vroom_df_…  6.22ms  6.38ms     157.     1.22MB      0       2     0     12.8ms
+#> 3 vroom_df_…  6.99ms  7.52ms     133.     2.44MB      0       2     0       15ms
+#> 4 c_read_df  21.43ms 21.43ms      46.7    1.22MB     46.7     1     1     21.4ms
+#> 5 io_uring_…  20.4ms 20.49ms      48.8    1.22MB      0       2     0       41ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1151,9 +1150,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x6097711ee6b0>
+#> <pointer: 0x5ed89da7e280>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x6097711ee6b0>
+#> <pointer: 0x5ed89da7e280>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

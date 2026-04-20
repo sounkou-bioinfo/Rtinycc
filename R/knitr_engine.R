@@ -11,7 +11,7 @@ rtinycc_c_block <- function(code, options = list()) {
     return(code)
   }
 
-  opts <- modifyList(
+  opts <- utils::modifyList(
     list(
       echo = TRUE,
       eval = FALSE,
