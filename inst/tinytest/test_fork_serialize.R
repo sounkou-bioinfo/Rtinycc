@@ -223,34 +223,43 @@ expect_equal(
 )
 
 # --- Test 9: tcc_link round-trip ----------------------------------------
-find_unix_libm <- function() {
+find_system_math_library <- function() {
   if (.Platform$OS.type == "windows") {
     return(NULL)
   }
 
-  paths <- unique(Rtinycc:::tcc_platform_lib_paths(
-    as.character(unname(Sys.info()[["sysname"]]))
-  ))
-  for (path in paths) {
-    if (!dir.exists(path)) {
-      next
-    }
-    candidates <- list.files(
-      path,
-      pattern = "^libm\\.so(\\.[0-9]+)+$",
-      full.names = TRUE
-    )
-    if (length(candidates) > 0L) {
-      return(candidates[[1]])
+  sysname <- as.character(unname(Sys.info()[["sysname"]]))
+  paths <- unique(Rtinycc:::tcc_platform_lib_paths(sysname))
+  patterns <- switch(
+    sysname,
+    Linux = c("^libm\\.so(\\.[0-9]+)+$"),
+    Darwin = c("^libSystem\\.B\\.dylib$", "^libm\\.dylib$"),
+    character(0)
+  )
+
+  for (pattern in patterns) {
+    for (path in paths) {
+      if (!dir.exists(path)) {
+        next
+      }
+      candidates <- list.files(
+        path,
+        pattern = pattern,
+        full.names = TRUE
+      )
+      if (length(candidates) > 0L) {
+        return(candidates[[1]])
+      }
     }
   }
+
   NULL
 }
 
-libm_path <- find_unix_libm()
-if (!is.null(libm_path)) {
+math_lib_path <- find_system_math_library()
+if (!is.null(math_lib_path)) {
   math <- tcc_link(
-    libm_path,
+    math_lib_path,
     symbols = list(
       sqrt = list(args = list("f64"), returns = "f64")
     )
