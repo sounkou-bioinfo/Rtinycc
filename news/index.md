@@ -1,5 +1,11 @@
 # Changelog
 
+## Rtinycc 0.1.6
+
+- Exclude the top-level `scripts/` directory more explicitly from
+  package builds to avoid CRAN notes about non-standard top-level
+  contents.
+
 ## Rtinycc 0.1.5
 
 - Fix Debian CRAN incoming failures around external-library linking.
