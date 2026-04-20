@@ -1,3 +1,4 @@
+
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 # Rtinycc
@@ -175,7 +176,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x620041a79650"
+#> [1] "0x609774af63c0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -206,11 +207,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x620044f87ef0>
+#> <pointer: 0x609774b49f50>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x62004746ebc0>
+#> <pointer: 0x6097722eb6e0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x620044f87ef0>
+#> <pointer: 0x609774b49f50>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -428,7 +429,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @6200455c83f8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @609772fc4070 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -444,7 +445,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6200455c83f8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @609772fc4070 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -471,15 +472,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x62004323dbe0>
+#> <pointer: 0x6097757b7bb0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x62004323dbe0>
+#> <pointer: 0x6097757b7bb0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x62004227eda0>
+#> <pointer: 0x6097720939d0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x62004227eda0>
+#> <pointer: 0x6097720939d0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -524,9 +525,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x620047d4e610>
+#> <pointer: 0x609775148360>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x620047d4e610>
+#> <pointer: 0x609775148360>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -927,7 +928,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6200485513e0>
+#> <pointer: 0x60976fb45af0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1044,11 +1045,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 49.48ms 49.48ms      20.2    6.33MB     20.2     1     1     49.5ms
-#> 2 vroom_df_…  6.42ms  6.65ms     150.     1.22MB      0       2     0     13.3ms
-#> 3 vroom_df_…  6.96ms  7.23ms     138.     2.44MB      0       2     0     14.5ms
-#> 4 c_read_df     21ms 21.01ms      47.6    1.22MB      0       2     0       42ms
-#> 5 io_uring_… 19.66ms 19.74ms      50.7    1.22MB      0       2     0     39.5ms
+#> 1 read_tabl…  45.4ms 46.73ms      21.4    6.33MB        0     2     0     93.5ms
+#> 2 vroom_df_…   6.5ms  6.54ms     153.     1.22MB        0     2     0     13.1ms
+#> 3 vroom_df_…  6.67ms  6.74ms     148.     2.44MB        0     2     0     13.5ms
+#> 4 c_read_df  21.11ms 21.34ms      46.9    1.22MB        0     2     0     42.7ms
+#> 5 io_uring_… 20.41ms 20.58ms      48.6    1.22MB        0     2     0     41.2ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1110,59 +1111,56 @@ ffi$struct_outer_free(outer)
 #> NULL
 ```
 
-For treesitter-generated bindings, nested struct fields currently still
-fall back to ptr-like accessors. The richer `struct:<name>` form is
-available when you declare the nested field accessors explicitly.
+For treesitter-generated bindings, nested struct fields inside structs
+still fall back to ptr-like accessors. If you want a borrowed nested
+view plus a copy-in setter, declare the nested field explicitly with
+`struct:<name>`.
 
-Bitfields are a separate case: they use scalar helper accessors, but
-`field_addr()` and `container_of()` reject bitfield members because
-bitfields do not have ordinary addressable field semantics.
+Bitfields are separate from ordinary addressable fields. They use scalar
+helper accessors, but `field_addr()` and `container_of()` reject
+bitfield members.
 
 ``` r
 ffi <- tcc_ffi() |>
   tcc_source('struct flags { unsigned int flag : 1; };') |>
-  tcc_struct("flags", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1)))
+  tcc_struct(
+    "flags",
+    accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))
+  )
 
-# Both of these error intentionally:
-# ffi <- tcc_field_addr(ffi, "flags", "flag")
-# ffi <- tcc_container_of(ffi, "flags", "flag")
+tcc_field_addr(ffi, "flags", "flag")
+#> Error:
+#> ! field_addr does not support bitfield members
+tcc_container_of(ffi, "flags", "flag")
+#> Error:
+#> ! container_of does not support bitfield members
 ```
 
-# Write the inner pointer into the outer struct
+### Array fields in structs
 
-ffi\$struct_outer_in_addr(o) \|\> tcc_ptr_set(i)
+Array fields require the `list(type = ..., size = N, array = TRUE)`
+syntax in `tcc_struct()`, which generates element-wise accessors.
 
-# Read it back through indirection
+``` r
+ffi <- tcc_ffi() |>
+  tcc_source('struct buf { unsigned char data[16]; };') |>
+  tcc_struct("buf", accessors = list(
+    data = list(type = "u8", size = 16, array = TRUE)
+  )) |>
+  tcc_compile()
 
-ffi$struct_outer_in_addr(o) |>  tcc_data_ptr() |>  ffi$struct_inner_get_a()
-
-ffi$struct_inner_free(i) ffi$struct_outer_free(o)
-
-
-    ### Array fields in structs
-
-    Array fields require the `list(type = ..., size = N, array = TRUE)` syntax in `tcc_struct()`, which generates element-wise accessors.
-
-
-    ``` r
-    ffi <- tcc_ffi() |>
-      tcc_source('struct buf { unsigned char data[16]; };') |>
-      tcc_struct("buf", accessors = list(
-        data = list(type = "u8", size = 16, array = TRUE)
-      )) |>
-      tcc_compile()
-
-    b <- ffi$struct_buf_new()
-    ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-    #> <pointer: 0x62004e5c4f80>
-    ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-    #> <pointer: 0x62004e5c4f80>
-    ffi$struct_buf_get_data_elt(b, 0L)
-    #> [1] 202
-    ffi$struct_buf_get_data_elt(b, 1L)
-    #> [1] 254
-    ffi$struct_buf_free(b)
-    #> NULL
+b <- ffi$struct_buf_new()
+ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
+#> <pointer: 0x6097711ee6b0>
+ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
+#> <pointer: 0x6097711ee6b0>
+ffi$struct_buf_get_data_elt(b, 0L)
+#> [1] 202
+ffi$struct_buf_get_data_elt(b, 1L)
+#> [1] 254
+ffi$struct_buf_free(b)
+#> NULL
+```
 
 ## Serialization and fork safety
 

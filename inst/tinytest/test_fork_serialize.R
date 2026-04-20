@@ -223,10 +223,34 @@ expect_equal(
 )
 
 # --- Test 9: tcc_link round-trip ----------------------------------------
-# libm doesn't exist on Windows (math is in the CRT), so skip this test
-if (.Platform$OS.type != "windows") {
+find_unix_libm <- function() {
+  if (.Platform$OS.type == "windows") {
+    return(NULL)
+  }
+
+  paths <- unique(Rtinycc:::tcc_platform_lib_paths(
+    as.character(unname(Sys.info()[["sysname"]]))
+  ))
+  for (path in paths) {
+    if (!dir.exists(path)) {
+      next
+    }
+    candidates <- list.files(
+      path,
+      pattern = "^libm\\.so(\\.[0-9]+)+$",
+      full.names = TRUE
+    )
+    if (length(candidates) > 0L) {
+      return(candidates[[1]])
+    }
+  }
+  NULL
+}
+
+libm_path <- find_unix_libm()
+if (!is.null(libm_path)) {
   math <- tcc_link(
-    "m",
+    libm_path,
     symbols = list(
       sqrt = list(args = list("f64"), returns = "f64")
     )

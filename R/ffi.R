@@ -2030,20 +2030,21 @@ tcc_link <- function(
   user_code = NULL,
   verbose = FALSE
 ) {
-  # Find library if not absolute path
+  # Find library if not absolute path. Keep short linker names such as
+  # "m" or "sqlite3" on the -l<name> path instead of eagerly resolving
+  # them to lib*.so files. On Debian-like systems, names such as libm.so can
+  # be linker scripts rather than real shared objects, and TinyCC cannot link
+  # those script files directly.
   is_short_name <- !file.exists(path) &&
     !grepl("[/\\\\]", path) &&
     !grepl("\\.(so|dylib|dll)", path)
 
-  if (!file.exists(path) && !grepl("^/", path)) {
+  if (!is_short_name && !file.exists(path) && !grepl("^/", path)) {
     found_path <- tcc_find_library(path)
-    if (is.null(found_path) && !is_short_name) {
+    if (is.null(found_path)) {
       stop("Library not found: ", path, call. = FALSE)
     }
-    if (!is.null(found_path)) {
-      path <- found_path
-      is_short_name <- FALSE
-    }
+    path <- found_path
   }
 
   if (verbose) {

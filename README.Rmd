@@ -942,34 +942,23 @@ ffi$struct_inner_free(inner)
 ffi$struct_outer_free(outer)
 ```
 
-For treesitter-generated bindings, nested struct fields currently still fall
-back to ptr-like accessors. The richer `struct:<name>` form is available when
-you declare the nested field accessors explicitly.
+For treesitter-generated bindings, nested struct fields inside structs still
+fall back to ptr-like accessors. If you want a borrowed nested view plus a
+copy-in setter, declare the nested field explicitly with `struct:<name>`.
 
-Bitfields are a separate case: they use scalar helper accessors, but
-`field_addr()` and `container_of()` reject bitfield members because bitfields do
-not have ordinary addressable field semantics.
+Bitfields are separate from ordinary addressable fields. They use scalar helper
+accessors, but `field_addr()` and `container_of()` reject bitfield members.
 
-```{r bitfield-nested-note, eval = FALSE}
+```{r bitfield-nested-note, error=TRUE}
 ffi <- tcc_ffi() |>
   tcc_source('struct flags { unsigned int flag : 1; };') |>
-  tcc_struct("flags", accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1)))
+  tcc_struct(
+    "flags",
+    accessors = list(flag = list(type = "u8", bitfield = TRUE, width = 1))
+  )
 
-# Both of these error intentionally:
-# ffi <- tcc_field_addr(ffi, "flags", "flag")
-# ffi <- tcc_container_of(ffi, "flags", "flag")
-```
-
-# Write the inner pointer into the outer struct
-ffi$struct_outer_in_addr(o) |> tcc_ptr_set(i)
-
-# Read it back through indirection
-ffi$struct_outer_in_addr(o) |>
-  tcc_data_ptr() |>
-  ffi$struct_inner_get_a()
-
-ffi$struct_inner_free(i)
-ffi$struct_outer_free(o)
+tcc_field_addr(ffi, "flags", "flag")
+tcc_container_of(ffi, "flags", "flag")
 ```
 
 ### Array fields in structs

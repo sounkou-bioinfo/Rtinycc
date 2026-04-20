@@ -14,6 +14,30 @@ knitr::opts_chunk$set(
 )
 library(Rtinycc)
 is_windows <- .Platform$OS.type == "windows"
+find_unix_libm <- function() {
+  if (is_windows) {
+    return(NULL)
+  }
+
+  paths <- unique(Rtinycc:::tcc_platform_lib_paths(
+    as.character(unname(Sys.info()[["sysname"]]))
+  ))
+  for (path in paths) {
+    if (!dir.exists(path)) {
+      next
+    }
+    candidates <- list.files(
+      path,
+      pattern = "^libm\\.so(\\.[0-9]+)+$",
+      full.names = TRUE
+    )
+    if (length(candidates) > 0L) {
+      return(candidates[[1]])
+    }
+  }
+  NULL
+}
+libm_path <- find_unix_libm()
 ```
 
 `tcc_link()` is the external-library counterpart to `tcc_compile()`.
@@ -41,11 +65,14 @@ Typical uses are:
 ## A Minimal Linking Example
 
 On Unix-like systems, the math library is a simple example because common
-functions such as `sqrt()` and `cos()` are usually resolved from `libm`.
+functions such as `sqrt()` and `cos()` are usually resolved from `libm`. For
+robustness across distributions, this vignette resolves an actual shared-object
+filename such as `libm.so.6` instead of relying on the unversioned `libm.so`
+entry, which may be a linker script on Debian-like systems.
 
-```{r, eval = .Platform$OS.type != "windows"}
+```{r, eval = !is_windows && !is.null(libm_path)}
 math <- tcc_link(
-  "m",
+  libm_path,
   symbols = list(
     sqrt = list(args = list("f64"), returns = "f64"),
     cos = list(args = list("f64"), returns = "f64")
@@ -67,9 +94,9 @@ library name.
 You can include a small amount of helper code in the same TinyCC unit while
 still linking against an external library:
 
-```{r, eval = .Platform$OS.type != "windows"}
+```{r, eval = !is_windows && !is.null(libm_path)}
 math_helpers <- tcc_link(
-  "m",
+  libm_path,
   symbols = list(
     sqrt = list(args = list("f64"), returns = "f64"),
     hypot2_checked = list(args = list("f64", "f64"), returns = "f64")
