@@ -1923,15 +1923,44 @@ recompile_into <- function(target) {
 # Helper for %||%
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+tcc_library_search_paths <- function(
+  sysname = as.character(unname(Sys.info()[["sysname"]]))
+) {
+  platform_paths <- tcc_platform_lib_paths(sysname)
+
+  env_vars <- unique(c(
+    tcc_loader_env_key(sysname),
+    "LIBRARY_PATH",
+    if (identical(sysname, "Darwin")) {
+      "DYLD_FALLBACK_LIBRARY_PATH"
+    } else {
+      character(0)
+    }
+  ))
+
+  env_paths <- unlist(
+    lapply(env_vars, function(key) {
+      value <- Sys.getenv(key, unset = "")
+      if (!nzchar(value)) {
+        return(character(0))
+      }
+      strsplit(value, .Platform$path.sep, fixed = TRUE)[[1]]
+    }),
+    use.names = FALSE
+  )
+
+  unique(c(env_paths[nzchar(env_paths)], platform_paths))
+}
+
 # Search for library in platform-dependent paths
 tcc_find_library <- function(name) {
   if (file.exists(name)) {
     return(name)
   }
 
-  # Try platform-specific paths
+  # Try platform-specific paths plus relevant loader/linker env paths.
   sysname <- as.character(unname(Sys.info()[["sysname"]]))
-  paths <- tcc_platform_lib_paths(sysname)
+  paths <- tcc_library_search_paths(sysname)
 
   suffix_pattern <- c(
     Windows = "\\.dll$",

@@ -229,7 +229,7 @@ find_system_math_library <- function() {
   }
 
   sysname <- as.character(unname(Sys.info()[["sysname"]]))
-  paths <- unique(Rtinycc:::tcc_platform_lib_paths(sysname))
+  paths <- unique(Rtinycc:::tcc_library_search_paths(sysname))
   patterns <- switch(
     sysname,
     Linux = c("^libm\\.so(\\.[0-9]+)+$"),
