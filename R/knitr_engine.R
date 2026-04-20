@@ -24,7 +24,7 @@ rtinycc_c_block <- function(code, options = list()) {
     ),
     options
   )
-  knitr::engine_output(opts, code, "")
+  knitr::asis_output(knitr::engine_output(opts, code, ""))
 }
 
 #' A knitr engine for reusable inline C source chunks in vignettes
