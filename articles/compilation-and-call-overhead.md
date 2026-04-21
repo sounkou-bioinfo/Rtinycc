@@ -369,8 +369,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc   0.017           17
-#> 2         callme   0.206          206
+#> 1        Rtinycc    0.02           20
+#> 2         callme    0.24          240
 ```
 
 The expected pattern is:
@@ -465,6 +465,7 @@ SEXP R_wrap_noop(void) {
 
 
 SEXP R_wrap_fill_rand(SEXP arg1_, SEXP arg2_) {
+  if (TYPEOF(arg1_) != REALSXP) Rf_error("expected numeric vector for argument 'arg1'");
   double* arg1 = REAL(arg1_);
   int _arg2 = asInteger(arg2_);
   if (_arg2 == NA_INTEGER) Rf_error("integer value is NA");
@@ -518,8 +519,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.19ms   1.33ms      765.    21.9KB        0
-#> 2 callme        423µs  436.2µs     2255.        0B        0
+#> 1 Rtinycc      1.22ms   1.23ms      809.    21.9KB        0
+#> 2 callme     453.01µs 469.49µs     2136.        0B        0
 ```
 
 Interpretation:
@@ -557,8 +558,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       2.6ms   3.55ms      291.    3.15MB     14.6
-#> 2 callme       1.99ms   2.04ms      452.    3.13MB     22.6
+#> 1 Rtinycc       4.1ms    5.8ms      183.    3.15MB     9.17
+#> 2 callme       2.07ms   2.15ms      367.    3.13MB    18.3
 ```
 
 Interpretation:
@@ -606,14 +607,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       1.7ms   1.82ms      520.    15.4KB     26.0
-#> 2 callme      796.2µs 827.96µs     1189.        0B      0
+#> 1 Rtinycc      1.79ms   1.87ms      502.    15.4KB     25.1
+#> 2 callme     967.41µs 984.27µs     1008.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.58ms   2.61ms      335.    3.13MB     16.7
-#> 2 callme       1.81ms   1.87ms      450.    3.13MB     22.5
+#> 1 Rtinycc      2.78ms   4.06ms      242.    3.13MB     12.1
+#> 2 callme        1.8ms    3.1ms      313.    3.13MB     15.7
 ```
 
 The usual pattern is:
@@ -652,3 +653,9 @@ It is less ideal when:
 - you need a direct
   [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point that
   writes its final result straight into R-managed objects
+
+## Package Attachment Check
+
+``` r
+library(Rtinycc)
+```

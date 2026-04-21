@@ -200,7 +200,7 @@ tcc_map_c_type_to_ffi("int")
 tcc_map_c_type_to_ffi("double")
 #> [1] "f64"
 tcc_map_c_type_to_ffi("const char *")
-#> [1] "i8"
+#> [1] "ptr"
 ```
 
 If you know a specific API uses `const char *` as a real NUL-terminated
@@ -230,3 +230,9 @@ tcc_treesitter_bindings(
 
 This is the intended extension point: keep the default mapper strict,
 then relax specific cases where you know the source API contract.
+
+## Package Attachment Check
+
+``` r
+library(Rtinycc)
+```

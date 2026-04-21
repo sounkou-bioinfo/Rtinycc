@@ -18,3 +18,9 @@ print(x, ...)
 - ...:
 
   Ignored
+
+## Value
+
+The input `tcc_ffi` object, invisibly. Called for its side effect of
+printing the configured output mode, registered symbols, and selected
+libraries/include paths.

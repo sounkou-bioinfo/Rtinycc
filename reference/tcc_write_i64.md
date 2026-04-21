@@ -21,3 +21,8 @@ tcc_write_i64(ptr, offset, value)
 - value:
 
   Integer value to write
+
+## Value
+
+`NULL` (invisibly). Called for its side effect of writing one signed
+64-bit value into native memory at `ptr + offset`.

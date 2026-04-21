@@ -151,3 +151,9 @@ struct/union external pointers, and helper allocations from
 or
 [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md):
 they do not serialize as live native resources.
+
+## Package Attachment Check
+
+``` r
+library(Rtinycc)
+```

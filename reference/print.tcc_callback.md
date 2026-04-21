@@ -18,3 +18,9 @@ print(x, ...)
 - ...:
 
   Ignored
+
+## Value
+
+The input `tcc_callback` object, invisibly. Called for its side effect
+of printing the callback signature, thread-safety flag, and validity
+status.

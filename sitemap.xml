@@ -18,6 +18,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/copilot-instructions.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/index.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/news/index.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/as.character.tcc_cstring.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/blas_lapack_info.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/cash-.tcc_compiled.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/dot-RtinyccCall.html</loc></url>
@@ -28,6 +29,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/parse_callback_type.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_callback.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_compiled.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_cstring.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_ffi.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_file.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_add_include_path.html</loc></url>

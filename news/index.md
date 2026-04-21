@@ -1,5 +1,15 @@
 # Changelog
 
+## Rtinycc 0.1.7
+
+- Add missing return-value documentation across exported helpers and
+  print methods so generated reference pages consistently describe
+  result class, meaning, or side-effect-only behavior.
+
+- Update vignettes to ensure each article executes ordinary R code
+  during builds, and correct conservative type-mapping docs so
+  `const char *` examples reflect the default `ptr` mapping.
+
 ## Rtinycc 0.1.6
 
 - Exclude the top-level `scripts/` directory more explicitly from

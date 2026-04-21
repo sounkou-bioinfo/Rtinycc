@@ -102,3 +102,9 @@ high-level binding format is the same, so you can move between generated
 code and linked code without changing the R-side calling convention. See
 the `Linking External Libraries` vignette for the external-linking
 workflow and the platform-specific runtime notes.
+
+## Package Attachment Check
+
+``` r
+library(Rtinycc)
+```

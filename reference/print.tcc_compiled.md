@@ -18,3 +18,9 @@ print(x, ...)
 - ...:
 
   Ignored
+
+## Value
+
+The input `tcc_compiled` object, invisibly. Called for its side effect
+of printing the compilation output mode and the status of compiled
+callable symbols.

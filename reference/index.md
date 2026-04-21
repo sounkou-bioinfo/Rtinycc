@@ -2,14 +2,16 @@
 
 ## All functions
 
+- [`as.character(`*`<tcc_cstring>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/as.character.tcc_cstring.md)
+  :
+
+  Convert a `tcc_cstring` object to an R string
+
 - [`blas_lapack_info()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/blas_lapack_info.md)
   : Report active BLAS/LAPACK runtime information from R
 
 - [`` `$`( ``*`<tcc_compiled>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/cash-.tcc_compiled.md)
   : Access a compiled FFI symbol
-
-- [`.RtinyccCall()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/dot-RtinyccCall.md)
-  : we are using .Call directly, this is to make R CMD check happy
 
 - [`generate_trampoline()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/generate_trampoline.md)
   : Generate trampoline code for a callback argument
@@ -28,6 +30,11 @@
 
 - [`print(`*`<tcc_compiled>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_compiled.md)
   : Print tcc_compiled object
+
+- [`print(`*`<tcc_cstring>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_cstring.md)
+  :
+
+  Print a `tcc_cstring` object
 
 - [`print(`*`<tcc_ffi>`*`)`](https://sounkou-bioinfo.github.io/Rtinycc/reference/print.tcc_ffi.md)
   : Print tcc_ffi object
