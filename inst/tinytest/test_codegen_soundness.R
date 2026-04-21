@@ -385,10 +385,11 @@ expect_error(
   info = "logical_array input rejects non-logical vectors before borrowing"
 )
 # character_array type-check insertion is covered structurally in
-# test_ffi_codegen.R. A runtime compile round-trip is avoided here because
-# TinyCC has shown platform-specific instability around small helpers that
-# directly exercise the current STRING_PTR_RO-based character_array path on
-# macOS CI.
+# test_ffi_codegen.R. The generated wrapper uses the R-defined
+# `const SEXP *` STRING_PTR_RO path (CHARSXP string-cell handles, not char**).
+# A runtime compile round-trip is avoided here because TinyCC has shown
+# platform-specific instability around small helpers that directly exercise
+# this path on macOS CI.
 
 # NULL array return -> R_NilValue
 ffi <- tcc_ffi() |>

@@ -37,6 +37,7 @@ expect_true(grepl("int[*] flags = LOGICAL", code))
 
 code <- Rtinycc:::generate_c_input("chars", "arg1_", "character_array")
 expect_true(grepl("Rf_isString\\(arg1_\\)", code))
+expect_true(grepl("const SEXP[*] chars = STRING_PTR_RO", code))
 expect_true(grepl("STRING_PTR_RO", code, fixed = TRUE))
 
 # Test 3: Generate C return code

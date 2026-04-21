@@ -655,7 +655,7 @@ RTINYCC_FFI_SEMANTICS <- list(
   ),
   character_array = list(
     ffi_type = "character_array",
-    c_type = "STRING_PTR_RO cells",
+    c_type = "const SEXP*",
     kind = "array",
     input = list(
       mode = "borrow_string_cells",
@@ -664,7 +664,10 @@ RTINYCC_FFI_SEMANTICS <- list(
       ownership = "R",
       r_storage = "character",
       checks = character(),
-      notes = "Exposes STRING_PTR_RO(x), meaning a vector of CHARSXP cells rather than char**."
+      notes = paste(
+        "Exposes STRING_PTR_RO(x), whose C type in R is const SEXP*;",
+        "the pointed elements are CHARSXP string cells rather than char** C strings."
+      )
     ),
     return = NULL
   ),

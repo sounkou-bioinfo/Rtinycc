@@ -21,6 +21,11 @@ type_info <- Rtinycc:::check_ffi_type("integer_array", "test")
 expect_equal(type_info$r_accessor, "INTEGER")
 expect_equal(type_info$c_type, "int32_t*")
 
+type_info <- Rtinycc:::check_ffi_type("character_array", "test")
+expect_equal(type_info$r_accessor, "STRING_PTR_RO")
+expect_equal(type_info$c_type, "const SEXP*")
+expect_equal(type_info$c_element, "SEXP (CHARSXP cell)")
+
 # Test 3: Invalid types throw errors
 expect_error(Rtinycc:::check_ffi_type("invalid_type", "test"))
 
