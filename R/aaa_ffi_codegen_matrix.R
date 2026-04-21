@@ -655,7 +655,7 @@ RTINYCC_FFI_SEMANTICS <- list(
   ),
   character_array = list(
     ffi_type = "character_array",
-    c_type = "SEXP*",
+    c_type = "STRING_PTR_RO cells",
     kind = "array",
     input = list(
       mode = "borrow_string_cells",

@@ -142,14 +142,14 @@ FFI_TYPES <- list(
     c_element = "int"
   ),
 
-  # R character vector → read-only CHARSXP cells (STRING_PTR_RO when available)
+  # R character vector → read-only CHARSXP cells exposed via STRING_PTR_RO
   character_array = list(
-    c_type = "SEXP*",
+    c_type = "STRING_PTR_RO cells",
     r_type = "character",
     size = NA_integer_,
     kind = "array",
     r_accessor = "STRING_PTR_RO",
-    c_element = "SEXP"
+    c_element = "CHARSXP cell"
   ),
 
   # R character vector → const char** (allocated with R_alloc in wrapper)
