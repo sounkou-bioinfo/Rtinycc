@@ -8,6 +8,8 @@
 #' These utilities handle pointer creation, buffer management, and memory operations
 #' that are commonly needed when working with external libraries.
 #'
+#' @return No return value. This is a documentation topic that groups the
+#'   pointer and buffer utility functions described below.
 #' @name tcc_ptr_utils
 NULL
 
@@ -274,6 +276,8 @@ tcc_write_i8 <- function(ptr, offset, value) {
 
 #' Write an unsigned 8-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   unsigned 8-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_u8 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_u8, ptr, offset, value))
@@ -281,6 +285,8 @@ tcc_write_u8 <- function(ptr, offset, value) {
 
 #' Write a signed 16-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   signed 16-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_i16 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_i16, ptr, offset, value))
@@ -288,6 +294,8 @@ tcc_write_i16 <- function(ptr, offset, value) {
 
 #' Write an unsigned 16-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   unsigned 16-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_u16 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_u16, ptr, offset, value))
@@ -295,6 +303,8 @@ tcc_write_u16 <- function(ptr, offset, value) {
 
 #' Write a signed 32-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   signed 32-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_i32 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_i32, ptr, offset, value))
@@ -302,6 +312,8 @@ tcc_write_i32 <- function(ptr, offset, value) {
 
 #' Write an unsigned 32-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   unsigned 32-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_u32 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_u32, ptr, offset, value))
@@ -309,6 +321,8 @@ tcc_write_u32 <- function(ptr, offset, value) {
 
 #' Write a signed 64-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   signed 64-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_i64 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_i64, ptr, offset, value))
@@ -316,6 +330,8 @@ tcc_write_i64 <- function(ptr, offset, value) {
 
 #' Write an unsigned 64-bit integer
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   unsigned 64-bit value into native memory at `ptr + offset`.
 #' @export
 tcc_write_u64 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_u64, ptr, offset, value))
@@ -323,6 +339,8 @@ tcc_write_u64 <- function(ptr, offset, value) {
 
 #' Write a 32-bit float
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   32-bit floating-point value into native memory at `ptr + offset`.
 #' @export
 tcc_write_f32 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_f32, ptr, offset, value))
@@ -330,6 +348,8 @@ tcc_write_f32 <- function(ptr, offset, value) {
 
 #' Write a 64-bit double
 #' @inheritParams tcc_write_i8
+#' @return `NULL` (invisibly). Called for its side effect of writing one
+#'   64-bit floating-point value into native memory at `ptr + offset`.
 #' @export
 tcc_write_f64 <- function(ptr, offset, value) {
   invisible(.Call(RC_write_f64, ptr, offset, value))

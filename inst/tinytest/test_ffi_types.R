@@ -78,15 +78,83 @@ expect_equal(
   "callback_async"
 )
 
-# Test 7: C type aliases map to expected FFI types
+# Test 7: all declared C type aliases map to the expected canonical FFI types
 
-expect_equal(tcc_map_c_type_to_ffi("size_t"), "u64")
-expect_equal(tcc_map_c_type_to_ffi("ssize_t"), "i64")
-expect_equal(tcc_map_c_type_to_ffi("ptrdiff_t"), "i64")
-expect_equal(tcc_map_c_type_to_ffi("intptr_t"), "i64")
-expect_equal(tcc_map_c_type_to_ffi("uintptr_t"), "u64")
-expect_equal(tcc_map_c_type_to_ffi("off_t"), "i64")
-expect_equal(tcc_map_c_type_to_ffi("unsigned long long int"), "u64")
-expect_equal(tcc_map_c_type_to_ffi("signed char"), "i8")
-expect_equal(tcc_map_c_type_to_ffi("unsigned"), "u32")
-expect_equal(tcc_map_c_type_to_ffi("long double"), "f64")
+mapping_cases <- list(
+  void = c("void"),
+  bool = c("bool", "_Bool"),
+  sexp = c("SEXP", "sexp"),
+  i32 = c("int", "signed", "int32_t", "__int32", "signed int"),
+  i16 = c("short", "short int", "signed short", "signed short int", "int16_t"),
+  i8 = c("char", "signed char", "int8_t"),
+  i64 = c(
+    "long",
+    "long int",
+    "long long",
+    "long long int",
+    "signed long",
+    "signed long int",
+    "signed long long",
+    "signed long long int",
+    "int64_t",
+    "__int64",
+    "intptr_t",
+    "ptrdiff_t",
+    "ssize_t",
+    "off_t"
+  ),
+  u32 = c("unsigned int", "unsigned", "uint32_t", "unsigned __int32"),
+  u16 = c("unsigned short", "unsigned short int", "uint16_t"),
+  u8 = c("unsigned char", "uint8_t"),
+  u64 = c(
+    "unsigned long",
+    "unsigned long int",
+    "unsigned long long",
+    "unsigned long long int",
+    "uint64_t",
+    "unsigned __int64",
+    "size_t",
+    "uintptr_t"
+  ),
+  f64 = c("double", "long double"),
+  f32 = c("float")
+)
+
+for (ffi_type in names(mapping_cases)) {
+  for (c_type in mapping_cases[[ffi_type]]) {
+    expect_equal(
+      tcc_map_c_type_to_ffi(c_type),
+      ffi_type,
+      info = paste("C type", shQuote(c_type), "maps to", ffi_type)
+    )
+  }
+}
+
+# Test 8: pointer spellings stay pointer-like under conservative mapping
+#
+# Regression coverage for a bug where trailing-identifier stripping could drop
+# the `*` from declarations such as `const char *`, causing them to collapse to
+# the scalar `i8` mapping instead of the intended conservative pointer mapping.
+pointer_cases <- c(
+  "const char *",
+  "char *",
+  "const char *name",
+  "char *buf",
+  "void **out",
+  "const void *ctx",
+  "volatile char *cursor",
+  "char **argv"
+)
+
+for (c_type in pointer_cases) {
+  expect_equal(
+    tcc_map_c_type_to_ffi(c_type),
+    "ptr",
+    info = paste("pointer type", shQuote(c_type), "stays on conservative ptr mapping")
+  )
+}
+
+# Test 9: whitespace and qualifiers are normalized before mapping
+expect_equal(tcc_map_c_type_to_ffi(" const   unsigned   long  long   int "), "u64")
+expect_equal(tcc_map_c_type_to_ffi("const volatile restrict double"), "f64")
+expect_equal(tcc_map_c_type_to_ffi("const volatile char * name"), "ptr")

@@ -13,6 +13,10 @@ tcc_write_f64(ptr, offset, value)
 
 \item{value}{Integer value to write}
 }
+\value{
+\code{NULL} (invisibly). Called for its side effect of writing one
+64-bit floating-point value into native memory at \code{ptr + offset}.
+}
 \description{
 Write a 64-bit double
 }

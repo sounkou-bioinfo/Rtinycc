@@ -119,6 +119,9 @@ tcc_callback_ptr <- function(callback) {
 #'
 #' @param x A tcc_callback object
 #' @param ... Ignored
+#' @return The input `tcc_callback` object, invisibly. Called for its
+#'   side effect of printing the callback signature, thread-safety flag,
+#'   and validity status.
 #' @export
 print.tcc_callback <- function(x, ...) {
   sig <- attr(x, "signature")

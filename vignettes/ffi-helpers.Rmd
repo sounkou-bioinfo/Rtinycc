@@ -100,3 +100,9 @@ tcc_free(str_ptr)
 
 This helper is the safe way to allocate a C-owned NUL-terminated string when
 the callee expects a mutable or longer-lived `char *`.
+
+## Package Attachment Check
+
+```{r}
+library(Rtinycc)
+```

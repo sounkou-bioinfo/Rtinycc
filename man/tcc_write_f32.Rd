@@ -13,6 +13,10 @@ tcc_write_f32(ptr, offset, value)
 
 \item{value}{Integer value to write}
 }
+\value{
+\code{NULL} (invisibly). Called for its side effect of writing one
+32-bit floating-point value into native memory at \code{ptr + offset}.
+}
 \description{
 Write a 32-bit float
 }

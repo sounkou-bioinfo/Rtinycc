@@ -20,15 +20,23 @@ expect_true(grepl("bool flag = (bool)(_flag != 0)", code, fixed = TRUE))
 
 # Test 2: Generate C input for array types
 code <- Rtinycc:::generate_c_input("buf", "arg1_", "raw")
+expect_true(grepl("TYPEOF\\(arg1_\\) != RAWSXP", code))
 expect_true(grepl("uint8_t[*] buf = RAW", code))
 
 code <- Rtinycc:::generate_c_input("arr", "arg1_", "integer_array")
+expect_true(grepl("TYPEOF\\(arg1_\\) != INTSXP", code))
 expect_true(grepl("int32_t[*] arr = INTEGER", code))
 
 code <- Rtinycc:::generate_c_input("nums", "arg1_", "numeric_array")
+expect_true(grepl("TYPEOF\\(arg1_\\) != REALSXP", code))
 expect_true(grepl("double[*] nums = REAL", code))
 
+code <- Rtinycc:::generate_c_input("flags", "arg1_", "logical_array")
+expect_true(grepl("TYPEOF\\(arg1_\\) != LGLSXP", code))
+expect_true(grepl("int[*] flags = LOGICAL", code))
+
 code <- Rtinycc:::generate_c_input("chars", "arg1_", "character_array")
+expect_true(grepl("Rf_isString\\(arg1_\\)", code))
 expect_true(grepl("STRING_PTR_RO", code, fixed = TRUE))
 
 # Test 3: Generate C return code

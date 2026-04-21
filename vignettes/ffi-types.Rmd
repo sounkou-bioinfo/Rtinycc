@@ -147,3 +147,9 @@ ffi_sexp$id_sexp(list(a = 1, b = 2))
 
 This is the lowest-friction way to cross the boundary when you want to work in
 terms of the R C API directly rather than the stricter scalar/vector FFI types.
+
+## Package Attachment Check
+
+```{r}
+library(Rtinycc)
+```

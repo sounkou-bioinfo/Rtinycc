@@ -11,6 +11,11 @@
 
 \item{...}{Ignored}
 }
+\value{
+The input \code{tcc_callback} object, invisibly. Called for its
+side effect of printing the callback signature, thread-safety flag,
+and validity status.
+}
 \description{
 Print tcc_callback object
 }

@@ -1088,8 +1088,51 @@ union_field_setter_lines <- function(type_name, mem_name, size) {
   union_field_setter_rule(type_name, mem_name, size)
 }
 
+ffi_input_array_check_rule <- function(ffi_type, arg_name, r_name) {
+  check_line <- switch(
+    ffi_type,
+    raw = sprintf(
+      "  if (TYPEOF(%s) != RAWSXP) Rf_error(\"expected raw vector for argument '%s'\");",
+      r_name,
+      arg_name
+    ),
+    integer_array = sprintf(
+      "  if (TYPEOF(%s) != INTSXP) Rf_error(\"expected integer vector for argument '%s'\");",
+      r_name,
+      arg_name
+    ),
+    numeric_array = sprintf(
+      "  if (TYPEOF(%s) != REALSXP) Rf_error(\"expected numeric vector for argument '%s'\");",
+      r_name,
+      arg_name
+    ),
+    logical_array = sprintf(
+      "  if (TYPEOF(%s) != LGLSXP) Rf_error(\"expected logical vector for argument '%s'\");",
+      r_name,
+      arg_name
+    ),
+    character_array = sprintf(
+      "  if (!Rf_isString(%s)) Rf_error(\"expected character vector for argument '%s'\");",
+      r_name,
+      arg_name
+    ),
+    NULL
+  )
+
+  if (is.null(check_line)) {
+    return(NULL)
+  }
+
+  paste(c(check_line, ffi_input_rule(ffi_type, arg_name, r_name)), collapse = "\n")
+}
+
 ffi_input_special_rule <- function(ffi_type, arg_name, r_name) {
   special_map <- list(
+    raw = function() ffi_input_array_check_rule(ffi_type, arg_name, r_name),
+    integer_array = function() ffi_input_array_check_rule(ffi_type, arg_name, r_name),
+    numeric_array = function() ffi_input_array_check_rule(ffi_type, arg_name, r_name),
+    logical_array = function() ffi_input_array_check_rule(ffi_type, arg_name, r_name),
+    character_array = function() ffi_input_array_check_rule(ffi_type, arg_name, r_name),
     "enum:" = function() ffi_input_enum_rule(ffi_type, arg_name, r_name),
     "callback" = function() ffi_input_callback_rule(ffi_type, arg_name, r_name)
   )

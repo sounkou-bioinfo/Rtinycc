@@ -249,6 +249,9 @@ tcc_map_c_type_to_ffi <- function(c_type) {
       return(type_str)
     }
     last <- parts[length(parts)]
+    if (last %in% c("*", "**") || grepl("^\\*+", last)) {
+      return(type_str)
+    }
     type_tokens <- c(
       "void",
       "bool",

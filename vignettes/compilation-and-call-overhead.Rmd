@@ -517,3 +517,9 @@ It is less ideal when:
 - you can already afford and manage a regular shared-library toolchain
 - you need a direct `.Call()` entry point that writes its final result straight
   into R-managed objects
+
+## Package Attachment Check
+
+```{r}
+library(Rtinycc)
+```

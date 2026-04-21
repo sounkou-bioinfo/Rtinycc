@@ -1811,6 +1811,9 @@ make_callable <- function(fn_ptr, sym, state) {
 #'
 #' @param x A tcc_ffi object
 #' @param ... Ignored
+#' @return The input `tcc_ffi` object, invisibly. Called for its side
+#'   effect of printing the configured output mode, registered symbols,
+#'   and selected libraries/include paths.
 #' @export
 print.tcc_ffi <- function(x, ...) {
   cat("<tcc_ffi>\n")
@@ -1836,6 +1839,9 @@ print.tcc_ffi <- function(x, ...) {
 #'
 #' @param x A tcc_compiled object
 #' @param ... Ignored
+#' @return The input `tcc_compiled` object, invisibly. Called for its side
+#'   effect of printing the compilation output mode and the status of
+#'   compiled callable symbols.
 #' @export
 print.tcc_compiled <- function(x, ...) {
   cat("<tcc_compiled>\n")
@@ -2226,6 +2232,13 @@ tcc_cstring_object <- function(ptr, clone = TRUE, owned = FALSE) {
   obj
 }
 
+#' Convert a `tcc_cstring` object to an R string
+#'
+#' @param x A `tcc_cstring` object.
+#' @param ... Ignored.
+#' @return A character scalar containing the string value. Returns the
+#'   cached R copy when available; otherwise reads the current NUL-terminated
+#'   C string from `x$ptr`.
 #' @export
 as.character.tcc_cstring <- function(x, ...) {
   if (!is.null(x$cached_string)) {
@@ -2234,6 +2247,12 @@ as.character.tcc_cstring <- function(x, ...) {
   tcc_read_cstring(x$ptr)
 }
 
+#' Print a `tcc_cstring` object
+#'
+#' @param x A `tcc_cstring` object.
+#' @param ... Ignored.
+#' @return The input `tcc_cstring` object, invisibly. Called for its side
+#'   effect of printing the current string value.
 #' @export
 print.tcc_cstring <- function(x, ...) {
   str <- as.character(x)

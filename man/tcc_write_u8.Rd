@@ -13,6 +13,10 @@ tcc_write_u8(ptr, offset, value)
 
 \item{value}{Integer value to write}
 }
+\value{
+\code{NULL} (invisibly). Called for its side effect of writing one
+unsigned 8-bit value into native memory at \code{ptr + offset}.
+}
 \description{
 Write an unsigned 8-bit integer
 }

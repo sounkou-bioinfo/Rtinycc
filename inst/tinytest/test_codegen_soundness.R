@@ -350,6 +350,47 @@ expect_equal(
   info = "logical_array round-trip preserves all values"
 )
 
+# Array input wrappers reject wrong SEXPTYPE before borrowing vector storage.
+ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    void touch_raw(unsigned char* buf) { (void) buf; }
+    void touch_ints(int* x) { (void) x; }
+    void touch_nums(double* x) { (void) x; }
+    void touch_lgl(int* x) { (void) x; }
+    void touch_chars(SEXP* x) { (void) x; }
+  "
+  ) |>
+  tcc_bind(
+    touch_raw = list(args = list("raw"), returns = "void"),
+    touch_ints = list(args = list("integer_array"), returns = "void"),
+    touch_nums = list(args = list("numeric_array"), returns = "void"),
+    touch_lgl = list(args = list("logical_array"), returns = "void"),
+    touch_chars = list(args = list("character_array"), returns = "void")
+  ) |>
+  tcc_compile()
+
+expect_error(
+  ffi$touch_raw(1:3),
+  info = "raw input rejects non-raw vectors before borrowing"
+)
+expect_error(
+  ffi$touch_ints(c(1, 2, 3)),
+  info = "integer_array input rejects non-integer vectors before borrowing"
+)
+expect_error(
+  ffi$touch_nums(1:3),
+  info = "numeric_array input rejects non-numeric vectors before borrowing"
+)
+expect_error(
+  ffi$touch_lgl(c(1L, 0L, 1L)),
+  info = "logical_array input rejects non-logical vectors before borrowing"
+)
+expect_error(
+  ffi$touch_chars(list("a", "b")),
+  info = "character_array input rejects non-character vectors before borrowing"
+)
+
 # NULL array return -> R_NilValue
 ffi <- tcc_ffi() |>
   tcc_source(
@@ -367,6 +408,32 @@ ffi <- tcc_ffi() |>
 expect_true(
   is.null(ffi$return_null(5L)),
   info = "NULL array return gives R NULL"
+)
+
+# Zero-length array returns still round-trip as empty R vectors when C returns
+# a non-NULL buffer. This guards the wrapper path used in the benchmark
+# vignette, where length 0 should yield numeric(0) rather than NULL.
+ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    #include <stdlib.h>
+    double* zero_vec(int n) {
+      if (n != 0) return NULL;
+      return (double*) malloc(sizeof(double));
+    }
+  "
+  ) |>
+  tcc_bind(
+    zero_vec = list(
+      args = list("i32"),
+      returns = list(type = "numeric_array", length_arg = 1, free = TRUE)
+    )
+  ) |>
+  tcc_compile()
+expect_equal(
+  ffi$zero_vec(0L),
+  numeric(0),
+  info = "zero-length array return with non-NULL buffer yields empty R vector"
 )
 
 # ===========================================================================
@@ -1085,6 +1152,23 @@ expect_equal(
   info = "cstring return: C function called exactly once"
 )
 expect_equal(r, "hello", info = "cstring return: correct value")
+
+# Regression: const-qualified char* returns must compile and box correctly.
+ffi <- tcc_ffi() |>
+  tcc_source(
+    "
+    const char* const_message(void) {
+      return \"const-ok\";
+    }
+  "
+  ) |>
+  tcc_bind(const_message = list(args = list(), returns = "cstring")) |>
+  tcc_compile()
+expect_equal(
+  ffi$const_message(),
+  "const-ok",
+  info = "const char* return compiles and boxes into an R string"
+)
 
 # wrapper argument single-eval
 ffi <- tcc_ffi() |>

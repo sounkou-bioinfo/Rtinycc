@@ -151,3 +151,9 @@ changes from “use the system copy” to “use this exact shared object”.
 Use `tcc_compile()` when your primary artifact is new C code shipped from R.
 Use `tcc_link()` when the primary implementation already lives in a shared
 library and you want `Rtinycc` to generate the wrapper layer around it.
+
+## Package Attachment Check
+
+```{r}
+library(Rtinycc)
+```

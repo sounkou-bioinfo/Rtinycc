@@ -11,6 +11,11 @@
 
 \item{...}{Ignored}
 }
+\value{
+The input \code{tcc_compiled} object, invisibly. Called for its side
+effect of printing the compilation output mode and the status of
+compiled callable symbols.
+}
 \description{
 Print tcc_compiled object
 }

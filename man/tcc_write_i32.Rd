@@ -13,6 +13,10 @@ tcc_write_i32(ptr, offset, value)
 
 \item{value}{Integer value to write}
 }
+\value{
+\code{NULL} (invisibly). Called for its side effect of writing one
+signed 32-bit value into native memory at \code{ptr + offset}.
+}
 \description{
 Write a signed 32-bit integer
 }

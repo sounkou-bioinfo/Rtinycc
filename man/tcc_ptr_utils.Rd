@@ -3,6 +3,10 @@
 \name{tcc_ptr_utils}
 \alias{tcc_ptr_utils}
 \title{Pointer and Buffer Utilities for FFI}
+\value{
+No return value. This is a documentation topic that groups the
+pointer and buffer utility functions described below.
+}
 \description{
 Generic helper functions for common FFI operations inspired by Bun's FFI.
 These utilities handle pointer creation, buffer management, and memory operations

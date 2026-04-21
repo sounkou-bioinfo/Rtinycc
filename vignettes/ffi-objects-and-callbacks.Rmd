@@ -121,3 +121,9 @@ The callback contract is deliberately explicit:
 
 That explicitness is part of what keeps `Rtinycc` predictable as a systems
 interface rather than a partial compiler front-end.
+
+## Package Attachment Check
+
+```{r}
+library(Rtinycc)
+```

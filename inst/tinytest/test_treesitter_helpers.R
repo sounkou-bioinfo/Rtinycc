@@ -40,6 +40,20 @@ expect_true(
   info = "Parse functions and map to FFI bindings"
 )
 
+# Test 1b: conservative mapping keeps char pointers as ptr in generated bindings
+expect_true(
+  {
+    symbols <- tcc_treesitter_bindings("int puts(const char *s);")
+
+    identical(symbols$puts$args[[1]], "ptr") &&
+      identical(symbols$puts$returns, "i32")
+  },
+  info = paste(
+    "treesitter-generated bindings keep const char * arguments on the",
+    "default conservative ptr mapping"
+  )
+)
+
 # Test 2: struct members and accessors (including bitfield)
 expect_true(
   {

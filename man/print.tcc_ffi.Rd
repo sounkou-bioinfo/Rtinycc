@@ -11,6 +11,11 @@
 
 \item{...}{Ignored}
 }
+\value{
+The input \code{tcc_ffi} object, invisibly. Called for its side
+effect of printing the configured output mode, registered symbols,
+and selected libraries/include paths.
+}
 \description{
 Print tcc_ffi object
 }
