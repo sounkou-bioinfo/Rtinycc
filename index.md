@@ -178,7 +178,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5f067f19eee0"
+#> [1] "0x5de606dadb80"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -209,11 +209,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5f067f2dc920>
+#> <pointer: 0x5de604eddc60>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5f067e612520>
+#> <pointer: 0x5de601907750>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5f067f2dc920>
+#> <pointer: 0x5de604eddc60>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -445,7 +445,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5f06800f4150 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5de6055d90c8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -461,7 +461,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5f06800f4150 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5de6055d90c8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -489,15 +489,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5f067fa4f000>
+#> <pointer: 0x5de601def1d0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5f067fa4f000>
+#> <pointer: 0x5de601def1d0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5f06825b4150>
+#> <pointer: 0x5de6046e3640>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5f06825b4150>
+#> <pointer: 0x5de6046e3640>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -542,9 +542,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5f067f190fb0>
+#> <pointer: 0x5de6024ab1d0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5f067f190fb0>
+#> <pointer: 0x5de6024ab1d0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -950,7 +950,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5f0682fb8530>
+#> <pointer: 0x5de607848460>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1067,11 +1067,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 46.05ms 47.78ms      20.9    6.33MB        0     2     0     95.6ms
-#> 2 vroom_df_…   6.3ms  6.49ms     154.     1.22MB        0     2     0       13ms
-#> 3 vroom_df_…  6.76ms  6.78ms     147.     2.44MB        0     2     0     13.6ms
-#> 4 c_read_df  21.01ms 21.36ms      46.8    1.22MB        0     2     0     42.7ms
-#> 5 io_uring_… 21.26ms 21.82ms      45.8    1.22MB        0     2     0     43.6ms
+#> 1 read_tabl… 46.38ms  47.9ms      20.9    6.33MB        0     2     0     95.8ms
+#> 2 vroom_df_…   6.1ms  6.39ms     156.     1.22MB        0     2     0     12.8ms
+#> 3 vroom_df_…  7.25ms  7.28ms     137.     2.44MB        0     2     0     14.6ms
+#> 4 c_read_df  21.18ms 22.16ms      45.1    1.22MB        0     2     0     44.3ms
+#> 5 io_uring_…    21ms 21.04ms      47.5    1.22MB        0     2     0     42.1ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1176,9 +1176,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5f0687b35e60>
+#> <pointer: 0x5de60914b1a0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5f0687b35e60>
+#> <pointer: 0x5de60914b1a0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
