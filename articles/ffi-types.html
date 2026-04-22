@@ -103,8 +103,27 @@ document.</p>
 </li>
 </ul>
 <p><code>Rtinycc</code> converts R values to these C types inside
-generated wrappers. The scalar integer and logical types are validated,
-not just cast silently.</p>
+generated wrappers, but the R-side scalar carriers depend on what R can
+represent directly:</p>
+<ul>
+<li>
+<code>i8</code>, <code>i16</code>, <code>i32</code>,
+<code>u8</code>, and <code>u16</code> are mediated through R integer
+scalars</li>
+<li>
+<code>u32</code>, <code>i64</code>, <code>u64</code>,
+<code>f32</code>, and <code>f64</code> are mediated through R numeric
+(<code>double</code>) coercion and boxing</li>
+<li>
+<code>bool</code> uses R logical</li>
+<li>
+<code>cstring</code> uses an R character scalar</li>
+</ul>
+<p>So the FFI names are C-side type names, not promises that R has a
+matching native scalar type for every width. Integer-like paths are
+validated, not just cast silently, and <code>i64</code> /
+<code>u64</code> are only exact up to <code>2^53</code> on the R
+side.</p>
 </div>
 <div class="section level2">
 <h2 id="a-minimal-example">A Minimal Example<a class="anchor" aria-label="anchor" href="#a-minimal-example"></a>

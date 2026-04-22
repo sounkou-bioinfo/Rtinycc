@@ -17,9 +17,20 @@ The core scalar types are:
 - direct R object: `sexp`
 - return-only sentinel: `void`
 
-`Rtinycc` converts R values to these C types inside generated wrappers.
-The scalar integer and logical types are validated, not just cast
-silently.
+`Rtinycc` converts R values to these C types inside generated wrappers,
+but the R-side scalar carriers depend on what R can represent directly:
+
+- `i8`, `i16`, `i32`, `u8`, and `u16` are mediated through R integer
+  scalars
+- `u32`, `i64`, `u64`, `f32`, and `f64` are mediated through R numeric
+  (`double`) coercion and boxing
+- `bool` uses R logical
+- `cstring` uses an R character scalar
+
+So the FFI names are C-side type names, not promises that R has a
+matching native scalar type for every width. Integer-like paths are
+validated, not just cast silently, and `i64` / `u64` are only exact up
+to `2^53` on the R side.
 
 ## A Minimal Example
 
