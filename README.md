@@ -1,3 +1,4 @@
+
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 # Rtinycc
@@ -175,7 +176,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6264ed93a940"
+#> [1] "0x5f067f19eee0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -206,11 +207,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6264e87b3e70>
+#> <pointer: 0x5f067f2dc920>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6264ee07b990>
+#> <pointer: 0x5f067e612520>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6264e87b3e70>
+#> <pointer: 0x5f067f2dc920>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -230,9 +231,19 @@ The FFI exposes a small set of type mappings between R and C.
 Conversions are explicit and predictable so callers know when data is
 shared versus copied.
 
-Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`,
-`u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical);
-`cstring` (NUL-terminated string).
+The scalar type names are C-facing, but the R-side carriers are not all
+one-to-one with those C widths:
+
+- `i8`, `i16`, `i32`, `u8`, and `u16` are mediated through R integer
+  scalars
+- `u32`, `i64`, `u64`, `f32`, and `f64` are mediated through R numeric
+  (`double`) coercion and boxing
+- `bool` uses R logical
+- `cstring` uses an R character scalar
+
+This means `u32` is routed through `double` to preserve the full
+unsigned 32-bit range, and `i64` / `u64` are only exact up to `2^53` on
+the R side.
 
 Array arguments pass R vectors to C with zero copy: `raw` maps to
 `uint8_t*`, `integer_array` to `int32_t*`, `numeric_array` to `double*`.
@@ -428,7 +439,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @6264ec17c518 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5f06800f4150 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -444,7 +455,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6264ec17c518 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5f06800f4150 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -471,15 +482,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x6264e8d15430>
+#> <pointer: 0x5f067fa4f000>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x6264e8d15430>
+#> <pointer: 0x5f067fa4f000>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x6264eb1709e0>
+#> <pointer: 0x5f06825b4150>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x6264eb1709e0>
+#> <pointer: 0x5f06825b4150>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -524,9 +535,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x6264eb206b60>
+#> <pointer: 0x5f067f190fb0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x6264eb206b60>
+#> <pointer: 0x5f067f190fb0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -927,7 +938,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6264eeecd510>
+#> <pointer: 0x5f0682fb8530>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1044,11 +1055,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 51.67ms 52.45ms      19.1    6.33MB        0     2     0    104.9ms
-#> 2 vroom_df_…  6.47ms  6.58ms     152.     1.22MB        0     2     0     13.2ms
-#> 3 vroom_df_…  6.97ms  7.07ms     141.     2.44MB        0     2     0     14.1ms
-#> 4 c_read_df  21.55ms 21.74ms      46.0    1.22MB        0     2     0     43.5ms
-#> 5 io_uring_… 21.06ms 21.16ms      47.3    1.22MB        0     2     0     42.3ms
+#> 1 read_tabl… 46.05ms 47.78ms      20.9    6.33MB        0     2     0     95.6ms
+#> 2 vroom_df_…   6.3ms  6.49ms     154.     1.22MB        0     2     0       13ms
+#> 3 vroom_df_…  6.76ms  6.78ms     147.     2.44MB        0     2     0     13.6ms
+#> 4 c_read_df  21.01ms 21.36ms      46.8    1.22MB        0     2     0     42.7ms
+#> 5 io_uring_… 21.26ms 21.82ms      45.8    1.22MB        0     2     0     43.6ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1150,9 +1161,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x6264f066b060>
+#> <pointer: 0x5f0687b35e60>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x6264f066b060>
+#> <pointer: 0x5f0687b35e60>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

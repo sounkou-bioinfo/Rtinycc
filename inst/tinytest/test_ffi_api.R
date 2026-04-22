@@ -101,6 +101,57 @@ expect_true(inherits(ffi, "tcc_compiled"))
 result <- ffi$multiply(2.5, 4.0)
 expect_equal(result, 10.0)
 
+# Test 5b: scalar wrappers use the intended R-side carrier types
+ffi_scalar_carriers <- tcc_ffi() |>
+  tcc_bind(
+    id_i32 = list(args = list("i32"), returns = "i32"),
+    id_u16 = list(args = list("u16"), returns = "u16"),
+    id_u32 = list(args = list("u32"), returns = "u32"),
+    id_i64 = list(args = list("i64"), returns = "i64"),
+    id_u64 = list(args = list("u64"), returns = "u64"),
+    id_f32 = list(args = list("f32"), returns = "f32"),
+    id_f64 = list(args = list("f64"), returns = "f64")
+  ) |>
+  tcc_source(
+    "
+    #include <stdint.h>
+
+    int32_t id_i32(int32_t x) { return x; }
+    uint16_t id_u16(uint16_t x) { return x; }
+    uint32_t id_u32(uint32_t x) { return x; }
+    int64_t id_i64(int64_t x) { return x; }
+    uint64_t id_u64(uint64_t x) { return x; }
+    float id_f32(float x) { return x; }
+    double id_f64(double x) { return x; }
+  "
+  ) |>
+  tcc_compile()
+
+expect_identical(typeof(ffi_scalar_carriers$id_i32(7L)), "integer")
+expect_identical(typeof(ffi_scalar_carriers$id_u16(65535L)), "integer")
+expect_identical(typeof(ffi_scalar_carriers$id_u32(4294967295)), "double")
+expect_identical(typeof(ffi_scalar_carriers$id_i64(2^53)), "double")
+expect_identical(typeof(ffi_scalar_carriers$id_u64(2^53)), "double")
+expect_identical(typeof(ffi_scalar_carriers$id_f32(1.25)), "double")
+expect_identical(typeof(ffi_scalar_carriers$id_f64(1.25)), "double")
+
+expect_equal(ffi_scalar_carriers$id_u32(4294967295), 4294967295)
+expect_equal(ffi_scalar_carriers$id_i64(2^53), 2^53)
+expect_equal(ffi_scalar_carriers$id_u64(2^53), 2^53)
+
+expect_error(
+  ffi_scalar_carriers$id_u32(1.5),
+  "u32 requires integer value"
+)
+expect_error(
+  ffi_scalar_carriers$id_i64(2^53 + 2),
+  "i64 requires exact integer"
+)
+expect_error(
+  ffi_scalar_carriers$id_u64(2^53 + 2),
+  "u64 requires exact integer"
+)
+
 # Test 6: Test print methods
 ffi <- tcc_ffi() |>
   tcc_bind(

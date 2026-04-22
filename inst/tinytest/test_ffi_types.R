@@ -12,6 +12,20 @@ expect_equal(type_info$c_type, "int32_t")
 expect_equal(type_info$r_type, "integer")
 expect_equal(type_info$kind, "scalar")
 
+# Test 1b: scalar ffi types record the intended R-side carrier types
+expect_equal(Rtinycc:::check_ffi_type("i8", "test")$r_type, "integer")
+expect_equal(Rtinycc:::check_ffi_type("i16", "test")$r_type, "integer")
+expect_equal(Rtinycc:::check_ffi_type("i32", "test")$r_type, "integer")
+expect_equal(Rtinycc:::check_ffi_type("u8", "test")$r_type, "integer")
+expect_equal(Rtinycc:::check_ffi_type("u16", "test")$r_type, "integer")
+expect_equal(Rtinycc:::check_ffi_type("u32", "test")$r_type, "numeric")
+expect_equal(Rtinycc:::check_ffi_type("i64", "test")$r_type, "numeric")
+expect_equal(Rtinycc:::check_ffi_type("u64", "test")$r_type, "numeric")
+expect_equal(Rtinycc:::check_ffi_type("f32", "test")$r_type, "numeric")
+expect_equal(Rtinycc:::check_ffi_type("f64", "test")$r_type, "numeric")
+expect_equal(Rtinycc:::check_ffi_type("bool", "test")$r_type, "logical")
+expect_equal(Rtinycc:::check_ffi_type("cstring", "test")$r_type, "character")
+
 # Test 2: Array types have proper accessors
 type_info <- Rtinycc:::check_ffi_type("raw", "test")
 expect_equal(type_info$r_accessor, "RAW")

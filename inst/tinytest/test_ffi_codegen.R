@@ -14,6 +14,18 @@ expect_true(grepl("int32_t x = (int32_t)_x", code, fixed = TRUE))
 code <- Rtinycc:::generate_c_input("y", "arg2_", "f64")
 expect_true(grepl("double y = asReal", code))
 
+code <- Rtinycc:::generate_c_input("u32_value", "arg4_", "u32")
+expect_true(grepl("double _u32_value = asReal", code))
+expect_true(grepl("uint32_t u32_value = \\(uint32_t\\)_u32_value", code))
+
+code <- Rtinycc:::generate_c_input("i64_value", "arg5_", "i64")
+expect_true(grepl("double _i64_value = asReal", code))
+expect_true(grepl("int64_t i64_value = \\(int64_t\\)_i64_value", code))
+
+code <- Rtinycc:::generate_c_input("u64_value", "arg6_", "u64")
+expect_true(grepl("double _u64_value = asReal", code))
+expect_true(grepl("uint64_t u64_value = \\(uint64_t\\)_u64_value", code))
+
 code <- Rtinycc:::generate_c_input("flag", "arg3_", "bool")
 expect_true(grepl("int _flag = asLogical", code))
 expect_true(grepl("bool flag = (bool)(_flag != 0)", code, fixed = TRUE))
@@ -45,6 +57,15 @@ rc <- Rtinycc:::generate_c_return("result", "i32")
 expect_true(grepl("ScalarInteger", rc))
 
 rc <- Rtinycc:::generate_c_return("result", "f64")
+expect_true(grepl("ScalarReal", rc))
+
+rc <- Rtinycc:::generate_c_return("result", "u32")
+expect_true(grepl("ScalarReal", rc))
+
+rc <- Rtinycc:::generate_c_return("result", "i64")
+expect_true(grepl("ScalarReal", rc))
+
+rc <- Rtinycc:::generate_c_return("result", "u64")
 expect_true(grepl("ScalarReal", rc))
 
 rc <- Rtinycc:::generate_c_return("result", "cstring")

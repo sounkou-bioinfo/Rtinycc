@@ -182,7 +182,17 @@ A declarative interface inspired by [Bun's FFI](https://bun.com/docs/runtime/ffi
 
 The FFI exposes a small set of type mappings between R and C. Conversions are explicit and predictable so callers know when data is shared versus copied.
 
-Scalar types map one-to-one: `i8`, `i16`, `i32`, `i64` (integers); `u8`, `u16`, `u32`, `u64` (unsigned); `f32`, `f64` (floats); `bool` (logical); `cstring` (NUL-terminated string). 
+The scalar type names are C-facing, but the R-side carriers are not all
+one-to-one with those C widths:
+
+- `i8`, `i16`, `i32`, `u8`, and `u16` are mediated through R integer scalars
+- `u32`, `i64`, `u64`, `f32`, and `f64` are mediated through R numeric
+  (`double`) coercion and boxing
+- `bool` uses R logical
+- `cstring` uses an R character scalar
+
+This means `u32` is routed through `double` to preserve the full unsigned
+32-bit range, and `i64` / `u64` are only exact up to `2^53` on the R side.
 
 Array arguments pass R vectors to C with zero copy: `raw` maps to `uint8_t*`, `integer_array` to `int32_t*`, `numeric_array` to `double*`. 
 
