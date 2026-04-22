@@ -3,6 +3,9 @@
 ^README\.html$
 ^\.claude$
 ^\.codex$
+^\.\.pdf$
+^\.\.Rcheck$
+^\.\.Rcheck/.*$
 src/*so$
 src/*.o
 ^_pkgdown\.yml$
@@ -29,5 +32,7 @@ src/*.o
 ^mutations/.*$
 ^tccquickr$
 ^tccquickr/.*$
+^\.sync$
 ^\.sync/.*$
-^treesiter\.c/.*$
+^treesitter\.c$
+^treesitter\.c/.*$
