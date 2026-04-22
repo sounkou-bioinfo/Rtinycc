@@ -178,7 +178,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5ed89220dc50"
+#> [1] "0x6264ed93a940"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -209,11 +209,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5ed8952bacf0>
+#> <pointer: 0x6264e87b3e70>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5ed897497ec0>
+#> <pointer: 0x6264ee07b990>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5ed8952bacf0>
+#> <pointer: 0x6264e87b3e70>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -435,7 +435,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5ed8955ac528 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @6264ec17c518 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -451,7 +451,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5ed8955ac528 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @6264ec17c518 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -479,15 +479,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5ed893f08110>
+#> <pointer: 0x6264e8d15430>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5ed893f08110>
+#> <pointer: 0x6264e8d15430>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5ed896fd09b0>
+#> <pointer: 0x6264eb1709e0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5ed896fd09b0>
+#> <pointer: 0x6264eb1709e0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -532,9 +532,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5ed893aed890>
+#> <pointer: 0x6264eb206b60>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5ed893aed890>
+#> <pointer: 0x6264eb206b60>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -608,8 +608,8 @@ tcc_callback_close(cb)
 If a callback throws an R error, the trampoline catches it, emits a
 warning, and returns a type-appropriate sentinel instead of unwinding
 through C. In practice this means NA-like numeric or integer values,
-`NA` logical, `NA` string, or a null external pointer depending on the
-declared return type.
+`NA` logical, `NULL` for `cstring`, or a null external pointer depending
+on the declared return type.
 
 ``` r
 cb_err <- tcc_callback(
@@ -940,7 +940,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5ed895123b00>
+#> <pointer: 0x6264eeecd510>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1057,11 +1057,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 48.33ms 49.71ms      20.1    6.33MB      0       2     0     99.4ms
-#> 2 vroom_df_…  6.22ms  6.38ms     157.     1.22MB      0       2     0     12.8ms
-#> 3 vroom_df_…  6.99ms  7.52ms     133.     2.44MB      0       2     0       15ms
-#> 4 c_read_df  21.43ms 21.43ms      46.7    1.22MB     46.7     1     1     21.4ms
-#> 5 io_uring_…  20.4ms 20.49ms      48.8    1.22MB      0       2     0       41ms
+#> 1 read_tabl… 51.67ms 52.45ms      19.1    6.33MB        0     2     0    104.9ms
+#> 2 vroom_df_…  6.47ms  6.58ms     152.     1.22MB        0     2     0     13.2ms
+#> 3 vroom_df_…  6.97ms  7.07ms     141.     2.44MB        0     2     0     14.1ms
+#> 4 c_read_df  21.55ms 21.74ms      46.0    1.22MB        0     2     0     43.5ms
+#> 5 io_uring_… 21.06ms 21.16ms      47.3    1.22MB        0     2     0     42.3ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1166,9 +1166,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5ed89da7e280>
+#> <pointer: 0x6264f066b060>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5ed89da7e280>
+#> <pointer: 0x6264f066b060>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

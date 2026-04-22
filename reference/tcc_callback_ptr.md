@@ -3,8 +3,10 @@
 Returns an external pointer that can be passed to compiled C code as
 user data for trampolines. Keep this handle (and the original
 `tcc_callback`) alive for as long as C may call back. The pointer handle
-keeps the underlying token alive until it is garbage collected, even if
-the original callback is closed.
+keeps the underlying token storage alive until it is garbage collected.
+Closing the original callback still invalidates the callback registry
+entry, so C must not continue invoking it after
+[`tcc_callback_close()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_close.md).
 
 ## Usage
 

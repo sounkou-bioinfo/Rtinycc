@@ -1,7 +1,8 @@
 # CString S3 Class
 
-Safe handling of C strings (char\*) with automatic memory management.
-Like Bun's CString class.
+Wrapper around a C string pointer with an optional cached R copy.
+Ownership follows the underlying external pointer; this wrapper does not
+add finalizer or freeing behavior on top of that pointer.
 
 ## Usage
 
