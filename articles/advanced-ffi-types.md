@@ -143,9 +143,3 @@ ffi_struct$struct_point_free(pt)
 These helpers are separate from
 [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md)
 because they expose storage and layout rather than just call signatures.
-
-## Package Attachment Check
-
-``` r
-library(Rtinycc)
-```

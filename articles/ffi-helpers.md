@@ -77,14 +77,14 @@ ptr_ref <- tcc_malloc(ptr_size)
 target <- tcc_malloc(4)
 
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x55d9f114fea0>
+#> <pointer: 0x55eab7d5de30>
 tcc_ptr_addr(tcc_data_ptr(ptr_ref))
-#> [1] "94394536450144"
+#> [1] "94466538723824"
 tcc_ptr_addr(target)
-#> [1] "94394536450144"
+#> [1] "94466538723824"
 
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x55d9f114fea0>
+#> <pointer: 0x55eab7d5de30>
 tcc_ptr_is_null(tcc_data_ptr(ptr_ref))
 #> [1] TRUE
 
@@ -111,9 +111,3 @@ tcc_free(str_ptr)
 
 This helper is the safe way to allocate a C-owned NUL-terminated string
 when the callee expects a mutable or longer-lived `char *`.
-
-## Package Attachment Check
-
-``` r
-library(Rtinycc)
-```

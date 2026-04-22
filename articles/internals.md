@@ -465,9 +465,3 @@ If you want to inspect the implementation directly, the main files are:
 - `R/callbacks.R`: callback parsing and trampoline generation helpers
 - `src/RC_libtcc.c`: TCC/R bridge, host symbol injection, callback
   runtime
-
-## Package Attachment Check
-
-``` r
-library(Rtinycc)
-```

@@ -118,9 +118,3 @@ when your primary artifact is new C code shipped from R. Use
 [`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
 when the primary implementation already lives in a shared library and
 you want `Rtinycc` to generate the wrapper layer around it.
-
-## Package Attachment Check
-
-``` r
-library(Rtinycc)
-```

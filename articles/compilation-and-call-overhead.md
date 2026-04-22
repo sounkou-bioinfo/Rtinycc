@@ -369,8 +369,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc   0.019           19
-#> 2         callme   0.221          221
+#> 1        Rtinycc   0.017           17
+#> 2         callme   0.211          211
 ```
 
 The expected pattern is:
@@ -519,8 +519,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.19ms   1.21ms      825.    21.9KB        0
-#> 2 callme      443.8µs 454.65µs     2194.        0B        0
+#> 1 Rtinycc      1.18ms   1.35ms      758.    21.9KB        0
+#> 2 callme     425.02µs 437.52µs     2256.        0B        0
 ```
 
 Interpretation:
@@ -558,8 +558,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.77ms   3.96ms      267.    3.15MB     13.3
-#> 2 callme       2.05ms   2.07ms      441.    3.13MB     22.1
+#> 1 Rtinycc       2.6ms   3.54ms      290.    3.15MB     14.5
+#> 2 callme       2.17ms   2.19ms      421.    3.13MB     21.1
 ```
 
 Interpretation:
@@ -607,14 +607,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.74ms   1.82ms      518.    15.4KB     25.9
-#> 2 callme      925.4µs 941.39µs     1058.        0B      0
+#> 1 Rtinycc      1.71ms   1.81ms      520.    15.4KB     26.0
+#> 2 callme     792.23µs  818.7µs     1218.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.77ms   4.07ms      243.    3.13MB     12.1
-#> 2 callme        1.8ms   3.06ms      318.    3.13MB     15.9
+#> 1 Rtinycc      2.58ms   3.48ms      282.    3.13MB     14.1
+#> 2 callme       2.03ms   2.92ms      331.    3.13MB     16.5
 ```
 
 The usual pattern is:
@@ -653,9 +653,3 @@ It is less ideal when:
 - you need a direct
   [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point that
   writes its final result straight into R-managed objects
-
-## Package Attachment Check
-
-``` r
-library(Rtinycc)
-```

@@ -230,9 +230,3 @@ tcc_treesitter_bindings(
 
 This is the intended extension point: keep the default mapper strict,
 then relax specific cases where you know the source API contract.
-
-## Package Attachment Check
-
-``` r
-library(Rtinycc)
-```
