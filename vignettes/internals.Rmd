@@ -12,7 +12,18 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-library(Rtinycc)
+tcc_bind <- Rtinycc::tcc_bind
+tcc_callback_close <- Rtinycc::tcc_callback_close
+tcc_compile <- Rtinycc::tcc_compile
+tcc_cstring <- Rtinycc::tcc_cstring
+tcc_data_ptr <- Rtinycc::tcc_data_ptr
+tcc_ffi <- Rtinycc::tcc_ffi
+tcc_get_symbol <- Rtinycc::tcc_get_symbol
+tcc_link <- Rtinycc::tcc_link
+tcc_malloc <- Rtinycc::tcc_malloc
+tcc_relocate <- Rtinycc::tcc_relocate
+tcc_set_options <- Rtinycc::tcc_set_options
+tcc_source <- Rtinycc::tcc_source
 ```
 
 This article is about how `Rtinycc` works internally. It is not the stable
@@ -435,9 +446,3 @@ If you want to inspect the implementation directly, the main files are:
 - `R/aaa_ffi_codegen_rules.R`: rule tables for conversions and mapping
 - `R/callbacks.R`: callback parsing and trampoline generation helpers
 - `src/RC_libtcc.c`: TCC/R bridge, host symbol injection, callback runtime
-
-## Package Attachment Check
-
-```{r}
-library(Rtinycc)
-```

@@ -7,14 +7,6 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
-library(Rtinycc)
-```
-
 This article is about what actually crosses the R/C boundary in `Rtinycc`:
 
 - when values are copied
@@ -145,9 +137,3 @@ serialization they are just dead addresses or invalid states, not
 auto-reconstructed resources. The same applies to callback tokens,
 struct/union external pointers, and helper allocations from `tcc_malloc()` or
 `tcc_cstring()`: they do not serialize as live native resources.
-
-## Package Attachment Check
-
-```{r}
-library(Rtinycc)
-```

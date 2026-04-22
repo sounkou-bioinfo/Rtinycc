@@ -12,7 +12,15 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-library(Rtinycc)
+tcc_bind <- Rtinycc::tcc_bind
+tcc_callback <- Rtinycc::tcc_callback
+tcc_callback_async_drain <- Rtinycc::tcc_callback_async_drain
+tcc_callback_close <- Rtinycc::tcc_callback_close
+tcc_callback_ptr <- Rtinycc::tcc_callback_ptr
+tcc_compile <- Rtinycc::tcc_compile
+tcc_ffi <- Rtinycc::tcc_ffi
+tcc_source <- Rtinycc::tcc_source
+tcc_struct <- Rtinycc::tcc_struct
 ```
 
 This vignette covers two patterns that come up quickly in real bindings:
@@ -121,9 +129,3 @@ The callback contract is deliberately explicit:
 
 That explicitness is part of what keeps `Rtinycc` predictable as a systems
 interface rather than a partial compiler front-end.
-
-## Package Attachment Check
-
-```{r}
-library(Rtinycc)
-```

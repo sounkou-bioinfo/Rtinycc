@@ -12,7 +12,16 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-library(Rtinycc)
+tcc_bind <- Rtinycc::tcc_bind
+tcc_compile <- Rtinycc::tcc_compile
+tcc_ffi <- Rtinycc::tcc_ffi
+tcc_generate_bindings <- Rtinycc::tcc_generate_bindings
+tcc_map_c_type_to_ffi <- Rtinycc::tcc_map_c_type_to_ffi
+tcc_source <- Rtinycc::tcc_source
+tcc_struct <- Rtinycc::tcc_struct
+tcc_treesitter_bindings <- Rtinycc::tcc_treesitter_bindings
+tcc_treesitter_functions <- Rtinycc::tcc_treesitter_functions
+tcc_treesitter_struct_accessors <- Rtinycc::tcc_treesitter_struct_accessors
 has_treesitter <- requireNamespace("treesitter.c", quietly = TRUE) &&
   packageVersion("treesitter.c") >= "0.0.4"
 ```
@@ -164,9 +173,3 @@ tcc_treesitter_bindings(
 
 This is the intended extension point: keep the default mapper strict, then
 relax specific cases where you know the source API contract.
-
-## Package Attachment Check
-
-```{r}
-library(Rtinycc)
-```

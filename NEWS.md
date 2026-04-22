@@ -1,3 +1,9 @@
+# Rtinycc 0.1.8
+
+- Clean up vignette sources by removing package-attachment checks and replacing
+  hidden `library(Rtinycc)` setup with explicit namespace bindings, while
+  keeping executable examples working during vignette builds.
+
 # Rtinycc 0.1.7
 
 - Add missing return-value documentation across exported helpers and print

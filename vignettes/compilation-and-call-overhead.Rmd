@@ -13,7 +13,10 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 knitr::knit_engines$set(rtinycc = Rtinycc:::rtinycc_engine)
-library(Rtinycc)
+tcc_bind <- Rtinycc::tcc_bind
+tcc_compile <- Rtinycc::tcc_compile
+tcc_ffi <- Rtinycc::tcc_ffi
+tcc_source <- Rtinycc::tcc_source
 has_callme <- requireNamespace("callme", quietly = TRUE)
 has_bench <- requireNamespace("bench", quietly = TRUE)
 ```
@@ -517,9 +520,3 @@ It is less ideal when:
 - you can already afford and manage a regular shared-library toolchain
 - you need a direct `.Call()` entry point that writes its final result straight
   into R-managed objects
-
-## Package Attachment Check
-
-```{r}
-library(Rtinycc)
-```

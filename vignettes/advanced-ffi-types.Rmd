@@ -12,7 +12,16 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-library(Rtinycc)
+tcc_bind <- Rtinycc::tcc_bind
+tcc_callback <- Rtinycc::tcc_callback
+tcc_callback_async_drain <- Rtinycc::tcc_callback_async_drain
+tcc_callback_close <- Rtinycc::tcc_callback_close
+tcc_callback_ptr <- Rtinycc::tcc_callback_ptr
+tcc_compile <- Rtinycc::tcc_compile
+tcc_ffi <- Rtinycc::tcc_ffi
+tcc_global <- Rtinycc::tcc_global
+tcc_source <- Rtinycc::tcc_source
+tcc_struct <- Rtinycc::tcc_struct
 ```
 
 This article covers the more structured parts of the FFI surface: array-return
@@ -142,9 +151,3 @@ ffi_struct$struct_point_free(pt)
 
 These helpers are separate from `tcc_bind()` because they expose storage and
 layout rather than just call signatures.
-
-## Package Attachment Check
-
-```{r}
-library(Rtinycc)
-```
