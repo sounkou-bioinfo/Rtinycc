@@ -2001,9 +2001,10 @@ tcc_find_library <- function(name) {
 #' Unlike dlopen(), this uses TinyCC to compile bindings that handle
 #' type conversion between R and C automatically.
 #'
-#' @param path Library short name (e.g., "m", "sqlite3") or full path to
-#'   the shared library. Short names are resolved using
-#'   platform-appropriate suffixes (`.so`, `.dylib`, `.dll`).
+#' @param path Library short name (e.g., `"m"`, `"sqlite3"`) or full path to
+#'   the shared library. Short names stay on the normal linker-name path
+#'   (`-l<name>`). File names such as `libm.so` or full paths are resolved
+#'   through the configured library search paths when needed.
 #' @param symbols Named list of symbol definitions with:
 #'   \itemize{
 #'     \item args: List of FFI types for arguments
@@ -2197,8 +2198,9 @@ tcc_link <- function(
 
 #' CString S3 Class
 #'
-#' Safe handling of C strings (char*) with automatic memory management.
-#' Like Bun's CString class.
+#' Wrapper around a C string pointer with an optional cached R copy.
+#' Ownership follows the underlying external pointer; this wrapper does not add
+#' finalizer or freeing behavior on top of that pointer.
 #'
 #' @param ptr External pointer to C string
 #' @param clone Whether to clone the string immediately (safe for R use)

@@ -16,9 +16,10 @@ tcc_link(
 )
 }
 \arguments{
-\item{path}{Library short name (e.g., "m", "sqlite3") or full path to
-the shared library. Short names are resolved using
-platform-appropriate suffixes (\code{.so}, \code{.dylib}, \code{.dll}).}
+\item{path}{Library short name (e.g., \code{"m"}, \code{"sqlite3"}) or full path to
+the shared library. Short names stay on the normal linker-name path
+(\verb{-l<name>}). File names such as \code{libm.so} or full paths are resolved
+through the configured library search paths when needed.}
 
 \item{symbols}{Named list of symbol definitions with:
 \itemize{

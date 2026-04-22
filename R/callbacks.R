@@ -96,8 +96,10 @@ tcc_callback_close <- function(callback) {
 #' Returns an external pointer that can be passed to compiled C code
 #' as user data for trampolines. Keep this handle (and the original
 #' `tcc_callback`) alive for as long as C may call back.
-#' The pointer handle keeps the underlying token alive until it is garbage
-#' collected, even if the original callback is closed.
+#' The pointer handle keeps the underlying token storage alive until it is
+#' garbage collected. Closing the original callback still invalidates the
+#' callback registry entry, so C must not continue invoking it after
+#' `tcc_callback_close()`.
 #'
 #' Pointer arguments and return values are treated as external pointers.
 #' Use \code{tcc_read_bytes()}, \code{tcc_read_u8()}, or \code{tcc_read_f64()}

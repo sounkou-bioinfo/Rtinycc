@@ -491,7 +491,7 @@ tcc_callback_close(cb)
 
 ### Callback errors
 
-If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate sentinel instead of unwinding through C. In practice this means NA-like numeric or integer values, `NA` logical, `NA` string, or a null external pointer depending on the declared return type.
+If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate sentinel instead of unwinding through C. In practice this means NA-like numeric or integer values, `NA` logical, `NULL` for `cstring`, or a null external pointer depending on the declared return type.
 
 ```{r callback-error}
 cb_err <- tcc_callback(

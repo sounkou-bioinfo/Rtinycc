@@ -17,6 +17,7 @@ tcc_cstring_object(ptr, clone = TRUE, owned = FALSE)
 A tcc_cstring object
 }
 \description{
-Safe handling of C strings (char*) with automatic memory management.
-Like Bun's CString class.
+Wrapper around a C string pointer with an optional cached R copy.
+Ownership follows the underlying external pointer; this wrapper does not add
+finalizer or freeing behavior on top of that pointer.
 }
