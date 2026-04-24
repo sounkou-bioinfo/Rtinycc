@@ -2,6 +2,8 @@
 
 ## Rtinycc 0.1.8
 
+CRAN release: 2026-04-24
+
 - Clean up vignette sources by removing package-attachment checks and
   replacing hidden
   [`library(Rtinycc)`](https://github.com/sounkou-bioinfo/Rtinycc) setup
