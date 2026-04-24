@@ -1,5 +1,9 @@
 # Changelog
 
+## Rtinycc 0.1.8.9000 (Development Version)
+
+- Add a CRAN version badge to the README.
+
 ## Rtinycc 0.1.8
 
 CRAN release: 2026-04-24
