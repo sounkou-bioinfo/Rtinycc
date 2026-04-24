@@ -1,3 +1,7 @@
+# Rtinycc 0.1.8.9000 (Development Version)
+
+- Add a CRAN version badge to the README.
+
 # Rtinycc 0.1.8
 
 - Clean up vignette sources by removing package-attachment checks and replacing
