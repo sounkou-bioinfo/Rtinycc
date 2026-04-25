@@ -451,7 +451,7 @@ below are skipped.</p>
 <span><span class="va">compile_times</span></span>
 <span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
 <span><span class="co">#&gt; 1        Rtinycc   0.019           19</span></span>
-<span><span class="co">#&gt; 2         callme   0.233          233</span></span></code></pre></div>
+<span><span class="co">#&gt; 2         callme   0.232          232</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -593,7 +593,7 @@ point.</p>
 <span>    callme <span class="op">=</span> <span class="fu">run_noop</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">noop</span>, <span class="va">n_noop</span><span class="op">)</span>,</span>
 <span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
 <span>    check <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    memory <span class="op">=</span> <span class="va">has_profmem</span>,</span>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
@@ -602,8 +602,8 @@ point.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.18ms   1.21ms      819.    21.9KB        0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     445.06µs 460.55µs     <span style="text-decoration: underline;">2</span>175.        0B        0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.17ms   1.21ms      828.    21.9KB        0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     452.46µs 466.07µs     <span style="text-decoration: underline;">2</span>143.        0B        0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -636,7 +636,7 @@ result.</p>
 <span>    callme <span class="op">=</span> <span class="fu">run_fill</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">fill_rand</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
 <span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
 <span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    memory <span class="op">=</span> <span class="va">has_profmem</span>,</span>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
@@ -645,8 +645,8 @@ result.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.79ms      4ms      264.    3.15MB     13.2</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.21ms   2.22ms      415.    3.13MB     20.7</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.78ms   3.97ms      264.    3.15MB     13.2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.18ms    2.2ms      418.    3.13MB     20.9</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>both sides now write into ordinary R numeric storage</li>
@@ -676,7 +676,7 @@ into a fresh R vector</li>
 <span>    callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">1L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
 <span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
 <span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    memory <span class="op">=</span> <span class="va">has_profmem</span>,</span>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
 <span></span>
@@ -685,7 +685,7 @@ into a fresh R vector</li>
 <span>    callme <span class="op">=</span> <span class="fu">run_rand</span><span class="op">(</span><span class="va">cm_mod</span><span class="op">$</span><span class="va">rand_unif</span>, <span class="fl">4096L</span>, <span class="fl">100L</span><span class="op">)</span>,</span>
 <span>    iterations <span class="op">=</span> <span class="fl">20</span>,</span>
 <span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    memory <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    memory <span class="op">=</span> <span class="va">has_profmem</span>,</span>
 <span>    filter_gc <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
 <span></span>
@@ -696,14 +696,14 @@ into a fresh R vector</li>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.76ms   1.84ms      511.    15.4KB     25.6</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     948.27µs 955.17µs     <span style="text-decoration: underline;">1</span>043.        0B      0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.73ms    1.8ms      525.    15.4KB     26.2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     952.67µs  965.8µs     <span style="text-decoration: underline;">1</span>032.        0B      0</span></span>
 <span><span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n4096</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.78ms   4.03ms      251.    3.13MB     12.5</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.92ms   3.22ms      309.    3.13MB     15.4</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.76ms   3.99ms      261.    3.13MB     13.1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.93ms   3.17ms      320.    3.13MB     16.0</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
 <li>for <code>fill_rand()</code>, the comparison is much closer to

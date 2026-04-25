@@ -380,7 +380,7 @@ compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
 #> 1        Rtinycc   0.019           19
-#> 2         callme   0.233          233
+#> 2         callme   0.232          232
 ```
 
 The expected pattern is:
@@ -520,7 +520,7 @@ noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
     callme = run_noop(cm_mod$noop, n_noop),
     iterations = 20,
     check = TRUE,
-    memory = TRUE,
+    memory = has_profmem,
     filter_gc = FALSE
   )
 })
@@ -529,8 +529,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.18ms   1.21ms      819.    21.9KB        0
-#> 2 callme     445.06µs 460.55µs     2175.        0B        0
+#> 1 Rtinycc      1.17ms   1.21ms      828.    21.9KB        0
+#> 2 callme     452.46µs 466.07µs     2143.        0B        0
 ```
 
 Interpretation:
@@ -559,7 +559,7 @@ fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
     callme = run_fill(cm_mod$fill_rand, 4096L, 100L),
     iterations = 20,
     check = FALSE,
-    memory = TRUE,
+    memory = has_profmem,
     filter_gc = FALSE
   )
 })
@@ -568,8 +568,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.79ms      4ms      264.    3.15MB     13.2
-#> 2 callme       2.21ms   2.22ms      415.    3.13MB     20.7
+#> 1 Rtinycc      2.78ms   3.97ms      264.    3.15MB     13.2
+#> 2 callme       2.18ms    2.2ms      418.    3.13MB     20.9
 ```
 
 Interpretation:
@@ -597,7 +597,7 @@ rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
     callme = run_rand(cm_mod$rand_unif, 1L, 1000L),
     iterations = 20,
     check = FALSE,
-    memory = TRUE,
+    memory = has_profmem,
     filter_gc = FALSE
   )
 
@@ -606,7 +606,7 @@ rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
     callme = run_rand(cm_mod$rand_unif, 4096L, 100L),
     iterations = 20,
     check = FALSE,
-    memory = TRUE,
+    memory = has_profmem,
     filter_gc = FALSE
   )
 
@@ -617,14 +617,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.76ms   1.84ms      511.    15.4KB     25.6
-#> 2 callme     948.27µs 955.17µs     1043.        0B      0
+#> 1 Rtinycc      1.73ms    1.8ms      525.    15.4KB     26.2
+#> 2 callme     952.67µs  965.8µs     1032.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.78ms   4.03ms      251.    3.13MB     12.5
-#> 2 callme       1.92ms   3.22ms      309.    3.13MB     15.4
+#> 1 Rtinycc      2.76ms   3.99ms      261.    3.13MB     13.1
+#> 2 callme       1.93ms   3.17ms      320.    3.13MB     16.0
 ```
 
 The usual pattern is:
