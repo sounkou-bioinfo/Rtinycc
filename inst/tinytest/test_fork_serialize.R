@@ -272,6 +272,34 @@ if (!is.null(math_lib_path)) {
     12.0,
     info = "tcc_link: auto-recompiles after deserialization"
   )
+
+  if (identical(as.character(unname(Sys.info()[["sysname"]])), "Linux")) {
+    tmp_lib_dir <- tempfile("rtinycc-libm-")
+    dir.create(tmp_lib_dir)
+    on.exit(unlink(tmp_lib_dir, recursive = TRUE), add = TRUE)
+
+    # Regression guard for CRAN Fedora: a full path to a versioned runtime
+    # shared object must be linked as that exact file, not collapsed to -lm.
+    isolated_math_path <- file.path(tmp_lib_dir, "libm_rtinycc_test.so.6")
+    linked <- file.symlink(math_lib_path, isolated_math_path)
+    if (!isTRUE(linked)) {
+      linked <- file.copy(math_lib_path, isolated_math_path)
+    }
+
+    if (isTRUE(linked)) {
+      math_exact <- tcc_link(
+        isolated_math_path,
+        symbols = list(
+          sqrt = list(args = list("f64"), returns = "f64")
+        )
+      )
+      expect_equal(
+        math_exact$sqrt(36.0),
+        6.0,
+        info = "tcc_link: versioned Linux shared object path links exactly"
+      )
+    }
+  }
 }
 
 # --- Test 10: raw pointers are still dead after deserialization ----------

@@ -18,8 +18,9 @@ tcc_link(
 \arguments{
 \item{path}{Library short name (e.g., \code{"m"}, \code{"sqlite3"}) or full path to
 the shared library. Short names stay on the normal linker-name path
-(\verb{-l<name>}). File names such as \code{libm.so} or full paths are resolved
-through the configured library search paths when needed.}
+(\verb{-l<name>}). File names such as \code{libm.so.6} or full paths are resolved
+through the configured library search paths when needed and linked as exact
+files rather than collapsed to generic names like \code{m}.}
 
 \item{symbols}{Named list of symbol definitions with:
 \itemize{

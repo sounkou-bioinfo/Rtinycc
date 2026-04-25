@@ -607,13 +607,25 @@ tcc_options <- function(ffi, options) {
   ffi
 }
 
+rtinycc_exact_library_name <- function(path) {
+  paste0(":", basename(path))
+}
+
+rtinycc_add_library_file <- function(ffi, path) {
+  ffi$lib_paths <- c(ffi$lib_paths, dirname(path))
+  ffi$libraries <- c(ffi$libraries, rtinycc_exact_library_name(path))
+  ffi
+}
+
 #' Add library to link against
 #'
 #' @param ffi A tcc_ffi object
 #' @param library Library name (e.g., "m", "sqlite3") or a path to a
-#'   shared library (e.g., "libm.so.6"). When a path is provided, the
-#'   library directory is added automatically and the library name is
-#'   inferred from the file name.
+#'   shared library (e.g., "libm.so.6"). When a path or platform library file
+#'   name is provided, the library directory is added automatically and TinyCC
+#'   is asked to link that exact file name. This keeps versioned runtime
+#'   libraries such as `libm.so.6` distinct from generic linker names such as
+#'   `m`/`libm.so`.
 #' @return Updated tcc_ffi object (for chaining)
 #' @export
 tcc_library <- function(ffi, library) {
@@ -629,8 +641,10 @@ tcc_library <- function(ffi, library) {
 
     lib_name <- lib
 
-    # If a path or a file name with extension is provided, resolve and
-    # extract the library name while also adding the lib path.
+    # If a path or a file name with extension is provided, resolve it and link
+    # the exact file name via TinyCC's -l:<filename> path.  Do not collapse a
+    # versioned runtime file such as libm.so.6 to -lm: some systems, including
+    # CRAN's Fedora flavor, do not install the unversioned development symlink.
     if (file.exists(lib) || grepl("[/\\\\]", lib)) {
       if (!file.exists(lib)) {
         found_path <- tcc_find_library(lib)
@@ -639,17 +653,15 @@ tcc_library <- function(ffi, library) {
         }
         lib <- found_path
       }
-      ffi$lib_paths <- c(ffi$lib_paths, dirname(lib))
-      lib_name <- sub("^lib", "", basename(lib))
-      lib_name <- sub("\\.(so|dylib|dll).*$", "", lib_name)
+      ffi <- rtinycc_add_library_file(ffi, lib)
+      next
     } else if (grepl("\\.(so|dylib|dll)(\\..*)?$", lib, ignore.case = TRUE)) {
       found_path <- tcc_find_library(lib)
       if (is.null(found_path)) {
         stop("Library not found: ", lib, call. = FALSE)
       }
-      ffi$lib_paths <- c(ffi$lib_paths, dirname(found_path))
-      lib_name <- sub("^lib", "", basename(found_path))
-      lib_name <- sub("\\.(so|dylib|dll).*$", "", lib_name)
+      ffi <- rtinycc_add_library_file(ffi, found_path)
+      next
     }
 
     if (nzchar(lib_name)) {
@@ -920,7 +932,13 @@ tcc_ffi_create_state <- function(ffi, output = ffi$output) {
 
 tcc_ffi_compile_state <- function(state, c_code, libraries, target) {
   for (lib in libraries) {
-    tcc_add_library(state, lib)
+    result <- tcc_add_library(state, lib)
+    if (result < 0) {
+      stop(
+        "Failed to add library '", lib, "' while compiling ", target,
+        call. = FALSE
+      )
+    }
   }
 
   # Always link against R's shared library so TCC can resolve
@@ -2003,8 +2021,9 @@ tcc_find_library <- function(name) {
 #'
 #' @param path Library short name (e.g., `"m"`, `"sqlite3"`) or full path to
 #'   the shared library. Short names stay on the normal linker-name path
-#'   (`-l<name>`). File names such as `libm.so` or full paths are resolved
-#'   through the configured library search paths when needed.
+#'   (`-l<name>`). File names such as `libm.so.6` or full paths are resolved
+#'   through the configured library search paths when needed and linked as exact
+#'   files rather than collapsed to generic names like `m`.
 #' @param symbols Named list of symbol definitions with:
 #'   \itemize{
 #'     \item args: List of FFI types for arguments
@@ -2067,10 +2086,10 @@ tcc_link <- function(
   verbose = FALSE
 ) {
   # Find library if not absolute path. Keep short linker names such as
-  # "m" or "sqlite3" on the -l<name> path instead of eagerly resolving
-  # them to lib*.so files. On Debian-like systems, names such as libm.so can
-  # be linker scripts rather than real shared objects, and TinyCC cannot link
-  # those script files directly.
+  # "m" or "sqlite3" on the -l<name> path. When the caller supplies a file
+  # name or path, resolve it and link that exact file; versioned runtime files
+  # such as libm.so.6 are not equivalent to the generic -lm linker name on all
+  # systems.
   is_short_name <- !file.exists(path) &&
     !grepl("[/\\\\]", path) &&
     !grepl("\\.(so|dylib|dll)", path)
@@ -2107,18 +2126,11 @@ tcc_link <- function(
     ffi$c_code <- user_code
   }
 
-  # Add the library path and link the library
+  # Add the library path and link the library.
   if (!is_short_name) {
-    ffi <- tcc_library_path(ffi, dirname(path))
-
-    # Extract library name from path for linking
-    lib_name <- sub("^lib", "", basename(path))
-    lib_name <- sub("\\.(so|dylib|dll).*", "", lib_name)
-    if (nzchar(lib_name) > 0) {
-      ffi <- tcc_library(ffi, lib_name)
-    }
+    ffi <- rtinycc_add_library_file(ffi, path)
   } else {
-    # Short name like "m" — just pass to linker as -l<name>
+    # Short name like "m" — just pass to linker as -l<name>.
     ffi <- tcc_library(ffi, path)
   }
 
