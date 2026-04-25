@@ -1,14 +1,23 @@
 # Changelog
 
-## Rtinycc 0.1.8.9000 (Development Version)
+## Rtinycc 0.1.9
 
-- Fix external-library linking when a Linux runtime library is supplied
-  as an exact versioned file such as `libm.so.6`, without requiring an
-  unversioned development symlink such as `libm.so`.
+- On Linux, prefer the unversioned `libm.so` GNU ld script over the bare
+  versioned SONAME (`libm.so.6`) when resolving the system math runtime
+  in vignettes and tests. TinyCC handles GNU ld scripts directly, which
+  avoids link failures on Fedora-style toolchains.
 
-- Skip runtime benchmark vignette chunks when R memory profiling is
-  unavailable, avoiding vignette rebuild failures on platforms built
-  without [`Rprofmem()`](https://rdrr.io/r/utils/Rprofmem.html).
+- Make the external-library linking example in tests and the “Linking
+  External Libraries” vignette skip cleanly when
+  [`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
+  cannot resolve the platform math runtime, instead of erroring the
+  whole run.
+
+- Skip runtime benchmark vignette chunks that depend on memory profiling
+  when the running R was built without
+  [`Rprofmem()`](https://rdrr.io/r/utils/Rprofmem.html), avoiding
+  vignette rebuild failures on platforms built without memory profiling
+  support.
 
 - Add a CRAN version badge to the README.
 
