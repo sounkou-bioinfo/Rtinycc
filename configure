@@ -23,6 +23,8 @@ cleanup_source() {
     if [ -d "$TINYCC_SRC" ]; then
         log "Removing temporary source tree: $TINYCC_SRC"
         rm -rf "$TINYCC_SRC" >> "$CONFIG_LOG" 2>&1 || true
+        # added now to see what went wrong if the compilation failed on tinycc step
+        cat "$CONFIG_LOG" 
     fi
 }
 
