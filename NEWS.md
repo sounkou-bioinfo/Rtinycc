@@ -1,5 +1,13 @@
 # Rtinycc 0.1.9
 
+- Replace the upstream `make install` step with explicit copies of the
+  build artifacts (`tcc`, `libtcc.{a,dylib,so}`, `libtcc1.a`, `libtcc.h`,
+  and the bundled tinycc C headers under `lib/tcc/include/`). This sidesteps
+  BSD/GNU `install` differences and the strict `install-unx` macros in the
+  upstream Makefile that cause configuration to fail on macOS arm64 and
+  x86_64 CRAN builders. The installed layout under `inst/tinycc/` is
+  unchanged.
+
 - On Linux, prefer the unversioned `libm.so` GNU ld script over the bare
   versioned SONAME (`libm.so.6`) when resolving the system math runtime in
   vignettes and tests. TinyCC handles GNU ld scripts directly, which avoids

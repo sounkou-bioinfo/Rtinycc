@@ -69,19 +69,54 @@ run_logged ./configure \
     --debug || exit 1
 
 run_logged "$MAKE" CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc || exit 1
-run_logged "$MAKE" install || exit 1
 
-LIBTCC1_SRC=$(find "$TINYCC_SRC" -name 'libtcc1.a' | head -n 1)
-if [ -n "$LIBTCC1_SRC" ]; then
-    run_logged mkdir -p "$TINYCC_DEST/lib/tcc" || exit 1
-    run_logged cp "$LIBTCC1_SRC" "$TINYCC_DEST/lib/tcc/" || true
-else
-    log "WARNING: libtcc1.a not found during build"
-fi
+# Install artifacts manually instead of `make install`. Upstream's install-unx
+# target depends on BSD/GNU `install` quirks and a strict $(call IF,...) over
+# files that can be missing on arm64-osx; bypassing it removes a class of
+# CRAN macOS failures while keeping the layout the package expects.
+log "Installing TinyCC artifacts (replicates install-unx, minus docs)"
+run_logged mkdir -p \
+    "$TINYCC_DEST/bin" \
+    "$TINYCC_DEST/include" \
+    "$TINYCC_DEST/lib" \
+    "$TINYCC_DEST/lib/tcc" \
+    "$TINYCC_DEST/lib/tcc/include" || exit 1
 
-for so in "$TINYCC_SRC/libtcc.so" "$TINYCC_SRC/libtcc.dylib"; do
-    if [ -f "$so" ]; then
-        run_logged cp "$so" "$TINYCC_DEST/lib/" || true
+# tcc CLI (+ any cross-tcc binaries the build happened to produce)
+run_logged cp "$TINYCC_SRC/tcc" "$TINYCC_DEST/bin/" || exit 1
+for x in "$TINYCC_SRC"/*-tcc; do
+    [ -f "$x" ] && run_logged cp "$x" "$TINYCC_DEST/bin/"
+done
+
+# Public libtcc.h consumed by the package's C wrappers.
+run_logged cp "$TINYCC_SRC/libtcc.h" "$TINYCC_DEST/include/" || exit 1
+
+# Shared and static libtcc next to each other so PKG_LIBS can pick either.
+run_logged cp "$TINYCC_SRC/$SHLIB" "$TINYCC_DEST/lib/" || exit 1
+[ -f "$TINYCC_SRC/libtcc.a" ] && run_logged cp "$TINYCC_SRC/libtcc.a" "$TINYCC_DEST/lib/"
+
+# JIT runtime archive.
+run_logged cp "$TINYCC_SRC/libtcc1.a" "$TINYCC_DEST/lib/tcc/" || exit 1
+for x in "$TINYCC_SRC"/*-libtcc1.a; do
+    [ -f "$x" ] && run_logged cp "$x" "$TINYCC_DEST/lib/tcc/"
+done
+
+# Tinycc-shipped C headers (stdarg.h, stdbool.h, stddef.h, ...) — tinycc
+# resolves these as <tccdir>/include at JIT compile time.
+run_logged cp -R "$TINYCC_SRC/include/." "$TINYCC_DEST/lib/tcc/include/" || exit 1
+[ -f "$TINYCC_SRC/tcclib.h" ] && run_logged cp "$TINYCC_SRC/tcclib.h" "$TINYCC_DEST/lib/tcc/include/"
+
+# Sanity-check the artifacts the package will look for at build and run time.
+for f in \
+    "$TINYCC_DEST/bin/tcc" \
+    "$TINYCC_DEST/include/libtcc.h" \
+    "$TINYCC_DEST/lib/$SHLIB" \
+    "$TINYCC_DEST/lib/tcc/libtcc1.a" \
+    "$TINYCC_DEST/lib/tcc/include/stdbool.h"
+do
+    if [ ! -f "$f" ]; then
+        log "ERROR: required TinyCC artifact missing after install: $f"
+        exit 1
     fi
 done
 
