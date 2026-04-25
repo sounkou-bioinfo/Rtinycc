@@ -2,6 +2,14 @@
 
 ## Rtinycc 0.1.8.9000 (Development Version)
 
+- Fix external-library linking when a Linux runtime library is supplied
+  as an exact versioned file such as `libm.so.6`, without requiring an
+  unversioned development symlink such as `libm.so`.
+
+- Skip runtime benchmark vignette chunks when R memory profiling is
+  unavailable, avoiding vignette rebuild failures on platforms built
+  without [`Rprofmem()`](https://rdrr.io/r/utils/Rprofmem.html).
+
 - Add a CRAN version badge to the README.
 
 ## Rtinycc 0.1.8

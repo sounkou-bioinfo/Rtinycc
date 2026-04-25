@@ -80,8 +80,9 @@ type conversion between R and C automatically.</p>
 <dl><dt id="arg-path">path<a class="anchor" aria-label="anchor" href="#arg-path"></a></dt>
 <dd><p>Library short name (e.g., <code>"m"</code>, <code>"sqlite3"</code>) or full path to
 the shared library. Short names stay on the normal linker-name path
-(<code>-l&lt;name&gt;</code>). File names such as <code>libm.so</code> or full paths are resolved
-through the configured library search paths when needed.</p></dd>
+(<code>-l&lt;name&gt;</code>). File names such as <code>libm.so.6</code> or full paths are resolved
+through the configured library search paths when needed and linked as exact
+files rather than collapsed to generic names like <code>m</code>.</p></dd>
 
 
 <dt id="arg-symbols">symbols<a class="anchor" aria-label="anchor" href="#arg-symbols"></a></dt>

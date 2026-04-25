@@ -47,7 +47,9 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.8.9000" id="rtinycc-0189000-development-version">Rtinycc 0.1.8.9000 (Development Version)<a class="anchor" aria-label="anchor" href="#rtinycc-0189000-development-version"></a></h2>
-<ul><li>Add a CRAN version badge to the README.</li>
+<ul><li><p>Fix external-library linking when a Linux runtime library is supplied as an exact versioned file such as <code>libm.so.6</code>, without requiring an unversioned development symlink such as <code>libm.so</code>.</p></li>
+<li><p>Skip runtime benchmark vignette chunks when R memory profiling is unavailable, avoiding vignette rebuild failures on platforms built without <code><a href="https://rdrr.io/r/utils/Rprofmem.html" class="external-link">Rprofmem()</a></code>.</p></li>
+<li><p>Add a CRAN version badge to the README.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.8" id="rtinycc-018">Rtinycc 0.1.8<a class="anchor" aria-label="anchor" href="#rtinycc-018"></a></h2><p class="text-muted">CRAN release: 2026-04-24</p>

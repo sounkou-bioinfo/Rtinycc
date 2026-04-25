@@ -235,10 +235,15 @@ if (!has_callme) {
   }
 }
 
-can_run_benchmarks <- can_run_callme && has_bench
+can_run_benchmarks <- can_run_callme && has_bench && has_profmem
 
 if (is.null(callme_runtime_reason) && !has_bench) {
   callme_runtime_reason <- "`bench` is not installed."
+} else if (is.null(callme_runtime_reason) && !has_profmem) {
+  callme_runtime_reason <- paste(
+    "`bench` runtime comparisons are skipped because memory profiling",
+    "is not available in this R build."
+  )
 } else if (is.null(callme_runtime_reason)) {
   callme_runtime_reason <- "Executable comparisons are enabled."
 }
@@ -327,12 +332,17 @@ has_callme
 #> [1] TRUE
 ```
 
-If `callme` or `bench` is unavailable, or if the current build
-environment cannot compile the temporary `callme` helper DLL, the
-executable comparisons below are skipped.
+If `callme`, `bench`, or R memory profiling is unavailable, or if the
+current build environment cannot compile the temporary `callme` helper
+DLL, the executable comparisons below are skipped.
 
 ``` r
 has_bench
+#> [1] TRUE
+```
+
+``` r
+has_profmem
 #> [1] TRUE
 ```
 
@@ -369,8 +379,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc    0.02           20
-#> 2         callme    0.24          240
+#> 1        Rtinycc   0.019           19
+#> 2         callme   0.233          233
 ```
 
 The expected pattern is:
@@ -519,8 +529,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.13ms   1.17ms      853.    21.9KB        0
-#> 2 callme     400.12µs 414.39µs     2410.        0B        0
+#> 1 Rtinycc      1.18ms   1.21ms      819.    21.9KB        0
+#> 2 callme     445.06µs 460.55µs     2175.        0B        0
 ```
 
 Interpretation:
@@ -558,8 +568,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       2.7ms   4.34ms      251.    3.15MB     12.6
-#> 2 callme       1.97ms      2ms      453.    3.13MB     22.7
+#> 1 Rtinycc      2.79ms      4ms      264.    3.15MB     13.2
+#> 2 callme       2.21ms   2.22ms      415.    3.13MB     20.7
 ```
 
 Interpretation:
@@ -607,14 +617,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.77ms   1.84ms      511.    15.4KB     25.6
-#> 2 callme     970.33µs 985.18µs     1009.        0B      0
+#> 1 Rtinycc      1.76ms   1.84ms      511.    15.4KB     25.6
+#> 2 callme     948.27µs 955.17µs     1043.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.62ms    4.2ms      236.    3.13MB     11.8
-#> 2 callme       1.86ms   3.27ms      298.    3.13MB     14.9
+#> 1 Rtinycc      2.78ms   4.03ms      251.    3.13MB     12.5
+#> 2 callme       1.92ms   3.22ms      309.    3.13MB     15.4
 ```
 
 The usual pattern is:

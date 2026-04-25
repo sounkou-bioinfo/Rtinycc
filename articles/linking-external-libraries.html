@@ -174,9 +174,12 @@ while still linking against an external library:</p>
 </li>
 <li>a full path to a shared library file</li>
 </ul>
-<p>When given a full path, <code>Rtinycc</code> derives the containing
-directory and the linker-facing library name automatically. When given a
-short name, TinyCC resolves it through its configured library search
+<p>When given a full path, <code>Rtinycc</code> adds the containing
+directory and asks TinyCC to link that exact file name. This matters for
+versioned runtime libraries such as <code>libm.so.6</code>, which are
+not interchangeable with a generic development symlink such as
+<code>libm.so</code> on every Linux distribution. When given a short
+name, TinyCC resolves it through its configured library search
 paths.</p>
 <p>This means the R-side binding declaration stays the same even when
 deployment changes from “use the system copy” to “use this exact shared

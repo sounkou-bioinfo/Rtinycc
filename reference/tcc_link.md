@@ -26,8 +26,9 @@ tcc_link(
 
   Library short name (e.g., `"m"`, `"sqlite3"`) or full path to the
   shared library. Short names stay on the normal linker-name path
-  (`-l<name>`). File names such as `libm.so` or full paths are resolved
-  through the configured library search paths when needed.
+  (`-l<name>`). File names such as `libm.so.6` or full paths are
+  resolved through the configured library search paths when needed and
+  linked as exact files rather than collapsed to generic names like `m`.
 
 - symbols:
 
