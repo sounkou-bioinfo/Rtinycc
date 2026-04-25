@@ -380,7 +380,7 @@ compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
 #> 1        Rtinycc   0.019           19
-#> 2         callme   0.225          225
+#> 2         callme   0.232          232
 ```
 
 The expected pattern is:
@@ -530,7 +530,7 @@ noop_bench
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
 #> 1 Rtinycc      1.18ms   1.21ms      827.    21.9KB        0
-#> 2 callme     458.32µs 471.38µs     2128.        0B        0
+#> 2 callme     452.78µs 462.11µs     2158.        0B        0
 ```
 
 Interpretation:
@@ -568,8 +568,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.77ms   3.98ms      265.    3.15MB     13.2
-#> 2 callme       2.18ms   2.21ms      415.    3.13MB     20.7
+#> 1 Rtinycc      2.77ms   3.99ms      264.    3.15MB     13.2
+#> 2 callme       2.15ms   2.19ms      422.    3.13MB     21.1
 ```
 
 Interpretation:
@@ -617,14 +617,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.74ms   1.81ms      522.    15.4KB     26.1
-#> 2 callme     953.53µs 964.49µs     1035.        0B      0
+#> 1 Rtinycc      1.73ms    1.8ms      524.    15.4KB     26.2
+#> 2 callme     959.34µs  966.3µs     1033.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.76ms   4.02ms      263.    3.13MB     13.1
-#> 2 callme       1.93ms    3.2ms      318.    3.13MB     15.9
+#> 1 Rtinycc      2.74ms      4ms      264.    3.13MB     13.2
+#> 2 callme       1.91ms    3.2ms      321.    3.13MB     16.0
 ```
 
 The usual pattern is:
