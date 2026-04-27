@@ -53,8 +53,15 @@ cd "$TINYCC_SRC" || exit 1
 log "Building TinyCC in $PWD"
 
 if [ "$(uname)" = "Darwin" ]; then
-    log "Removing -flat_namespace from TinyCC Makefile for macOS"
-    run_logged sed -i '' -e 's/-flat_namespace//g' "$TINYCC_SRC/Makefile" || exit 1
+    # Strip both -flat_namespace and the paired `-undefined warning` that
+    # upstream injects on clang < 15. Modern ld rejects `-undefined warning`
+    # under the default -twolevel_namespace, so removing only -flat_namespace
+    # breaks the link on the macOS oldrel arm64 (Big Sur, clang 14) builder.
+    log "Patching TinyCC Makefile for macOS (drop -flat_namespace, -undefined warning)"
+    run_logged sed -i '' \
+        -e 's/-flat_namespace//g' \
+        -e 's/-undefined warning//g' \
+        "$TINYCC_SRC/Makefile" || exit 1
     SHLIB=libtcc.dylib
 else
     SHLIB=libtcc.so
