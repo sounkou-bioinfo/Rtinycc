@@ -780,7 +780,15 @@ R's C API.  htslib owns the file/header/record state, the coroutine only yields
 status codes, and R objects are created after control has returned to the normal
 R call stack.
 
-The README displays the actual demo source below, rather than a shortened
+The README runs the demo when htslib is available on the build machine.  The
+example input is plain VCF text because htslib can stream VCF and BCF through
+the same API; no `bcftools` conversion step is needed.
+
+```{r ffi-bcf-coroutine-run, eval=.Platform$OS.type != "windows" && nzchar(Sys.which("pkg-config")) && system2("pkg-config", c("--exists", "htslib")) == 0L}
+cat(system2(R.home("bin/Rscript"), "scripts/demo-streaming-bcf-reader-ffi.R", stdout = TRUE), sep = "\n")
+```
+
+The README also displays the actual demo source below, rather than a shortened
 pseudo-example.  The full R script is foldable so the page stays readable.
 
 <details>

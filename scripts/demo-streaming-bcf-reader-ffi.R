@@ -439,21 +439,9 @@ write_demo_vcf <- function(path) {
   invisible(path)
 }
 
-make_demo_bcf <- function() {
+make_demo_vcf <- function() {
   vcf <- tempfile(fileext = ".vcf")
-  bcf <- tempfile(fileext = ".bcf")
   write_demo_vcf(vcf)
-
-  if (nzchar(Sys.which("bcftools"))) {
-    status <- system2("bcftools", c("view", "-Ob", "-o", bcf, vcf), stdout = TRUE, stderr = TRUE)
-    if (identical(attr(status, "status"), NULL) && file.exists(bcf)) {
-      return(bcf)
-    }
-    warning("bcftools failed; falling back to streaming the VCF text with htslib")
-  } else {
-    warning("bcftools not found; falling back to streaming the VCF text with htslib")
-  }
-
   vcf
 }
 
@@ -463,10 +451,10 @@ if (identical(sys.nframe(), 0L)) {
   say("Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.")
 
   ffi <- build_streaming_bcf_ffi()
-  path <- make_demo_bcf()
+  path <- make_demo_vcf()
 
   say("")
-  say("Input: ", path)
+  say("Input: generated VCF text (opened directly by htslib)")
 
   reader <- new_bcf_reader(path, ffi)
   on.exit(close(reader), add = TRUE)
