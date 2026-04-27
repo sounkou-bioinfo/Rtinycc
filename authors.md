@@ -13,7 +13,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/sounkou-bioinfo/Rtinycc/blob/v0.1.10/DESCRIPTION)
 
 Toure S (2026). *Rtinycc: Builds the 'TinyCC' Command-Line Interface and
 Library for 'C' Scripting in 'R'*. R package version 0.1.10,
