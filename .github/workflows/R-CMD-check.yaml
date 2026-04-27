@@ -24,10 +24,6 @@ jobs:
           # arm64 oldrel — exercises the same configure path that CRAN's
           # macos-oldrel-arm64 builder uses (Apple silicon + older Xcode/clang).
           - {os: macos-latest,   r: 'oldrel'}
-          # x86_64 with older Xcode toolchain — likeliest GH runner combo to
-          # reproduce clang < 15 behavior in the bundled TinyCC Makefile.
-          - {os: macos-13,       r: 'release'}
-          - {os: macos-13,       r: 'oldrel'}
           - {os: windows-latest, r: 'release'}
           - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
           #- {os: ubuntu-latest,   r: 'release'}
