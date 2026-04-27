@@ -178,7 +178,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6466c349d850"
+#> [1] "0x5f2009633c00"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -209,11 +209,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6466c3458870>
+#> <pointer: 0x5f2008dab1e0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x6466c4f2b6f0>
+#> <pointer: 0x5f200c96caa0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6466c3458870>
+#> <pointer: 0x5f2008dab1e0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -445,7 +445,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @6466c6878d10 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5f200aab3a60 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -461,7 +461,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @6466c6878d10 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5f200aab3a60 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -489,15 +489,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x6466c8d73770>
+#> <pointer: 0x5f20071ddec0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x6466c8d73770>
+#> <pointer: 0x5f20071ddec0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x6466c31fed80>
+#> <pointer: 0x5f2007874610>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x6466c31fed80>
+#> <pointer: 0x5f2007874610>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -542,9 +542,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x6466c59134c0>
+#> <pointer: 0x5f2007a731f0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x6466c59134c0>
+#> <pointer: 0x5f2007a731f0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -897,6 +897,822 @@ sqlite$close_db(db)
 tcc_callback_close(cb)
 ```
 
+### Stackful C coroutines: streaming BCF/VCF records with htslib
+
+A more experimental pattern is to use Rtinycc as a JIT compiler for
+native iterators that keep their own C stack between calls from R. The
+script
+[`scripts/demo-streaming-bcf-reader-ffi.R`](https://sounkou-bioinfo.github.io/Rtinycc/scripts/demo-streaming-bcf-reader-ffi.R)
+combines the stackful `ucontext` coroutine pattern from
+[`scripts/demo-stackful-coroutine-ffi.R`](https://sounkou-bioinfo.github.io/Rtinycc/scripts/demo-stackful-coroutine-ffi.R)
+with [htslib](https://www.htslib.org/) to make a streaming BCF/VCF
+reader. Each call from R resumes the native reader until the next
+`bcf1_t` record is available, yields back to R, and then lets R copy the
+current record into a regular list.
+
+The important safety rule is that the alternate coroutine stack does not
+call R’s C API. htslib owns the file/header/record state, the coroutine
+only yields status codes, and R objects are created after control has
+returned to the normal R call stack.
+
+The README displays the actual demo source below, rather than a
+shortened pseudo-example. The full R script is foldable so the page
+stays readable.
+
+Click to show the complete `scripts/demo-streaming-bcf-reader-ffi.R`
+script
+
+``` r
+#!/usr/bin/env Rscript
+
+suppressPackageStartupMessages(library(Rtinycc))
+
+if (.Platform$OS.type == "windows") {
+  stop("This demo requires a Unix-like platform with ucontext.h", call. = FALSE)
+}
+
+say <- function(...) cat(..., "\n", sep = "")
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+pkg_config_paths <- function(args, prefix) {
+  out <- tryCatch(
+    system2("pkg-config", c(args, "htslib"), stdout = TRUE, stderr = FALSE),
+    error = function(e) character()
+  )
+  out <- unlist(strsplit(paste(out, collapse = " "), "[[:space:]]+"))
+  out <- out[nzchar(out)]
+  sub(paste0("^", prefix), "", out[startsWith(out, prefix)])
+}
+
+build_streaming_bcf_ffi <- function() {
+  code <- '
+#include <ucontext.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <math.h>
+#include <htslib/hts.h>
+#include <htslib/vcf.h>
+
+enum {
+  BCF_STREAM_ERR = -1,
+  BCF_STREAM_EOF = 0,
+  BCF_STREAM_RECORD = 1
+};
+
+typedef struct bcf_stream {
+  ucontext_t ctx;
+  ucontext_t caller;
+  char *stack;
+  size_t stack_size;
+  int yielded;
+  int started;
+  int done;
+  int error;
+  char err[256];
+  htsFile *fp;
+  bcf_hdr_t *hdr;
+  bcf1_t *rec;
+  char *alts;
+  size_t alts_cap;
+} bcf_stream_t;
+
+static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
+  if (!st) return;
+  if (!msg) msg = "unknown htslib error";
+  snprintf(st->err, sizeof(st->err), "%s", msg);
+  st->error = 1;
+}
+
+static void bcf_stream_yield(bcf_stream_t *st, int value) {
+  st->yielded = value;
+  if (swapcontext(&st->ctx, &st->caller) != 0) {
+    bcf_stream_set_error(st, "swapcontext() failed while yielding");
+    st->done = 1;
+  }
+}
+
+static void bcf_stream_entry(uint32_t lo, uint32_t hi) {
+  uintptr_t raw = ((uintptr_t) hi << 32) | (uintptr_t) lo;
+  bcf_stream_t *st = (bcf_stream_t *) raw;
+  int ret;
+
+  if (!st || !st->fp || !st->hdr || !st->rec) {
+    if (st) bcf_stream_set_error(st, "stream is not open");
+    if (st) st->done = 1;
+    return;
+  }
+
+  for (;;) {
+    ret = bcf_read(st->fp, st->hdr, st->rec);
+    if (ret == 0) {
+      if (bcf_unpack(st->rec, BCF_UN_STR) < 0) {
+        bcf_stream_set_error(st, "bcf_unpack() failed");
+        st->done = 1;
+        bcf_stream_yield(st, BCF_STREAM_ERR);
+        return;
+      }
+      bcf_stream_yield(st, BCF_STREAM_RECORD);
+      if (st->error || st->done) return;
+    } else {
+      if (ret < -1) {
+        bcf_stream_set_error(st, "bcf_read() failed");
+      }
+      st->done = 1;
+      return;
+    }
+  }
+}
+
+void *bcf_stream_open(const char *path) {
+  bcf_stream_t *st = (bcf_stream_t *) calloc(1, sizeof(bcf_stream_t));
+  uintptr_t raw;
+
+  if (!st) return NULL;
+
+  if (!path || !path[0]) {
+    bcf_stream_set_error(st, "path is empty");
+    st->done = 1;
+    return st;
+  }
+
+  st->fp = hts_open(path, "r");
+  if (!st->fp) {
+    bcf_stream_set_error(st, "hts_open() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->hdr = bcf_hdr_read(st->fp);
+  if (!st->hdr) {
+    bcf_stream_set_error(st, "bcf_hdr_read() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->rec = bcf_init();
+  if (!st->rec) {
+    bcf_stream_set_error(st, "bcf_init() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->stack_size = (size_t) (1 << 20);
+  st->stack = (char *) malloc(st->stack_size);
+  if (!st->stack) {
+    bcf_stream_set_error(st, "failed to allocate coroutine stack");
+    st->done = 1;
+    return st;
+  }
+
+  if (getcontext(&st->ctx) != 0) {
+    bcf_stream_set_error(st, "getcontext() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->ctx.uc_stack.ss_sp = st->stack;
+  st->ctx.uc_stack.ss_size = st->stack_size;
+  st->ctx.uc_link = &st->caller;
+
+  raw = (uintptr_t) st;
+  makecontext(
+    &st->ctx,
+    (void (*) (void)) bcf_stream_entry,
+    2,
+    (uint32_t) raw,
+    (uint32_t) (raw >> 32)
+  );
+
+  return st;
+}
+
+int bcf_stream_resume(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+
+  if (!st) return BCF_STREAM_ERR;
+  if (st->error) return BCF_STREAM_ERR;
+  if (st->done) return BCF_STREAM_EOF;
+
+  st->started = 1;
+  if (swapcontext(&st->caller, &st->ctx) != 0) {
+    bcf_stream_set_error(st, "swapcontext() failed while resuming");
+    st->done = 1;
+    return BCF_STREAM_ERR;
+  }
+
+  if (st->error) return BCF_STREAM_ERR;
+  if (st->done) return BCF_STREAM_EOF;
+  return st->yielded;
+}
+
+int bcf_stream_done(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  return st ? st->done : 1;
+}
+
+const char *bcf_stream_error(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st) return "stream pointer is NULL";
+  return st->err[0] ? st->err : NULL;
+}
+
+const char *bcf_stream_chrom(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->hdr || !st->rec) return NULL;
+  return bcf_seqname(st->hdr, st->rec);
+}
+
+int64_t bcf_stream_pos1(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec) return -1;
+  return (int64_t) st->rec->pos + 1;
+}
+
+int64_t bcf_stream_end1(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec) return -1;
+  return (int64_t) st->rec->pos + (int64_t) st->rec->rlen;
+}
+
+const char *bcf_stream_id(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec || !st->rec->d.id || !st->rec->d.id[0]) return ".";
+  return st->rec->d.id;
+}
+
+int bcf_stream_n_allele(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec) return 0;
+  return st->rec->n_allele;
+}
+
+const char *bcf_stream_allele(void *ptr, int idx) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec || idx < 0 || idx >= st->rec->n_allele) return NULL;
+  return st->rec->d.allele[idx];
+}
+
+const char *bcf_stream_ref(void *ptr) {
+  return bcf_stream_allele(ptr, 0);
+}
+
+const char *bcf_stream_alt(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  size_t need = 2;
+  int i;
+
+  if (!st || !st->rec) return NULL;
+  if (st->rec->n_allele <= 1) return ".";
+
+  for (i = 1; i < st->rec->n_allele; ++i) {
+    const char *a = st->rec->d.allele[i] ? st->rec->d.allele[i] : "";
+    need += strlen(a) + 1;
+  }
+
+  if (need > st->alts_cap) {
+    char *tmp = (char *) realloc(st->alts, need);
+    if (!tmp) {
+      bcf_stream_set_error(st, "failed to allocate ALT buffer");
+      return NULL;
+    }
+    st->alts = tmp;
+    st->alts_cap = need;
+  }
+
+  st->alts[0] = 0;
+  for (i = 1; i < st->rec->n_allele; ++i) {
+    if (i > 1) strcat(st->alts, ",");
+    strcat(st->alts, st->rec->d.allele[i] ? st->rec->d.allele[i] : "");
+  }
+
+  return st->alts;
+}
+
+double bcf_stream_qual(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec || bcf_float_is_missing(st->rec->qual)) return NAN;
+  return (double) st->rec->qual;
+}
+
+int bcf_stream_nsamples(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->hdr) return 0;
+  return bcf_hdr_nsamples(st->hdr);
+}
+
+const char *bcf_stream_sample(void *ptr, int idx) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->hdr || idx < 0 || idx >= bcf_hdr_nsamples(st->hdr)) return NULL;
+  return st->hdr->samples[idx];
+}
+
+void bcf_stream_close(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+
+  if (!st) return;
+
+  if (st->rec) bcf_destroy(st->rec);
+  if (st->hdr) bcf_hdr_destroy(st->hdr);
+  if (st->fp) hts_close(st->fp);
+  free(st->alts);
+  free(st->stack);
+  memset(st, 0, sizeof(bcf_stream_t));
+  free(st);
+}
+'
+
+  ffi <- tcc_ffi()
+
+  for (path in pkg_config_paths("--cflags-only-I", "-I")) {
+    ffi <- tcc_include(ffi, path)
+  }
+  for (path in pkg_config_paths("--libs-only-L", "-L")) {
+    ffi <- tcc_library_path(ffi, path)
+  }
+
+  ffi |>
+    tcc_source(code) |>
+    tcc_library("hts") |>
+    tcc_bind(
+      bcf_stream_open = list(args = list("cstring"), returns = "ptr"),
+      bcf_stream_resume = list(args = list("ptr"), returns = "i32"),
+      bcf_stream_done = list(args = list("ptr"), returns = "bool"),
+      bcf_stream_error = list(args = list("ptr"), returns = "cstring"),
+      bcf_stream_chrom = list(args = list("ptr"), returns = "cstring"),
+      bcf_stream_pos1 = list(args = list("ptr"), returns = "i64"),
+      bcf_stream_end1 = list(args = list("ptr"), returns = "i64"),
+      bcf_stream_id = list(args = list("ptr"), returns = "cstring"),
+      bcf_stream_n_allele = list(args = list("ptr"), returns = "i32"),
+      bcf_stream_allele = list(args = list("ptr", "i32"), returns = "cstring"),
+      bcf_stream_ref = list(args = list("ptr"), returns = "cstring"),
+      bcf_stream_alt = list(args = list("ptr"), returns = "cstring"),
+      bcf_stream_qual = list(args = list("ptr"), returns = "f64"),
+      bcf_stream_nsamples = list(args = list("ptr"), returns = "i32"),
+      bcf_stream_sample = list(args = list("ptr", "i32"), returns = "cstring"),
+      bcf_stream_close = list(args = list("ptr"), returns = "void")
+    ) |>
+    tcc_compile()
+}
+
+new_bcf_reader <- function(path, ffi = build_streaming_bcf_ffi()) {
+  path <- normalizePath(path, mustWork = TRUE)
+  ptr <- ffi$bcf_stream_open(path)
+  if (tcc_ptr_is_null(ptr)) {
+    stop("failed to allocate BCF stream", call. = FALSE)
+  }
+
+  err <- ffi$bcf_stream_error(ptr)
+  if (!is.null(err)) {
+    ffi$bcf_stream_close(ptr)
+    stop(err, call. = FALSE)
+  }
+
+  reader <- new.env(parent = emptyenv())
+  reader$ffi <- ffi
+  reader$ptr <- ptr
+  reader$closed <- FALSE
+  class(reader) <- "bcf_stream_reader"
+
+  reg.finalizer(reader, function(x) {
+    if (!isTRUE(x$closed)) {
+      x$ffi$bcf_stream_close(x$ptr)
+      x$closed <- TRUE
+    }
+  }, onexit = TRUE)
+
+  reader
+}
+
+close.bcf_stream_reader <- function(con, ...) {
+  if (!inherits(con, "bcf_stream_reader")) {
+    stop("expected a bcf_stream_reader", call. = FALSE)
+  }
+  if (!isTRUE(con$closed)) {
+    con$ffi$bcf_stream_close(con$ptr)
+    con$closed <- TRUE
+  }
+  invisible(NULL)
+}
+
+bcf_reader_samples <- function(reader) {
+  stopifnot(inherits(reader, "bcf_stream_reader"), !isTRUE(reader$closed))
+  n <- reader$ffi$bcf_stream_nsamples(reader$ptr)
+  if (n <= 0L) return(character())
+  vapply(seq_len(n) - 1L, function(i) reader$ffi$bcf_stream_sample(reader$ptr, i), "")
+}
+
+bcf_reader_next <- function(reader) {
+  stopifnot(inherits(reader, "bcf_stream_reader"), !isTRUE(reader$closed))
+
+  status <- reader$ffi$bcf_stream_resume(reader$ptr)
+  if (identical(status, 0L)) {
+    return(NULL)
+  }
+  if (identical(status, -1L)) {
+    err <- reader$ffi$bcf_stream_error(reader$ptr) %||% "BCF stream failed"
+    stop(err, call. = FALSE)
+  }
+
+  n_allele <- reader$ffi$bcf_stream_n_allele(reader$ptr)
+  alleles <- if (n_allele > 0L) {
+    vapply(seq_len(n_allele) - 1L, function(i) {
+      reader$ffi$bcf_stream_allele(reader$ptr, i) %||% NA_character_
+    }, "")
+  } else {
+    character()
+  }
+
+  list(
+    chrom = reader$ffi$bcf_stream_chrom(reader$ptr),
+    pos = reader$ffi$bcf_stream_pos1(reader$ptr),
+    end = reader$ffi$bcf_stream_end1(reader$ptr),
+    id = reader$ffi$bcf_stream_id(reader$ptr),
+    ref = reader$ffi$bcf_stream_ref(reader$ptr),
+    alt = reader$ffi$bcf_stream_alt(reader$ptr),
+    qual = reader$ffi$bcf_stream_qual(reader$ptr),
+    alleles = alleles
+  )
+}
+
+bcf_reader_collect <- function(reader, n = Inf) {
+  out <- list()
+  i <- 0L
+  repeat {
+    if (i >= n) break
+    rec <- bcf_reader_next(reader)
+    if (is.null(rec)) break
+    i <- i + 1L
+    out[[i]] <- rec
+  }
+  out
+}
+
+write_demo_vcf <- function(path) {
+  lines <- c(
+    "##fileformat=VCFv4.3",
+    "##contig=<ID=chr1,length=1000>",
+    "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
+    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample1",
+    "chr1\t10\trs1\tA\tC\t50\tPASS\t.\tGT\t0/1",
+    "chr1\t20\t.\tG\tA,T\t99\tPASS\t.\tGT\t1/2",
+    "chr1\t30\trs3\tTT\tT\t.\tPASS\t.\tGT\t0/1"
+  )
+  writeLines(lines, path)
+  invisible(path)
+}
+
+make_demo_bcf <- function() {
+  vcf <- tempfile(fileext = ".vcf")
+  bcf <- tempfile(fileext = ".bcf")
+  write_demo_vcf(vcf)
+
+  if (nzchar(Sys.which("bcftools"))) {
+    status <- system2("bcftools", c("view", "-Ob", "-o", bcf, vcf), stdout = TRUE, stderr = TRUE)
+    if (identical(attr(status, "status"), NULL) && file.exists(bcf)) {
+      return(bcf)
+    }
+    warning("bcftools failed; falling back to streaming the VCF text with htslib")
+  } else {
+    warning("bcftools not found; falling back to streaming the VCF text with htslib")
+  }
+
+  vcf
+}
+
+if (identical(sys.nframe(), 0L)) {
+  say("Rtinycc version: ", as.character(utils::packageVersion("Rtinycc")))
+  say("Demo: stackful coroutine + htslib BCF/VCF API streaming reader")
+  say("Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.")
+
+  ffi <- build_streaming_bcf_ffi()
+  path <- make_demo_bcf()
+
+  say("")
+  say("Input: ", path)
+
+  reader <- new_bcf_reader(path, ffi)
+  on.exit(close(reader), add = TRUE)
+
+  say("Samples: ", paste(bcf_reader_samples(reader), collapse = ", "))
+  say("")
+  say("== Streaming records one resume at a time ==")
+
+  i <- 0L
+  repeat {
+    rec <- bcf_reader_next(reader)
+    if (is.null(rec)) break
+    i <- i + 1L
+    say(
+      "record ", i, ": ",
+      rec$chrom, ":", rec$pos,
+      " id=", rec$id,
+      " ref=", rec$ref,
+      " alt=", rec$alt,
+      " qual=", if (is.nan(rec$qual)) "." else rec$qual,
+      " alleles=[", paste(rec$alleles, collapse = ","), "]"
+    )
+  }
+
+  say("done_after_collect=", isTRUE(ffi$bcf_stream_done(reader$ptr)))
+}
+```
+
+The embedded htslib coroutine C source is extracted from the script and
+rendered with the same Rtinycc C-code display helper used by the
+vignettes.
+
+Click to show only the embedded C coroutine / htslib source
+
+``` c
+#include <ucontext.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <math.h>
+#include <htslib/hts.h>
+#include <htslib/vcf.h>
+
+enum {
+  BCF_STREAM_ERR = -1,
+  BCF_STREAM_EOF = 0,
+  BCF_STREAM_RECORD = 1
+};
+
+typedef struct bcf_stream {
+  ucontext_t ctx;
+  ucontext_t caller;
+  char *stack;
+  size_t stack_size;
+  int yielded;
+  int started;
+  int done;
+  int error;
+  char err[256];
+  htsFile *fp;
+  bcf_hdr_t *hdr;
+  bcf1_t *rec;
+  char *alts;
+  size_t alts_cap;
+} bcf_stream_t;
+
+static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
+  if (!st) return;
+  if (!msg) msg = "unknown htslib error";
+  snprintf(st->err, sizeof(st->err), "%s", msg);
+  st->error = 1;
+}
+
+static void bcf_stream_yield(bcf_stream_t *st, int value) {
+  st->yielded = value;
+  if (swapcontext(&st->ctx, &st->caller) != 0) {
+    bcf_stream_set_error(st, "swapcontext() failed while yielding");
+    st->done = 1;
+  }
+}
+
+static void bcf_stream_entry(uint32_t lo, uint32_t hi) {
+  uintptr_t raw = ((uintptr_t) hi << 32) | (uintptr_t) lo;
+  bcf_stream_t *st = (bcf_stream_t *) raw;
+  int ret;
+
+  if (!st || !st->fp || !st->hdr || !st->rec) {
+    if (st) bcf_stream_set_error(st, "stream is not open");
+    if (st) st->done = 1;
+    return;
+  }
+
+  for (;;) {
+    ret = bcf_read(st->fp, st->hdr, st->rec);
+    if (ret == 0) {
+      if (bcf_unpack(st->rec, BCF_UN_STR) < 0) {
+        bcf_stream_set_error(st, "bcf_unpack() failed");
+        st->done = 1;
+        bcf_stream_yield(st, BCF_STREAM_ERR);
+        return;
+      }
+      bcf_stream_yield(st, BCF_STREAM_RECORD);
+      if (st->error || st->done) return;
+    } else {
+      if (ret < -1) {
+        bcf_stream_set_error(st, "bcf_read() failed");
+      }
+      st->done = 1;
+      return;
+    }
+  }
+}
+
+void *bcf_stream_open(const char *path) {
+  bcf_stream_t *st = (bcf_stream_t *) calloc(1, sizeof(bcf_stream_t));
+  uintptr_t raw;
+
+  if (!st) return NULL;
+
+  if (!path || !path[0]) {
+    bcf_stream_set_error(st, "path is empty");
+    st->done = 1;
+    return st;
+  }
+
+  st->fp = hts_open(path, "r");
+  if (!st->fp) {
+    bcf_stream_set_error(st, "hts_open() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->hdr = bcf_hdr_read(st->fp);
+  if (!st->hdr) {
+    bcf_stream_set_error(st, "bcf_hdr_read() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->rec = bcf_init();
+  if (!st->rec) {
+    bcf_stream_set_error(st, "bcf_init() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->stack_size = (size_t) (1 << 20);
+  st->stack = (char *) malloc(st->stack_size);
+  if (!st->stack) {
+    bcf_stream_set_error(st, "failed to allocate coroutine stack");
+    st->done = 1;
+    return st;
+  }
+
+  if (getcontext(&st->ctx) != 0) {
+    bcf_stream_set_error(st, "getcontext() failed");
+    st->done = 1;
+    return st;
+  }
+
+  st->ctx.uc_stack.ss_sp = st->stack;
+  st->ctx.uc_stack.ss_size = st->stack_size;
+  st->ctx.uc_link = &st->caller;
+
+  raw = (uintptr_t) st;
+  makecontext(
+    &st->ctx,
+    (void (*) (void)) bcf_stream_entry,
+    2,
+    (uint32_t) raw,
+    (uint32_t) (raw >> 32)
+  );
+
+  return st;
+}
+
+int bcf_stream_resume(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+
+  if (!st) return BCF_STREAM_ERR;
+  if (st->error) return BCF_STREAM_ERR;
+  if (st->done) return BCF_STREAM_EOF;
+
+  st->started = 1;
+  if (swapcontext(&st->caller, &st->ctx) != 0) {
+    bcf_stream_set_error(st, "swapcontext() failed while resuming");
+    st->done = 1;
+    return BCF_STREAM_ERR;
+  }
+
+  if (st->error) return BCF_STREAM_ERR;
+  if (st->done) return BCF_STREAM_EOF;
+  return st->yielded;
+}
+
+int bcf_stream_done(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  return st ? st->done : 1;
+}
+
+const char *bcf_stream_error(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st) return "stream pointer is NULL";
+  return st->err[0] ? st->err : NULL;
+}
+
+const char *bcf_stream_chrom(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->hdr || !st->rec) return NULL;
+  return bcf_seqname(st->hdr, st->rec);
+}
+
+int64_t bcf_stream_pos1(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec) return -1;
+  return (int64_t) st->rec->pos + 1;
+}
+
+int64_t bcf_stream_end1(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec) return -1;
+  return (int64_t) st->rec->pos + (int64_t) st->rec->rlen;
+}
+
+const char *bcf_stream_id(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec || !st->rec->d.id || !st->rec->d.id[0]) return ".";
+  return st->rec->d.id;
+}
+
+int bcf_stream_n_allele(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec) return 0;
+  return st->rec->n_allele;
+}
+
+const char *bcf_stream_allele(void *ptr, int idx) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec || idx < 0 || idx >= st->rec->n_allele) return NULL;
+  return st->rec->d.allele[idx];
+}
+
+const char *bcf_stream_ref(void *ptr) {
+  return bcf_stream_allele(ptr, 0);
+}
+
+const char *bcf_stream_alt(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  size_t need = 2;
+  int i;
+
+  if (!st || !st->rec) return NULL;
+  if (st->rec->n_allele <= 1) return ".";
+
+  for (i = 1; i < st->rec->n_allele; ++i) {
+    const char *a = st->rec->d.allele[i] ? st->rec->d.allele[i] : "";
+    need += strlen(a) + 1;
+  }
+
+  if (need > st->alts_cap) {
+    char *tmp = (char *) realloc(st->alts, need);
+    if (!tmp) {
+      bcf_stream_set_error(st, "failed to allocate ALT buffer");
+      return NULL;
+    }
+    st->alts = tmp;
+    st->alts_cap = need;
+  }
+
+  st->alts[0] = 0;
+  for (i = 1; i < st->rec->n_allele; ++i) {
+    if (i > 1) strcat(st->alts, ",");
+    strcat(st->alts, st->rec->d.allele[i] ? st->rec->d.allele[i] : "");
+  }
+
+  return st->alts;
+}
+
+double bcf_stream_qual(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->rec || bcf_float_is_missing(st->rec->qual)) return NAN;
+  return (double) st->rec->qual;
+}
+
+int bcf_stream_nsamples(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->hdr) return 0;
+  return bcf_hdr_nsamples(st->hdr);
+}
+
+const char *bcf_stream_sample(void *ptr, int idx) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+  if (!st || !st->hdr || idx < 0 || idx >= bcf_hdr_nsamples(st->hdr)) return NULL;
+  return st->hdr->samples[idx];
+}
+
+void bcf_stream_close(void *ptr) {
+  bcf_stream_t *st = (bcf_stream_t *) ptr;
+
+  if (!st) return;
+
+  if (st->rec) bcf_destroy(st->rec);
+  if (st->hdr) bcf_hdr_destroy(st->hdr);
+  if (st->fp) hts_close(st->fp);
+  free(st->alts);
+  free(st->stack);
+  memset(st, 0, sizeof(bcf_stream_t));
+  free(st);
+}
+```
+
+This points toward a useful separate package idea: a small, generic
+Rtinycc-based C coroutine layer for R. Such a package could provide
+reusable pieces like `coro_new()`, `coro_resume()`, finalizer-backed
+native handles, status/error conventions, and helpers for writing
+streaming bindings around C libraries such as htslib, SQLite, parsers,
+decompression libraries, or network clients. R would see ordinary
+iterators; C would keep natural blocking or recursive control flow
+without rewriting everything as a heap-allocated state machine.
+
 ## Header parsing with treesitter.c
 
 For header-driven bindings, we use `treesitter.c` to parse function
@@ -950,7 +1766,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6466c59c3b90>
+#> <pointer: 0x5f2008670da0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1067,11 +1883,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl…  45.9ms 47.43ms      21.1    6.33MB        0     2     0     94.9ms
-#> 2 vroom_df_…  6.33ms  6.76ms     148.     1.22MB        0     2     0     13.5ms
-#> 3 vroom_df_…  6.66ms  6.81ms     147.     2.44MB        0     2     0     13.6ms
-#> 4 c_read_df  21.36ms 21.44ms      46.6    1.22MB        0     2     0     42.9ms
-#> 5 io_uring_… 20.83ms 20.95ms      47.7    1.22MB        0     2     0     41.9ms
+#> 1 read_tabl…    55ms    55ms      18.2    6.33MB     18.2     1     1       55ms
+#> 2 vroom_df_…  6.29ms  6.39ms     156.     1.22MB      0       2     0     12.8ms
+#> 3 vroom_df_…  6.67ms  6.94ms     144.     2.44MB      0       2     0     13.9ms
+#> 4 c_read_df  21.43ms 21.47ms      46.6    1.22MB      0       2     0     42.9ms
+#> 5 io_uring_… 21.25ms 21.32ms      46.9    1.22MB      0       2     0     42.6ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1176,9 +1992,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x6466c9dbffa0>
+#> <pointer: 0x5f200d6c0360>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x6466c9dbffa0>
+#> <pointer: 0x5f200d6c0360>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
