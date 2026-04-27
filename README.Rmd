@@ -765,31 +765,21 @@ tcc_callback_close(cb)
 
 ### Stackful C coroutines: streaming BCF/VCF records with htslib
 
-A more experimental pattern is to use Rtinycc as a JIT compiler for native
-iterators that keep their own C stack between calls from R.  The script
-[`scripts/demo-streaming-bcf-reader-ffi.R`](scripts/demo-streaming-bcf-reader-ffi.R)
-combines the stackful `ucontext` coroutine pattern from
-[`scripts/demo-stackful-coroutine-ffi.R`](scripts/demo-stackful-coroutine-ffi.R)
-with [htslib](https://www.htslib.org/) to make a streaming BCF/VCF reader.
-Each call from R resumes the native reader until the next `bcf1_t` record is
-available, yields back to R, and then lets R copy the current record into a
-regular list.
+Rtinycc can JIT-compile native iterators that keep their own C stack between R
+calls.  This demo binds [htslib](https://www.htslib.org/) through a `ucontext`
+coroutine: R resumes the reader until the next `bcf1_t`, then copies the current
+fields into a regular list.  The coroutine stack never calls R's C API; R
+objects are created only after control returns to the normal R stack.
 
-The important safety rule is that the alternate coroutine stack does not call
-R's C API.  htslib owns the file/header/record state, the coroutine only yields
-status codes, and R objects are created after control has returned to the normal
-R call stack.
-
-The README runs the demo when htslib is available on the build machine.  The
-example input is plain VCF text because htslib can stream VCF and BCF through
-the same API; no `bcftools` conversion step is needed.
+The demo uses plain VCF text, opened directly by htslib through the same API as
+BCF.
 
 ```{r ffi-bcf-coroutine-run, eval=.Platform$OS.type != "windows" && nzchar(Sys.which("pkg-config")) && system2("pkg-config", c("--exists", "htslib")) == 0L}
-cat(system2(R.home("bin/Rscript"), "scripts/demo-streaming-bcf-reader-ffi.R", stdout = TRUE), sep = "\n")
+source("scripts/demo-streaming-bcf-reader-ffi.R")
+run_streaming_bcf_demo()
 ```
 
-The README also displays the actual demo source below, rather than a shortened
-pseudo-example.  The full R script is foldable so the page stays readable.
+The full demo source is foldable below.
 
 <details>
 <summary>Click to show the complete <code>scripts/demo-streaming-bcf-reader-ffi.R</code> script</summary>

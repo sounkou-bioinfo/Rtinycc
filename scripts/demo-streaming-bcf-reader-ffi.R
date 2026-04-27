@@ -445,7 +445,7 @@ make_demo_vcf <- function() {
   vcf
 }
 
-if (identical(sys.nframe(), 0L)) {
+run_streaming_bcf_demo <- function() {
   say("Rtinycc version: ", as.character(utils::packageVersion("Rtinycc")))
   say("Demo: stackful coroutine + htslib BCF/VCF API streaming reader")
   say("Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.")
@@ -480,4 +480,9 @@ if (identical(sys.nframe(), 0L)) {
   }
 
   say("done_after_collect=", isTRUE(ffi$bcf_stream_done(reader$ptr)))
+  invisible(NULL)
+}
+
+if (identical(sys.nframe(), 0L)) {
+  run_streaming_bcf_demo()
 }
