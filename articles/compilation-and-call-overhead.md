@@ -529,8 +529,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.17ms    1.2ms      826.    21.9KB        0
-#> 2 callme     456.88µs  467.6µs     2132.        0B        0
+#> 1 Rtinycc      1.17ms   1.21ms      828.    21.9KB        0
+#> 2 callme     447.95µs  460.2µs     2173.        0B        0
 ```
 
 Interpretation:
@@ -568,8 +568,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.77ms   3.96ms      268.    3.15MB     13.4
-#> 2 callme        2.1ms   2.19ms      425.    3.13MB     21.2
+#> 1 Rtinycc      2.76ms   3.95ms      268.    3.15MB     13.4
+#> 2 callme       2.13ms   2.19ms      421.    3.13MB     21.1
 ```
 
 Interpretation:
@@ -617,14 +617,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       1.7ms   1.78ms      531.    15.4KB     26.6
-#> 2 callme      952.8µs 963.47µs     1031.        0B      0
+#> 1 Rtinycc      1.72ms   1.79ms      526.    15.4KB     26.3
+#> 2 callme     951.12µs 970.61µs     1029.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.76ms   3.99ms      263.    3.13MB     13.2
-#> 2 callme       1.93ms   3.18ms      323.    3.13MB     16.1
+#> 1 Rtinycc      2.76ms      4ms      256.    3.13MB     12.8
+#> 2 callme       1.93ms   3.17ms      316.    3.13MB     15.8
 ```
 
 The usual pattern is:
