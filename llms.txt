@@ -178,7 +178,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5dafff18bed0"
+#> [1] "0x57e1a27400f0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -209,11 +209,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5dafff262a50>
+#> <pointer: 0x57e19ec62480>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5db00198a030>
+#> <pointer: 0x57e19e05f410>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5dafff262a50>
+#> <pointer: 0x57e19ec62480>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -445,7 +445,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5db002c5b160 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @57e1a0611640 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -461,7 +461,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5db002c5b160 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @57e1a0611640 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -489,15 +489,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5db001d8b2f0>
+#> <pointer: 0x57e19ff258d0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5db001d8b2f0>
+#> <pointer: 0x57e19ff258d0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5db0024ee190>
+#> <pointer: 0x57e19e089190>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5db0024ee190>
+#> <pointer: 0x57e19e089190>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -542,9 +542,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5dafffa48a90>
+#> <pointer: 0x57e19d142ee0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5dafffa48a90>
+#> <pointer: 0x57e19d142ee0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -899,28 +899,19 @@ tcc_callback_close(cb)
 
 ### Stackful C coroutines: streaming BCF/VCF records with htslib
 
-A more experimental pattern is to use Rtinycc as a JIT compiler for
-native iterators that keep their own C stack between calls from R. The
-script
-[`scripts/demo-streaming-bcf-reader-ffi.R`](https://sounkou-bioinfo.github.io/Rtinycc/scripts/demo-streaming-bcf-reader-ffi.R)
-combines the stackful `ucontext` coroutine pattern from
-[`scripts/demo-stackful-coroutine-ffi.R`](https://sounkou-bioinfo.github.io/Rtinycc/scripts/demo-stackful-coroutine-ffi.R)
-with [htslib](https://www.htslib.org/) to make a streaming BCF/VCF
-reader. Each call from R resumes the native reader until the next
-`bcf1_t` record is available, yields back to R, and then lets R copy the
-current record into a regular list.
+Rtinycc can JIT-compile native iterators that keep their own C stack
+between R calls. This demo binds [htslib](https://www.htslib.org/)
+through a `ucontext` coroutine: R resumes the reader until the next
+`bcf1_t`, then copies the current fields into a regular list. The
+coroutine stack never calls R’s C API; R objects are created only after
+control returns to the normal R stack.
 
-The important safety rule is that the alternate coroutine stack does not
-call R’s C API. htslib owns the file/header/record state, the coroutine
-only yields status codes, and R objects are created after control has
-returned to the normal R call stack.
-
-The README runs the demo when htslib is available on the build machine.
-The example input is plain VCF text because htslib can stream VCF and
-BCF through the same API; no `bcftools` conversion step is needed.
+The demo uses plain VCF text, opened directly by htslib through the same
+API as BCF.
 
 ``` r
-cat(system2(R.home("bin/Rscript"), "scripts/demo-streaming-bcf-reader-ffi.R", stdout = TRUE), sep = "\n")
+source("scripts/demo-streaming-bcf-reader-ffi.R")
+run_streaming_bcf_demo()
 #> Rtinycc version: 0.1.10
 #> Demo: stackful coroutine + htslib BCF/VCF API streaming reader
 #> Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.
@@ -935,9 +926,7 @@ cat(system2(R.home("bin/Rscript"), "scripts/demo-streaming-bcf-reader-ffi.R", st
 #> done_after_collect=TRUE
 ```
 
-The README also displays the actual demo source below, rather than a
-shortened pseudo-example. The full R script is foldable so the page
-stays readable.
+The full demo source is foldable below.
 
 Click to show the complete `scripts/demo-streaming-bcf-reader-ffi.R`
 script
@@ -1390,7 +1379,7 @@ make_demo_vcf <- function() {
   vcf
 }
 
-if (identical(sys.nframe(), 0L)) {
+run_streaming_bcf_demo <- function() {
   say("Rtinycc version: ", as.character(utils::packageVersion("Rtinycc")))
   say("Demo: stackful coroutine + htslib BCF/VCF API streaming reader")
   say("Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.")
@@ -1425,6 +1414,11 @@ if (identical(sys.nframe(), 0L)) {
   }
 
   say("done_after_collect=", isTRUE(ffi$bcf_stream_done(reader$ptr)))
+  invisible(NULL)
+}
+
+if (identical(sys.nframe(), 0L)) {
+  run_streaming_bcf_demo()
 }
 ```
 
@@ -1774,7 +1768,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5db00115f320>
+#> <pointer: 0x57e19cff8f30>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1891,11 +1885,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 52.26ms 52.26ms      19.1    6.33MB     19.1     1     1     52.3ms
-#> 2 vroom_df_…  6.41ms  6.56ms     152.     1.22MB      0       2     0     13.1ms
-#> 3 vroom_df_…  6.51ms  6.61ms     151.     2.44MB      0       2     0     13.2ms
-#> 4 c_read_df  21.07ms 21.16ms      47.2    1.22MB      0       2     0     42.3ms
-#> 5 io_uring_… 20.18ms 20.66ms      48.4    1.22MB      0       2     0     41.3ms
+#> 1 read_tabl… 49.73ms 49.73ms      20.1    6.33MB     20.1     1     1     49.7ms
+#> 2 vroom_df_…  6.38ms  6.74ms     148.     1.22MB      0       2     0     13.5ms
+#> 3 vroom_df_…  6.58ms  6.92ms     145.     2.44MB      0       2     0     13.8ms
+#> 4 c_read_df  21.05ms 21.06ms      47.5    1.22MB      0       2     0     42.1ms
+#> 5 io_uring_… 19.92ms 19.92ms      50.2    1.22MB      0       2     0     39.8ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -2000,9 +1994,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5db00ab77c60>
+#> <pointer: 0x57e1a847e840>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5db00ab77c60>
+#> <pointer: 0x57e1a847e840>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
