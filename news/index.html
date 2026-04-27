@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.9</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.10</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,7 +46,11 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.1.9" id="rtinycc-019">Rtinycc 0.1.9<a class="anchor" aria-label="anchor" href="#rtinycc-019"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.1.10" id="rtinycc-0110">Rtinycc 0.1.10<a class="anchor" aria-label="anchor" href="#rtinycc-0110"></a></h2>
+<ul><li>Fix configure failure on macOS oldrel arm64 (Big Sur, clang 14). The bundled TinyCC Makefile pairs <code>-flat_namespace</code> with <code>-undefined warning</code> on clang older than 15. The package strips <code>-flat_namespace</code> on macOS to avoid TinyCC SIGSEGV behavior under flat namespace, but on clang &lt; 15 that left <code>-undefined warning</code> on its own, which the modern macOS linker rejects under the default <code>-twolevel_namespace</code>. The configure step now also strips <code>-undefined warning</code> so the <code>libtcc.dylib</code> link succeeds on the CRAN macOS oldrel arm64 builder.</li>
+</ul></div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.9" id="rtinycc-019">Rtinycc 0.1.9<a class="anchor" aria-label="anchor" href="#rtinycc-019"></a></h2><p class="text-muted">CRAN release: 2026-04-27</p>
 <ul><li><p>Replace the upstream <code>make install</code> step with explicit copies of the build artifacts (<code>tcc</code>, <code>libtcc.{a,dylib,so}</code>, <code>libtcc1.a</code>, <code>libtcc.h</code>, and the bundled tinycc C headers under <code>lib/tcc/include/</code>). This sidesteps BSD/GNU <code>install</code> differences and the strict <code>install-unx</code> macros in the upstream Makefile that cause configuration to fail on macOS arm64 and x86_64 CRAN builders. The installed layout under <code>inst/tinycc/</code> is unchanged.</p></li>
 <li><p>On Linux, prefer the unversioned <code>libm.so</code> GNU ld script over the bare versioned SONAME (<code>libm.so.6</code>) when resolving the system math runtime in vignettes and tests. TinyCC handles GNU ld scripts directly, which avoids link failures on Fedora-style toolchains.</p></li>
 <li><p>Make the external-library linking example in tests and the “Linking External Libraries” vignette skip cleanly when <code><a href="../reference/tcc_link.html">tcc_link()</a></code> cannot resolve the platform math runtime, instead of erroring the whole run.</p></li>

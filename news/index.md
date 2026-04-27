@@ -1,6 +1,20 @@
 # Changelog
 
+## Rtinycc 0.1.10
+
+- Fix configure failure on macOS oldrel arm64 (Big Sur, clang 14). The
+  bundled TinyCC Makefile pairs `-flat_namespace` with
+  `-undefined warning` on clang older than 15. The package strips
+  `-flat_namespace` on macOS to avoid TinyCC SIGSEGV behavior under flat
+  namespace, but on clang \< 15 that left `-undefined warning` on its
+  own, which the modern macOS linker rejects under the default
+  `-twolevel_namespace`. The configure step now also strips
+  `-undefined warning` so the `libtcc.dylib` link succeeds on the CRAN
+  macOS oldrel arm64 builder.
+
 ## Rtinycc 0.1.9
+
+CRAN release: 2026-04-27
 
 - Replace the upstream `make install` step with explicit copies of the
   build artifacts (`tcc`, `libtcc.{a,dylib,so}`, `libtcc1.a`,
