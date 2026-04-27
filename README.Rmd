@@ -763,6 +763,82 @@ sqlite$close_db(db)
 tcc_callback_close(cb)
 ```
 
+### Stackful C coroutines: streaming BCF/VCF records with htslib
+
+A more experimental pattern is to use Rtinycc as a JIT compiler for native
+iterators that keep their own C stack between calls from R.  The script
+[`scripts/demo-streaming-bcf-reader-ffi.R`](scripts/demo-streaming-bcf-reader-ffi.R)
+combines the stackful `ucontext` coroutine pattern from
+[`scripts/demo-stackful-coroutine-ffi.R`](scripts/demo-stackful-coroutine-ffi.R)
+with [htslib](https://www.htslib.org/) to make a streaming BCF/VCF reader.
+Each call from R resumes the native reader until the next `bcf1_t` record is
+available, yields back to R, and then lets R copy the current record into a
+regular list.
+
+The important safety rule is that the alternate coroutine stack does not call
+R's C API.  htslib owns the file/header/record state, the coroutine only yields
+status codes, and R objects are created after control has returned to the normal
+R call stack.
+
+The README displays the actual demo source below, rather than a shortened
+pseudo-example.  The full R script is foldable so the page stays readable.
+
+<details>
+<summary>Click to show the complete <code>scripts/demo-streaming-bcf-reader-ffi.R</code> script</summary>
+
+```{r ffi-bcf-coroutine-demo-source, echo=FALSE, results='asis'}
+bcf_demo_path <- "scripts/demo-streaming-bcf-reader-ffi.R"
+bcf_demo_source <- paste(readLines(bcf_demo_path, warn = FALSE), collapse = "\n")
+knitr::asis_output(knitr::engine_output(
+  list(
+    echo = TRUE,
+    eval = FALSE,
+    engine = "r",
+    class.source = "rtinycc-demo",
+    prompt = FALSE,
+    comment = "",
+    tidy = FALSE,
+    highlight = TRUE
+  ),
+  bcf_demo_source,
+  ""
+))
+```
+
+</details>
+
+The embedded htslib coroutine C source is extracted from the script and rendered
+with the same Rtinycc C-code display helper used by the vignettes.
+
+<details>
+<summary>Click to show only the embedded C coroutine / htslib source</summary>
+
+```{r ffi-bcf-coroutine-c-source, echo=FALSE, results='asis'}
+bcf_demo_lines <- readLines(bcf_demo_path, warn = FALSE)
+bcf_c_start <- grep("^  code <- '$", bcf_demo_lines)
+bcf_c_end <- NA_integer_
+if (length(bcf_c_start) == 1L) {
+  bcf_c_end <- which(seq_along(bcf_demo_lines) > bcf_c_start & bcf_demo_lines == "'")[1]
+}
+if (length(bcf_c_start) == 1L && length(bcf_c_end) == 1L && !is.na(bcf_c_end)) {
+  bcf_c_source <- paste(bcf_demo_lines[(bcf_c_start + 1L):(bcf_c_end - 1L)], collapse = "\n")
+  Rtinycc:::rtinycc_c_block(bcf_c_source)
+} else {
+  knitr::asis_output("_Could not extract embedded C source from the demo script._")
+}
+```
+
+</details>
+
+This points toward a useful separate package idea: a small, generic
+Rtinycc-based C coroutine layer for R.  Such a package could provide reusable
+pieces like `coro_new()`, `coro_resume()`, finalizer-backed native handles,
+status/error conventions, and helpers for writing streaming bindings around C
+libraries such as htslib, SQLite, parsers, decompression libraries, or network
+clients.  R would see ordinary iterators; C would keep natural blocking or
+recursive control flow without rewriting everything as a heap-allocated state
+machine.
+
 ## Header parsing with treesitter.c
 
 For header-driven bindings, we use `treesitter.c` to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, `tcc_generate_bindings()` handles the code generation.
