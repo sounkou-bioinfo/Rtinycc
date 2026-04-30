@@ -2,6 +2,8 @@
 
 ## Rtinycc 0.1.10
 
+CRAN release: 2026-04-27
+
 - Fix configure failure on macOS oldrel arm64 (Big Sur, clang 14). The
   bundled TinyCC Makefile pairs `-flat_namespace` with
   `-undefined warning` on clang older than 15. The package strips

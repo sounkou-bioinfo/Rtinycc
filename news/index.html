@@ -46,7 +46,7 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.1.10" id="rtinycc-0110">Rtinycc 0.1.10<a class="anchor" aria-label="anchor" href="#rtinycc-0110"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.1.10" id="rtinycc-0110">Rtinycc 0.1.10<a class="anchor" aria-label="anchor" href="#rtinycc-0110"></a></h2><p class="text-muted">CRAN release: 2026-04-27</p>
 <ul><li>Fix configure failure on macOS oldrel arm64 (Big Sur, clang 14). The bundled TinyCC Makefile pairs <code>-flat_namespace</code> with <code>-undefined warning</code> on clang older than 15. The package strips <code>-flat_namespace</code> on macOS to avoid TinyCC SIGSEGV behavior under flat namespace, but on clang &lt; 15 that left <code>-undefined warning</code> on its own, which the modern macOS linker rejects under the default <code>-twolevel_namespace</code>. The configure step now also strips <code>-undefined warning</code> so the <code>libtcc.dylib</code> link succeeds on the CRAN macOS oldrel arm64 builder.</li>
 </ul></div>
     <div class="section level2">
