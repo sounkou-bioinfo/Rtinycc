@@ -319,6 +319,13 @@ static inline TCCState *RC_tcc_state(SEXP ext) {
     return s;
 }
 
+static void RC_tcc_error_callback(void *opaque, const char *msg) {
+    (void)opaque;
+    if (msg && msg[0]) {
+        Rprintf("%s\n", msg);
+    }
+}
+
 /**
  * Create a new TCCState, configure output type, and add include/lib paths.
  * Ownership: returns owned external pointer (finalizer frees TCCState).
@@ -331,8 +338,8 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         Rf_error("tcc_new failed");
     }
 
-    /* Route libtcc diagnostics through R (stdout, sink-able) */
-    tcc_set_error_func(s, NULL, (void (*)(void *, const char *)) Rprintf);
+    /* Route libtcc diagnostics through R without treating diagnostics as printf formats. */
+    tcc_set_error_func(s, NULL, RC_tcc_error_callback);
 
     /* library paths */
     if (Rf_isString(lib_path) && XLENGTH(lib_path) > 0) {
