@@ -68,11 +68,23 @@ else
 fi
 log "Selected shared library target: $SHLIB"
 
+TCC_CONFIG_EXTRA=""
+if [ "$(uname)" = "Linux" ]; then
+    if ldd --version 2>&1 | grep -qi musl || \
+        ls /lib/ld-musl-*.so.1 >/dev/null 2>&1 || \
+        ls /usr/lib/ld-musl-*.so.1 >/dev/null 2>&1 || \
+        "$CC" -dumpmachine 2>/dev/null | grep -qi musl; then
+        log "Detected musl libc; enabling TinyCC musl configuration"
+        TCC_CONFIG_EXTRA="--config-musl"
+    fi
+fi
+
 run_logged ./configure \
     --prefix="$TINYCC_DEST" \
     --cc="$CC" \
     --ar="$AR" \
     --extra-cflags=-fPIC \
+    $TCC_CONFIG_EXTRA \
     --debug || exit 1
 
 run_logged "$MAKE" CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc || exit 1
