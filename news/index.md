@@ -4,6 +4,10 @@
 
 CRAN release: 2026-04-27
 
+- Fix installation on musl-based Linux systems, including Alpine Linux,
+  by enabling TinyCC’s musl configuration when a musl libc environment
+  is detected during configure.
+
 - Fix configure failure on macOS oldrel arm64 (Big Sur, clang 14). The
   bundled TinyCC Makefile pairs `-flat_namespace` with
   `-undefined warning` on clang older than 15. The package strips

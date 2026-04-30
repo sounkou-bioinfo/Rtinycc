@@ -15,6 +15,7 @@ compiled object exposes ordinary R-callable functions.
 The bundled TinyCC installation is discoverable from R:
 
 ``` r
+
 tcc_path()
 #> [1] "/home/runner/work/_temp/Library/Rtinycc/tinycc/bin/tcc"
 tcc_include_paths()
@@ -36,6 +37,7 @@ You add C source, declare the function signatures you want to expose,
 and compile once:
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source(
     "
@@ -65,6 +67,7 @@ You can also expose C globals through generated getter and setter
 helpers:
 
 ``` r
+
 ffi_globals <- tcc_ffi() |>
   tcc_source(
     "

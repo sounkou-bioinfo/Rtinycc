@@ -15,6 +15,7 @@ type string. The implemented form is:
   after copying
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source(
     "
@@ -49,6 +50,7 @@ Callback arguments use `callback:<signature>` or
 `callback_async:<signature>`.
 
 ``` r
+
 cb <- tcc_callback(function(x) x * 3, "double (*)(double)")
 cb_ptr <- tcc_callback_ptr(cb)
 
@@ -93,6 +95,7 @@ For `callback_async:<signature>` specifically:
 generates getter and setter wrappers for C globals.
 
 ``` r
+
 ffi_global <- tcc_ffi() |>
   tcc_source(
     "
@@ -119,6 +122,7 @@ For C structs, `Rtinycc` can generate allocation, getter, setter, and
 free helpers.
 
 ``` r
+
 ffi_struct <- tcc_ffi() |>
   tcc_source(
     "

@@ -12,6 +12,7 @@ and
 [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md).
 
 ``` r
+
 buf <- tcc_malloc(16)
 str_ptr <- tcc_cstring("hello")
 
@@ -26,6 +27,7 @@ Both return owned external pointers. They can be freed explicitly with
 and also carry finalizers.
 
 ``` r
+
 tcc_free(buf)
 #> NULL
 tcc_free(str_ptr)
@@ -35,6 +37,7 @@ tcc_free(str_ptr)
 ## Reading and Writing Raw Bytes
 
 ``` r
+
 buf <- tcc_malloc(8)
 tcc_write_bytes(buf, as.raw(1:8))
 #> NULL
@@ -50,6 +53,7 @@ The helper layer also exposes typed accessors for primitive values at
 byte offsets.
 
 ``` r
+
 buf <- tcc_malloc(16)
 tcc_write_i32(buf, 0L, 42L)
 tcc_write_f64(buf, 8L, 3.5)
@@ -72,19 +76,20 @@ Some C APIs fill outputs through `T **` or `void **`. `Rtinycc` exposes
 a small set of helpers for that pattern.
 
 ``` r
+
 ptr_size <- if (!is.null(.Machine$sizeof.pointer)) .Machine$sizeof.pointer else 8L
 ptr_ref <- tcc_malloc(ptr_size)
 target <- tcc_malloc(4)
 
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5610cdfac450>
+#> <pointer: 0x5607a7a0bd50>
 tcc_ptr_addr(tcc_data_ptr(ptr_ref))
-#> [1] "94630189329552"
+#> [1] "94590857212944"
 tcc_ptr_addr(target)
-#> [1] "94630189329552"
+#> [1] "94590857212944"
 
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5610cdfac450>
+#> <pointer: 0x5607a7a0bd50>
 tcc_ptr_is_null(tcc_data_ptr(ptr_ref))
 #> [1] TRUE
 
@@ -100,6 +105,7 @@ returns a borrowed pointer view. It is not an owned allocation.
 ## C String Helpers
 
 ``` r
+
 str_ptr <- tcc_cstring("Hello, world")
 tcc_read_cstring(str_ptr)
 #> [1] "Hello, world"

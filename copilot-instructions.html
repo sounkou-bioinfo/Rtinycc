@@ -244,37 +244,37 @@
 <div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span>k <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> k <span class="op">&lt;</span> len<span class="op">;</span> <span class="op">++</span>k<span class="op">)</span> acc <span class="op">+=</span> p_x<span class="op">[(</span>i<span class="op">-</span><span class="dv">1</span><span class="op">)+</span>k<span class="op">]</span> <span class="op">*</span> p_weights<span class="op">[</span>k<span class="op">];</span></span></code></pre></div>
 <p>No slice array is allocated, no product array is allocated. The composition <code>reduce(binary(vec_slice, var))</code> is resolved entirely by recursive element access.</p>
 <p>Correspondence with SAC:</p>
-<table class="table"><thead><tr class="header"><th>SAC concept</th>
+<table class="table"><thead><tr><th>SAC concept</th>
 <th>Our implementation</th>
-</tr></thead><tbody><tr class="odd"><td>Single assignment scoping</td>
+</tr></thead><tbody><tr><td>Single assignment scoping</td>
 <td>R’s functional semantics (free)</td>
-</tr><tr class="even"><td>
+</tr><tr><td>
 <code>with</code> genarray/modarray</td>
 <td>
 <code>vec_alloc</code> + <code>for</code>/<code>vec_set</code>
 </td>
-</tr><tr class="odd"><td>ψ-reduction (condensation)</td>
+</tr><tr><td>ψ-reduction (condensation)</td>
 <td>
 <code>tccq_cg_vec_elem</code> recursion</td>
-</tr><tr class="even"><td>
+</tr><tr><td>
 <code>sel(v, A)</code> / <code>A[v]</code>
 </td>
 <td>
 <code>vec_get</code>, <code>mat_get</code>
 </td>
-</tr><tr class="odd"><td>
+</tr><tr><td>
 <code>take</code>/<code>drop</code> (subarray)</td>
 <td>
 <code>vec_slice</code> (range view)</td>
-</tr><tr class="even"><td>Element-wise <code>Op(A, B)</code>
+</tr><tr><td>Element-wise <code>Op(A, B)</code>
 </td>
 <td>
 <code>binary</code> with shape=“vector”</td>
-</tr><tr class="odd"><td><code>fold(fun, neutral)</code></td>
+</tr><tr><td><code>fold(fun, neutral)</code></td>
 <td>
 <code>reduce</code> / <code>reduce_expr</code>
 </td>
-</tr><tr class="even"><td>No intermediate arrays</td>
+</tr><tr><td>No intermediate arrays</td>
 <td>Slices are views, not allocations</td>
 </tr></tbody></table></div>
 <div class="section level3">

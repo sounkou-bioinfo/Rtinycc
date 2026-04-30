@@ -76,6 +76,7 @@ coverage snapshots and delegated fallback contract tables. Keep them out
 of user-facing README content.
 
 ``` r
+
 rtinycc_file_coverage <- function(path = ".") {
   cov <- covr::package_coverage(path)
   df <- as.data.frame(cov)

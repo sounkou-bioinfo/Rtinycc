@@ -139,7 +139,7 @@
 </div>
 <div class="section level2">
 <h2 id="improvement-directions">Improvement Directions<a class="anchor" aria-label="anchor" href="#improvement-directions"></a></h2>
-<ul><li>Keep one explicit internal matrix of <code>type -&gt; input borrow/copy semantics -&gt;   return borrow/copy semantics -&gt; ownership expectations</code>. Docs and tests should be checked against that matrix.</li>
+<ul><li>Keep one explicit internal matrix of <code>type -&gt; input borrow/copy semantics -&gt; return borrow/copy semantics -&gt; ownership expectations</code>. Docs and tests should be checked against that matrix.</li>
 <li>Add focused tests that force GC around wrapper calls, struct field-address helpers, and callback paths. The risk is not ordinary logic breakage but silent protection regressions.</li>
 <li>Revisit <code>character_array</code>. Its current <code>STRING_PTR()</code> semantics are easy to misread and much less clear than <code>cstring_array</code>.</li>
 <li>Consider exposing copy behavior more explicitly in docs and possibly in runtime metadata, so users can inspect whether a path is zero-copy, borrowed, or copy-on-return.</li>

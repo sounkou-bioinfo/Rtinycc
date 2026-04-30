@@ -35,6 +35,7 @@ to `2^53` on the R side.
 ## A Minimal Example
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source(
     "
@@ -67,6 +68,7 @@ ffi$negate_bool(TRUE)
 - `ptr` passes an external pointer address through unchanged
 
 ``` r
+
 ffi_str <- tcc_ffi() |>
   tcc_source(
     "
@@ -111,6 +113,7 @@ underlying `CHARSXP` cells as a read-only `SEXP *`, not a `char **`. Use
 `cstring_array` when the C side expects a temporary `const char **`.
 
 ``` r
+
 ffi_arr <- tcc_ffi() |>
   tcc_source(
     "
@@ -135,6 +138,7 @@ ffi_arr$second_num(c(1.5, 2.5))
 `sexp` passes the R object through the wrapper without conversion.
 
 ``` r
+
 ffi_sexp <- tcc_ffi() |>
   tcc_source(
     "

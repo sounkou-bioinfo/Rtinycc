@@ -93,6 +93,7 @@ double* rand_unif(int n) {
 Click to show R code
 
 ``` r
+
 rtinycc_code <- "#include <R.h>\n#include <Rinternals.h>\n#include <Rmath.h>\n#include <stdlib.h>\n\nvoid noop(void) {}\n\nvoid fill_rand(double* out, int n) {\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n}\n\ndouble* rand_unif(int n) {\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n  if (n == 0) {\n    return (double*) malloc(sizeof(double));\n  }\n\n  double *out = (double*) malloc(sizeof(double) * (size_t) n);\n  if (!out) {\n    Rf_error(\"malloc failed\");\n  }\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n  return out;\n}"
 ```
 
@@ -152,10 +153,12 @@ SEXP rand_unif(SEXP n_) {
 Click to show R code
 
 ``` r
+
 callme_code <- "#include <R.h>\n#include <Rinternals.h>\n#include <Rmath.h>\n\nSEXP noop(void) {\n  return R_NilValue;\n}\n\nSEXP fill_rand(SEXP out_, SEXP n_) {\n  int n = asInteger(n_);\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  if (TYPEOF(out_) != REALSXP) {\n    Rf_error(\"out must be a numeric vector\");\n  }\n\n  if (XLENGTH(out_) < n) {\n    Rf_error(\"out is shorter than n\");\n  }\n\n  double *out = REAL(out_);\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    out[i] = unif_rand();\n  }\n  PutRNGstate();\n\n  return out_;\n}\n\nSEXP rand_unif(SEXP n_) {\n  int n = asInteger(n_);\n  if (n < 0) {\n    Rf_error(\"n must be non-negative\");\n  }\n\n  SEXP out = PROTECT(allocVector(REALSXP, n));\n  double *ptr = REAL(out);\n\n  GetRNGstate();\n  for (int i = 0; i < n; ++i) {\n    ptr[i] = unif_rand();\n  }\n  PutRNGstate();\n\n  UNPROTECT(1);\n  return out;\n}"
 ```
 
 ``` r
+
 build_rtinycc_module <- function() {
   tcc_ffi() |>
     tcc_source(rtinycc_code) |>
@@ -328,6 +331,7 @@ generated_code <- Rtinycc:::generate_ffi_code(
 ## Availability
 
 ``` r
+
 has_callme
 #> [1] TRUE
 ```
@@ -337,21 +341,25 @@ current build environment cannot compile the temporary `callme` helper
 DLL, the executable comparisons below are skipped.
 
 ``` r
+
 has_bench
 #> [1] TRUE
 ```
 
 ``` r
+
 has_profmem
 #> [1] TRUE
 ```
 
 ``` r
+
 can_run_callme
 #> [1] TRUE
 ```
 
 ``` r
+
 can_run_benchmarks
 #> [1] TRUE
 ```
@@ -359,6 +367,7 @@ can_run_benchmarks
 Current comparison status:
 
 ``` r
+
 callme_runtime_reason
 #> [1] "Executable comparisons are enabled."
 ```
@@ -368,6 +377,7 @@ callme_runtime_reason
 This measures module build time, not call time.
 
 ``` r
+
 compile_times <- data.frame(
   implementation = c("Rtinycc", "callme"),
   seconds = c(
@@ -397,6 +407,7 @@ the native `double*` buffer into it, then `free()`s the original buffer.
 In contrast, `fill_rand()` uses the borrowed `numeric_array` input path.
 
 ``` r
+
 Rtinycc:::rtinycc_c_block(generated_code)
 ```
 
@@ -512,6 +523,7 @@ on call overhead above a plain
 [`.Call()`](https://rdrr.io/r/base/CallExternal.html) entry point.
 
 ``` r
+
 noop_bench <- with_benchmark_modules(function(rt_mod, cm_mod) {
   n_noop <- 1000L
 
@@ -529,8 +541,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.19ms   1.24ms      810.    21.9KB        0
-#> 2 callme     456.33µs 470.34µs     2108.        0B        0
+#> 1 Rtinycc       1.2ms   1.24ms      758.    21.9KB        0
+#> 2 callme      410.6µs 426.69µs     2348.        0B        0
 ```
 
 Interpretation:
@@ -553,6 +565,7 @@ an existing R numeric vector instead of returning a newly allocated
 result.
 
 ``` r
+
 fill_bench_n4096 <- with_benchmark_modules(function(rt_mod, cm_mod) {
   bench::mark(
     Rtinycc = run_fill(rt_mod$fill_rand, 4096L, 100L),
@@ -568,8 +581,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.76ms   3.99ms      266.    3.15MB     13.3
-#> 2 callme       2.16ms    2.2ms      418.    3.13MB     20.9
+#> 1 Rtinycc      2.77ms   3.94ms      266.    3.15MB     13.3
+#> 2 callme       2.11ms   2.18ms      430.    3.13MB     21.5
 ```
 
 Interpretation:
@@ -591,6 +604,7 @@ differs:
 We time both a tiny and a larger return size.
 
 ``` r
+
 rand_results <- with_benchmark_modules(function(rt_mod, cm_mod) {
   rand_bench_n1 <- bench::mark(
     Rtinycc = run_rand(rt_mod$rand_unif, 1L, 1000L),
@@ -618,13 +632,13 @@ rand_results$rand_bench_n1
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
 #> 1 Rtinycc      1.75ms   1.83ms      516.    15.4KB     25.8
-#> 2 callme     992.36µs      1ms      992.        0B      0
+#> 2 callme     972.26µs 984.46µs     1005.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.78ms   4.03ms      261.    3.13MB     13.1
-#> 2 callme       1.93ms   3.21ms      319.    3.13MB     15.9
+#> 1 Rtinycc      2.78ms   4.07ms      242.    3.13MB     12.1
+#> 2 callme       1.92ms   3.23ms      302.    3.13MB     15.1
 ```
 
 The usual pattern is:

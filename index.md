@@ -78,6 +78,7 @@ the C function returns a `malloc`-owned buffer.
 ## Installation
 
 ``` r
+
 install.packages(
       'Rtinycc', 
         repos = c('https://sounkou-bioinfo.r-universe.dev', 
@@ -93,6 +94,7 @@ The CLI interface compiles C source files to standalone executables
 using the bundled TinyCC toolchain.
 
 ``` r
+
 library(Rtinycc)
 
 src <- system.file("c_examples", "forty_two.c", package = "Rtinycc")
@@ -117,6 +119,7 @@ We can compile and call C functions entirely in memory. This is the
 simplest path for quick JIT compilation.
 
 ``` r
+
 state <- tcc_state(output = "memory")
 tcc_compile_string(state, "int forty_two(){ return 42; }")
 #> [1] 0
@@ -133,6 +136,7 @@ support](https://lists.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html),
 we can link against R’s headers and call into `libR`.
 
 ``` r
+
 state <- tcc_state(output = "memory")
 tcc_add_include_path(state, R.home("include"))
 #> [1] 0
@@ -172,6 +176,7 @@ offset into any external pointer, so you can walk structs, arrays, and
 output parameters without writing C helpers.
 
 ``` r
+
 ptr <- tcc_cstring("hello")
 tcc_read_cstring(ptr)
 #> [1] "hello"
@@ -191,6 +196,7 @@ dereferencing via `tcc_read_ptr` / `tcc_write_ptr`. All operations use a
 byte offset and `memcpy` internally for alignment safety.
 
 ``` r
+
 buf <- tcc_malloc(32)
 tcc_write_i32(buf, 0L, 42L)
 tcc_write_f64(buf, 8L, pi)
@@ -206,6 +212,7 @@ Pointer-to-pointer workflows are supported for C APIs that return values
 through output parameters.
 
 ``` r
+
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
@@ -271,6 +278,7 @@ when the C function returns a `malloc`-owned buffer.
 ### Simple functions
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("
     int add(int a, int b) { return a + b; }
@@ -292,6 +300,7 @@ allowed arity and type combinations, and runtime dispatch selects the
 matching wrapper from the scalar tail values provided at call time.
 
 ``` r
+
 ffi_var <- tcc_ffi() |>
   tcc_header("#include <R_ext/Print.h>") |>
   tcc_source('
@@ -347,6 +356,7 @@ We can bind directly to symbols in shared libraries. Here we link
 against `libm`.
 
 ``` r
+
 math <- tcc_ffi() |>
   tcc_library("m") |>
   tcc_bind(
@@ -374,6 +384,7 @@ states, use
 directly.
 
 ``` r
+
 ffi_opt_off <- tcc_ffi() |>
   tcc_options("-O0") |>
   tcc_source('
@@ -414,6 +425,7 @@ R vectors are passed to C with zero copy. Mutations in C are visible in
 R.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("
     #include <stdlib.h>
@@ -473,6 +485,7 @@ Complex C types are supported declaratively. Use
 to generate allocation and accessor helpers. Free instances when done.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source('
     #include <math.h>
@@ -513,6 +526,7 @@ ffi$struct_point_free(p2)
 Enums are exposed as helper functions that return integer constants.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("enum color { RED = 0, GREEN = 1, BLUE = 2 };") |>
   tcc_enum("color", constants = c("RED", "GREEN", "BLUE")) |>
@@ -530,6 +544,7 @@ Bitfields are handled by TCC. Accessors read and write them like normal
 fields.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("
     struct flags {
@@ -558,6 +573,7 @@ ffi$struct_flags_free(s)
 C globals can be exposed with explicit getter/setter helpers.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("
     int counter = 7;
@@ -590,6 +606,7 @@ when you want deterministic invalidation and earlier release of the
 preserved R function.
 
 ``` r
+
 cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
 
 code <- '
@@ -622,6 +639,7 @@ through C. In practice this means NA-like numeric or integer values,
 on the declared return type.
 
 ``` r
+
 cb_err <- tcc_callback(
   function(x) stop("boom"),
   signature = "double (*)(double)"
@@ -682,6 +700,7 @@ Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
 pointer (`void*`, `T*`).
 
 ``` r
+
 # Fire-and-forget: void callback accumulated from 100 worker threads
 hits <- 0L
 cb_async <- tcc_callback(
@@ -766,6 +785,7 @@ Non-void return works the same way — the generated wrapper handles the
 drain loop transparently:
 
 ``` r
+
 cb_triple <- tcc_callback(
   function(x) x * 3L,
   signature = "int (*)(int)"
@@ -838,6 +858,7 @@ queries, and collect rows through an R callback that reads `char**`
 arrays using `tcc_read_ptr` and `tcc_read_cstring`.
 
 ``` r
+
 ptr_size <- .Machine$sizeof.pointer
 
 read_string_array <- function(ptr, n) {
@@ -910,6 +931,7 @@ The demo uses plain VCF text, opened directly by htslib through the same
 API as BCF.
 
 ``` r
+
 source("scripts/demo-streaming-bcf-reader-ffi.R")
 run_streaming_bcf_demo()
 #> Rtinycc version: 0.1.10
@@ -932,6 +954,7 @@ Click to show the complete `scripts/demo-streaming-bcf-reader-ffi.R`
 script
 
 ``` r
+
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages(library(Rtinycc))
@@ -1729,6 +1752,7 @@ parameter is a C string, provide a custom mapper that returns `cstring`
 for that type.
 
 ``` r
+
 header <- '
 double sqrt(double x);
 double sin(double x);
@@ -1781,6 +1805,7 @@ ffi$global_global_counter_get()
 on linux
 
 ``` r
+
 if (Sys.info()[["sysname"]] == "Linux") {
   c_file <- system.file("c_examples", "io_uring_csv.c", package = "Rtinycc")
 
@@ -1908,10 +1933,11 @@ code when headers pull in complex types.
 ### 64-bit integer precision
 
 R represents `i64` and `u64` values as `double`, which loses precision
-beyond $2^{53}$. Values that differ only past that threshold become
+beyond $`2^{53}`$. Values that differ only past that threshold become
 indistinguishable.
 
 ``` r
+
 sprintf("2^53:     %.0f", 2^53)
 #> [1] "2^53:     9007199254740992"
 sprintf("2^53 + 1: %.0f", 2^53 + 1)
@@ -1930,6 +1956,7 @@ Named nested struct fields can now be declared explicitly with
 bytes from another struct object of the declared nested type.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source('
     struct inner { int a; };
@@ -1962,6 +1989,7 @@ helper accessors, but `field_addr()` and `container_of()` reject
 bitfield members.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source('struct flags { unsigned int flag : 1; };') |>
   tcc_struct(
@@ -1985,6 +2013,7 @@ syntax in
 which generates element-wise accessors.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source('struct buf { unsigned char data[16]; };') |>
   tcc_struct("buf", accessors = list(
@@ -2022,6 +2051,7 @@ FFI recipe internally, so after
 access detects the dead TCC state pointer and recompiles transparently.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("int square(int x) { return x * x; }") |>
   tcc_bind(square = list(args = list("i32"), returns = "i32")) |>

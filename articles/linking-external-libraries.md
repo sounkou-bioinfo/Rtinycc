@@ -38,6 +38,7 @@ that is typically a versioned `libm.so.*` file, while on macOS the
 resolver prefers `libSystem.B.dylib`.
 
 ``` r
+
 math <- tcc_link(
   math_lib_path,
   symbols = list(
@@ -64,6 +65,7 @@ You can include a small amount of helper code in the same TinyCC unit
 while still linking against an external library:
 
 ``` r
+
 math_helpers <- tcc_link(
   math_lib_path,
   symbols = list(

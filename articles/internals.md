@@ -31,6 +31,7 @@ works from this declarative recipe, not from an already-live TCC
 process.
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source("int add(int a, int b) { return a + b; }") |>
   tcc_bind(add = list(args = list("i32", "i32"), returns = "i32"))
@@ -63,6 +64,7 @@ Internally, the generated translation unit is assembled in this order:
 For a small binding:
 
 ``` r
+
 code <- Rtinycc:::generate_ffi_code(
   symbols = ffi$symbols,
   headers = ffi$headers,
@@ -187,6 +189,7 @@ In practice, `generate_c_input()` and `generate_c_return()` delegate
 into that rule table:
 
 ``` r
+
 Rtinycc:::generate_c_input("x", "arg1_", "i32")
 #> [1] "  int _x = asInteger(arg1_);\n  if (_x == NA_INTEGER) Rf_error(\"integer value is NA\");\n  if (_x < INT32_MIN || _x > INT32_MAX) Rf_error(\"i32 out of range\");\n  int32_t x = (int32_t)_x;"
 Rtinycc:::generate_c_return("res", "f64")

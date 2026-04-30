@@ -12,6 +12,7 @@ example below, `Rtinycc` creates allocation, field getter, field setter,
 and free helpers for a simple `struct point`.
 
 ``` r
+
 ffi_struct <- tcc_ffi() |>
   tcc_source(
     "
@@ -59,6 +60,7 @@ roles:
   returns the user-data handle that C trampolines expect
 
 ``` r
+
 cb <- tcc_callback(
   function(x) x * 2,
   signature = "double (*)(double)"

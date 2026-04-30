@@ -16,6 +16,7 @@ This workflow is useful when:
 These helpers require the optional `treesitter.c` package.
 
 ``` r
+
 has_treesitter
 #> [1] TRUE
 ```
@@ -26,6 +27,7 @@ examples in this vignette are skipped.
 ## Start from a Header Snippet
 
 ``` r
+
 header <- paste(
   "double sqrt(double x);",
   "int add(int a, int b);",
@@ -40,6 +42,7 @@ header <- paste(
 The lowest-level helpers return parsed declarations from the header:
 
 ``` r
+
 tcc_treesitter_functions(header)
 #>   capture_name text start_line start_col   params return_type
 #> 1    decl_name sqrt          1         8   double      double
@@ -53,6 +56,7 @@ converts the parsed signatures into
 specs:
 
 ``` r
+
 tcc_treesitter_bindings(header)
 #> $sqrt
 #> $sqrt$args
@@ -84,6 +88,7 @@ For a fuller workflow, use
 on a `tcc_ffi` object that already has matching C source attached:
 
 ``` r
+
 ffi <- tcc_ffi() |>
   tcc_source(
     "
@@ -121,6 +126,7 @@ binding plan first.
 You can also extract just the generated struct accessors:
 
 ``` r
+
 tcc_treesitter_struct_accessors("struct point { double x; double y; };")
 #> $point
 #> $point$x
@@ -138,6 +144,7 @@ Bitfields now stay explicit in the accessor metadata rather than
 collapsing to a bare scalar type:
 
 ``` r
+
 tcc_treesitter_struct_accessors(
   "struct flags { unsigned int flag : 1; unsigned int code : 6; };"
 )
@@ -168,6 +175,7 @@ Nested struct fields in structs currently still fall back to ptr-like
 accessors:
 
 ``` r
+
 tcc_treesitter_struct_accessors(
   "struct child { int x; }; struct outer { struct child child; int y; };"
 )
@@ -195,6 +203,7 @@ types are not automatically treated as C strings unless that is
 semantically safe.
 
 ``` r
+
 tcc_map_c_type_to_ffi("int")
 #> [1] "i32"
 tcc_map_c_type_to_ffi("double")
@@ -207,6 +216,7 @@ If you know a specific API uses `const char *` as a real NUL-terminated
 string, you can override the mapping:
 
 ``` r
+
 string_mapper <- function(type) {
   if (trimws(type) == "const char *") {
     return("cstring")
