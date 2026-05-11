@@ -80,7 +80,7 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
         "  UNPROTECT(1);",
         "  return out;"
       ),
-      collapse = "\n"
+      sep = "", collapse = "\n"
     ))
   }
 
@@ -120,7 +120,7 @@ variadic_wrapper_name_types <- function(wrapper_name, vararg_types) {
       collapse = "__"
     )
   }
-  paste0(wrapper_name, "__v", length(vararg_types), "__", suffix)
+  str_interp("{wrapper_name}__v{length(vararg_types)}__{suffix}")
 }
 
 generate_variadic_type_sequences <- function(allowed_types, n_varargs) {
@@ -187,16 +187,16 @@ generate_c_wrapper <- function(
   if (n_args > 0) {
     fixed_arg_names <- names(arg_types)
     if (is.null(fixed_arg_names) || all(fixed_arg_names == "")) {
-      fixed_arg_names <- paste0("arg", seq_along(arg_types))
+      fixed_arg_names <- sprintf("arg%d", seq_along(arg_types))
     }
     vararg_names <- if (length(vararg_types) > 0) {
-      paste0("vararg", seq_along(vararg_types))
+      sprintf("vararg%d", seq_along(vararg_types))
     } else {
       character(0)
     }
     arg_names <- c(fixed_arg_names, vararg_names)
     all_arg_types <- c(arg_types, vararg_types)
-    r_arg_names <- paste0("arg", seq_len(n_args), "_")
+    r_arg_names <- sprintf("arg%d_", seq_len(n_args))
 
     # Input conversions from SEXP to C types
     input_lines <- character(0)
@@ -275,7 +275,7 @@ generate_c_wrapper <- function(
       "SEXP %s(%s) {",
       wrapper_name,
       if (n_args > 0) {
-        paste0("SEXP ", r_arg_names, collapse = ", ")
+        paste("SEXP ", r_arg_names, sep = "", collapse = ", ")
       } else {
         "void"
       }
@@ -403,10 +403,10 @@ generate_async_exec_wrapper <- function(
       return_type,
       arg_names
     )
-    return_code <- paste0(
+    return_code <- paste(
       "  ",
       strsplit(return_conversion, "\n")[[1]],
-      collapse = "\n"
+      sep = "", collapse = "\n"
     )
   }
 
@@ -415,7 +415,7 @@ generate_async_exec_wrapper <- function(
       "SEXP %s(%s) {",
       wrapper_name,
       if (n_args > 0) {
-        paste0("SEXP ", r_arg_names, collapse = ", ")
+        paste("SEXP ", r_arg_names, sep = "", collapse = ", ")
       } else {
         "void"
       }
@@ -1273,13 +1273,13 @@ generate_global_helpers <- function(globals) {
 
     c_type <- type_info$c_type
     get_ret <- generate_c_return(global_name, ffi_type)
-    get_ret_lines <- paste0("  ", strsplit(get_ret, "\n")[[1]])
+    get_ret_lines <- paste("  ", strsplit(get_ret, "\n")[[1]], sep = "")
 
     set_arg <- "value_"
     set_input <- generate_c_input("value", set_arg, ffi_type)
     set_input_lines <- strsplit(set_input, "\n")[[1]]
     set_ret <- generate_c_return(global_name, ffi_type)
-    set_ret_lines <- paste0("  ", strsplit(set_ret, "\n")[[1]])
+    set_ret_lines <- paste("  ", strsplit(set_ret, "\n")[[1]], sep = "")
 
     helpers <- c(
       helpers,

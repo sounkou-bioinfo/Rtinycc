@@ -1091,12 +1091,7 @@ tcc_compiled_object <- function(
           helper_names,
           str_interp("struct_{struct_name}_get_{field_name}")
         )
-        helper_specs[[paste0(
-          "struct_",
-          struct_name,
-          "_get_",
-          field_name
-        )]] <- c(
+        helper_specs[[str_interp("struct_{struct_name}_get_{field_name}")]] <- c(
           list(
             args = list("sexp"),
             returns = "sexp"
@@ -1116,23 +1111,11 @@ tcc_compiled_object <- function(
             str_interp("struct_{struct_name}_get_{field_name}_elt"),
             str_interp("struct_{struct_name}_set_{field_name}_elt")
           )
-          helper_specs[[paste0(
-            "struct_",
-            struct_name,
-            "_get_",
-            field_name,
-            "_elt"
-          )]] <- list(
+          helper_specs[[str_interp("struct_{struct_name}_get_{field_name}_elt")]] <- list(
             args = list("sexp", "i32"),
             returns = "sexp"
           )
-          helper_specs[[paste0(
-            "struct_",
-            struct_name,
-            "_set_",
-            field_name,
-            "_elt"
-          )]] <- list(
+          helper_specs[[str_interp("struct_{struct_name}_set_{field_name}_elt")]] <- list(
             args = list("sexp", "i32", "sexp"),
             returns = "sexp"
           )
@@ -1141,12 +1124,7 @@ tcc_compiled_object <- function(
             helper_names,
             str_interp("struct_{struct_name}_set_{field_name}")
           )
-          helper_specs[[paste0(
-            "struct_",
-            struct_name,
-            "_set_",
-            field_name
-          )]] <- c(
+          helper_specs[[str_interp("struct_{struct_name}_set_{field_name}")]] <- c(
             list(
               args = list("sexp", "sexp"),
               returns = "sexp"
@@ -1168,12 +1146,7 @@ tcc_compiled_object <- function(
             helper_names,
             str_interp("struct_{struct_name}_from_{member_name}")
           )
-          helper_specs[[paste0(
-            "struct_",
-            struct_name,
-            "_from_",
-            member_name
-          )]] <- list(
+          helper_specs[[str_interp("struct_{struct_name}_from_{member_name}")]] <- list(
             args = list("sexp"),
             returns = "sexp"
           )
@@ -1186,13 +1159,7 @@ tcc_compiled_object <- function(
             helper_names,
             str_interp("struct_{struct_name}_{field_name}_addr")
           )
-          helper_specs[[paste0(
-            "struct_",
-            struct_name,
-            "_",
-            field_name,
-            "_addr"
-          )]] <- list(
+          helper_specs[[str_interp("struct_{struct_name}_{field_name}_addr")]] <- list(
             args = list("sexp"),
             returns = "sexp"
           )
@@ -1278,12 +1245,7 @@ tcc_compiled_object <- function(
             helper_names,
             str_interp("union_{union_name}_set_{mem_name}")
           )
-          helper_specs[[paste0(
-            "union_",
-            union_name,
-            "_set_",
-            mem_name
-          )]] <- list(
+          helper_specs[[str_interp("union_{union_name}_set_{mem_name}")]] <- list(
             args = list("sexp", "sexp"),
             returns = "sexp"
           )
@@ -1449,13 +1411,7 @@ tcc_compiled_object <- function(
                 fn_ptr <- tcc_get_symbol(state, wrapper_name)
                 if (!tcc_symbol_is_valid(fn_ptr)) {
                   add_bind_failure(
-                    paste0(
-                      "Symbol '",
-                      sym_name,
-                      "' returned invalid pointer for '",
-                      wrapper_name,
-                      "'"
-                    )
+                    str_interp("Symbol \'{sym_name}\' returned invalid pointer for \'{wrapper_name}\'")
                   )
                   next
                 }
@@ -1463,14 +1419,7 @@ tcc_compiled_object <- function(
               },
               error = function(e) {
                 add_bind_failure(
-                  paste0(
-                    "Could not bind symbol '",
-                    sym_name,
-                    "' wrapper '",
-                    wrapper_name,
-                    "': ",
-                    conditionMessage(e)
-                  )
+                  str_interp("Could not bind symbol \'{sym_name}\' wrapper \'{wrapper_name}\': {conditionMessage(e)}")
                 )
               }
             )
@@ -1491,13 +1440,7 @@ tcc_compiled_object <- function(
               fn_ptr <- tcc_get_symbol(state, wrapper_name)
               if (!tcc_symbol_is_valid(fn_ptr)) {
                 add_bind_failure(
-                  paste0(
-                    "Symbol '",
-                    sym_name,
-                    "' returned invalid pointer for '",
-                    wrapper_name,
-                    "'"
-                  )
+                  str_interp("Symbol \'{sym_name}\' returned invalid pointer for \'{wrapper_name}\'")
                 )
                 next
               }
@@ -1505,14 +1448,7 @@ tcc_compiled_object <- function(
             },
             error = function(e) {
               add_bind_failure(
-                paste0(
-                  "Could not bind symbol '",
-                  sym_name,
-                  "' wrapper '",
-                  wrapper_name,
-                  "': ",
-                  conditionMessage(e)
-                )
+                str_interp("Could not bind symbol \'{sym_name}\' wrapper \'{wrapper_name}\': {conditionMessage(e)}")
               )
             }
           )
@@ -1521,11 +1457,7 @@ tcc_compiled_object <- function(
 
       if (length(fn_ptrs) == 0) {
         add_bind_failure(
-          paste0(
-            "Could not bind any variadic wrappers for symbol '",
-            sym_name,
-            "'"
-          )
+          str_interp("Could not bind any variadic wrappers for symbol \'{sym_name}\'")
         )
         next
       }
@@ -1542,13 +1474,7 @@ tcc_compiled_object <- function(
         # Validate the pointer before creating callable
         if (!tcc_symbol_is_valid(fn_ptr)) {
           add_bind_failure(
-            paste0(
-              "Symbol '",
-              sym_name,
-              "' returned invalid pointer for '",
-              wrapper_name,
-              "'"
-            )
+            str_interp("Symbol \'{sym_name}\' returned invalid pointer for \'{wrapper_name}\'")
           )
           next
         }
@@ -1556,12 +1482,7 @@ tcc_compiled_object <- function(
       },
       error = function(e) {
         add_bind_failure(
-          paste0(
-            "Could not bind symbol '",
-            sym_name,
-            "': ",
-            conditionMessage(e)
-          )
+          str_interp("Could not bind symbol \'{sym_name}\': {conditionMessage(e)}")
         )
       }
     )
@@ -1581,13 +1502,7 @@ tcc_compiled_object <- function(
 
         if (!tcc_symbol_is_valid(fn_ptr)) {
           add_bind_failure(
-            paste0(
-              "Symbol '",
-              sym_name,
-              "' returned invalid pointer for '",
-              wrapper_name,
-              "'"
-            )
+            str_interp("Symbol \'{sym_name}\' returned invalid pointer for \'{wrapper_name}\'")
           )
           next
         }
@@ -1596,12 +1511,7 @@ tcc_compiled_object <- function(
       },
       error = function(e) {
         add_bind_failure(
-          paste0(
-            "Could not bind symbol '",
-            sym_name,
-            "': ",
-            conditionMessage(e)
-          )
+          str_interp("Could not bind symbol \'{sym_name}\': {conditionMessage(e)}")
         )
       }
     )
