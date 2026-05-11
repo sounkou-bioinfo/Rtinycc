@@ -6,6 +6,8 @@ Authors@R: c(
     email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
     person(given = "Mike", family = "Cheng", role = c("cph"),
     comment = "Adapted parts of the vignette knitr engine from the callme package"),
+    person(given = "Adam", family = "Dunkels", role = c("cph"),
+    comment = "Author of the bundled protothreads library"),
     person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
     comment = "Tinycc Compiler (tinycc) authors and COPYRIGHT holders")
     )

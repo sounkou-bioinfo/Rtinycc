@@ -763,18 +763,20 @@ sqlite$close_db(db)
 tcc_callback_close(cb)
 ```
 
-### Stackful C coroutines: streaming BCF/VCF records with htslib
+### Stackless C Protothreads: streaming BCF/VCF records with htslib
 
-Rtinycc can JIT-compile native iterators that keep their own C stack between R
-calls.  This demo binds [htslib](https://www.htslib.org/) through a `ucontext`
-coroutine: R resumes the reader until the next `bcf1_t`, then copies the current
-fields into a regular list.  The coroutine stack never calls R's C API; R
-objects are created only after control returns to the normal R stack.
+Rtinycc bundles Adam Dunkels' [Protothreads](http://dunkels.com/adam/pt/) library, allowing you to JIT-compile cross-platform native iterators that yield back to R. This demo binds [htslib](https://www.htslib.org/) using a protothread:
+R resumes the C reader until the next `bcf1_t` is ready, then copies the current fields into a regular R list. The C logic never blocks R's event loop, and R objects are created only after control returns safely to the main R stack.
 
-The demo uses plain VCF text, opened directly by htslib through the same API as
-BCF.
+**Important Protothreads Limitations:**
+Because protothreads are stackless (implemented using Duff's device macro expansions), you must observe a few strict rules in your C code:
 
-```{r ffi-bcf-coroutine-run, eval=.Platform$OS.type != "windows" && nzchar(Sys.which("pkg-config")) && system2("pkg-config", c("--exists", "htslib")) == 0L}
+1. **Local variables are NOT preserved** across `PT_YIELD` calls. Store state in your context struct instead.
+2. **No nested blocking**: You cannot yield from inside a nested C function call.
+3. **No switch statements**: Because Protothreads uses `switch` internally, you cannot use `switch` within a `PT_THREAD` block.
+
+The demo uses plain VCF text, opened directly by htslib through the same API as BCF.
+```{r ffi-bcf-coroutine-run, eval=nzchar(Sys.which("pkg-config")) && system2("pkg-config", c("--exists", "htslib")) == 0L}
 source("scripts/demo-streaming-bcf-reader-ffi.R")
 run_streaming_bcf_demo()
 ```
@@ -805,11 +807,11 @@ knitr::asis_output(knitr::engine_output(
 
 </details>
 
-The embedded htslib coroutine C source is extracted from the script and rendered
+The embedded htslib Protothreads C source is extracted from the script and rendered
 with the same Rtinycc C-code display helper used by the vignettes.
 
 <details>
-<summary>Click to show only the embedded C coroutine / htslib source</summary>
+<summary>Click to show only the embedded C Protothreads / htslib source</summary>
 
 ```{r ffi-bcf-coroutine-c-source, echo=FALSE, results='asis'}
 bcf_demo_lines <- readLines(bcf_demo_path, warn = FALSE)
@@ -829,7 +831,7 @@ if (length(bcf_c_start) == 1L && length(bcf_c_end) == 1L && !is.na(bcf_c_end)) {
 </details>
 
 This points toward a useful separate package idea: a small, generic
-Rtinycc-based C coroutine layer for R.  Such a package could provide reusable
+Rtinycc-based C coroutine/Protothreads layer for R.  Such a package could provide reusable
 pieces like `coro_new()`, `coro_resume()`, finalizer-backed native handles,
 status/error conventions, and helpers for writing streaming bindings around C
 libraries such as htslib, SQLite, parsers, decompression libraries, or network

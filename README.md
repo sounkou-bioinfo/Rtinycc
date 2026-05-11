@@ -178,7 +178,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5809e850d310"
+#> [1] "0x58b1bc4ac900"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -209,11 +209,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5809e850d310>
+#> <pointer: 0x58b1b9da83c0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5809eb307510>
+#> <pointer: 0x58b1b901ae10>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5809e850d310>
+#> <pointer: 0x58b1b9da83c0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -441,7 +441,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5809ec3c29e8 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @58b1bac28850 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -457,7 +457,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5809ec3c29e8 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @58b1bac28850 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -484,15 +484,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5809eab17000>
+#> <pointer: 0x58b1bba400a0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5809eab17000>
+#> <pointer: 0x58b1bba400a0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5809eeda52a0>
+#> <pointer: 0x58b1bd834190>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5809eeda52a0>
+#> <pointer: 0x58b1bd834190>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -537,9 +537,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5809edd584a0>
+#> <pointer: 0x58b1b91f4a70>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5809edd584a0>
+#> <pointer: 0x58b1b91f4a70>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -888,14 +888,27 @@ sqlite$close_db(db)
 tcc_callback_close(cb)
 ```
 
-### Stackful C coroutines: streaming BCF/VCF records with htslib
+### Stackless C Protothreads: streaming BCF/VCF records with htslib
 
-Rtinycc can JIT-compile native iterators that keep their own C stack
-between R calls. This demo binds [htslib](https://www.htslib.org/)
-through a `ucontext` coroutine: R resumes the reader until the next
-`bcf1_t`, then copies the current fields into a regular list. The
-coroutine stack never calls R’s C API; R objects are created only after
-control returns to the normal R stack.
+Rtinycc bundles Adam Dunkels’
+[Protothreads](http://dunkels.com/adam/pt/) library, allowing you to
+JIT-compile cross-platform native iterators that yield back to R. This
+demo binds [htslib](https://www.htslib.org/) using a protothread: R
+resumes the C reader until the next `bcf1_t` is ready, then copies the
+current fields into a regular R list. The C logic never blocks R’s event
+loop, and R objects are created only after control returns safely to the
+main R stack.
+
+**Important Protothreads Limitations:** Because protothreads are
+stackless (implemented using Duff’s device macro expansions), you must
+observe a few strict rules in your C code:
+
+1.  **Local variables are NOT preserved** across `PT_YIELD` calls. Store
+    state in your context struct instead.
+2.  **No nested blocking**: You cannot yield from inside a nested C
+    function call.
+3.  **No switch statements**: Because Protothreads uses `switch`
+    internally, you cannot use `switch` within a `PT_THREAD` block.
 
 The demo uses plain VCF text, opened directly by htslib through the same
 API as BCF.
@@ -904,8 +917,8 @@ API as BCF.
 source("scripts/demo-streaming-bcf-reader-ffi.R")
 run_streaming_bcf_demo()
 #> Rtinycc version: 0.1.11.9000
-#> Demo: stackful coroutine + htslib BCF/VCF API streaming reader
-#> Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.
+#> Demo: stackless Protothreads + htslib BCF/VCF API streaming reader
+#> Note: htslib reads run using Protothreads. Warning: Local C variables are NOT preserved across yields!; R objects are built only after each yield.
 #> 
 #> Input: generated VCF text (opened directly by htslib)
 #> Samples: sample1
@@ -930,9 +943,6 @@ Click to show the complete
 
 suppressPackageStartupMessages(library(Rtinycc))
 
-if (.Platform$OS.type == "windows") {
-  stop("This demo requires a Unix-like platform with ucontext.h", call. = FALSE)
-}
 
 say <- function(...) cat(..., "\n", sep = "")
 
@@ -950,7 +960,7 @@ pkg_config_paths <- function(args, prefix) {
 
 build_streaming_bcf_ffi <- function() {
   code <- '
-#include <ucontext.h>
+#include <rtinycc/pt.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -966,10 +976,7 @@ enum {
 };
 
 typedef struct bcf_stream {
-  ucontext_t ctx;
-  ucontext_t caller;
-  char *stack;
-  size_t stack_size;
+  struct pt pt;
   int yielded;
   int started;
   int done;
@@ -980,6 +987,7 @@ typedef struct bcf_stream {
   bcf1_t *rec;
   char *alts;
   size_t alts_cap;
+  int ret;
 } bcf_stream_t;
 
 static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
@@ -989,51 +997,45 @@ static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
   st->error = 1;
 }
 
-static void bcf_stream_yield(bcf_stream_t *st, int value) {
-  st->yielded = value;
-  if (swapcontext(&st->ctx, &st->caller) != 0) {
-    bcf_stream_set_error(st, "swapcontext() failed while yielding");
-    st->done = 1;
-  }
-}
-
-static void bcf_stream_entry(uint32_t lo, uint32_t hi) {
-  uintptr_t raw = ((uintptr_t) hi << 32) | (uintptr_t) lo;
-  bcf_stream_t *st = (bcf_stream_t *) raw;
-  int ret;
+static int bcf_stream_resume_internal(bcf_stream_t *st) {
+  PT_BEGIN(&st->pt);
 
   if (!st || !st->fp || !st->hdr || !st->rec) {
     if (st) bcf_stream_set_error(st, "stream is not open");
     if (st) st->done = 1;
-    return;
+    PT_EXIT(&st->pt);
   }
 
   for (;;) {
-    ret = bcf_read(st->fp, st->hdr, st->rec);
-    if (ret == 0) {
+    st->ret = bcf_read(st->fp, st->hdr, st->rec);
+    if (st->ret == 0) {
       if (bcf_unpack(st->rec, BCF_UN_STR) < 0) {
         bcf_stream_set_error(st, "bcf_unpack() failed");
         st->done = 1;
-        bcf_stream_yield(st, BCF_STREAM_ERR);
-        return;
+        st->yielded = BCF_STREAM_ERR;
+        PT_EXIT(&st->pt);
       }
-      bcf_stream_yield(st, BCF_STREAM_RECORD);
-      if (st->error || st->done) return;
+      st->yielded = BCF_STREAM_RECORD;
+      PT_YIELD(&st->pt);
+      if (st->error || st->done) PT_EXIT(&st->pt);
     } else {
-      if (ret < -1) {
+      if (st->ret < -1) {
         bcf_stream_set_error(st, "bcf_read() failed");
       }
       st->done = 1;
-      return;
+      st->yielded = BCF_STREAM_EOF;
+      PT_EXIT(&st->pt);
     }
   }
+
+  PT_END(&st->pt);
 }
 
 void *bcf_stream_open(const char *path) {
   bcf_stream_t *st = (bcf_stream_t *) calloc(1, sizeof(bcf_stream_t));
-  uintptr_t raw;
-
   if (!st) return NULL;
+
+  PT_INIT(&st->pt);
 
   if (!path || !path[0]) {
     bcf_stream_set_error(st, "path is empty");
@@ -1062,33 +1064,6 @@ void *bcf_stream_open(const char *path) {
     return st;
   }
 
-  st->stack_size = (size_t) (1 << 20);
-  st->stack = (char *) malloc(st->stack_size);
-  if (!st->stack) {
-    bcf_stream_set_error(st, "failed to allocate coroutine stack");
-    st->done = 1;
-    return st;
-  }
-
-  if (getcontext(&st->ctx) != 0) {
-    bcf_stream_set_error(st, "getcontext() failed");
-    st->done = 1;
-    return st;
-  }
-
-  st->ctx.uc_stack.ss_sp = st->stack;
-  st->ctx.uc_stack.ss_size = st->stack_size;
-  st->ctx.uc_link = &st->caller;
-
-  raw = (uintptr_t) st;
-  makecontext(
-    &st->ctx,
-    (void (*) (void)) bcf_stream_entry,
-    2,
-    (uint32_t) raw,
-    (uint32_t) (raw >> 32)
-  );
-
   return st;
 }
 
@@ -1100,11 +1075,7 @@ int bcf_stream_resume(void *ptr) {
   if (st->done) return BCF_STREAM_EOF;
 
   st->started = 1;
-  if (swapcontext(&st->caller, &st->ctx) != 0) {
-    bcf_stream_set_error(st, "swapcontext() failed while resuming");
-    st->done = 1;
-    return BCF_STREAM_ERR;
-  }
+  bcf_stream_resume_internal(st);
 
   if (st->error) return BCF_STREAM_ERR;
   if (st->done) return BCF_STREAM_EOF;
@@ -1221,13 +1192,13 @@ void bcf_stream_close(void *ptr) {
   if (st->hdr) bcf_hdr_destroy(st->hdr);
   if (st->fp) hts_close(st->fp);
   free(st->alts);
-  free(st->stack);
   memset(st, 0, sizeof(bcf_stream_t));
   free(st);
 }
 '
 
   ffi <- tcc_ffi()
+  ffi <- tcc_include(ffi, system.file("include", package = "Rtinycc"))
 
   for (path in pkg_config_paths("--cflags-only-I", "-I")) {
     ffi <- tcc_include(ffi, path)
@@ -1375,8 +1346,8 @@ make_demo_vcf <- function() {
 
 run_streaming_bcf_demo <- function() {
   say("Rtinycc version: ", as.character(utils::packageVersion("Rtinycc")))
-  say("Demo: stackful coroutine + htslib BCF/VCF API streaming reader")
-  say("Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.")
+  say("Demo: stackless Protothreads + htslib BCF/VCF API streaming reader")
+  say("Note: htslib reads run using Protothreads. Warning: Local C variables are NOT preserved across yields!; R objects are built only after each yield.")
 
   ffi <- build_streaming_bcf_ffi()
   path <- make_demo_vcf()
@@ -1418,17 +1389,17 @@ if (identical(sys.nframe(), 0L)) {
 
 </details>
 
-The embedded htslib coroutine C source is extracted from the script and
-rendered with the same Rtinycc C-code display helper used by the
+The embedded htslib Protothreads C source is extracted from the script
+and rendered with the same Rtinycc C-code display helper used by the
 vignettes.
 
 <details>
 <summary>
-Click to show only the embedded C coroutine / htslib source
+Click to show only the embedded C Protothreads / htslib source
 </summary>
 
 ``` c
-#include <ucontext.h>
+#include <rtinycc/pt.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1444,10 +1415,7 @@ enum {
 };
 
 typedef struct bcf_stream {
-  ucontext_t ctx;
-  ucontext_t caller;
-  char *stack;
-  size_t stack_size;
+  struct pt pt;
   int yielded;
   int started;
   int done;
@@ -1458,6 +1426,7 @@ typedef struct bcf_stream {
   bcf1_t *rec;
   char *alts;
   size_t alts_cap;
+  int ret;
 } bcf_stream_t;
 
 static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
@@ -1467,51 +1436,45 @@ static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
   st->error = 1;
 }
 
-static void bcf_stream_yield(bcf_stream_t *st, int value) {
-  st->yielded = value;
-  if (swapcontext(&st->ctx, &st->caller) != 0) {
-    bcf_stream_set_error(st, "swapcontext() failed while yielding");
-    st->done = 1;
-  }
-}
-
-static void bcf_stream_entry(uint32_t lo, uint32_t hi) {
-  uintptr_t raw = ((uintptr_t) hi << 32) | (uintptr_t) lo;
-  bcf_stream_t *st = (bcf_stream_t *) raw;
-  int ret;
+static int bcf_stream_resume_internal(bcf_stream_t *st) {
+  PT_BEGIN(&st->pt);
 
   if (!st || !st->fp || !st->hdr || !st->rec) {
     if (st) bcf_stream_set_error(st, "stream is not open");
     if (st) st->done = 1;
-    return;
+    PT_EXIT(&st->pt);
   }
 
   for (;;) {
-    ret = bcf_read(st->fp, st->hdr, st->rec);
-    if (ret == 0) {
+    st->ret = bcf_read(st->fp, st->hdr, st->rec);
+    if (st->ret == 0) {
       if (bcf_unpack(st->rec, BCF_UN_STR) < 0) {
         bcf_stream_set_error(st, "bcf_unpack() failed");
         st->done = 1;
-        bcf_stream_yield(st, BCF_STREAM_ERR);
-        return;
+        st->yielded = BCF_STREAM_ERR;
+        PT_EXIT(&st->pt);
       }
-      bcf_stream_yield(st, BCF_STREAM_RECORD);
-      if (st->error || st->done) return;
+      st->yielded = BCF_STREAM_RECORD;
+      PT_YIELD(&st->pt);
+      if (st->error || st->done) PT_EXIT(&st->pt);
     } else {
-      if (ret < -1) {
+      if (st->ret < -1) {
         bcf_stream_set_error(st, "bcf_read() failed");
       }
       st->done = 1;
-      return;
+      st->yielded = BCF_STREAM_EOF;
+      PT_EXIT(&st->pt);
     }
   }
+
+  PT_END(&st->pt);
 }
 
 void *bcf_stream_open(const char *path) {
   bcf_stream_t *st = (bcf_stream_t *) calloc(1, sizeof(bcf_stream_t));
-  uintptr_t raw;
-
   if (!st) return NULL;
+
+  PT_INIT(&st->pt);
 
   if (!path || !path[0]) {
     bcf_stream_set_error(st, "path is empty");
@@ -1540,33 +1503,6 @@ void *bcf_stream_open(const char *path) {
     return st;
   }
 
-  st->stack_size = (size_t) (1 << 20);
-  st->stack = (char *) malloc(st->stack_size);
-  if (!st->stack) {
-    bcf_stream_set_error(st, "failed to allocate coroutine stack");
-    st->done = 1;
-    return st;
-  }
-
-  if (getcontext(&st->ctx) != 0) {
-    bcf_stream_set_error(st, "getcontext() failed");
-    st->done = 1;
-    return st;
-  }
-
-  st->ctx.uc_stack.ss_sp = st->stack;
-  st->ctx.uc_stack.ss_size = st->stack_size;
-  st->ctx.uc_link = &st->caller;
-
-  raw = (uintptr_t) st;
-  makecontext(
-    &st->ctx,
-    (void (*) (void)) bcf_stream_entry,
-    2,
-    (uint32_t) raw,
-    (uint32_t) (raw >> 32)
-  );
-
   return st;
 }
 
@@ -1578,11 +1514,7 @@ int bcf_stream_resume(void *ptr) {
   if (st->done) return BCF_STREAM_EOF;
 
   st->started = 1;
-  if (swapcontext(&st->caller, &st->ctx) != 0) {
-    bcf_stream_set_error(st, "swapcontext() failed while resuming");
-    st->done = 1;
-    return BCF_STREAM_ERR;
-  }
+  bcf_stream_resume_internal(st);
 
   if (st->error) return BCF_STREAM_ERR;
   if (st->done) return BCF_STREAM_EOF;
@@ -1699,7 +1631,6 @@ void bcf_stream_close(void *ptr) {
   if (st->hdr) bcf_hdr_destroy(st->hdr);
   if (st->fp) hts_close(st->fp);
   free(st->alts);
-  free(st->stack);
   memset(st, 0, sizeof(bcf_stream_t));
   free(st);
 }
@@ -1708,13 +1639,14 @@ void bcf_stream_close(void *ptr) {
 </details>
 
 This points toward a useful separate package idea: a small, generic
-Rtinycc-based C coroutine layer for R. Such a package could provide
-reusable pieces like `coro_new()`, `coro_resume()`, finalizer-backed
-native handles, status/error conventions, and helpers for writing
-streaming bindings around C libraries such as htslib, SQLite, parsers,
-decompression libraries, or network clients. R would see ordinary
-iterators; C would keep natural blocking or recursive control flow
-without rewriting everything as a heap-allocated state machine.
+Rtinycc-based C coroutine/Protothreads layer for R. Such a package could
+provide reusable pieces like `coro_new()`, `coro_resume()`,
+finalizer-backed native handles, status/error conventions, and helpers
+for writing streaming bindings around C libraries such as htslib,
+SQLite, parsers, decompression libraries, or network clients. R would
+see ordinary iterators; C would keep natural blocking or recursive
+control flow without rewriting everything as a heap-allocated state
+machine.
 
 ## Header parsing with treesitter.c
 
@@ -1768,7 +1700,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5809ea8028d0>
+#> <pointer: 0x58b1bd549dd0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1883,13 +1815,13 @@ if (Sys.info()[["sysname"]] == "Linux") {
 }
 #> CSV size: 2.75 MB
 #> # A tibble: 5 × 13
-#>   expression      min median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
-#>   <bch:expr>  <bch:t> <bch:>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_table… 52.27ms 52.3ms      19.1    6.33MB     19.1     1     1     52.3ms
-#> 2 vroom_df_a…  6.48ms  6.5ms     154.     1.22MB      0       2     0       13ms
-#> 3 vroom_df_a…  6.43ms  6.6ms     152.     2.44MB      0       2     0     13.2ms
-#> 4 c_read_df   20.84ms 21.1ms      47.3    1.22MB      0       2     0     42.2ms
-#> 5 io_uring_df 20.13ms 20.2ms      49.6    1.22MB      0       2     0     40.3ms
+#>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
+#>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
+#> 1 read_tabl… 50.17ms 50.17ms      19.9    6.33MB     19.9     1     1     50.2ms
+#> 2 vroom_df_…  6.54ms  6.94ms     144.     1.22MB      0       2     0     13.9ms
+#> 3 vroom_df_…  6.72ms  6.85ms     146.     2.44MB      0       2     0     13.7ms
+#> 4 c_read_df  21.04ms 21.21ms      47.1    1.22MB      0       2     0     42.4ms
+#> 5 io_uring_… 20.76ms 20.79ms      48.1    1.22MB      0       2     0     41.6ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1991,9 +1923,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5809e904ffd0>
+#> <pointer: 0x58b1b756bea0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5809e904ffd0>
+#> <pointer: 0x58b1b756bea0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

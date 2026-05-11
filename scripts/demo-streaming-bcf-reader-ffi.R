@@ -2,9 +2,6 @@
 
 suppressPackageStartupMessages(library(Rtinycc))
 
-if (.Platform$OS.type == "windows") {
-  stop("This demo requires a Unix-like platform with ucontext.h", call. = FALSE)
-}
 
 say <- function(...) cat(..., "\n", sep = "")
 
@@ -22,7 +19,7 @@ pkg_config_paths <- function(args, prefix) {
 
 build_streaming_bcf_ffi <- function() {
   code <- '
-#include <ucontext.h>
+#include <rtinycc/pt.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,10 +35,7 @@ enum {
 };
 
 typedef struct bcf_stream {
-  ucontext_t ctx;
-  ucontext_t caller;
-  char *stack;
-  size_t stack_size;
+  struct pt pt;
   int yielded;
   int started;
   int done;
@@ -52,6 +46,7 @@ typedef struct bcf_stream {
   bcf1_t *rec;
   char *alts;
   size_t alts_cap;
+  int ret;
 } bcf_stream_t;
 
 static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
@@ -61,51 +56,45 @@ static void bcf_stream_set_error(bcf_stream_t *st, const char *msg) {
   st->error = 1;
 }
 
-static void bcf_stream_yield(bcf_stream_t *st, int value) {
-  st->yielded = value;
-  if (swapcontext(&st->ctx, &st->caller) != 0) {
-    bcf_stream_set_error(st, "swapcontext() failed while yielding");
-    st->done = 1;
-  }
-}
-
-static void bcf_stream_entry(uint32_t lo, uint32_t hi) {
-  uintptr_t raw = ((uintptr_t) hi << 32) | (uintptr_t) lo;
-  bcf_stream_t *st = (bcf_stream_t *) raw;
-  int ret;
+static int bcf_stream_resume_internal(bcf_stream_t *st) {
+  PT_BEGIN(&st->pt);
 
   if (!st || !st->fp || !st->hdr || !st->rec) {
     if (st) bcf_stream_set_error(st, "stream is not open");
     if (st) st->done = 1;
-    return;
+    PT_EXIT(&st->pt);
   }
 
   for (;;) {
-    ret = bcf_read(st->fp, st->hdr, st->rec);
-    if (ret == 0) {
+    st->ret = bcf_read(st->fp, st->hdr, st->rec);
+    if (st->ret == 0) {
       if (bcf_unpack(st->rec, BCF_UN_STR) < 0) {
         bcf_stream_set_error(st, "bcf_unpack() failed");
         st->done = 1;
-        bcf_stream_yield(st, BCF_STREAM_ERR);
-        return;
+        st->yielded = BCF_STREAM_ERR;
+        PT_EXIT(&st->pt);
       }
-      bcf_stream_yield(st, BCF_STREAM_RECORD);
-      if (st->error || st->done) return;
+      st->yielded = BCF_STREAM_RECORD;
+      PT_YIELD(&st->pt);
+      if (st->error || st->done) PT_EXIT(&st->pt);
     } else {
-      if (ret < -1) {
+      if (st->ret < -1) {
         bcf_stream_set_error(st, "bcf_read() failed");
       }
       st->done = 1;
-      return;
+      st->yielded = BCF_STREAM_EOF;
+      PT_EXIT(&st->pt);
     }
   }
+
+  PT_END(&st->pt);
 }
 
 void *bcf_stream_open(const char *path) {
   bcf_stream_t *st = (bcf_stream_t *) calloc(1, sizeof(bcf_stream_t));
-  uintptr_t raw;
-
   if (!st) return NULL;
+
+  PT_INIT(&st->pt);
 
   if (!path || !path[0]) {
     bcf_stream_set_error(st, "path is empty");
@@ -134,33 +123,6 @@ void *bcf_stream_open(const char *path) {
     return st;
   }
 
-  st->stack_size = (size_t) (1 << 20);
-  st->stack = (char *) malloc(st->stack_size);
-  if (!st->stack) {
-    bcf_stream_set_error(st, "failed to allocate coroutine stack");
-    st->done = 1;
-    return st;
-  }
-
-  if (getcontext(&st->ctx) != 0) {
-    bcf_stream_set_error(st, "getcontext() failed");
-    st->done = 1;
-    return st;
-  }
-
-  st->ctx.uc_stack.ss_sp = st->stack;
-  st->ctx.uc_stack.ss_size = st->stack_size;
-  st->ctx.uc_link = &st->caller;
-
-  raw = (uintptr_t) st;
-  makecontext(
-    &st->ctx,
-    (void (*) (void)) bcf_stream_entry,
-    2,
-    (uint32_t) raw,
-    (uint32_t) (raw >> 32)
-  );
-
   return st;
 }
 
@@ -172,11 +134,7 @@ int bcf_stream_resume(void *ptr) {
   if (st->done) return BCF_STREAM_EOF;
 
   st->started = 1;
-  if (swapcontext(&st->caller, &st->ctx) != 0) {
-    bcf_stream_set_error(st, "swapcontext() failed while resuming");
-    st->done = 1;
-    return BCF_STREAM_ERR;
-  }
+  bcf_stream_resume_internal(st);
 
   if (st->error) return BCF_STREAM_ERR;
   if (st->done) return BCF_STREAM_EOF;
@@ -293,13 +251,13 @@ void bcf_stream_close(void *ptr) {
   if (st->hdr) bcf_hdr_destroy(st->hdr);
   if (st->fp) hts_close(st->fp);
   free(st->alts);
-  free(st->stack);
   memset(st, 0, sizeof(bcf_stream_t));
   free(st);
 }
 '
 
   ffi <- tcc_ffi()
+  ffi <- tcc_include(ffi, system.file("include", package = "Rtinycc"))
 
   for (path in pkg_config_paths("--cflags-only-I", "-I")) {
     ffi <- tcc_include(ffi, path)
@@ -447,8 +405,8 @@ make_demo_vcf <- function() {
 
 run_streaming_bcf_demo <- function() {
   say("Rtinycc version: ", as.character(utils::packageVersion("Rtinycc")))
-  say("Demo: stackful coroutine + htslib BCF/VCF API streaming reader")
-  say("Note: htslib reads run on the alternate coroutine stack; R objects are built only after each yield.")
+  say("Demo: stackless Protothreads + htslib BCF/VCF API streaming reader")
+  say("Note: htslib reads run using Protothreads. Warning: Local C variables are NOT preserved across yields!; R objects are built only after each yield.")
 
   ffi <- build_streaming_bcf_ffi()
   path <- make_demo_vcf()
