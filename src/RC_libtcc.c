@@ -1137,134 +1137,33 @@ static inline unsigned char *ptr_at(SEXP ptr, SEXP offset) {
     return base + rtinycc_offset_to_size_t(offset);
 }
 
-/* --- scalar reads -------------------------------------------------------- */
+/* --- scalar reads & writes ----------------------------------------------- */
 
-/**
- * Read int8 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_i8(SEXP ptr, SEXP offset) {
-    int8_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarInteger((int)v);
+#define DEFINE_READ_SCALAR(FUN_NAME, C_TYPE, R_BOX_FUN, CAST_TYPE) \
+SEXP FUN_NAME(SEXP ptr, SEXP offset) { \
+    C_TYPE v; \
+    memcpy(&v, ptr_at(ptr, offset), sizeof(v)); \
+    return R_BOX_FUN((CAST_TYPE)v); \
 }
 
-/**
- * Read uint8 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_u8_typed(SEXP ptr, SEXP offset) {
-    uint8_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarInteger((int)v);
+#define DEFINE_WRITE_SCALAR(FUN_NAME, C_TYPE, R_UNBOX_FUN) \
+SEXP FUN_NAME(SEXP ptr, SEXP offset, SEXP value) { \
+    C_TYPE v = (C_TYPE)R_UNBOX_FUN(value); \
+    memcpy(ptr_at(ptr, offset), &v, sizeof(v)); \
+    return R_NilValue; \
 }
 
-/**
- * Read int16 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_i16(SEXP ptr, SEXP offset) {
-    int16_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarInteger((int)v);
-}
+DEFINE_READ_SCALAR(RC_read_i8, int8_t, Rf_ScalarInteger, int)
+DEFINE_READ_SCALAR(RC_read_u8_typed, uint8_t, Rf_ScalarInteger, int)
+DEFINE_READ_SCALAR(RC_read_i16, int16_t, Rf_ScalarInteger, int)
+DEFINE_READ_SCALAR(RC_read_u16, uint16_t, Rf_ScalarInteger, int)
+DEFINE_READ_SCALAR(RC_read_i32_typed, int32_t, Rf_ScalarInteger, int)
+DEFINE_READ_SCALAR(RC_read_u32, uint32_t, Rf_ScalarReal, double)
+DEFINE_READ_SCALAR(RC_read_i64, int64_t, Rf_ScalarReal, double)
+DEFINE_READ_SCALAR(RC_read_u64, uint64_t, Rf_ScalarReal, double)
+DEFINE_READ_SCALAR(RC_read_f32, float, Rf_ScalarReal, double)
+DEFINE_READ_SCALAR(RC_read_f64_typed, double, Rf_ScalarReal, double)
 
-/**
- * Read uint16 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_u16(SEXP ptr, SEXP offset) {
-    uint16_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarInteger((int)v);
-}
-
-/**
- * Read int32 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_i32_typed(SEXP ptr, SEXP offset) {
-    int32_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarInteger(v);
-}
-
-/**
- * Read uint32 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_u32(SEXP ptr, SEXP offset) {
-    uint32_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarReal((double)v);
-}
-
-/**
- * Read int64 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_i64(SEXP ptr, SEXP offset) {
-    int64_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarReal((double)v);
-}
-
-/**
- * Read uint64 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_u64(SEXP ptr, SEXP offset) {
-    uint64_t v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarReal((double)v);
-}
-
-/**
- * Read float32 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_f32(SEXP ptr, SEXP offset) {
-    float v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarReal((double)v);
-}
-
-/**
- * Read float64 at byte offset.
- * Ownership: returns R-managed scalar.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_read_f64_typed(SEXP ptr, SEXP offset) {
-    double v;
-    memcpy(&v, ptr_at(ptr, offset), sizeof(v));
-    return Rf_ScalarReal(v);
-}
-
-/**
- * Read a pointer value at byte offset (dereference void**).
- * Ownership: returns borrowed external pointer.
- * Allocation: external pointer only.
- * Protection: none.
- */
 /* Read a pointer value at byte offset (dereference void**). */
 SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
     void *v;
@@ -1272,134 +1171,18 @@ SEXP RC_read_ptr(SEXP ptr, SEXP offset) {
     return RC_make_unowned_ptr(v, Rf_install("rtinycc_borrowed"));
 }
 
-/* --- scalar writes ------------------------------------------------------- */
+DEFINE_WRITE_SCALAR(RC_write_i8, int8_t, Rf_asInteger)
+DEFINE_WRITE_SCALAR(RC_write_u8, uint8_t, Rf_asInteger)
+DEFINE_WRITE_SCALAR(RC_write_i16, int16_t, Rf_asInteger)
+DEFINE_WRITE_SCALAR(RC_write_u16, uint16_t, Rf_asInteger)
+DEFINE_WRITE_SCALAR(RC_write_i32, int32_t, Rf_asInteger)
+DEFINE_WRITE_SCALAR(RC_write_u32, uint32_t, rtinycc_as_u32_value)
+DEFINE_WRITE_SCALAR(RC_write_i64, int64_t, rtinycc_as_i64_value)
+DEFINE_WRITE_SCALAR(RC_write_u64, uint64_t, rtinycc_as_u64_value)
+DEFINE_WRITE_SCALAR(RC_write_f32, float, Rf_asReal)
+DEFINE_WRITE_SCALAR(RC_write_f64, double, Rf_asReal)
 
-/**
- * Write int8 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_i8(SEXP ptr, SEXP offset, SEXP value) {
-    int8_t v = (int8_t)Rf_asInteger(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write uint8 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_u8(SEXP ptr, SEXP offset, SEXP value) {
-    uint8_t v = (uint8_t)Rf_asInteger(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write int16 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_i16(SEXP ptr, SEXP offset, SEXP value) {
-    int16_t v = (int16_t)Rf_asInteger(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write uint16 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_u16(SEXP ptr, SEXP offset, SEXP value) {
-    uint16_t v = (uint16_t)Rf_asInteger(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write int32 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_i32(SEXP ptr, SEXP offset, SEXP value) {
-    int32_t v = (int32_t)Rf_asInteger(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write uint32 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_u32(SEXP ptr, SEXP offset, SEXP value) {
-    uint32_t v = rtinycc_as_u32_value(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write int64 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_i64(SEXP ptr, SEXP offset, SEXP value) {
-    int64_t v = rtinycc_as_i64_value(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write uint64 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_u64(SEXP ptr, SEXP offset, SEXP value) {
-    uint64_t v = rtinycc_as_u64_value(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write float32 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_f32(SEXP ptr, SEXP offset, SEXP value) {
-    float v = (float)Rf_asReal(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write float64 at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
-SEXP RC_write_f64(SEXP ptr, SEXP offset, SEXP value) {
-    double v = Rf_asReal(value);
-    memcpy(ptr_at(ptr, offset), &v, sizeof(v));
-    return R_NilValue;
-}
-
-/**
- * Write pointer value at byte offset.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
- */
+/* Write pointer value at byte offset. */
 SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value) {
     void *v = NULL;
     if (TYPEOF(value) == EXTPTRSXP) {
