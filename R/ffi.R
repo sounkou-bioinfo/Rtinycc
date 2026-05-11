@@ -608,7 +608,7 @@ tcc_options <- function(ffi, options) {
 }
 
 rtinycc_exact_library_name <- function(path) {
-  str_interp(":{basename(path}"))
+  str_interp(":{basename(path)}")
 }
 
 rtinycc_add_library_file <- function(ffi, path) {
@@ -2171,7 +2171,7 @@ tcc_link <- function(
     state = state,
     c_code = c_code,
     libraries = ffi$libraries,
-    target = str_interp("FFI bindings for {basename(path}"))
+    target = str_interp("FFI bindings for {basename(path)}")
   )
 
   # Create compiled object

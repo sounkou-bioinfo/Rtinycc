@@ -97,7 +97,7 @@ callback_trampoline_name <- function(wrapper_name, arg_index) {
 }
 
 variadic_wrapper_name <- function(wrapper_name, n_varargs) {
-  str_interp("{wrapper_name}__v{as.integer(n_varargs}"))
+  str_interp("{wrapper_name}__v{as.integer(n_varargs)}")
 }
 
 variadic_type_token <- function(x) {
