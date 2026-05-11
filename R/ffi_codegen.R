@@ -37,7 +37,7 @@ rtinycc_return_type_info <- function(x) {
 # Generate C code to extract R SEXP to C type
 generate_c_input <- function(arg_name, r_name, ffi_type) {
   type_name <- if (is_rtinycc_ffi_type(ffi_type)) ffi_type$name else ffi_type
-  check_ffi_type(type_name, paste0("argument '", arg_name, "'"))
+  check_ffi_type(type_name, str_interp("argument '{arg_name}'"))
   special <- ffi_input_special_rule(type_name, arg_name, r_name)
   if (!is.null(special)) {
     return(special)
@@ -93,11 +93,11 @@ generate_c_return <- function(value_expr, ffi_type, arg_names = character()) {
 
 # Callback helper: generate a unique trampoline name per wrapper argument
 callback_trampoline_name <- function(wrapper_name, arg_index) {
-  paste0("trampoline_", wrapper_name, "_arg", arg_index)
+  str_interp("trampoline_{wrapper_name}_arg{arg_index}")
 }
 
 variadic_wrapper_name <- function(wrapper_name, n_varargs) {
-  paste0(wrapper_name, "__v", as.integer(n_varargs))
+  str_interp("{wrapper_name}__v{as.integer(n_varargs}"))
 }
 
 variadic_type_token <- function(x) {
@@ -214,7 +214,7 @@ generate_c_wrapper <- function(
           )
         }
         tramp_name <- callback_trampoline_name(
-          paste0("R_wrap_", symbol_name),
+          str_interp("R_wrap_{symbol_name}"),
           i
         )
         input_lines <- c(
@@ -332,7 +332,7 @@ generate_async_exec_wrapper <- function(
       type_info <- if (is_rtinycc_ffi_type(ffi_type)) {
         ffi_type
       } else {
-        check_ffi_type(ffi_type, paste0("argument '", aname, "'"))
+        check_ffi_type(ffi_type, str_interp("argument '{aname}'"))
       }
       struct_fields <- c(
         struct_fields,
@@ -347,8 +347,8 @@ generate_async_exec_wrapper <- function(
     )
   }
 
-  struct_name <- paste0("_async_ctx_", wrapper_name)
-  thread_fn_name <- paste0("_async_fn_", wrapper_name)
+  struct_name <- str_interp("_async_ctx_{wrapper_name}")
+  thread_fn_name <- str_interp("_async_fn_{wrapper_name}")
 
   # --- Build struct definition ---
   struct_code <- c(
@@ -458,7 +458,7 @@ generate_external_declarations <- function(symbols) {
         arg_info <- lapply(
           arg_types,
           check_ffi_type,
-          context = paste0("symbol '", sym_name, "' argument")
+          context = str_interp("symbol '{sym_name}' argument")
         )
       }
       arg_decls <- paste(
@@ -500,7 +500,7 @@ generate_wrappers <- function(
 
   for (sym_name in names(symbols)) {
     sym <- symbols[[sym_name]]
-    base_wrapper_name <- paste0(prefix, sym_name)
+    base_wrapper_name <- str_interp("{prefix}{sym_name}")
 
     if (isTRUE(sym$variadic)) {
       vararg_mode <- sym$varargs_mode %||% "prefix"
@@ -1521,7 +1521,7 @@ generate_callback_trampolines <- function(symbols) {
             call. = FALSE
           )
         }
-        wrapper_name <- paste0("R_wrap_", sym_name)
+        wrapper_name <- str_interp("R_wrap_{sym_name}")
         tramp_name <- callback_trampoline_name(wrapper_name, i)
         if (is_callback_async_type(ffi_type)) {
           needs_async <- TRUE

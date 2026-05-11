@@ -42,7 +42,7 @@ new_rtinycc_bound_symbol <- function(
   classes <- c("rtinycc_bound_symbol", "rtinycc_symbol_spec")
   if (!is.null(helper_kind)) {
     classes <- c(
-      paste0("rtinycc_helper_symbol_", helper_kind),
+      str_interp("rtinycc_helper_symbol_{helper_kind}"),
       "rtinycc_helper_symbol",
       classes
     )
@@ -211,7 +211,7 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
   arg_type_info <- lapply(seq_along(sym$args), function(i) {
     check_ffi_type(
       sym$args[[i]],
-      paste0("symbol '", sym_name, "' argument ", i)
+      str_interp("symbol '{sym_name}' argument {i}")
     )
   })
 
@@ -256,7 +256,7 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
     ret_type <- sym$returns$type
     ret_info <- check_ffi_type(
       ret_type,
-      paste0("symbol '", sym_name, "' return")
+      str_interp("symbol '{sym_name}' return")
     )
     if (!is.null(ret_info$kind) && ret_info$kind == "array") {
       if (is.null(sym$returns$length_arg)) {
@@ -310,7 +310,7 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
   } else {
     ret_info <- check_ffi_type(
       sym$returns,
-      paste0("symbol '", sym_name, "' return")
+      str_interp("symbol '{sym_name}' return")
     )
     return_spec <- new_rtinycc_symbol_return_spec(
       type = sym$returns,
@@ -334,7 +334,7 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
         vtype <- sym$varargs_types[[i]]
         vinfo <- check_ffi_type(
           vtype,
-          paste0("symbol '", sym_name, "' varargs_types ", i)
+          str_interp("symbol '{sym_name}' varargs_types {i}")
         )
         if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
           stop(
@@ -443,7 +443,7 @@ as_rtinycc_bound_symbol <- function(sym_name, sym) {
         vtype <- sym$varargs[[i]]
         vinfo <- check_ffi_type(
           vtype,
-          paste0("symbol '", sym_name, "' vararg ", i)
+          str_interp("symbol '{sym_name}' vararg {i}")
         )
         if (!is.null(vinfo$kind) && vinfo$kind != "scalar") {
           stop(
@@ -608,7 +608,7 @@ tcc_options <- function(ffi, options) {
 }
 
 rtinycc_exact_library_name <- function(path) {
-  paste0(":", basename(path))
+  str_interp(":{basename(path}"))
 }
 
 rtinycc_add_library_file <- function(ffi, path) {
@@ -1071,14 +1071,14 @@ tcc_compiled_object <- function(
       # new, free
       helper_names <- c(
         helper_names,
-        paste0("struct_", struct_name, "_new"),
-        paste0("struct_", struct_name, "_free")
+        str_interp("struct_{struct_name}_new"),
+        str_interp("struct_{struct_name}_free")
       )
-      helper_specs[[paste0("struct_", struct_name, "_new")]] <- list(
+      helper_specs[[str_interp("struct_{struct_name}_new")]] <- list(
         args = list(),
         returns = "sexp"
       )
-      helper_specs[[paste0("struct_", struct_name, "_free")]] <- list(
+      helper_specs[[str_interp("struct_{struct_name}_free")]] <- list(
         args = list("sexp"),
         returns = "sexp"
       )
@@ -1089,7 +1089,7 @@ tcc_compiled_object <- function(
 
         helper_names <- c(
           helper_names,
-          paste0("struct_", struct_name, "_get_", field_name)
+          str_interp("struct_{struct_name}_get_{field_name}")
         )
         helper_specs[[paste0(
           "struct_",
@@ -1113,8 +1113,8 @@ tcc_compiled_object <- function(
         if (is_array) {
           helper_names <- c(
             helper_names,
-            paste0("struct_", struct_name, "_get_", field_name, "_elt"),
-            paste0("struct_", struct_name, "_set_", field_name, "_elt")
+            str_interp("struct_{struct_name}_get_{field_name}_elt"),
+            str_interp("struct_{struct_name}_set_{field_name}_elt")
           )
           helper_specs[[paste0(
             "struct_",
@@ -1139,7 +1139,7 @@ tcc_compiled_object <- function(
         } else {
           helper_names <- c(
             helper_names,
-            paste0("struct_", struct_name, "_set_", field_name)
+            str_interp("struct_{struct_name}_set_{field_name}")
           )
           helper_specs[[paste0(
             "struct_",
@@ -1166,7 +1166,7 @@ tcc_compiled_object <- function(
         for (member_name in container_of[[struct_name]]) {
           helper_names <- c(
             helper_names,
-            paste0("struct_", struct_name, "_from_", member_name)
+            str_interp("struct_{struct_name}_from_{member_name}")
           )
           helper_specs[[paste0(
             "struct_",
@@ -1184,7 +1184,7 @@ tcc_compiled_object <- function(
         for (field_name in field_addr[[struct_name]]) {
           helper_names <- c(
             helper_names,
-            paste0("struct_", struct_name, "_", field_name, "_addr")
+            str_interp("struct_{struct_name}_{field_name}_addr")
           )
           helper_specs[[paste0(
             "struct_",
@@ -1202,14 +1202,14 @@ tcc_compiled_object <- function(
       if (!is.null(struct_raw_access) && struct_name %in% struct_raw_access) {
         helper_names <- c(
           helper_names,
-          paste0("struct_", struct_name, "_get_raw"),
-          paste0("struct_", struct_name, "_set_raw")
+          str_interp("struct_{struct_name}_get_raw"),
+          str_interp("struct_{struct_name}_set_raw")
         )
-        helper_specs[[paste0("struct_", struct_name, "_get_raw")]] <- list(
+        helper_specs[[str_interp("struct_{struct_name}_get_raw")]] <- list(
           args = list("sexp", "i32"),
           returns = "sexp"
         )
-        helper_specs[[paste0("struct_", struct_name, "_set_raw")]] <- list(
+        helper_specs[[str_interp("struct_{struct_name}_set_raw")]] <- list(
           args = list("sexp", "raw"),
           returns = "sexp"
         )
@@ -1218,14 +1218,14 @@ tcc_compiled_object <- function(
       if (!is.null(introspect) && introspect) {
         helper_names <- c(
           helper_names,
-          paste0("struct_", struct_name, "_sizeof"),
-          paste0("struct_", struct_name, "_alignof")
+          str_interp("struct_{struct_name}_sizeof"),
+          str_interp("struct_{struct_name}_alignof")
         )
-        helper_specs[[paste0("struct_", struct_name, "_sizeof")]] <- list(
+        helper_specs[[str_interp("struct_{struct_name}_sizeof")]] <- list(
           args = list(),
           returns = "sexp"
         )
-        helper_specs[[paste0("struct_", struct_name, "_alignof")]] <- list(
+        helper_specs[[str_interp("struct_{struct_name}_alignof")]] <- list(
           args = list(),
           returns = "sexp"
         )
@@ -1240,14 +1240,14 @@ tcc_compiled_object <- function(
       # new, free
       helper_names <- c(
         helper_names,
-        paste0("union_", union_name, "_new"),
-        paste0("union_", union_name, "_free")
+        str_interp("union_{union_name}_new"),
+        str_interp("union_{union_name}_free")
       )
-      helper_specs[[paste0("union_", union_name, "_new")]] <- list(
+      helper_specs[[str_interp("union_{union_name}_new")]] <- list(
         args = list(),
         returns = "sexp"
       )
-      helper_specs[[paste0("union_", union_name, "_free")]] <- list(
+      helper_specs[[str_interp("union_{union_name}_free")]] <- list(
         args = list("sexp"),
         returns = "sexp"
       )
@@ -1259,9 +1259,9 @@ tcc_compiled_object <- function(
 
         helper_names <- c(
           helper_names,
-          paste0("union_", union_name, "_get_", mem_name)
+          str_interp("union_{union_name}_get_{mem_name}")
         )
-        helper_specs[[paste0("union_", union_name, "_get_", mem_name)]] <- c(
+        helper_specs[[str_interp("union_{union_name}_get_{mem_name}")]] <- c(
           list(
             args = list("sexp"),
             returns = "sexp"
@@ -1276,7 +1276,7 @@ tcc_compiled_object <- function(
         if (!is_nested_struct) {
           helper_names <- c(
             helper_names,
-            paste0("union_", union_name, "_set_", mem_name)
+            str_interp("union_{union_name}_set_{mem_name}")
           )
           helper_specs[[paste0(
             "union_",
@@ -1293,14 +1293,14 @@ tcc_compiled_object <- function(
       if (!is.null(introspect) && introspect) {
         helper_names <- c(
           helper_names,
-          paste0("union_", union_name, "_sizeof"),
-          paste0("union_", union_name, "_alignof")
+          str_interp("union_{union_name}_sizeof"),
+          str_interp("union_{union_name}_alignof")
         )
-        helper_specs[[paste0("union_", union_name, "_sizeof")]] <- list(
+        helper_specs[[str_interp("union_{union_name}_sizeof")]] <- list(
           args = list(),
           returns = "sexp"
         )
-        helper_specs[[paste0("union_", union_name, "_alignof")]] <- list(
+        helper_specs[[str_interp("union_{union_name}_alignof")]] <- list(
           args = list(),
           returns = "sexp"
         )
@@ -1314,8 +1314,8 @@ tcc_compiled_object <- function(
       enum_def <- enums[[enum_name]]
       # introspection
       if (!is.null(introspect) && introspect) {
-        helper_names <- c(helper_names, paste0("enum_", enum_name, "_sizeof"))
-        helper_specs[[paste0("enum_", enum_name, "_sizeof")]] <- list(
+        helper_names <- c(helper_names, str_interp("enum_{enum_name}_sizeof"))
+        helper_specs[[str_interp("enum_{enum_name}_sizeof")]] <- list(
           args = list(),
           returns = "sexp"
         )
@@ -1325,9 +1325,9 @@ tcc_compiled_object <- function(
         for (const_name in enum_def$constants) {
           helper_names <- c(
             helper_names,
-            paste0("enum_", enum_name, "_", const_name)
+            str_interp("enum_{enum_name}_{const_name}")
           )
-          helper_specs[[paste0("enum_", enum_name, "_", const_name)]] <- list(
+          helper_specs[[str_interp("enum_{enum_name}_{const_name}")]] <- list(
             args = list(),
             returns = "sexp",
             .helper_operation = "constant"
@@ -1342,14 +1342,14 @@ tcc_compiled_object <- function(
     for (global_name in names(globals)) {
       helper_names <- c(
         helper_names,
-        paste0("global_", global_name, "_get"),
-        paste0("global_", global_name, "_set")
+        str_interp("global_{global_name}_get"),
+        str_interp("global_{global_name}_set")
       )
-      helper_specs[[paste0("global_", global_name, "_get")]] <- list(
+      helper_specs[[str_interp("global_{global_name}_get")]] <- list(
         args = list(),
         returns = "sexp"
       )
-      helper_specs[[paste0("global_", global_name, "_set")]] <- list(
+      helper_specs[[str_interp("global_{global_name}_set")]] <- list(
         args = list("sexp"),
         returns = "sexp"
       )
@@ -1439,7 +1439,7 @@ tcc_compiled_object <- function(
           )
           for (this_types in type_sequences) {
             wrapper_name <- variadic_wrapper_name_types(
-              paste0("R_wrap_", sym_name),
+              str_interp("R_wrap_{sym_name}"),
               this_types
             )
             key <- variadic_signature_key(this_types)
@@ -1482,7 +1482,7 @@ tcc_compiled_object <- function(
 
         for (n_varargs in seq.int(min_varargs, max_varargs)) {
           wrapper_name <- variadic_wrapper_name(
-            paste0("R_wrap_", sym_name),
+            str_interp("R_wrap_{sym_name}"),
             n_varargs
           )
 
@@ -1534,7 +1534,7 @@ tcc_compiled_object <- function(
       next
     }
 
-    wrapper_name <- paste0("R_wrap_", sym_name)
+    wrapper_name <- str_interp("R_wrap_{sym_name}")
     tryCatch(
       {
         fn_ptr <- tcc_get_symbol(state, wrapper_name)
@@ -1568,10 +1568,10 @@ tcc_compiled_object <- function(
   }
 
   for (sym_name in helper_names) {
-    wrapper_name <- paste0("R_wrap_", sym_name)
+    wrapper_name <- str_interp("R_wrap_{sym_name}")
     sym <- helper_specs[[sym_name]]
     if (is.null(sym)) {
-      add_bind_failure(paste0("Unknown helper symbol '", sym_name, "'"))
+      add_bind_failure(str_interp("Unknown helper symbol '{sym_name}'"))
       next
     }
 
@@ -1688,7 +1688,7 @@ make_callable <- function(fn_ptr, sym, state) {
   if (!variadic) {
     expected_n <- fixed_n
     dot_syms <- if (expected_n > 0L) {
-      lapply(seq_len(expected_n), function(i) as.name(paste0("..", i)))
+      lapply(seq_len(expected_n), function(i) as.name(str_interp("..{i}")))
     } else {
       list()
     }
@@ -2171,7 +2171,7 @@ tcc_link <- function(
     state = state,
     c_code = c_code,
     libraries = ffi$libraries,
-    target = paste0("FFI bindings for ", basename(path))
+    target = str_interp("FFI bindings for {basename(path}"))
   )
 
   # Create compiled object
@@ -2347,7 +2347,7 @@ tcc_struct <- function(ffi, name, accessors) {
     if (!grepl("^struct:", type_name)) {
       check_ffi_type(
         type_name,
-        paste0("struct '", name, "' field '", field_name, "'")
+        str_interp("struct '{name}' field '{field_name}'")
       )
     }
   }
@@ -2396,13 +2396,13 @@ tcc_union <- function(ffi, name, members, active = NULL) {
         type_name <- mem_type$type %||% "ptr"
         check_ffi_type(
           type_name,
-          paste0("union '", name, "' member '", mem_name, "'")
+          str_interp("union '{name}' member '{mem_name}'")
         )
       }
     } else {
       check_ffi_type(
         mem_type,
-        paste0("union '", name, "' member '", mem_name, "'")
+        str_interp("union '{name}' member '{mem_name}'")
       )
     }
   }
