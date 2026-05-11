@@ -375,7 +375,9 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
         Rf_error("tcc_set_output_type failed");
     }
     SEXP ext = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
-    Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_state"));
+    SEXP class_str = PROTECT(Rf_mkString("tcc_state"));
+    Rf_setAttrib(ext, R_ClassSymbol, class_str);
+    UNPROTECT(1);
     R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
     /* onexit = FALSE: skip tcc_delete() during R shutdown.
        tcc_delete() → tcc_run_free() releases DLLs loaded during JIT
@@ -544,7 +546,9 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     DL_FUNC fn_ptr;
     memcpy(&fn_ptr, &fn, sizeof(fn_ptr));
     SEXP ptr = PROTECT(R_MakeExternalPtrFn(fn_ptr, native_symbol_tag, R_NilValue));
-    Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_symbol"));
+    SEXP class_str = PROTECT(Rf_mkString("tcc_symbol"));
+    Rf_setAttrib(ptr, R_ClassSymbol, class_str);
+    UNPROTECT(1);
     UNPROTECT(1);
     return ptr;
 }
@@ -1723,7 +1727,9 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     token->origin_id = id;
     
     SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
-    Rf_setAttrib(ext, R_ClassSymbol, Rf_mkString("tcc_callback"));
+    SEXP class_str = PROTECT(Rf_mkString("tcc_callback"));
+    Rf_setAttrib(ext, R_ClassSymbol, class_str);
+    UNPROTECT(1);
     R_RegisterCFinalizerEx(ext, RC_callback_finalizer, FALSE);
     UNPROTECT(1);
     
@@ -1773,7 +1779,9 @@ SEXP RC_get_callback_ptr(SEXP callback_ext) {
     // Return the token address as external pointer (this is what trampolines use)
     token->refs += 1;
     SEXP ptr = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
-    Rf_setAttrib(ptr, R_ClassSymbol, Rf_mkString("tcc_callback_ptr"));
+    SEXP class_str = PROTECT(Rf_mkString("tcc_callback_ptr"));
+    Rf_setAttrib(ptr, R_ClassSymbol, class_str);
+    UNPROTECT(1);
     R_RegisterCFinalizerEx(ptr, RC_callback_ptr_finalizer, FALSE);
     UNPROTECT(1);
     return ptr;
@@ -1932,7 +1940,8 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
                 pair = PROTECT(Rf_cons(VECTOR_ELT(args, i), pair));
             }
             call = PROTECT(Rf_lcons(entry->fun, pair));
-            UNPROTECT(n_args);
+            UNPROTECT(n_args + 1);
+            PROTECT(call);
         }
     } else {
         call = PROTECT(Rf_lang1(entry->fun));

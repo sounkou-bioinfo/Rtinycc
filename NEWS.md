@@ -1,3 +1,8 @@
+# Rtinycc 0.1.11
+
+- Fix `PROTECT` and memory-balance hygiene bugs in internal C state initialization (`RC_libtcc_state_new`, `RC_libtcc_get_symbol`, and callback registration paths). Previously, class string attributes could be inadvertently allocated without proper protection.
+- Fix a stack-depth and protection imbalance bug in `RC_invoke_callback_internal` where callback execution could unexpectedly unprotect the `call` object prior to evaluation.
+
 # Rtinycc 0.1.10
 
 - Fix installation on musl-based Linux systems, including Alpine Linux, by
