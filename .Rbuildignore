@@ -36,3 +36,6 @@ src/*.o
 ^\.sync/.*$
 ^treesitter\.c$
 ^treesitter\.c/.*$
+^\.sync$
+^Rducks$
+^patch_protect\.py$

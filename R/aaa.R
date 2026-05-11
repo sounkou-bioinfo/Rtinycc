@@ -15,3 +15,22 @@ NULL
 #'   registration requirements.
 #' @keywords internal
 .RtinyccCall <- base::.Call
+
+#' Tiny template string interpolator (glue alternative)
+#' @param text String to interpolate
+#' @param env Environment
+#' @noRd
+str_interp <- function(text, env = parent.frame()) {
+  pattern <- "\\{([^}]+)\\}"
+  matches <- regmatches(text, gregexpr(pattern, text))[[1]]
+  if (length(matches) == 0) return(text)
+  
+  res <- text
+  for (m in unique(matches)) {
+    code <- substr(m, 2, nchar(m) - 1)
+    val <- eval(parse(text = code), envir = env)
+    if (is.null(val)) val <- ""
+    res <- gsub(m, paste0(val, collapse = ""), res, fixed = TRUE)
+  }
+  res
+}
