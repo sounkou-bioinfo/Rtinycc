@@ -7,6 +7,9 @@
 - **Mike Cheng**. Copyright holder.  
   Adapted parts of the vignette knitr engine from the callme package
 
+- **Adam Dunkels**. Copyright holder.  
+  Author of the bundled protothreads library
+
 - **Fabrice Bellard and tinycc Authors**. Contributor.  
   Tinycc Compiler (tinycc) authors and COPYRIGHT holders
 
