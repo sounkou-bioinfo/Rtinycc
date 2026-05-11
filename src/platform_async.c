@@ -478,7 +478,11 @@ int RC_platform_async_init(void) {
     }
     int flags = fcntl(cbq_pipe[0], F_GETFL, 0);
     if (flags < 0 || fcntl(cbq_pipe[0], F_SETFL, flags | O_NONBLOCK) < 0) {
-        Rf_error("Failed to set async pipe non-blocking: %s", strerror(errno));
+        Rf_error("Failed to set async pipe read non-blocking: %s", strerror(errno));
+    }
+    int flags_w = fcntl(cbq_pipe[1], F_GETFL, 0);
+    if (flags_w < 0 || fcntl(cbq_pipe[1], F_SETFL, flags_w | O_NONBLOCK) < 0) {
+        Rf_error("Failed to set async pipe write non-blocking: %s", strerror(errno));
     }
     cbq_ih = addInputHandler(R_InputHandlers, cbq_pipe[0], cbq_input_handler, 10);
     if (!cbq_ih) {
