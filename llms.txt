@@ -2185,6 +2185,9 @@ GPL-3
 - [`tcc_link()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_link.md)
   : Link an external shared library with Bun-style FFI bindings
 
+- [`tcc_list_symbols()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_list_symbols.md)
+  : List symbols known to a libtcc state
+
 - [`tcc_malloc()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_malloc.md)
   : Allocate memory buffer
 
