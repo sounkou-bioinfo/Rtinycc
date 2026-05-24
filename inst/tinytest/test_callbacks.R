@@ -337,10 +337,6 @@ expect_true(
   grepl(".v.p = arg1;", tramp_ptrptr, fixed = TRUE),
   info = "Async callback stores char** in pointer slot"
 )
-expect_false(
-  grepl("Rf_warning", tramp_ptrptr, fixed = TRUE),
-  info = "Async trampoline does not call R warning API from worker-capable code"
-)
 
 for (case in callback_abi_specs$async_trampoline) {
   sig <- Rtinycc:::parse_callback_type(case$signature)

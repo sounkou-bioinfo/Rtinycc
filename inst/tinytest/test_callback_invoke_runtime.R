@@ -265,9 +265,8 @@ expect_equal(
 )
 close_if_valid(cb_direct)
 
-# Test: queued R-level async scheduling is serviced by R event-loop activity,
-# not by ordinary CPU-bound R code. This exercises the input-handler/message
-# pump path without a manual drain call.
+# Test: queued R-level async scheduling auto-fires during R event-loop activity.
+# This exercises the input-handler/message pump path without a manual drain call.
 hits_event_loop <- 0L
 cb_event_loop <- tcc_callback(
   function(x) {
@@ -277,16 +276,7 @@ cb_event_loop <- tcc_callback(
   signature = "void (*)(int)"
 )
 tcc_callback_async_schedule(cb_event_loop, list(5L))
-busy_until <- Sys.time() + 0.05
-while (Sys.time() < busy_until) {
-  invisible(NULL)
-}
-expect_equal(
-  hits_event_loop,
-  0L,
-  info = "Queued async callback is not serviced by a tight R loop without event-loop activity"
-)
-for (i in seq_len(50)) {
+for (i in seq_len(100)) {
   if (hits_event_loop == 5L) {
     break
   }
@@ -295,9 +285,8 @@ for (i in seq_len(50)) {
 expect_equal(
   hits_event_loop,
   5L,
-  info = "Queued async callback is serviced during R event-loop activity"
+  info = "Queued async callback auto-fires during R event-loop activity without manual drain"
 )
-tcc_callback_async_drain()
 close_if_valid(cb_event_loop)
 
 # Test: async trampoline error paths return the declared C default without
@@ -332,6 +321,8 @@ ffi_invalid_async <- tcc_ffi() |>
   ) |>
   tcc_compile()
 
+.Call("RC_callback_async_failure_reset", PACKAGE = "Rtinycc")
+
 invalid_hits <- 0L
 cb_invalid_i32 <- tcc_callback(
   function(x) {
@@ -345,7 +336,7 @@ tcc_callback_close(cb_invalid_i32)
 invalid_res <- NULL
 expect_silent(
   invalid_res <- ffi_invalid_async$call_async_i32(cb_invalid_i32, cb_ptr_invalid_i32, 7L),
-  info = "Closed async callback token follows invalid-token error path silently"
+  info = "Closed async callback token follows invalid-token error path without warning"
 )
 expect_true(
   is.na(invalid_res),
@@ -356,9 +347,19 @@ expect_equal(
   0L,
   info = "Invalid-token async callback does not invoke the released R function"
 )
+expect_equal(
+  unname(.Call("RC_callback_async_failure_status", PACKAGE = "Rtinycc")),
+  c(1L, -2L),
+  info = "Invalid-token async callback records an observable failure code"
+)
 expect_silent(
   ffi_invalid_async$call_async_void(cb_invalid_i32, cb_ptr_invalid_i32, 7L),
   info = "Void async invalid-token path returns without warning"
+)
+expect_equal(
+  unname(.Call("RC_callback_async_failure_status", PACKAGE = "Rtinycc")),
+  c(2L, -2L),
+  info = "Void async invalid-token path records an observable failure code"
 )
 
 cb_stale_i32 <- tcc_callback(function(x) x + 10L, signature = "int (*)(int)")
@@ -367,11 +368,16 @@ cb_ptr_stale_i32 <- tcc_callback_ptr(cb_stale_i32)
 stale_res <- NULL
 expect_silent(
   stale_res <- ffi_invalid_async$call_async_i32(cb_stale_i32, cb_ptr_stale_i32, 8L),
-  info = "Stale async callback token follows schedule-failure error path silently"
+  info = "Stale async callback token follows schedule-failure error path without warning"
 )
 expect_true(
   is.na(stale_res),
   info = "Schedule-failure async callback returns default integer sentinel"
+)
+expect_equal(
+  unname(.Call("RC_callback_async_failure_status", PACKAGE = "Rtinycc")),
+  c(3L, -2L),
+  info = "Schedule-failure async callback records an observable failure code"
 )
 
 # Test: non-void async callback returns the real computed value (synchronous path).

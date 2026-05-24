@@ -1397,6 +1397,7 @@ generate_ffi_code <- function(
           "} cb_arg_t;",
           "",
           "int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);",
+          "void RC_callback_async_note_failure_c(int code);",
           "/* Drain pending async callbacks from main-thread C code */",
           "void RC_callback_async_drain_c(void);",
           "/* Run func(arg) on a new thread, drain callbacks on the main thread */",

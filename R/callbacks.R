@@ -564,7 +564,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
     ),
     "  callback_token_t* tok = (callback_token_t*)cb;",
     "  if (!tok || tok->id < 0) {",
-    "    /* No R API calls here: async trampolines may run on worker threads. */",
+    "    RC_callback_async_note_failure_c(-2);",
     get_c_default_return(sig$return_type, indent = 4L),
     "  }"
   )
@@ -587,7 +587,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
         if (n_args > 0) "args" else "NULL"
       ),
       "  if (rc != 0) {",
-      "    /* No R API calls here: async trampolines may run on worker threads. */",
+      "    RC_callback_async_note_failure_c(rc);",
       "  }",
       "  return;"
     )
@@ -601,7 +601,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
         if (n_args > 0) "args" else "NULL"
       ),
       "  if (rc != 0) {",
-      "    /* No R API calls here: async trampolines may run on worker threads. */",
+      "    RC_callback_async_note_failure_c(rc);",
       get_c_default_return(sig$return_type, indent = 4L),
       "  }",
       get_async_result_return(sig$return_type)

@@ -11,6 +11,7 @@
 #include <R_ext/Print.h>
 #include <R_ext/Parse.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <math.h>
@@ -92,6 +93,9 @@ static int RC_callback_find_free_slot(void);
 SEXP RC_callback_async_init(void);
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args);
 SEXP RC_callback_async_drain(void);
+SEXP RC_callback_async_failure_status(void);
+SEXP RC_callback_async_failure_reset(void);
+void RC_callback_async_note_failure_c(int code);
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
 void RC_callback_async_drain_loop_c(volatile int *done_flag);
@@ -127,6 +131,12 @@ typedef struct {
 // Static array of callbacks (simple fixed-size for now)
 #define MAX_CALLBACKS 256
 static callback_entry_t callback_registry[MAX_CALLBACKS];
+
+/* Async trampoline failures can occur on worker threads, where R warnings and
+ * other R API calls are not safe. Keep a small atomic diagnostic counter so the
+ * failure path remains observable without touching the R API off-thread. */
+static atomic_int callback_async_failure_count = ATOMIC_VAR_INIT(0);
+static atomic_int callback_async_last_failure = ATOMIC_VAR_INIT(0);
 
 // Callback token structure - passed back to R as external ptr
 typedef struct {
@@ -1327,6 +1337,9 @@ SEXP RC_callback_async_init(void) {
  * @return R_NilValue on success.
  */
 SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
+    if (!RC_platform_async_is_initialized()) {
+        RC_platform_async_init();
+    }
     if (!Rf_inherits(callback_ext, "tcc_callback")) {
         Rf_error("Expected a 'tcc_callback' external pointer");
     }
@@ -1387,7 +1400,33 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
  * @return R_NilValue on success.
  */
 SEXP RC_callback_async_drain(void) {
+    if (!RC_platform_async_is_initialized()) {
+        RC_platform_async_init();
+    }
     RC_platform_async_drain();
+    return R_NilValue;
+}
+
+void RC_callback_async_note_failure_c(int code) {
+    atomic_fetch_add_explicit(&callback_async_failure_count, 1, memory_order_relaxed);
+    atomic_store_explicit(&callback_async_last_failure, code, memory_order_relaxed);
+}
+
+SEXP RC_callback_async_failure_status(void) {
+    SEXP out = PROTECT(Rf_allocVector(INTSXP, 2));
+    INTEGER(out)[0] = atomic_load_explicit(&callback_async_failure_count, memory_order_relaxed);
+    INTEGER(out)[1] = atomic_load_explicit(&callback_async_last_failure, memory_order_relaxed);
+    SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+    SET_STRING_ELT(names, 0, Rf_mkChar("count"));
+    SET_STRING_ELT(names, 1, Rf_mkChar("last_code"));
+    Rf_setAttrib(out, R_NamesSymbol, names);
+    UNPROTECT(2);
+    return out;
+}
+
+SEXP RC_callback_async_failure_reset(void) {
+    atomic_store_explicit(&callback_async_failure_count, 0, memory_order_relaxed);
+    atomic_store_explicit(&callback_async_last_failure, 0, memory_order_relaxed);
     return R_NilValue;
 }
 
@@ -1442,6 +1481,8 @@ static cb_result_t RC_callback_async_result_from_sexp(SEXP s) {
 }
 
 static int RC_callback_async_invoke_now(int id, int n_args, const cb_arg_t *args, cb_result_t *result) {
+    /* Return value is dispatch status. Callback-level R errors are converted
+     * by RC_invoke_callback_internal() into the declared default result. */
     SEXP r_args = PROTECT(RC_callback_async_args_to_sexp(n_args, args));
     SEXP res = PROTECT(RC_invoke_callback_internal(id, r_args));
     if (result) {
@@ -1459,6 +1500,9 @@ static int RC_callback_async_invoke_now(int id, int n_args, const cb_arg_t *args
  * @return 0 on success, negative error code otherwise.
  */
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
+    if (!RC_platform_async_is_initialized()) {
+        RC_platform_async_init();
+    }
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
@@ -1484,6 +1528,9 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
                                       cb_result_t *result) {
     if (!RC_platform_async_is_initialized()) {
+        RC_platform_async_init();
+    }
+    if (!RC_platform_async_is_initialized()) {
         return -1;
     }
     if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
@@ -1503,6 +1550,9 @@ int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
  *                  when it finishes.
  */
 void RC_callback_async_drain_loop_c(volatile int *done_flag) {
+    if (!RC_platform_async_is_initialized()) {
+        RC_platform_async_init();
+    }
     RC_platform_async_drain_loop(done_flag);
 }
 
@@ -2058,6 +2108,8 @@ SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     RC_tcc_add_function_symbol(s, "RC_invoke_callback_id", (DL_FUNC) RC_invoke_callback_id);
     RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_c",
                                (DL_FUNC) RC_callback_async_schedule_c);
+    RC_tcc_add_function_symbol(s, "RC_callback_async_note_failure_c",
+                               (DL_FUNC) RC_callback_async_note_failure_c);
     RC_tcc_add_function_symbol(s, "RC_callback_async_schedule_sync_c",
                                (DL_FUNC) RC_callback_async_schedule_sync_c);
     /* Expose drain to TCC-compiled C code so the main-thread C side can
