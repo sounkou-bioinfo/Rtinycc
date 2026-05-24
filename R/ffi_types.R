@@ -11,7 +11,9 @@
 # - numeric() → double* (via REAL())
 # - logical() → int* (via LOGICAL())
 #
-# We support both scalar types (with coercion) and array types (zero-copy)
+# We support both scalar types (with coercion) and array types. Array inputs
+# borrow writable R vector storage for materialized vectors; ALTREP vectors may
+# be materialized by R when the wrapper asks for a C data pointer.
 
 new_rtinycc_ffi_type <- function(name, ..., family = name) {
   fields <- list(name = name, family = family, ...)
@@ -101,7 +103,8 @@ FFI_TYPES <- list(
     kind = "scalar"
   ),
 
-  # Array types - R native vector types (zero-copy)
+  # Array types - R native vector types. These are writable pointer borrows;
+  # ALTREP inputs may materialize when R exposes the C data pointer.
   # R raw vector → uint8_t* (byte buffer)
   raw = list(
     c_type = "uint8_t*",
@@ -112,7 +115,7 @@ FFI_TYPES <- list(
     c_element = "uint8_t"
   ),
 
-  # R integer vector → int32_t* (zero-copy via INTEGER())
+  # R integer vector → int32_t* (writable borrow via INTEGER())
   integer_array = list(
     c_type = "int32_t*",
     r_type = "integer",
@@ -122,7 +125,7 @@ FFI_TYPES <- list(
     c_element = "int32_t"
   ),
 
-  # R numeric vector → double* (zero-copy via REAL())
+  # R numeric vector → double* (writable borrow via REAL())
   numeric_array = list(
     c_type = "double*",
     r_type = "numeric",
@@ -132,7 +135,7 @@ FFI_TYPES <- list(
     c_element = "double"
   ),
 
-  # R logical vector → int* (zero-copy via LOGICAL())
+  # R logical vector → int* (writable borrow via LOGICAL())
   logical_array = list(
     c_type = "int*",
     r_type = "logical",

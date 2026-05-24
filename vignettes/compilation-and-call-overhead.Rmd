@@ -61,7 +61,7 @@ We use three small workloads:
 The `fill_rand()` case is the fairer array-oriented comparison:
 
 - `Rtinycc` receives a `numeric_array`, so the wrapper borrows the backing
-  `REAL()` storage of the R vector directly
+  `REAL()` storage of an already-materialized R vector directly
 - `callme` takes an R numeric vector and writes into `REAL(vec)` directly
 
 The `rand_unif()` case intentionally stresses the extra copy path:

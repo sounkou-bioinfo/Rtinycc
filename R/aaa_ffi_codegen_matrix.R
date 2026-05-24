@@ -580,7 +580,13 @@ RTINYCC_FFI_SEMANTICS <- list(
       ownership = "R",
       r_storage = "raw",
       checks = character(),
-      notes = "Zero-copy borrow of RAW(x); sound only while no fresh R allocations are inserted before the C call."
+      notes = paste(
+        "Mutable pointer input through RAW(x); for ordinary materialized vectors",
+        "no extra buffer is allocated. ALTREP vectors follow R's writable pointer",
+        "materialization path. ALTREP-specific read-only or temp-buffer behavior",
+        "needs a separate access-mode contract because this type permits mutation",
+        "and pointer aliasing."
+      )
     ),
     return = list(
       mode = "copy_array",
@@ -601,7 +607,13 @@ RTINYCC_FFI_SEMANTICS <- list(
       ownership = "R",
       r_storage = "integer",
       checks = character(),
-      notes = "Zero-copy borrow of INTEGER(x); sound only while no fresh R allocations are inserted before the C call."
+      notes = paste(
+        "Mutable pointer input through INTEGER(x); for ordinary materialized",
+        "vectors no extra buffer is allocated. ALTREP vectors follow R's writable",
+        "pointer materialization path. ALTREP-specific read-only or temp-buffer",
+        "behavior needs a separate access-mode contract because this type permits",
+        "mutation and pointer aliasing."
+      )
     ),
     return = list(
       mode = "copy_array",
@@ -622,7 +634,13 @@ RTINYCC_FFI_SEMANTICS <- list(
       ownership = "R",
       r_storage = "numeric",
       checks = character(),
-      notes = "Zero-copy borrow of REAL(x); sound only while no fresh R allocations are inserted before the C call."
+      notes = paste(
+        "Mutable pointer input through REAL(x); for ordinary materialized vectors",
+        "no extra buffer is allocated. ALTREP vectors follow R's writable pointer",
+        "materialization path. ALTREP-specific read-only or temp-buffer behavior",
+        "needs a separate access-mode contract because this type permits mutation",
+        "and pointer aliasing."
+      )
     ),
     return = list(
       mode = "copy_array",
@@ -643,7 +661,13 @@ RTINYCC_FFI_SEMANTICS <- list(
       ownership = "R",
       r_storage = "logical",
       checks = character(),
-      notes = "Zero-copy borrow of LOGICAL(x); sound only while no fresh R allocations are inserted before the C call."
+      notes = paste(
+        "Mutable pointer input through LOGICAL(x); for ordinary materialized",
+        "vectors no extra buffer is allocated. ALTREP vectors follow R's writable",
+        "pointer materialization path. ALTREP-specific read-only or temp-buffer",
+        "behavior needs a separate access-mode contract because this type permits",
+        "mutation and pointer aliasing."
+      )
     ),
     return = list(
       mode = "copy_array",
@@ -1083,8 +1107,9 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     write_copy = TRUE,
     ownership = "struct-owned-storage",
     notes = paste(
-      "Raw struct helpers copy bytes out to a fresh RAWSXP or copy bytes from",
-      "a RAWSXP back into the struct buffer with memcpy()."
+      "Raw struct helpers copy bytes out to a fresh RAWSXP with memcpy() and",
+      "copy bytes from a RAWSXP back into the struct buffer with RAW_GET_REGION(),",
+      "which avoids asking R for a writable raw-vector data pointer on copy-in."
     )
   ),
   struct_array_field = list(
@@ -1253,7 +1278,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
   ),
   list(
     name = "struct_raw_access_copy",
-    info = "struct raw access helpers use memcpy copy paths",
+    info = "struct raw access helpers use explicit copy paths",
     generate_args = list(
       symbols = list(),
       c_code = "struct packet { unsigned char data[8]; };",
@@ -1276,7 +1301,7 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
         fixed = TRUE
       ),
       list(
-        pattern = "memcpy(p, RAW(raw),",
+        pattern = "RAW_GET_REGION(raw, 0, n_copy, (Rbyte*)p)",
         fixed = TRUE
       )
     )

@@ -16,13 +16,13 @@ static cb_result_t cb_result_from_sexp(SEXP s) {
     if (s == R_NilValue) return r;
     if (Rf_isInteger(s) && XLENGTH(s) >= 1) {
         r.kind = CB_RESULT_INT;
-        r.v.i  = INTEGER(s)[0];
+        r.v.i  = Rf_asInteger(s);
     } else if (Rf_isReal(s) && XLENGTH(s) >= 1) {
         r.kind = CB_RESULT_REAL;
-        r.v.d  = REAL(s)[0];
+        r.v.d  = Rf_asReal(s);
     } else if (Rf_isLogical(s) && XLENGTH(s) >= 1) {
         r.kind = CB_RESULT_LOGICAL;
-        r.v.i  = LOGICAL(s)[0];
+        r.v.i  = Rf_asLogical(s);
     } else if (TYPEOF(s) == EXTPTRSXP) {
         r.kind = CB_RESULT_PTR;
         r.v.p  = R_ExternalPtrAddr(s);

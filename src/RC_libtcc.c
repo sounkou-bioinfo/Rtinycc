@@ -1138,7 +1138,10 @@ SEXP RC_write_bytes(SEXP ptr, SEXP raw) {
     }
     R_xlen_t n = XLENGTH(raw);
     if (n > 0) {
-        memcpy(data, RAW(raw), (size_t)n);
+        R_xlen_t copied = RAW_GET_REGION(raw, 0, n, (Rbyte*)data);
+        if (copied != n) {
+            Rf_error("failed to read raw vector");
+        }
     }
     return R_NilValue;
 }

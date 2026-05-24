@@ -921,12 +921,14 @@ generate_struct_raw_access <- function(struct_name) {
     sprintf("SEXP R_wrap_struct_%s_set_raw(SEXP ext, SEXP raw) {", struct_name),
     sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
     sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-    "  int n = LENGTH(raw);",
+    "  if (TYPEOF(raw) != RAWSXP) Rf_error(\"expected raw vector\");",
+    "  R_xlen_t n = XLENGTH(raw);",
     sprintf(
-      "  memcpy(p, RAW(raw), (n < sizeof(struct %s)) ? n : sizeof(struct %s));",
+      "  R_xlen_t n_copy = (n < (R_xlen_t)sizeof(struct %s)) ? n : (R_xlen_t)sizeof(struct %s);",
       struct_name,
       struct_name
     ),
+    "  if (n_copy > 0 && RAW_GET_REGION(raw, 0, n_copy, (Rbyte*)p) != n_copy) Rf_error(\"failed to read raw vector\");",
     "  return R_NilValue;",
     "}",
     ""

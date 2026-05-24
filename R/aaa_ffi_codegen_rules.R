@@ -537,7 +537,7 @@ struct_array_field_setter_rule("i32", field_name) %as%
 
 struct_array_field_setter_rule("i64", field_name) %as%
   {
-    sprintf("p->%s[idx] = (int64_t)REAL(val)[0];", field_name)
+    sprintf("p->%s[idx] = (int64_t)asReal(val);", field_name)
   }
 
 struct_array_field_setter_rule("u8", field_name) %as%
@@ -552,22 +552,22 @@ struct_array_field_setter_rule("u16", field_name) %as%
 
 struct_array_field_setter_rule("u32", field_name) %as%
   {
-    sprintf("p->%s[idx] = (uint32_t)REAL(val)[0];", field_name)
+    sprintf("p->%s[idx] = (uint32_t)asReal(val);", field_name)
   }
 
 struct_array_field_setter_rule("u64", field_name) %as%
   {
-    sprintf("p->%s[idx] = (uint64_t)REAL(val)[0];", field_name)
+    sprintf("p->%s[idx] = (uint64_t)asReal(val);", field_name)
   }
 
 struct_array_field_setter_rule("f32", field_name) %as%
   {
-    sprintf("p->%s[idx] = (float)REAL(val)[0];", field_name)
+    sprintf("p->%s[idx] = (float)asReal(val);", field_name)
   }
 
 struct_array_field_setter_rule("f64", field_name) %as%
   {
-    sprintf("p->%s[idx] = REAL(val)[0];", field_name)
+    sprintf("p->%s[idx] = asReal(val);", field_name)
   }
 
 struct_array_field_setter_rule("bool", field_name) %as%
@@ -604,7 +604,7 @@ struct_field_setter_rule("i32", field_name, size) %as%
 
 struct_field_setter_rule("i64", field_name, size) %as%
   {
-    sprintf("p->%s = (int64_t)REAL(val)[0];", field_name)
+    sprintf("p->%s = (int64_t)asReal(val);", field_name)
   }
 
 struct_field_setter_rule("u8", field_name, size) %as%
@@ -619,12 +619,12 @@ struct_field_setter_rule("u16", field_name, size) %as%
 
 struct_field_setter_rule("u32", field_name, size) %as%
   {
-    sprintf("p->%s = (uint32_t)REAL(val)[0];", field_name)
+    sprintf("p->%s = (uint32_t)asReal(val);", field_name)
   }
 
 struct_field_setter_rule("u64", field_name, size) %as%
   {
-    sprintf("p->%s = (uint64_t)REAL(val)[0];", field_name)
+    sprintf("p->%s = (uint64_t)asReal(val);", field_name)
   }
 
 struct_field_setter_rule("f32", field_name, size) %as%
