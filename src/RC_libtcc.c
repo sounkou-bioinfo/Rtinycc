@@ -12,6 +12,7 @@
 #include <R_ext/Parse.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +47,7 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code);
 SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
 SEXP RC_libtcc_relocate(SEXP ext);
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
+SEXP RC_libtcc_list_symbols(SEXP ext);
 SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type);
 SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_libtcc_output_file(SEXP ext, SEXP filename);
@@ -551,6 +553,87 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     UNPROTECT(1);
     UNPROTECT(1);
     return ptr;
+}
+
+typedef struct {
+    R_xlen_t count;
+} RC_tcc_symbol_count_t;
+
+typedef struct {
+    SEXP names;
+    SEXP addresses;
+    R_xlen_t index;
+} RC_tcc_symbol_collect_t;
+
+static void RC_libtcc_count_symbol_cb(void *ctx, const char *name, const void *val) {
+    (void) name;
+    (void) val;
+    RC_tcc_symbol_count_t *counter = (RC_tcc_symbol_count_t *) ctx;
+    counter->count++;
+}
+
+static void RC_libtcc_collect_symbol_cb(void *ctx, const char *name, const void *val) {
+    RC_tcc_symbol_collect_t *collect = (RC_tcc_symbol_collect_t *) ctx;
+    R_xlen_t i = collect->index++;
+    if (i >= XLENGTH(collect->names)) {
+        return;
+    }
+
+    char addr_buf[2 + (sizeof(uintptr_t) * 2) + 1];
+    if (val == NULL) {
+        snprintf(addr_buf, sizeof(addr_buf), "0x0");
+    } else {
+        snprintf(addr_buf, sizeof(addr_buf), "0x%" PRIxPTR, (uintptr_t) val);
+    }
+
+    SET_STRING_ELT(
+        collect->names,
+        i,
+        Rf_mkCharCE(name == NULL ? "" : name, CE_UTF8)
+    );
+    SET_STRING_ELT(collect->addresses, i, Rf_mkChar(addr_buf));
+}
+
+/**
+ * List global symbols known to a TCC state.
+ * Ownership: none.
+ * Allocation: result data frame only.
+ * Protection: PROTECT(6), UNPROTECT(6).
+ */
+SEXP RC_libtcc_list_symbols(SEXP ext) {
+    TCCState *s = RC_tcc_state(ext);
+
+    RC_tcc_symbol_count_t counter = {0};
+    tcc_list_symbols(s, &counter, RC_libtcc_count_symbol_cb);
+    if (counter.count > INT_MAX) {
+        Rf_error("too many TCC symbols to return as a data frame");
+    }
+
+    SEXP names_vec = PROTECT(Rf_allocVector(STRSXP, counter.count));
+    SEXP addresses_vec = PROTECT(Rf_allocVector(STRSXP, counter.count));
+
+    RC_tcc_symbol_collect_t collect = {names_vec, addresses_vec, 0};
+    tcc_list_symbols(s, &collect, RC_libtcc_collect_symbol_cb);
+
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
+    SET_VECTOR_ELT(out, 0, names_vec);
+    SET_VECTOR_ELT(out, 1, addresses_vec);
+
+    SEXP out_names = PROTECT(Rf_allocVector(STRSXP, 2));
+    SET_STRING_ELT(out_names, 0, Rf_mkChar("name"));
+    SET_STRING_ELT(out_names, 1, Rf_mkChar("address"));
+    Rf_setAttrib(out, R_NamesSymbol, out_names);
+
+    SEXP row_names = PROTECT(Rf_allocVector(INTSXP, 2));
+    INTEGER(row_names)[0] = NA_INTEGER;
+    INTEGER(row_names)[1] = -(int) counter.count;
+    Rf_setAttrib(out, R_RowNamesSymbol, row_names);
+
+    SEXP class_str = PROTECT(Rf_mkString("data.frame"));
+    Rf_setAttrib(out, R_ClassSymbol, class_str);
+
+    UNPROTECT(6);
+    return out;
 }
 
 /**

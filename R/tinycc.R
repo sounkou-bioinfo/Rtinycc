@@ -307,6 +307,21 @@ tcc_get_symbol <- function(state, name) {
   .Call(RC_libtcc_get_symbol, state, name)
 }
 
+#' List symbols known to a libtcc state
+#'
+#' Return the global symbols currently known to a libtcc state. This is a
+#' symbol-table inspection helper for compiled/linked TCC states, not a DLL
+#' export scanner and not a C signature discovery API. For meaningful runtime
+#' addresses, call it after [tcc_relocate()].
+#'
+#' @param state A `tcc_state`.
+#' @return A data frame with columns `name` and `address`, where `address` is a
+#'   hexadecimal character string.
+#' @export
+tcc_list_symbols <- function(state) {
+  .Call(RC_libtcc_list_symbols, state)
+}
+
 
 #' Call a zero-argument symbol with a specified return type
 #' @param state A `tcc_state`.
