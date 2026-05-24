@@ -14,8 +14,10 @@ A data frame with columns \code{name} and \code{address}, where \code{address} i
 hexadecimal character string.
 }
 \description{
-Return the global symbols currently known to a libtcc state. This is a
-symbol-table inspection helper for compiled/linked TCC states, not a DLL
-export scanner and not a C signature discovery API. For meaningful runtime
-addresses, call it after \code{\link[=tcc_relocate]{tcc_relocate()}}.
+Return the global symbols currently reported by libtcc for a state. This is
+a best-effort symbol-table inspection helper for compiled/linked TCC states,
+not a portable exhaustive symbol enumerator, not a DLL export scanner, and
+not a C signature discovery API. Platform backends may omit symbols that are
+still resolvable with \code{\link[=tcc_get_symbol]{tcc_get_symbol()}}. For meaningful runtime addresses,
+call it after \code{\link[=tcc_relocate]{tcc_relocate()}}.
 }
