@@ -11,6 +11,10 @@
   callback/struct scalar conversions. Clarify that mutable array FFI
   inputs can materialize ALTREP vectors when R exposes writable C
   storage.
+- Harden async callback draining so explicit drains only execute R
+  callbacks on the recorded main R thread, and direct main-thread async
+  scheduling executes immediately instead of queueing and waiting on
+  itself.
 - Fix `PROTECT` and memory-balance hygiene bugs in internal C state
   initialization (`RC_libtcc_state_new`, `RC_libtcc_get_symbol`, and
   callback registration paths). Previously, class string attributes

@@ -18,5 +18,9 @@ NULL (invisible)
 
 ## Details
 
-TCC-compiled C code running on the main thread can call
-`RC_callback_async_drain_c()` directly instead of returning to R.
+TCC-compiled C code that is known to be running on the main R thread can
+call `RC_callback_async_drain_c()` directly instead of returning to R.
+Functions bound with `callback_async:*` arguments are normally executed
+on a worker by the generated wrapper while the main thread drains, so
+user code in that target function should not assume it is itself on the
+main thread.

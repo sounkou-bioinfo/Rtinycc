@@ -73,8 +73,11 @@ to R's event loop.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>TCC-compiled C code running on the main thread can call
-<code>RC_callback_async_drain_c()</code> directly instead of returning to R.</p>
+    <p>TCC-compiled C code that is known to be running on the main R thread can
+call <code>RC_callback_async_drain_c()</code> directly instead of returning to R.
+Functions bound with <code>callback_async:*</code> arguments are normally executed on a
+worker by the generated wrapper while the main thread drains, so user code in
+that target function should not assume it is itself on the main thread.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
