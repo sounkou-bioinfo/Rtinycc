@@ -32,15 +32,26 @@ The array input types:
 - `numeric_array`
 - `logical_array`
 
-are passed as direct pointers into the underlying R vector storage.
+are passed as writable direct pointers into the underlying R vector
+storage. For ordinary already-materialized vectors, no extra buffer is
+allocated by the wrapper.
 
 That means:
 
-- no extra buffer is allocated by the wrapper
 - C sees the existing vector data
 - mutation from C writes into the same memory region
+- the current array input types intentionally use R’s writable pointer
+  access path because their C signatures receive mutable pointers
 
-This is the main zero-copy part of the FFI boundary.
+This is the main zero-copy part of the FFI boundary. One important
+R-specific caveat is ALTREP: if an input vector is an ALTREP object,
+asking R for a writable C data pointer can materialize that vector.
+Checking `ALTREP(x)` in generated C could choose a different policy, but
+using `*_GET_REGION()` into a temporary buffer would be a different
+contract for these mutable types: it would need copy-back behavior and
+would not automatically preserve pointer aliasing when the same R vector
+is passed to multiple C arguments. Read-only ALTREP-friendly array types
+would be a cleaner separate API.
 
 ## `cstring_array` Is Rebuilt Per Call
 

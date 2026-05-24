@@ -232,8 +232,9 @@ code.</p>
 <ul>
 <li>
 <code>raw</code>, <code>integer_array</code>,
-<code>numeric_array</code>, and <code>logical_array</code> borrow the
-underlying R vector storage directly</li>
+<code>numeric_array</code>, and <code>logical_array</code> borrow
+writable R vector storage directly; for ALTREP inputs, R may materialize
+the vector when the wrapper asks for a C data pointer</li>
 <li>
 <code>cstring_array</code> allocates a temporary pointer array with
 <code>R_alloc()</code> and fills it from translated R strings</li>
@@ -386,7 +387,8 @@ intended to be used during the wrapper call:</p>
 <li>
 <code>raw</code>, <code>integer_array</code>,
 <code>numeric_array</code>, and <code>logical_array</code> inputs borrow
-the backing R vector storage</li>
+writable backing R vector storage; ALTREP inputs may be materialized by
+R on pointer access</li>
 <li>
 <code>cstring</code> input borrows the translated string pointer for
 the duration of the call</li>

@@ -6,6 +6,11 @@
   [`tcc_list_symbols()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_list_symbols.md)
   to inspect global symbol names and resolved hexadecimal addresses
   known to a libtcc state.
+- Improve ALTREP-aware copy-in paths by using `RAW_GET_REGION()` when
+  copying raw vectors into native memory and scalar accessors for
+  callback/struct scalar conversions. Clarify that mutable array FFI
+  inputs can materialize ALTREP vectors when R exposes writable C
+  storage.
 - Fix `PROTECT` and memory-balance hygiene bugs in internal C state
   initialization (`RC_libtcc_state_new`, `RC_libtcc_get_symbol`, and
   callback registration paths). Previously, class string attributes

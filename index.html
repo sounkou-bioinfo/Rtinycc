@@ -1806,7 +1806,7 @@ Click to show only the embedded C Protothreads / htslib source
 <li>
 <code>Rtinycc</code> compiles tiny modules very quickly</li>
 <li>a regular <code><a href="https://rdrr.io/r/base/CallExternal.html" class="external-link">.Call()</a></code> module can have lower minimal per-call overhead</li>
-<li>array-oriented zero-copy inputs are a much better fit than many tiny scalar crossings</li>
+<li>array-oriented inputs can be zero-copy for already-materialized R vectors, but ALTREP inputs may materialize when C pointer access is requested</li>
 <li>return paths that copy native buffers back into fresh R vectors make that copy cost visible</li>
 </ul>
 <p>If you want the benchmark details rather than the high-level summary, see the <code>Compilation and Call Overhead</code> vignette.</p>

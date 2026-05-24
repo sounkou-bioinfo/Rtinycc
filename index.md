@@ -2021,8 +2021,9 @@ In practice, the usual pattern is:
 - `Rtinycc` compiles tiny modules very quickly
 - a regular [`.Call()`](https://rdrr.io/r/base/CallExternal.html) module
   can have lower minimal per-call overhead
-- array-oriented zero-copy inputs are a much better fit than many tiny
-  scalar crossings
+- array-oriented inputs can be zero-copy for already-materialized R
+  vectors, but ALTREP inputs may materialize when C pointer access is
+  requested
 - return paths that copy native buffers back into fresh R vectors make
   that copy cost visible
 

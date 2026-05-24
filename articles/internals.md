@@ -138,7 +138,8 @@ These are not zero-copy paths.
 Vector inputs are split into two groups:
 
 - `raw`, `integer_array`, `numeric_array`, and `logical_array` borrow
-  the underlying R vector storage directly
+  writable R vector storage directly; for ALTREP inputs, R may
+  materialize the vector when the wrapper asks for a C data pointer
 - `cstring_array` allocates a temporary pointer array with `R_alloc()`
   and fills it from translated R strings
 
@@ -269,7 +270,8 @@ These values are borrowed from existing R objects and are only intended
 to be used during the wrapper call:
 
 - `raw`, `integer_array`, `numeric_array`, and `logical_array` inputs
-  borrow the backing R vector storage
+  borrow writable backing R vector storage; ALTREP inputs may be
+  materialized by R on pointer access
 - `cstring` input borrows the translated string pointer for the duration
   of the call
 - `sexp` input borrows the original R object directly

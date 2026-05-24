@@ -115,15 +115,25 @@ become C scalars inside the wrapper.</p>
 <li><code>numeric_array</code></li>
 <li><code>logical_array</code></li>
 </ul>
-<p>are passed as direct pointers into the underlying R vector
-storage.</p>
+<p>are passed as writable direct pointers into the underlying R vector
+storage. For ordinary already-materialized vectors, no extra buffer is
+allocated by the wrapper.</p>
 <p>That means:</p>
 <ul>
-<li>no extra buffer is allocated by the wrapper</li>
 <li>C sees the existing vector data</li>
 <li>mutation from C writes into the same memory region</li>
+<li>the current array input types intentionally use R’s writable pointer
+access path because their C signatures receive mutable pointers</li>
 </ul>
-<p>This is the main zero-copy part of the FFI boundary.</p>
+<p>This is the main zero-copy part of the FFI boundary. One important
+R-specific caveat is ALTREP: if an input vector is an ALTREP object,
+asking R for a writable C data pointer can materialize that vector.
+Checking <code>ALTREP(x)</code> in generated C could choose a different
+policy, but using <code>*_GET_REGION()</code> into a temporary buffer
+would be a different contract for these mutable types: it would need
+copy-back behavior and would not automatically preserve pointer aliasing
+when the same R vector is passed to multiple C arguments. Read-only
+ALTREP-friendly array types would be a cleaner separate API.</p>
 </div>
 <div class="section level2">
 <h2 id="cstring_array-is-rebuilt-per-call">

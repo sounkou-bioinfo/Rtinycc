@@ -37,7 +37,7 @@ We use three small workloads:
 The `fill_rand()` case is the fairer array-oriented comparison:
 
 - `Rtinycc` receives a `numeric_array`, so the wrapper borrows the
-  backing `REAL()` storage of the R vector directly
+  backing `REAL()` storage of an already-materialized R vector directly
 - `callme` takes an R numeric vector and writes into `REAL(vec)`
   directly
 
@@ -390,7 +390,7 @@ compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
 #> 1        Rtinycc   0.021           21
-#> 2         callme   0.236          236
+#> 2         callme   0.240          240
 ```
 
 The expected pattern is:
@@ -541,8 +541,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.09ms   1.11ms      896.    21.9KB        0
-#> 2 callme     391.23µs 411.82µs     2414.        0B        0
+#> 1 Rtinycc      1.23ms   1.25ms      800.    21.9KB        0
+#> 2 callme     466.79µs 481.26µs     2069.        0B        0
 ```
 
 Interpretation:
@@ -581,8 +581,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.85ms   4.27ms      248.    3.15MB     12.4
-#> 2 callme       1.96ms   2.03ms      448.    3.13MB     22.4
+#> 1 Rtinycc      2.79ms      4ms      262.    3.15MB     13.1
+#> 2 callme       2.21ms   2.23ms      409.    3.13MB     20.5
 ```
 
 Interpretation:
@@ -631,14 +631,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       1.7ms    1.8ms      523.    15.4KB     26.2
-#> 2 callme      943.4µs  954.4µs     1043.        0B      0
+#> 1 Rtinycc       1.8ms   1.86ms      500.    15.4KB     25.0
+#> 2 callme          1ms   1.01ms      987.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.59ms   4.27ms      234.    3.13MB     11.7
-#> 2 callme       1.99ms   3.48ms      283.    3.13MB     14.2
+#> 1 Rtinycc      2.77ms   4.08ms      242.    3.13MB     12.1
+#> 2 callme       1.94ms   3.25ms      300.    3.13MB     15.0
 ```
 
 The usual pattern is:
