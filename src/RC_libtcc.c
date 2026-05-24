@@ -11,7 +11,6 @@
 #include <R_ext/Print.h>
 #include <R_ext/Parse.h>
 #include <stdint.h>
-#include <stdatomic.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <math.h>
@@ -135,8 +134,32 @@ static callback_entry_t callback_registry[MAX_CALLBACKS];
 /* Async trampoline failures can occur on worker threads, where R warnings and
  * other R API calls are not safe. Keep a small atomic diagnostic counter so the
  * failure path remains observable without touching the R API off-thread. */
-static atomic_int callback_async_failure_count = ATOMIC_VAR_INIT(0);
-static atomic_int callback_async_last_failure = ATOMIC_VAR_INIT(0);
+static int callback_async_failure_count = 0;
+static int callback_async_last_failure = 0;
+
+static void RC_async_diag_increment(int *value) {
+#if defined(__GNUC__) || defined(__clang__)
+    (void)__sync_fetch_and_add(value, 1);
+#else
+    *value += 1;
+#endif
+}
+
+static void RC_async_diag_store(int *value, int new_value) {
+#if defined(__GNUC__) || defined(__clang__)
+    (void)__sync_lock_test_and_set(value, new_value);
+#else
+    *value = new_value;
+#endif
+}
+
+static int RC_async_diag_load(int *value) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __sync_fetch_and_add(value, 0);
+#else
+    return *value;
+#endif
+}
 
 // Callback token structure - passed back to R as external ptr
 typedef struct {
@@ -1408,14 +1431,14 @@ SEXP RC_callback_async_drain(void) {
 }
 
 void RC_callback_async_note_failure_c(int code) {
-    atomic_fetch_add_explicit(&callback_async_failure_count, 1, memory_order_relaxed);
-    atomic_store_explicit(&callback_async_last_failure, code, memory_order_relaxed);
+    RC_async_diag_increment(&callback_async_failure_count);
+    RC_async_diag_store(&callback_async_last_failure, code);
 }
 
 SEXP RC_callback_async_failure_status(void) {
     SEXP out = PROTECT(Rf_allocVector(INTSXP, 2));
-    INTEGER(out)[0] = atomic_load_explicit(&callback_async_failure_count, memory_order_relaxed);
-    INTEGER(out)[1] = atomic_load_explicit(&callback_async_last_failure, memory_order_relaxed);
+    INTEGER(out)[0] = RC_async_diag_load(&callback_async_failure_count);
+    INTEGER(out)[1] = RC_async_diag_load(&callback_async_last_failure);
     SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
     SET_STRING_ELT(names, 0, Rf_mkChar("count"));
     SET_STRING_ELT(names, 1, Rf_mkChar("last_code"));
@@ -1425,8 +1448,8 @@ SEXP RC_callback_async_failure_status(void) {
 }
 
 SEXP RC_callback_async_failure_reset(void) {
-    atomic_store_explicit(&callback_async_failure_count, 0, memory_order_relaxed);
-    atomic_store_explicit(&callback_async_last_failure, 0, memory_order_relaxed);
+    RC_async_diag_store(&callback_async_failure_count, 0);
+    RC_async_diag_store(&callback_async_last_failure, 0);
     return R_NilValue;
 }
 
