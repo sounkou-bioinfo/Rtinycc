@@ -410,8 +410,11 @@ tcc_callback_async_schedule <- function(callback, args = list()) {
 #' only needed in test harnesses or tight batch loops that never yield
 #' to R's event loop.
 #'
-#' TCC-compiled C code running on the main thread can call
-#' \code{RC_callback_async_drain_c()} directly instead of returning to R.
+#' TCC-compiled C code that is known to be running on the main R thread can
+#' call \code{RC_callback_async_drain_c()} directly instead of returning to R.
+#' Functions bound with `callback_async:*` arguments are normally executed on a
+#' worker by the generated wrapper while the main thread drains, so user code in
+#' that target function should not assume it is itself on the main thread.
 #'
 #' @return NULL (invisible)
 #' @export
@@ -509,9 +512,11 @@ generate_trampoline <- function(trampoline_name, sig) {
 # non-void return -> synchronous via RC_callback_async_schedule_sync_c
 #                   (SendMessage on Windows, pthread_cond on Linux).
 #                   Blocks the worker thread until the main thread
-#                   services the callback.  C code on the main thread
-#                   can call RC_callback_async_drain_c() in a loop
-#                   rather than returning to R.
+#                   services the callback. C code known to be on the main
+#                   thread can call RC_callback_async_drain_c() in a loop
+#                   rather than returning to R; generated callback_async
+#                   wrappers run the target function on a worker and drain
+#                   from the wrapper's main-thread side.
 generate_async_trampoline <- function(trampoline_name, sig) {
   unsupported <- vapply(sig$arg_types, async_type_unsupported, logical(1))
   if (any(unsupported)) {
@@ -559,10 +564,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
     ),
     "  callback_token_t* tok = (callback_token_t*)cb;",
     "  if (!tok || tok->id < 0) {",
-    sprintf(
-      "    Rf_warning(\"Invalid callback token in %s\");",
-      trampoline_name
-    ),
+    "    /* No R API calls here: async trampolines may run on worker threads. */",
     get_c_default_return(sig$return_type, indent = 4L),
     "  }"
   )
@@ -585,10 +587,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
         if (n_args > 0) "args" else "NULL"
       ),
       "  if (rc != 0) {",
-      sprintf(
-        "    Rf_warning(\"Async schedule failed (rc=%%d) in %s\", rc);",
-        trampoline_name
-      ),
+      "    /* No R API calls here: async trampolines may run on worker threads. */",
       "  }",
       "  return;"
     )
@@ -602,10 +601,7 @@ generate_async_trampoline <- function(trampoline_name, sig) {
         if (n_args > 0) "args" else "NULL"
       ),
       "  if (rc != 0) {",
-      sprintf(
-        "    Rf_warning(\"Async schedule failed (rc=%%d) in %s\", rc);",
-        trampoline_name
-      ),
+      "    /* No R API calls here: async trampolines may run on worker threads. */",
       get_c_default_return(sig$return_type, indent = 4L),
       "  }",
       get_async_result_return(sig$return_type)

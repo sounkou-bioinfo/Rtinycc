@@ -44,6 +44,7 @@ extern SEXP RC_invoke_callback_internal(int id, SEXP args);
 
 static HWND cbq_hwnd = NULL;
 static int  cbq_initialized = 0;
+static DWORD cbq_main_thread_id = 0;
 
 typedef struct cb_task {
     int        id;
@@ -143,9 +144,9 @@ static cb_task_t *cbq_make_task(int id, int n_args, const cb_arg_t *args) {
 static void cbq_execute_task(cb_task_t *task) {
     int  id   = task->id;
     SEXP args = PROTECT(cb_task_to_args(task));
-    SEXP res  = RC_invoke_callback_internal(id, args);
-    UNPROTECT(1);
+    SEXP res  = PROTECT(RC_invoke_callback_internal(id, args));
     task->result = cb_result_from_sexp(res);
+    UNPROTECT(2);
 }
 
 /**
@@ -192,6 +193,11 @@ int RC_platform_async_is_initialized(void) {
     return cbq_initialized;
 }
 
+int RC_platform_async_is_main_thread(void) {
+    return cbq_initialized && cbq_main_thread_id != 0 &&
+        GetCurrentThreadId() == cbq_main_thread_id;
+}
+
 /**
  * Initialize async callback subsystem.
  * Creates the message-only window on the main thread.
@@ -215,6 +221,7 @@ int RC_platform_async_init(void) {
     if (!cbq_hwnd) {
         Rf_error("Failed to create async callback window");
     }
+    cbq_main_thread_id = GetCurrentThreadId();
     cbq_initialized = 1;
     return 0;
 }
@@ -261,7 +268,7 @@ int RC_platform_async_schedule_sync(int id, int n_args, const cb_arg_t *args,
  * Used by tcc_callback_async_drain() for testing.
  */
 void RC_platform_async_drain(void) {
-    if (!cbq_initialized) return;
+    if (!cbq_initialized || !RC_platform_async_is_main_thread()) return;
     MSG msg;
     while (PeekMessage(&msg, cbq_hwnd, WM_CB_FIRE, WM_CB_FIRE, PM_REMOVE)) {
         DispatchMessage(&msg);
@@ -275,7 +282,7 @@ void RC_platform_async_drain(void) {
  * Must be called from the main R thread only.
  */
 void RC_platform_async_drain_loop(volatile int *done_flag) {
-    if (!done_flag || !cbq_initialized) return;
+    if (!done_flag || !cbq_initialized || !RC_platform_async_is_main_thread()) return;
     while (!*done_flag) {
         RC_platform_async_drain();
         if (*done_flag) break;
@@ -336,6 +343,8 @@ static pthread_mutex_t cbq_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int             cbq_pipe[2] = {-1, -1};
 static InputHandler   *cbq_ih  = NULL;
 static int             cbq_initialized = 0;
+static pthread_t       cbq_main_thread;
+static int             cbq_main_thread_set = 0;
 
 /**
  * Return 1 on Unix-like platforms.
@@ -349,6 +358,11 @@ int RC_platform_async_is_supported(void) {
  */
 int RC_platform_async_is_initialized(void) {
     return cbq_initialized;
+}
+
+int RC_platform_async_is_main_thread(void) {
+    return cbq_initialized && cbq_main_thread_set &&
+        pthread_equal(pthread_self(), cbq_main_thread) != 0;
 }
 
 /**
@@ -438,8 +452,7 @@ static void cbq_drain_tasks(void) {
         cb_task_t *next = task->next;  /* capture before any signal */
         int  id   = task->id;
         SEXP args = PROTECT(cb_task_to_args(task));
-        SEXP res  = RC_invoke_callback_internal(id, args);
-        UNPROTECT(1);
+        SEXP res  = PROTECT(RC_invoke_callback_internal(id, args));
 
         if (task->is_sync) {
             task->result = cb_result_from_sexp(res);
@@ -451,6 +464,7 @@ static void cbq_drain_tasks(void) {
         } else {
             cbq_free_task(task);
         }
+        UNPROTECT(2);
         task = next;
     }
 }
@@ -488,6 +502,8 @@ int RC_platform_async_init(void) {
     if (!cbq_ih) {
         Rf_error("Failed to register input handler");
     }
+    cbq_main_thread = pthread_self();
+    cbq_main_thread_set = 1;
     cbq_initialized = 1;
     return 0;
 }
@@ -578,6 +594,7 @@ int RC_platform_async_schedule_sync(int id, int n_args, const cb_arg_t *args,
  * Used by tcc_callback_async_drain() for testing / manual flush.
  */
 void RC_platform_async_drain(void) {
+    if (!RC_platform_async_is_main_thread()) return;
     cbq_drain_tasks();
 }
 
@@ -589,7 +606,7 @@ void RC_platform_async_drain(void) {
  * Must be called from the main R thread only.
  */
 void RC_platform_async_drain_loop(volatile int *done_flag) {
-    if (!done_flag || !cbq_initialized) return;
+    if (!done_flag || !cbq_initialized || !RC_platform_async_is_main_thread()) return;
     while (!*done_flag) {
         /* Drain pipe bytes and execute pending tasks. */
         char buf[32];

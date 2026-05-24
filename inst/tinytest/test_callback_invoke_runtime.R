@@ -215,6 +215,165 @@ expect_true(
 )
 close_if_valid(cb_async)
 
+# Test: direct C scheduling from the main R thread executes immediately.
+# This exercises the main-thread fast path used to avoid queue-and-wait
+# deadlocks when a TCC-side main-thread shim schedules an async callback.
+hits_direct <- 0L
+cb_direct <- tcc_callback(
+  function(x) {
+    hits_direct <<- hits_direct + x
+    NULL
+  },
+  signature = "void (*)(int)"
+)
+cb_ptr_direct <- tcc_callback_ptr(cb_direct)
+
+code_direct_schedule <- "
+#define _Complex
+
+typedef enum { CB_ARG_INT = 0, CB_ARG_REAL = 1, CB_ARG_LOGICAL = 2, CB_ARG_PTR = 3, CB_ARG_CSTRING = 4 } cb_arg_kind_t;
+typedef struct { cb_arg_kind_t kind; union { int i; double d; void* p; char* s; } v; } cb_arg_t;
+typedef struct { int id; int refs; int origin_id; } callback_token_t;
+int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
+
+int schedule_direct(void* ctx, int value) {
+  callback_token_t* tok = (callback_token_t*)ctx;
+  cb_arg_t args[1];
+  if (!tok || tok->id < 0) return -99;
+  args[0].kind = CB_ARG_INT;
+  args[0].v.i = value;
+  return RC_callback_async_schedule_c(tok->id, 1, args);
+}
+"
+
+ffi_direct_schedule <- tcc_ffi() |>
+  tcc_source(code_direct_schedule) |>
+  tcc_bind(
+    schedule_direct = list(args = list("ptr", "i32"), returns = "i32")
+  ) |>
+  tcc_compile()
+
+expect_equal(
+  ffi_direct_schedule$schedule_direct(cb_ptr_direct, 4L),
+  0L,
+  info = "Direct main-thread async schedule succeeds"
+)
+expect_equal(
+  hits_direct,
+  4L,
+  info = "Direct main-thread async schedule executes without waiting for event-loop auto-drain"
+)
+close_if_valid(cb_direct)
+
+# Test: queued R-level async scheduling is serviced by R event-loop activity,
+# not by ordinary CPU-bound R code. This exercises the input-handler/message
+# pump path without a manual drain call.
+hits_event_loop <- 0L
+cb_event_loop <- tcc_callback(
+  function(x) {
+    hits_event_loop <<- hits_event_loop + x
+    NULL
+  },
+  signature = "void (*)(int)"
+)
+tcc_callback_async_schedule(cb_event_loop, list(5L))
+busy_until <- Sys.time() + 0.05
+while (Sys.time() < busy_until) {
+  invisible(NULL)
+}
+expect_equal(
+  hits_event_loop,
+  0L,
+  info = "Queued async callback is not serviced by a tight R loop without event-loop activity"
+)
+for (i in seq_len(50)) {
+  if (hits_event_loop == 5L) {
+    break
+  }
+  Sys.sleep(0.02)
+}
+expect_equal(
+  hits_event_loop,
+  5L,
+  info = "Queued async callback is serviced during R event-loop activity"
+)
+tcc_callback_async_drain()
+close_if_valid(cb_event_loop)
+
+# Test: async trampoline error paths return the declared C default without
+# attempting to call R APIs from the worker-capable trampoline body.
+# A closed callback keeps the callback-pointer token alive with id = -1, which
+# exercises the early invalid-token branch. RC_cleanup_callbacks() invalidates
+# the registry while leaving a non-negative token id, which exercises the
+# schedule-failure branch.
+code_invalid_async <- "
+#define _Complex
+
+int call_async_i32(int (*cb)(void* ctx, int), void* ctx, int x) {
+  return cb(ctx, x);
+}
+
+void call_async_void(void (*cb)(void* ctx, int), void* ctx, int x) {
+  cb(ctx, x);
+}
+"
+
+ffi_invalid_async <- tcc_ffi() |>
+  tcc_source(code_invalid_async) |>
+  tcc_bind(
+    call_async_i32 = list(
+      args = list("callback_async:int(int)", "ptr", "i32"),
+      returns = "i32"
+    ),
+    call_async_void = list(
+      args = list("callback_async:void(int)", "ptr", "i32"),
+      returns = "void"
+    )
+  ) |>
+  tcc_compile()
+
+invalid_hits <- 0L
+cb_invalid_i32 <- tcc_callback(
+  function(x) {
+    invalid_hits <<- invalid_hits + 1L
+    x + 1L
+  },
+  signature = "int (*)(int)"
+)
+cb_ptr_invalid_i32 <- tcc_callback_ptr(cb_invalid_i32)
+tcc_callback_close(cb_invalid_i32)
+invalid_res <- NULL
+expect_silent(
+  invalid_res <- ffi_invalid_async$call_async_i32(cb_invalid_i32, cb_ptr_invalid_i32, 7L),
+  info = "Closed async callback token follows invalid-token error path silently"
+)
+expect_true(
+  is.na(invalid_res),
+  info = "Invalid-token async callback returns default integer sentinel"
+)
+expect_equal(
+  invalid_hits,
+  0L,
+  info = "Invalid-token async callback does not invoke the released R function"
+)
+expect_silent(
+  ffi_invalid_async$call_async_void(cb_invalid_i32, cb_ptr_invalid_i32, 7L),
+  info = "Void async invalid-token path returns without warning"
+)
+
+cb_stale_i32 <- tcc_callback(function(x) x + 10L, signature = "int (*)(int)")
+cb_ptr_stale_i32 <- tcc_callback_ptr(cb_stale_i32)
+.Call("RC_cleanup_callbacks", PACKAGE = "Rtinycc")
+stale_res <- NULL
+expect_silent(
+  stale_res <- ffi_invalid_async$call_async_i32(cb_stale_i32, cb_ptr_stale_i32, 8L),
+  info = "Stale async callback token follows schedule-failure error path silently"
+)
+expect_true(
+  is.na(stale_res),
+  info = "Schedule-failure async callback returns default integer sentinel"
+)
+
 # Test: non-void async callback returns the real computed value (synchronous path).
 #
 # The worker thread blocks on the cond/SendMessage until R drains.

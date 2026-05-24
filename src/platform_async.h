@@ -66,6 +66,15 @@ int RC_platform_async_is_supported(void);
 int RC_platform_async_is_initialized(void);
 
 /**
+ * Return 1 when called on the R thread that initialized the async callback
+ * subsystem.
+ * Ownership: none.
+ * Allocation: none.
+ * Protection: none.
+ */
+int RC_platform_async_is_main_thread(void);
+
+/**
  * Initialize async callback queue.
  * Ownership: none.
  * Allocation: platform queue state.

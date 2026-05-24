@@ -1391,6 +1391,66 @@ SEXP RC_callback_async_drain(void) {
     return R_NilValue;
 }
 
+static SEXP RC_callback_async_args_to_sexp(int n_args, const cb_arg_t *args) {
+    if (n_args <= 0) {
+        return R_NilValue;
+    }
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, n_args));
+    for (int i = 0; i < n_args; i++) {
+        const cb_arg_t *a = &args[i];
+        switch (a->kind) {
+            case CB_ARG_INT:
+                SET_VECTOR_ELT(out, i, Rf_ScalarInteger(a->v.i));
+                break;
+            case CB_ARG_REAL:
+                SET_VECTOR_ELT(out, i, Rf_ScalarReal(a->v.d));
+                break;
+            case CB_ARG_LOGICAL:
+                SET_VECTOR_ELT(out, i, Rf_ScalarLogical(a->v.i));
+                break;
+            case CB_ARG_PTR:
+                SET_VECTOR_ELT(out, i, RC_make_unowned_ptr(a->v.p, R_NilValue));
+                break;
+            case CB_ARG_CSTRING:
+                SET_VECTOR_ELT(out, i, Rf_mkString(a->v.s ? a->v.s : ""));
+                break;
+        }
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+static cb_result_t RC_callback_async_result_from_sexp(SEXP s) {
+    cb_result_t r;
+    memset(&r, 0, sizeof(r));
+    r.kind = CB_RESULT_VOID;
+    if (s == R_NilValue) return r;
+    if (Rf_isInteger(s) && XLENGTH(s) >= 1) {
+        r.kind = CB_RESULT_INT;
+        r.v.i = Rf_asInteger(s);
+    } else if (Rf_isReal(s) && XLENGTH(s) >= 1) {
+        r.kind = CB_RESULT_REAL;
+        r.v.d = Rf_asReal(s);
+    } else if (Rf_isLogical(s) && XLENGTH(s) >= 1) {
+        r.kind = CB_RESULT_LOGICAL;
+        r.v.i = Rf_asLogical(s);
+    } else if (TYPEOF(s) == EXTPTRSXP) {
+        r.kind = CB_RESULT_PTR;
+        r.v.p = R_ExternalPtrAddr(s);
+    }
+    return r;
+}
+
+static int RC_callback_async_invoke_now(int id, int n_args, const cb_arg_t *args, cb_result_t *result) {
+    SEXP r_args = PROTECT(RC_callback_async_args_to_sexp(n_args, args));
+    SEXP res = PROTECT(RC_invoke_callback_internal(id, r_args));
+    if (result) {
+        *result = RC_callback_async_result_from_sexp(res);
+    }
+    UNPROTECT(2);
+    return 0;
+}
+
 /**
  * Schedule async callback from C worker threads.
  * @param id Callback registry id.
@@ -1399,13 +1459,14 @@ SEXP RC_callback_async_drain(void) {
  * @return 0 on success, negative error code otherwise.
  */
 int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
-    /* Lazy-init: covers deserialized objects used in a fresh session. */
-    RC_platform_async_init();
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
     if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
         return -2;
+    }
+    if (RC_platform_async_is_main_thread()) {
+        return RC_callback_async_invoke_now(id, n_args, args, NULL);
     }
     return RC_platform_async_schedule(id, n_args, args);
 }
@@ -1422,13 +1483,14 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
  */
 int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
                                       cb_result_t *result) {
-    /* Lazy-init: covers deserialized objects used in a fresh session. */
-    RC_platform_async_init();
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
     if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
         return -2;
+    }
+    if (RC_platform_async_is_main_thread()) {
+        return RC_callback_async_invoke_now(id, n_args, args, result);
     }
     return RC_platform_async_schedule_sync(id, n_args, args, result);
 }
@@ -1441,8 +1503,6 @@ int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
  *                  when it finishes.
  */
 void RC_callback_async_drain_loop_c(volatile int *done_flag) {
-    /* Lazy-init: covers deserialized objects used in a fresh session. */
-    RC_platform_async_init();
     RC_platform_async_drain_loop(done_flag);
 }
 
