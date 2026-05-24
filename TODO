@@ -1,5 +1,1 @@
 - design explicit ALTREP-aware FFI array semantics before changing mutable array inputs; decide whether to add read-only array types, inout copy-back modes, aliasing rules, and when to use *_GET_REGION(), DATAPTR_RO(), or writable materialization
-- add simple input types for tcc_call_symbol
-- add simple more types
-- setjump support for tcc_call_symbol
-- external symbols when compiling with tinycc
