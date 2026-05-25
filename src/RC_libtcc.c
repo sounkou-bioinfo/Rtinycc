@@ -48,7 +48,7 @@ SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
 SEXP RC_libtcc_relocate(SEXP ext);
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
 SEXP RC_libtcc_list_symbols(SEXP ext);
-SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type);
+SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type, SEXP args, SEXP naok_);
 SEXP RC_libtcc_ptr_valid(SEXP ptr);
 SEXP RC_libtcc_output_file(SEXP ext, SEXP filename);
 SEXP RC_get_external_ptr_addr(SEXP ext);
@@ -670,22 +670,590 @@ SEXP RC_libtcc_list_symbols(SEXP ext) {
 }
 
 /**
- * Call a zero-argument symbol, casting to the requested return type.
- * Ownership: none.
- * Allocation: none.
- * Protection: none.
+ * Call a TCC symbol.
+ *
+ * With no pointer arguments this preserves the historical quick-test helper
+ * semantics: call a zero-argument function and box an int/double/void return.
+ * With one or more arguments this follows R's .C-style convention: the target
+ * function is called as a void routine receiving pointers to mutable argument
+ * buffers, and the return value is a list mirroring the input arguments.
+ *
+ * Ownership: all temporary C buffers are R_alloc-managed.
+ * Allocation: R result objects and R_alloc buffers.
+ * Protection: protects result list and temporary output vectors until attached.
  */
-/* Call a zero-argument symbol, casting to the requested return type
- * ("int", "double", or "void"). Useful for quick tests. */
-SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type) {
+#define RC_DOTC_MAX_ARGS 65
+#define RC_DOTC_CHAR_BUFSIZE_MIN 128
+
+typedef enum {
+    RC_DOTC_ARG_DIRECT = 0,
+    RC_DOTC_ARG_LOGICAL = 1,
+    RC_DOTC_ARG_SINGLE = 2,
+    RC_DOTC_ARG_CHARACTER = 3
+} RC_dotc_arg_kind_t;
+
+typedef struct {
+    RC_dotc_arg_kind_t kind;
+    SEXP original;
+    SEXP out;
+    R_xlen_t n;
+    void *ptr;
+} RC_dotc_arg_t;
+
+typedef void (*RC_DOTC_FUNV0)(void);
+typedef void (*RC_DOTC_FUNV1)(void *);
+typedef void (*RC_DOTC_FUNV2)(void *, void *);
+typedef void (*RC_DOTC_FUNV3)(void *, void *, void *);
+typedef void (*RC_DOTC_FUNV4)(void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV5)(void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV6)(void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV7)(void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV8)(void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV9)(void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV10)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV11)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV12)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV13)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV14)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV15)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV16)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV17)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV18)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV19)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV20)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV21)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV22)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV23)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV24)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV25)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV26)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV27)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV28)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV29)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV30)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV31)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV32)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV33)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV34)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV35)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV36)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV37)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV38)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV39)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV40)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV41)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV42)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV43)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV44)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV45)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV46)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV47)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV48)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV49)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV50)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV51)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV52)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV53)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV54)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV55)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV56)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV57)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV58)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV59)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV60)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV61)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV62)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV63)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV64)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void (*RC_DOTC_FUNV65)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+
+static void RC_libtcc_call_void_symbol(uintptr_t addr, int nargs, void **cargs) {
+    switch (nargs) {
+    case 0:
+        ((RC_DOTC_FUNV0)addr)();
+        break;
+    case 1:
+        ((RC_DOTC_FUNV1)addr)(cargs[0]);
+        break;
+    case 2:
+        ((RC_DOTC_FUNV2)addr)(cargs[0], cargs[1]);
+        break;
+    case 3:
+        ((RC_DOTC_FUNV3)addr)(cargs[0], cargs[1], cargs[2]);
+        break;
+    case 4:
+        ((RC_DOTC_FUNV4)addr)(cargs[0], cargs[1], cargs[2], cargs[3]);
+        break;
+    case 5:
+        ((RC_DOTC_FUNV5)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4]);
+        break;
+    case 6:
+        ((RC_DOTC_FUNV6)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5]);
+        break;
+    case 7:
+        ((RC_DOTC_FUNV7)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6]);
+        break;
+    case 8:
+        ((RC_DOTC_FUNV8)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7]);
+        break;
+    case 9:
+        ((RC_DOTC_FUNV9)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8]);
+        break;
+    case 10:
+        ((RC_DOTC_FUNV10)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9]);
+        break;
+    case 11:
+        ((RC_DOTC_FUNV11)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10]);
+        break;
+    case 12:
+        ((RC_DOTC_FUNV12)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11]);
+        break;
+    case 13:
+        ((RC_DOTC_FUNV13)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12]);
+        break;
+    case 14:
+        ((RC_DOTC_FUNV14)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13]);
+        break;
+    case 15:
+        ((RC_DOTC_FUNV15)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14]);
+        break;
+    case 16:
+        ((RC_DOTC_FUNV16)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15]);
+        break;
+    case 17:
+        ((RC_DOTC_FUNV17)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16]);
+        break;
+    case 18:
+        ((RC_DOTC_FUNV18)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17]);
+        break;
+    case 19:
+        ((RC_DOTC_FUNV19)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18]);
+        break;
+    case 20:
+        ((RC_DOTC_FUNV20)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19]);
+        break;
+    case 21:
+        ((RC_DOTC_FUNV21)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20]);
+        break;
+    case 22:
+        ((RC_DOTC_FUNV22)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21]);
+        break;
+    case 23:
+        ((RC_DOTC_FUNV23)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22]);
+        break;
+    case 24:
+        ((RC_DOTC_FUNV24)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23]);
+        break;
+    case 25:
+        ((RC_DOTC_FUNV25)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24]);
+        break;
+    case 26:
+        ((RC_DOTC_FUNV26)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25]);
+        break;
+    case 27:
+        ((RC_DOTC_FUNV27)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26]);
+        break;
+    case 28:
+        ((RC_DOTC_FUNV28)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27]);
+        break;
+    case 29:
+        ((RC_DOTC_FUNV29)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28]);
+        break;
+    case 30:
+        ((RC_DOTC_FUNV30)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29]);
+        break;
+    case 31:
+        ((RC_DOTC_FUNV31)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30]);
+        break;
+    case 32:
+        ((RC_DOTC_FUNV32)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31]);
+        break;
+    case 33:
+        ((RC_DOTC_FUNV33)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32]);
+        break;
+    case 34:
+        ((RC_DOTC_FUNV34)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33]);
+        break;
+    case 35:
+        ((RC_DOTC_FUNV35)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34]);
+        break;
+    case 36:
+        ((RC_DOTC_FUNV36)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35]);
+        break;
+    case 37:
+        ((RC_DOTC_FUNV37)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36]);
+        break;
+    case 38:
+        ((RC_DOTC_FUNV38)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37]);
+        break;
+    case 39:
+        ((RC_DOTC_FUNV39)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38]);
+        break;
+    case 40:
+        ((RC_DOTC_FUNV40)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39]);
+        break;
+    case 41:
+        ((RC_DOTC_FUNV41)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40]);
+        break;
+    case 42:
+        ((RC_DOTC_FUNV42)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41]);
+        break;
+    case 43:
+        ((RC_DOTC_FUNV43)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42]);
+        break;
+    case 44:
+        ((RC_DOTC_FUNV44)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43]);
+        break;
+    case 45:
+        ((RC_DOTC_FUNV45)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44]);
+        break;
+    case 46:
+        ((RC_DOTC_FUNV46)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45]);
+        break;
+    case 47:
+        ((RC_DOTC_FUNV47)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46]);
+        break;
+    case 48:
+        ((RC_DOTC_FUNV48)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47]);
+        break;
+    case 49:
+        ((RC_DOTC_FUNV49)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48]);
+        break;
+    case 50:
+        ((RC_DOTC_FUNV50)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49]);
+        break;
+    case 51:
+        ((RC_DOTC_FUNV51)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50]);
+        break;
+    case 52:
+        ((RC_DOTC_FUNV52)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51]);
+        break;
+    case 53:
+        ((RC_DOTC_FUNV53)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52]);
+        break;
+    case 54:
+        ((RC_DOTC_FUNV54)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53]);
+        break;
+    case 55:
+        ((RC_DOTC_FUNV55)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54]);
+        break;
+    case 56:
+        ((RC_DOTC_FUNV56)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55]);
+        break;
+    case 57:
+        ((RC_DOTC_FUNV57)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56]);
+        break;
+    case 58:
+        ((RC_DOTC_FUNV58)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57]);
+        break;
+    case 59:
+        ((RC_DOTC_FUNV59)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58]);
+        break;
+    case 60:
+        ((RC_DOTC_FUNV60)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58], cargs[59]);
+        break;
+    case 61:
+        ((RC_DOTC_FUNV61)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58], cargs[59], cargs[60]);
+        break;
+    case 62:
+        ((RC_DOTC_FUNV62)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58], cargs[59], cargs[60], cargs[61]);
+        break;
+    case 63:
+        ((RC_DOTC_FUNV63)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58], cargs[59], cargs[60], cargs[61], cargs[62]);
+        break;
+    case 64:
+        ((RC_DOTC_FUNV64)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58], cargs[59], cargs[60], cargs[61], cargs[62], cargs[63]);
+        break;
+    case 65:
+        ((RC_DOTC_FUNV65)addr)(cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15], cargs[16], cargs[17], cargs[18], cargs[19], cargs[20], cargs[21], cargs[22], cargs[23], cargs[24], cargs[25], cargs[26], cargs[27], cargs[28], cargs[29], cargs[30], cargs[31], cargs[32], cargs[33], cargs[34], cargs[35], cargs[36], cargs[37], cargs[38], cargs[39], cargs[40], cargs[41], cargs[42], cargs[43], cargs[44], cargs[45], cargs[46], cargs[47], cargs[48], cargs[49], cargs[50], cargs[51], cargs[52], cargs[53], cargs[54], cargs[55], cargs[56], cargs[57], cargs[58], cargs[59], cargs[60], cargs[61], cargs[62], cargs[63], cargs[64]);
+        break;
+    default:
+        Rf_error("too many arguments in TCC symbol call (maximum is %d)", RC_DOTC_MAX_ARGS);
+    }
+}
+
+static void RC_libtcc_check_dotc_na(SEXP x, int arg_index, int naok) {
+    if (naok) return;
+
+    switch (TYPEOF(x)) {
+    case LGLSXP:
+    case INTSXP: {
+        const int *p = INTEGER(x);
+        R_xlen_t n = XLENGTH(x);
+        for (R_xlen_t i = 0; i < n; i++) {
+            if (p[i] == NA_INTEGER) {
+                Rf_error("NAs in TCC foreign function call (arg %d)", arg_index);
+            }
+        }
+        break;
+    }
+    case REALSXP: {
+        const double *p = REAL(x);
+        R_xlen_t n = XLENGTH(x);
+        for (R_xlen_t i = 0; i < n; i++) {
+            if (!R_FINITE(p[i])) {
+                Rf_error("NA/NaN/Inf in TCC foreign function call (arg %d)", arg_index);
+            }
+        }
+        break;
+    }
+    case CPLXSXP: {
+        const Rcomplex *p = COMPLEX(x);
+        R_xlen_t n = XLENGTH(x);
+        for (R_xlen_t i = 0; i < n; i++) {
+            if (!R_FINITE(p[i].r) || !R_FINITE(p[i].i)) {
+                Rf_error("complex NA/NaN/Inf in TCC foreign function call (arg %d)", arg_index);
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static int RC_libtcc_is_csingle(SEXP x) {
+    static SEXP csingle_symbol = NULL;
+    if (csingle_symbol == NULL) {
+        csingle_symbol = Rf_install("Csingle");
+    }
+    return Rf_asLogical(Rf_getAttrib(x, csingle_symbol)) == TRUE;
+}
+
+static void RC_libtcc_copy_attrib(SEXP to, SEXP from) {
+    SHALLOW_DUPLICATE_ATTRIB(to, from);
+}
+
+static R_xlen_t RC_libtcc_dotc_arg_length(SEXP x, int arg_index) {
+    switch (TYPEOF(x)) {
+    case RAWSXP:
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case CPLXSXP:
+    case STRSXP:
+    case VECSXP: {
+        R_xlen_t n = XLENGTH(x);
+        if (n > INT_MAX) {
+            Rf_error("long vectors (argument %d) are not supported in TCC foreign function calls", arg_index);
+        }
+        return n;
+    }
+    default:
+        return 0;
+    }
+}
+
+static void RC_libtcc_prepare_dotc_arg(SEXP x, int arg_index, int naok,
+                                       SEXP ans, void **cargs,
+                                       RC_dotc_arg_t *meta) {
+    RC_libtcc_check_dotc_na(x, arg_index, naok);
+
+    meta->kind = RC_DOTC_ARG_DIRECT;
+    meta->original = x;
+    meta->out = x;
+    meta->n = RC_libtcc_dotc_arg_length(x, arg_index);
+    meta->ptr = NULL;
+
+    switch (TYPEOF(x)) {
+    case RAWSXP: {
+        SEXP out = PROTECT(Rf_allocVector(RAWSXP, meta->n));
+        if (meta->n) memcpy(RAW(out), RAW(x), (size_t)meta->n * sizeof(Rbyte));
+        RC_libtcc_copy_attrib(out, x);
+        SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->out = out;
+        meta->ptr = RAW(out);
+        cargs[arg_index - 1] = meta->ptr;
+        UNPROTECT(1);
+        break;
+    }
+    case LGLSXP: {
+        SEXP out = PROTECT(Rf_allocVector(LGLSXP, meta->n));
+        if (meta->n) memcpy(LOGICAL(out), LOGICAL(x), (size_t)meta->n * sizeof(int));
+        RC_libtcc_copy_attrib(out, x);
+        SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->kind = RC_DOTC_ARG_LOGICAL;
+        meta->out = out;
+        meta->ptr = LOGICAL(out);
+        cargs[arg_index - 1] = meta->ptr;
+        UNPROTECT(1);
+        break;
+    }
+    case INTSXP: {
+        SEXP out = PROTECT(Rf_allocVector(INTSXP, meta->n));
+        if (meta->n) memcpy(INTEGER(out), INTEGER(x), (size_t)meta->n * sizeof(int));
+        RC_libtcc_copy_attrib(out, x);
+        SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->out = out;
+        meta->ptr = INTEGER(out);
+        cargs[arg_index - 1] = meta->ptr;
+        UNPROTECT(1);
+        break;
+    }
+    case REALSXP: {
+        if (RC_libtcc_is_csingle(x)) {
+            float *buf = (float *)R_alloc((size_t)meta->n, sizeof(float));
+            for (R_xlen_t i = 0; i < meta->n; i++) buf[i] = (float)REAL(x)[i];
+            SEXP out = PROTECT(Rf_allocVector(REALSXP, meta->n));
+            RC_libtcc_copy_attrib(out, x);
+            SET_VECTOR_ELT(ans, arg_index - 1, out);
+            meta->kind = RC_DOTC_ARG_SINGLE;
+            meta->out = out;
+            meta->ptr = buf;
+            cargs[arg_index - 1] = meta->ptr;
+            UNPROTECT(1);
+        } else {
+            SEXP out = PROTECT(Rf_allocVector(REALSXP, meta->n));
+            if (meta->n) memcpy(REAL(out), REAL(x), (size_t)meta->n * sizeof(double));
+            RC_libtcc_copy_attrib(out, x);
+            SET_VECTOR_ELT(ans, arg_index - 1, out);
+            meta->out = out;
+            meta->ptr = REAL(out);
+            cargs[arg_index - 1] = meta->ptr;
+            UNPROTECT(1);
+        }
+        break;
+    }
+    case CPLXSXP: {
+        SEXP out = PROTECT(Rf_allocVector(CPLXSXP, meta->n));
+        if (meta->n) memcpy(COMPLEX(out), COMPLEX(x), (size_t)meta->n * sizeof(Rcomplex));
+        RC_libtcc_copy_attrib(out, x);
+        SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->out = out;
+        meta->ptr = COMPLEX(out);
+        cargs[arg_index - 1] = meta->ptr;
+        UNPROTECT(1);
+        break;
+    }
+    case STRSXP: {
+        char **cptr = (char **)R_alloc((size_t)meta->n, sizeof(char *));
+        for (R_xlen_t i = 0; i < meta->n; i++) {
+            const char *src = (STRING_ELT(x, i) == NA_STRING) ? "NA" : Rf_translateChar(STRING_ELT(x, i));
+            size_t len = strlen(src) + 1;
+            size_t cap = len < RC_DOTC_CHAR_BUFSIZE_MIN ? RC_DOTC_CHAR_BUFSIZE_MIN : len;
+            cptr[i] = (char *)R_alloc(cap, sizeof(char));
+            memset(cptr[i], 0, cap);
+            memcpy(cptr[i], src, len);
+        }
+        SEXP out = PROTECT(Rf_allocVector(STRSXP, meta->n));
+        RC_libtcc_copy_attrib(out, x);
+        SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->kind = RC_DOTC_ARG_CHARACTER;
+        meta->out = out;
+        meta->ptr = cptr;
+        cargs[arg_index - 1] = meta->ptr;
+        UNPROTECT(1);
+        break;
+    }
+    case VECSXP: {
+        SEXP *lptr = (SEXP *)R_alloc((size_t)meta->n, sizeof(SEXP));
+        for (R_xlen_t i = 0; i < meta->n; i++) lptr[i] = VECTOR_ELT(x, i);
+        SET_VECTOR_ELT(ans, arg_index - 1, x);
+        meta->ptr = lptr;
+        cargs[arg_index - 1] = meta->ptr;
+        break;
+    }
+    case NILSXP:
+        Rf_error("invalid mode (%s) to pass to TCC foreign function (arg %d)",
+                 Rf_type2char(TYPEOF(x)), arg_index);
+        break;
+    default:
+        SET_VECTOR_ELT(ans, arg_index - 1, x);
+        meta->ptr = (void *)x;
+        cargs[arg_index - 1] = meta->ptr;
+        break;
+    }
+}
+
+static void RC_libtcc_finish_dotc_arg(RC_dotc_arg_t *meta) {
+    switch (meta->kind) {
+    case RC_DOTC_ARG_LOGICAL: {
+        int *p = LOGICAL(meta->out);
+        for (R_xlen_t i = 0; i < meta->n; i++) {
+            int v = p[i];
+            p[i] = (v == NA_INTEGER || v == 0) ? v : 1;
+        }
+        break;
+    }
+    case RC_DOTC_ARG_SINGLE: {
+        float *p = (float *)meta->ptr;
+        for (R_xlen_t i = 0; i < meta->n; i++) REAL(meta->out)[i] = (double)p[i];
+        break;
+    }
+    case RC_DOTC_ARG_CHARACTER: {
+        char **p = (char **)meta->ptr;
+        for (R_xlen_t i = 0; i < meta->n; i++) {
+            SET_STRING_ELT(meta->out, i, Rf_mkChar(p[i] ? p[i] : ""));
+        }
+        break;
+    }
+    case RC_DOTC_ARG_DIRECT:
+    default:
+        break;
+    }
+}
+
+static SEXP RC_libtcc_call_symbol_dotc(uintptr_t addr, SEXP args, int naok) {
+    if (TYPEOF(args) != VECSXP) {
+        Rf_error("internal error: TCC symbol arguments must be a list");
+    }
+
+    R_xlen_t nargs_x = XLENGTH(args);
+    if (nargs_x > RC_DOTC_MAX_ARGS) {
+        Rf_error("too many arguments in TCC symbol call (maximum is %d)", RC_DOTC_MAX_ARGS);
+    }
+    int nargs = (int)nargs_x;
+
+    SEXP ans = PROTECT(Rf_allocVector(VECSXP, nargs));
+    SEXP names = Rf_getAttrib(args, R_NamesSymbol);
+    if (names != R_NilValue) {
+        Rf_setAttrib(ans, R_NamesSymbol, names);
+    }
+
+    void **cargs = (void **)R_alloc((size_t)nargs, sizeof(void *));
+    RC_dotc_arg_t *meta = (RC_dotc_arg_t *)R_alloc((size_t)nargs, sizeof(RC_dotc_arg_t));
+
+    for (int i = 0; i < nargs; i++) {
+        RC_libtcc_prepare_dotc_arg(VECTOR_ELT(args, i), i + 1, naok, ans, cargs, &meta[i]);
+    }
+
+    RC_libtcc_call_void_symbol(addr, nargs, cargs);
+
+    for (int i = 0; i < nargs; i++) {
+        RC_libtcc_finish_dotc_arg(&meta[i]);
+    }
+
+    UNPROTECT(1);
+    return ans;
+}
+
+/* Call a TCC symbol. ret_type controls the legacy zero-argument scalar path;
+ * when args is non-empty the function is called with .C-style pointer
+ * arguments and must be declared void. */
+SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type, SEXP args, SEXP naok_) {
     TCCState *s = RC_tcc_state(ext);
+    if (!Rf_isString(name) || XLENGTH(name) != 1) {
+        Rf_error("symbol name must be a character scalar");
+    }
+    if (!Rf_isString(ret_type) || XLENGTH(ret_type) != 1) {
+        Rf_error("return type must be a character scalar");
+    }
     const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
     const char *rtype = Rf_translateCharUTF8(STRING_ELT(ret_type, 0));
     void *fn = tcc_get_symbol(s, sym);
     if (!fn) {
         Rf_error("symbol '%s' not found", sym);
     }
+
     uintptr_t addr = (uintptr_t) fn;
+    int nargs = (args == R_NilValue) ? 0 : (int)XLENGTH(args);
+    if (nargs > 0) {
+        if (strcmp(rtype, "void") != 0) {
+            Rf_error("TCC .C-style symbol calls with arguments require return = 'void'");
+        }
+        int naok = Rf_asLogical(naok_) == TRUE;
+        return RC_libtcc_call_symbol_dotc(addr, args, naok);
+    }
     /* Debug: print address and alignment if RTINYCC_DEBUG is set */
     int debug_enabled = 0;
     const char *env = getenv("RTINYCC_DEBUG");
@@ -2110,11 +2678,19 @@ SEXP RC_cleanup_callbacks(void) {
 /* Register host symbols that TCC-compiled code may reference.
     On macOS (without -flat_namespace) these are not visible to TCC
     through the dynamic linker, so we must add them explicitly. */
-/* libtcc stores symbol addresses as const void*.  Passing function pointers
-   through that API is required here, but ISO C has no warning-free spell for
-   function-pointer-to-object-pointer conversion.  Keep the cast localized. */
+/* libtcc stores all symbol addresses as const void*, including callable C
+   symbols.  ISO C does not define a portable function-pointer/object-pointer
+   conversion, but the platforms supported by Rtinycc use equal-sized code and
+   data pointers for dynamically resolved symbols.  Copy the representation
+   through memory rather than spelling a function-pointer-to-object-pointer
+   cast, which keeps -Wpedantic builds quiet while preserving the libtcc ABI. */
 static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn) {
-    return tcc_add_symbol(s, name, (const void *) fn);
+    const void *addr = NULL;
+    if (sizeof(addr) != sizeof(fn)) {
+        Rf_error("cannot register host symbol '%s': function pointer size differs from object pointer size", name);
+    }
+    memcpy(&addr, &fn, sizeof(addr));
+    return tcc_add_symbol(s, name, addr);
 }
 
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {

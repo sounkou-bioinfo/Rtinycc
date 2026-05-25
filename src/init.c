@@ -22,7 +22,7 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code);
 SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr);
 SEXP RC_libtcc_add_host_symbols(SEXP ext);
 SEXP RC_libtcc_relocate(SEXP ext);
-SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type);
+SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type, SEXP args, SEXP naok_);
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name);
 SEXP RC_libtcc_list_symbols(SEXP ext);
 
@@ -97,7 +97,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"RC_libtcc_add_symbol",  (DL_FUNC) &RC_libtcc_add_symbol,  3},
     {"RC_libtcc_add_host_symbols", (DL_FUNC) &RC_libtcc_add_host_symbols, 1},
     {"RC_libtcc_relocate",    (DL_FUNC) &RC_libtcc_relocate,    1},
-    {"RC_libtcc_call_symbol", (DL_FUNC) &RC_libtcc_call_symbol, 3},
+    {"RC_libtcc_call_symbol", (DL_FUNC) &RC_libtcc_call_symbol, 5},
     {"RC_libtcc_get_symbol",  (DL_FUNC) &RC_libtcc_get_symbol,  2},
     {"RC_libtcc_list_symbols", (DL_FUNC) &RC_libtcc_list_symbols, 1},
     

@@ -2,20 +2,51 @@
 % Please edit documentation in R/tinycc.R
 \name{tcc_call_symbol}
 \alias{tcc_call_symbol}
-\title{Call a zero-argument symbol with a specified return type}
+\title{Call a symbol from a TinyCC state}
 \usage{
-tcc_call_symbol(state, name, return = c("int", "double", "void"))
+tcc_call_symbol(
+  .state,
+  .NAME,
+  ...,
+  return = c("int", "double", "void"),
+  NAOK = FALSE
+)
 }
 \arguments{
-\item{state}{A \code{tcc_state}.}
+\item{.state}{A \code{tcc_state}. Named \verb{state =} is also accepted for
+compatibility with earlier releases.}
 
-\item{name}{Symbol name to call.}
+\item{.NAME}{Symbol name to call. Named \verb{name =} is also accepted for
+compatibility with earlier releases.}
 
-\item{return}{One of "int", "double", "void".}
+\item{...}{Optional arguments for \code{.C()}-style pointer calls.}
+
+\item{return}{One of \code{"int"}, \code{"double"}, or \code{"void"}. If \code{...} is present,
+the only supported value is \code{"void"}; when omitted with \code{...}, it defaults
+to \code{"void"}.}
+
+\item{NAOK}{If \code{FALSE}, integer/logical \code{NA} and non-finite numeric/complex
+values are rejected before the call, matching \code{.C()}'s default safety
+check. If \code{TRUE}, those values are passed through.}
 }
 \value{
-The return value cast to the requested type (NULL for void).
+For zero-argument scalar calls, the boxed return value (\code{NULL} for
+\code{void}). For \code{.C()}-style calls, a list mirroring \code{...} with any C-side
+modifications copied back.
 }
 \description{
-Call a zero-argument symbol with a specified return type
+With no additional arguments, \code{tcc_call_symbol()} preserves its historical
+quick-test behavior: call a zero-argument symbol and box an \code{int}, \code{double},
+or \code{void} return value.
+}
+\details{
+With additional arguments, it uses an R \code{.C()}-style calling convention: the
+target C function must be \code{void}, each R argument is copied to a mutable C
+buffer and passed by pointer, and the result is a list of the modified
+argument values. Supported argument types mirror the common \code{.C()} set:
+raw, integer, logical, double, complex, character, lists as \verb{SEXP *}, and
+other R objects as \code{SEXP}. Up to 65 arguments are supported.
+
+This is a low-level convenience interface. For typed scalar returns,
+ownership metadata, and clearer signatures, prefer \code{\link[=tcc_ffi]{tcc_ffi()}}.
 }

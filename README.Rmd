@@ -113,6 +113,17 @@ tcc_relocate(state)
 tcc_call_symbol(state, "forty_two", return = "int")
 ```
 
+For low-level pointer-style calls, `tcc_call_symbol()` can also use an
+R `.C()`-like convention: call a `void` C routine with pointers to copied
+argument buffers, then return a list of the modified values.
+
+```{r in-memory-dotc}
+state <- tcc_state(output = "memory")
+tcc_compile_string(state, "void add_one(int *x) { x[0] += 1; }")
+tcc_relocate(state)
+tcc_call_symbol(state, "add_one", x = as.integer(41))
+```
+
 The lower-level API gives full control over include paths, libraries, and the R C API. Using `#define _Complex` as a workaround for TCC's lack of [complex type support](https://lists.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html), we can link against R's headers and call into `libR`.
 
 ```{r call-R-C-API}

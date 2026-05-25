@@ -325,15 +325,76 @@ tcc_list_symbols <- function(state) {
 }
 
 
-#' Call a zero-argument symbol with a specified return type
-#' @param state A `tcc_state`.
-#' @param name Symbol name to call.
-#' @param return One of "int", "double", "void".
-#' @return The return value cast to the requested type (NULL for void).
+#' Call a symbol from a TinyCC state
+#'
+#' With no additional arguments, `tcc_call_symbol()` preserves its historical
+#' quick-test behavior: call a zero-argument symbol and box an `int`, `double`,
+#' or `void` return value.
+#'
+#' With additional arguments, it uses an R `.C()`-style calling convention: the
+#' target C function must be `void`, each R argument is copied to a mutable C
+#' buffer and passed by pointer, and the result is a list of the modified
+#' argument values. Supported argument types mirror the common `.C()` set:
+#' raw, integer, logical, double, complex, character, lists as `SEXP *`, and
+#' other R objects as `SEXP`. Up to 65 arguments are supported.
+#'
+#' This is a low-level convenience interface. For typed scalar returns,
+#' ownership metadata, and clearer signatures, prefer [tcc_ffi()].
+#'
+#' @param .state A `tcc_state`. Named `state =` is also accepted for
+#'   compatibility with earlier releases.
+#' @param .NAME Symbol name to call. Named `name =` is also accepted for
+#'   compatibility with earlier releases.
+#' @param ... Optional arguments for `.C()`-style pointer calls.
+#' @param return One of `"int"`, `"double"`, or `"void"`. If `...` is present,
+#'   the only supported value is `"void"`; when omitted with `...`, it defaults
+#'   to `"void"`.
+#' @param NAOK If `FALSE`, integer/logical `NA` and non-finite numeric/complex
+#'   values are rejected before the call, matching `.C()`'s default safety
+#'   check. If `TRUE`, those values are passed through.
+#' @return For zero-argument scalar calls, the boxed return value (`NULL` for
+#'   `void`). For `.C()`-style calls, a list mirroring `...` with any C-side
+#'   modifications copied back.
 #' @export
-tcc_call_symbol <- function(state, name, return = c("int", "double", "void")) {
-  return <- match.arg(return)
-  .Call(RC_libtcc_call_symbol, state, name, return)
+tcc_call_symbol <- function(.state, .NAME, ..., return = c("int", "double", "void"), NAOK = FALSE) {
+  args <- list(...)
+
+  if (missing(.state)) {
+    if (!is.null(args$state)) {
+      .state <- args$state
+      args$state <- NULL
+    } else {
+      stop("argument '.state' is missing", call. = FALSE)
+    }
+  }
+  if (missing(.NAME)) {
+    if (!is.null(args$name)) {
+      .NAME <- args$name
+      args$name <- NULL
+    } else {
+      stop("argument '.NAME' is missing", call. = FALSE)
+    }
+  }
+
+  if (missing(return) && length(args) == 1L && is.character(args[[1L]]) &&
+      length(args[[1L]]) == 1L && args[[1L]] %in% c("int", "double", "void") &&
+      is.null(names(args))) {
+    return <- args[[1L]]
+    args <- list()
+  } else if (missing(return) && length(args) > 0L) {
+    return <- "void"
+  } else {
+    return <- match.arg(return)
+  }
+
+  if (length(args) > 0L && !identical(return, "void")) {
+    stop("tcc_call_symbol() with arguments uses .C-style void functions", call. = FALSE)
+  }
+  if (!isTRUE(NAOK) && !identical(NAOK, FALSE)) {
+    stop("NAOK must be TRUE or FALSE", call. = FALSE)
+  }
+
+  .Call(RC_libtcc_call_symbol, .state, .NAME, return, args, isTRUE(NAOK))
 }
 
 #' Check if a tcc_symbol external pointer is valid
