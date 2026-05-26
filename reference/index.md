@@ -61,7 +61,7 @@
   : Bind symbols with type specifications
 
 - [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
-  : Call a zero-argument symbol with a specified return type
+  : Call a symbol from a TinyCC state
 
 - [`tcc_callback()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback.md)
   : Register an R function as a callback

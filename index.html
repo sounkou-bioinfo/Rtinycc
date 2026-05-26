@@ -128,8 +128,18 @@
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"forty_two"</span>, return <span class="op">=</span> <span class="st">"int"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 42</span></span></code></pre></div>
-<p>The lower-level API gives full control over include paths, libraries, and the R C API. Using <code>#define _Complex</code> as a workaround for TCC’s lack of <a href="https://lists.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html" class="external-link">complex type support</a>, we can link against R’s headers and call into <code>libR</code>.</p>
+<p>For low-level pointer-style calls, <code><a href="reference/tcc_call_symbol.html">tcc_call_symbol()</a></code> can also use an R <code><a href="https://rdrr.io/r/base/Foreign.html" class="external-link">.C()</a></code>-like convention: call a <code>void</code> C routine with pointers to copied argument buffers, then return a list of the modified values.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/tcc_compile_string.html">tcc_compile_string</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"void add_one(int *x) { x[0] += 1; }"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="reference/tcc_relocate.html">tcc_relocate</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="reference/tcc_call_symbol.html">tcc_call_symbol</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"add_one"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">41</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $x</span></span>
+<span><span class="co">#&gt; [1] 42</span></span></code></pre></div>
+<p>The lower-level API gives full control over include paths, libraries, and the R C API. Using <code>#define _Complex</code> as a workaround for TCC’s lack of <a href="https://lists.gnu.org/archive/html/tinycc-devel/2022-04/msg00020.html" class="external-link">complex type support</a>, we can link against R’s headers and call into <code>libR</code>.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_state.html">tcc_state</a></span><span class="op">(</span>output <span class="op">=</span> <span class="st">"memory"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_add_include_path.html">tcc_add_include_path</a></span><span class="op">(</span><span class="va">state</span>, <span class="fu"><a href="https://rdrr.io/r/base/Rhome.html" class="external-link">R.home</a></span><span class="op">(</span><span class="st">"include"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
@@ -162,20 +172,20 @@
 <h3 id="pointer-utilities">Pointer utilities<a class="anchor" aria-label="anchor" href="#pointer-utilities"></a>
 </h3>
 <p>Rtinycc ships a set of typed memory access functions similar to what the <a href="https://cran.r-project.org/package=ctypesio" class="external-link">ctypesio</a> package offers, but designed around our FFI pointer model. Every scalar C type has a corresponding <code>tcc_read_*</code> / <code>tcc_write_*</code> pair that operates at a byte offset into any external pointer, so you can walk structs, arrays, and output parameters without writing C helpers.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ptr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_cstring.html">tcc_cstring</a></span><span class="op">(</span><span class="st">"hello"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_read_cstring.html">tcc_read_cstring</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "hello"</span></span>
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x5b307d43dc30"</span></span>
+<span><span class="co">#&gt; [1] "0x6538652f7850"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 <p>Typed reads and writes cover the full scalar range (<code>i8</code>/<code>u8</code>, <code>i16</code>/<code>u16</code>, <code>i32</code>/<code>u32</code>, <code>i64</code>/<code>u64</code>, <code>f32</code>/<code>f64</code>) plus pointer dereferencing via <code>tcc_read_ptr</code> / <code>tcc_write_ptr</code>. All operations use a byte offset and <code>memcpy</code> internally for alignment safety.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">buf</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">32</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_write_i32.html">tcc_write_i32</a></span><span class="op">(</span><span class="va">buf</span>, <span class="fl">0L</span>, <span class="fl">42L</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_write_f64.html">tcc_write_f64</a></span><span class="op">(</span><span class="va">buf</span>, <span class="fl">8L</span>, <span class="va">pi</span><span class="op">)</span></span>
@@ -186,15 +196,15 @@
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">buf</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 <p>Pointer-to-pointer workflows are supported for C APIs that return values through output parameters.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307d335050&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6538652f7850&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307cc3ef00&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x653866def2f0&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307d335050&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6538652f7850&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -229,7 +239,7 @@
 <div class="section level3">
 <h3 id="simple-functions">Simple functions<a class="anchor" aria-label="anchor" href="#simple-functions"></a>
 </h3>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    int add(int a, int b) { return a + b; }</span></span>
@@ -244,7 +254,7 @@
 <h3 id="variadic-calls-eg-rprintf-style">Variadic calls (e.g. <code>Rprintf</code> style)<a class="anchor" aria-label="anchor" href="#variadic-calls-eg-rprintf-style"></a>
 </h3>
 <p>Rtinycc supports two ways to bind variadic tails. The legacy approach uses <code>varargs</code> as a typed prefix tail, while the bounded dynamic approach uses <code>varargs_types</code> together with <code>varargs_min</code> and <code>varargs_max</code>. In the bounded mode, wrappers are generated across the allowed arity and type combinations, and runtime dispatch selects the matching wrapper from the scalar tail values provided at call time.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi_var</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_header.html">tcc_header</a></span><span class="op">(</span><span class="st">"#include &lt;R_ext/Print.h&gt;"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
@@ -297,7 +307,7 @@
 <h3 id="linking-external-libraries">Linking external libraries<a class="anchor" aria-label="anchor" href="#linking-external-libraries"></a>
 </h3>
 <p>We can bind directly to symbols in shared libraries. Here we link against <code>libm</code>.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">math</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_library.html">tcc_library</a></span><span class="op">(</span><span class="st">"m"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
@@ -318,7 +328,7 @@
 <h3 id="compiler-options">Compiler options<a class="anchor" aria-label="anchor" href="#compiler-options"></a>
 </h3>
 <p>Use <code><a href="reference/tcc_options.html">tcc_options()</a></code> to pass raw TinyCC options in the high-level FFI pipeline. For low-level states, use <code><a href="reference/tcc_set_options.html">tcc_set_options()</a></code> directly.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi_opt_off</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_options.html">tcc_options</a></span><span class="op">(</span><span class="st">"-O0"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
@@ -356,7 +366,7 @@
 <h3 id="working-with-arrays">Working with arrays<a class="anchor" aria-label="anchor" href="#working-with-arrays"></a>
 </h3>
 <p>R vectors are passed to C with zero copy. Mutations in C are visible in R.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    #include &lt;stdlib.h&gt;</span></span>
@@ -388,7 +398,7 @@
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @5b307e5d8198 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @653868b6d278 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -404,7 +414,7 @@
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @5b307e5d8198 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @653868b6d278 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -414,7 +424,7 @@
 <h3 id="structs-and-unions">Structs and unions<a class="anchor" aria-label="anchor" href="#structs-and-unions"></a>
 </h3>
 <p>Complex C types are supported declaratively. Use <code><a href="reference/tcc_struct.html">tcc_struct()</a></code> to generate allocation and accessor helpers. Free instances when done.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    #include &lt;math.h&gt;</span></span>
@@ -431,15 +441,15 @@
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307dbbd010&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x653866dbd710&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307dbbd010&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x653866dbd710&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307ae7f0c0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x653866c5a820&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307ae7f0c0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x653866c5a820&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -453,7 +463,7 @@
 <h3 id="enums">Enums<a class="anchor" aria-label="anchor" href="#enums"></a>
 </h3>
 <p>Enums are exposed as helper functions that return integer constants.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"enum color { RED = 0, GREEN = 1, BLUE = 2 };"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_enum.html">tcc_enum</a></span><span class="op">(</span><span class="st">"color"</span>, constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"RED"</span>, <span class="st">"GREEN"</span>, <span class="st">"BLUE"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -468,7 +478,7 @@
 <h3 id="bitfields">Bitfields<a class="anchor" aria-label="anchor" href="#bitfields"></a>
 </h3>
 <p>Bitfields are handled by TCC. Accessors read and write them like normal fields.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    struct flags {</span></span>
@@ -481,9 +491,9 @@
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307b0c7f80&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x65386b1a9c50&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307b0c7f80&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x65386b1a9c50&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -495,7 +505,7 @@
 <h3 id="global-getters-and-setters">Global getters and setters<a class="anchor" aria-label="anchor" href="#global-getters-and-setters"></a>
 </h3>
 <p>C globals can be exposed with explicit getter/setter helpers.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    int counter = 7;</span></span>
@@ -518,7 +528,7 @@
 <h3 id="callbacks">Callbacks<a class="anchor" aria-label="anchor" href="#callbacks"></a>
 </h3>
 <p>R functions can be registered as C function pointers via <code><a href="reference/tcc_callback.html">tcc_callback()</a></code> and passed to compiled code. Specify a <code>callback:&lt;signature&gt;</code> argument in <code><a href="reference/tcc_bind.html">tcc_bind()</a></code> so the trampoline is generated automatically. Call <code><a href="reference/tcc_callback_close.html">tcc_callback_close()</a></code> when you want deterministic invalidation and earlier release of the preserved R function.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="va">x</span>, signature <span class="op">=</span> <span class="st">"double (*)(double)"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">code</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
@@ -545,7 +555,7 @@
 <h3 id="callback-errors">Callback errors<a class="anchor" aria-label="anchor" href="#callback-errors"></a>
 </h3>
 <p>If a callback throws an R error, the trampoline catches it, emits a warning, and returns a type-appropriate sentinel instead of unwinding through C. In practice this means NA-like numeric or integer values, <code>NA</code> logical, <code>NULL</code> for <code>cstring</code>, or a null external pointer depending on the declared return type.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"boom"</span><span class="op">)</span>,</span>
 <span>  signature <span class="op">=</span> <span class="st">"double (*)(double)"</span></span>
@@ -588,7 +598,7 @@
 <p>When a bound function has any <code>callback_async:</code> argument, the generated wrapper automatically runs your C function on a new thread while draining callbacks on the main R thread. Your C code doesn’t need to know about draining at all — just call the callback as normal and the wrapper handles the rest.</p>
 <p><strong>Void return (fire-and-forget):</strong> the callback is enqueued from any thread and executed on the main R thread automatically — on Windows via R’s message pump, on Linux/macOS via R’s event loop <code>addInputHandler</code>.</p>
 <p><strong>Non-void return (synchronous):</strong> the worker thread blocks until the main R thread executes the callback and returns the real result. Supported return types: integer variants (<code>int</code>, <code>int32_t</code>, <code>i8</code>, <code>i16</code>, <code>u8</code>, <code>u16</code>), floating-point (<code>double</code>, <code>float</code>), <code>bool</code>/<code>logical</code>, and pointer (<code>void*</code>, <code>T*</code>).</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Fire-and-forget: void callback accumulated from 100 worker threads</span></span>
 <span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
 <span><span class="va">cb_async</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
@@ -668,7 +678,7 @@
 <span><span class="co">#&gt; [1] 200</span></span>
 <span><span class="fu"><a href="reference/tcc_callback_close.html">tcc_callback_close</a></span><span class="op">(</span><span class="va">cb_async</span><span class="op">)</span></span></code></pre></div>
 <p>Non-void return works the same way — the generated wrapper handles the drain loop transparently:</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cb_triple</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_callback.html">tcc_callback</a></span><span class="op">(</span></span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span> <span class="op">*</span> <span class="fl">3L</span>,</span>
 <span>  signature <span class="op">=</span> <span class="st">"int (*)(int)"</span></span>
@@ -736,7 +746,7 @@
 <h3 id="sqlite-a-complete-example">SQLite: a complete example<a class="anchor" aria-label="anchor" href="#sqlite-a-complete-example"></a>
 </h3>
 <p>This example ties together external library linking, callbacks, and pointer dereferencing. We open an in-memory SQLite database, execute queries, and collect rows through an R callback that reads <code>char**</code> arrays using <code>tcc_read_ptr</code> and <code>tcc_read_cstring</code>.</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ptr_size</span> <span class="op">&lt;-</span> <span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span></span>
 <span></span>
 <span><span class="va">read_string_array</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">ptr</span>, <span class="va">n</span><span class="op">)</span> <span class="op">{</span></span>
@@ -809,7 +819,7 @@
 <strong>No switch statements</strong>: Because Protothreads uses <code>switch</code> internally, you cannot use <code>switch</code> within a <code>PT_THREAD</code> block.</li>
 </ol>
 <p>The demo uses plain VCF text, opened directly by htslib through the same API as BCF.</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"scripts/demo-streaming-bcf-reader-ffi.R"</span><span class="op">)</span></span>
 <span><span class="fu">run_streaming_bcf_demo</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Rtinycc version: 0.1.11.9000</span></span>
@@ -827,7 +837,7 @@
 <p>The full demo source is foldable below.</p>
 <details><summary>
 Click to show the complete <code>scripts/demo-streaming-bcf-reader-ffi.R</code> script
-</summary><div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+</summary><div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#!/usr/bin/env Rscript</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressPackageStartupMessages</a></span><span class="op">(</span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rtinycc" class="external-link">Rtinycc</a></span><span class="op">)</span><span class="op">)</span></span>
@@ -1277,241 +1287,241 @@ Click to show the complete <code>scripts/demo-streaming-bcf-reader-ffi.R</code> 
 </details><p>The embedded htslib Protothreads C source is extracted from the script and rendered with the same Rtinycc C-code display helper used by the vignettes.</p>
 <details><summary>
 Click to show only the embedded C Protothreads / htslib source
-</summary><div class="sourceCode" id="cb24"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;rtinycc/pt.h&gt;</span></span>
-<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdint.h&gt;</span></span>
-<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdlib.h&gt;</span></span>
-<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string.h&gt;</span></span>
-<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdio.h&gt;</span></span>
-<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;math.h&gt;</span></span>
-<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;htslib/hts.h&gt;</span></span>
-<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;htslib/vcf.h&gt;</span></span>
-<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a></span>
-<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a><span class="kw">enum</span> <span class="op">{</span></span>
-<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  BCF_STREAM_ERR <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span></span>
-<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a>  BCF_STREAM_EOF <span class="op">=</span> <span class="dv">0</span><span class="op">,</span></span>
-<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a>  BCF_STREAM_RECORD <span class="op">=</span> <span class="dv">1</span></span>
-<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb24-15"><a href="#cb24-15" tabindex="-1"></a></span>
-<span id="cb24-16"><a href="#cb24-16" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> bcf_stream <span class="op">{</span></span>
-<span id="cb24-17"><a href="#cb24-17" tabindex="-1"></a>  <span class="kw">struct</span> pt pt<span class="op">;</span></span>
-<span id="cb24-18"><a href="#cb24-18" tabindex="-1"></a>  <span class="dt">int</span> yielded<span class="op">;</span></span>
-<span id="cb24-19"><a href="#cb24-19" tabindex="-1"></a>  <span class="dt">int</span> started<span class="op">;</span></span>
-<span id="cb24-20"><a href="#cb24-20" tabindex="-1"></a>  <span class="dt">int</span> done<span class="op">;</span></span>
-<span id="cb24-21"><a href="#cb24-21" tabindex="-1"></a>  <span class="dt">int</span> error<span class="op">;</span></span>
-<span id="cb24-22"><a href="#cb24-22" tabindex="-1"></a>  <span class="dt">char</span> err<span class="op">[</span><span class="dv">256</span><span class="op">];</span></span>
-<span id="cb24-23"><a href="#cb24-23" tabindex="-1"></a>  htsFile <span class="op">*</span>fp<span class="op">;</span></span>
-<span id="cb24-24"><a href="#cb24-24" tabindex="-1"></a>  bcf_hdr_t <span class="op">*</span>hdr<span class="op">;</span></span>
-<span id="cb24-25"><a href="#cb24-25" tabindex="-1"></a>  bcf1_t <span class="op">*</span>rec<span class="op">;</span></span>
-<span id="cb24-26"><a href="#cb24-26" tabindex="-1"></a>  <span class="dt">char</span> <span class="op">*</span>alts<span class="op">;</span></span>
-<span id="cb24-27"><a href="#cb24-27" tabindex="-1"></a>  <span class="dt">size_t</span> alts_cap<span class="op">;</span></span>
-<span id="cb24-28"><a href="#cb24-28" tabindex="-1"></a>  <span class="dt">int</span> ret<span class="op">;</span></span>
-<span id="cb24-29"><a href="#cb24-29" tabindex="-1"></a><span class="op">}</span> bcf_stream_t<span class="op">;</span></span>
-<span id="cb24-30"><a href="#cb24-30" tabindex="-1"></a></span>
-<span id="cb24-31"><a href="#cb24-31" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> bcf_stream_set_error<span class="op">(</span>bcf_stream_t <span class="op">*</span>st<span class="op">,</span> <span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>msg<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-32"><a href="#cb24-32" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
-<span id="cb24-33"><a href="#cb24-33" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>msg<span class="op">)</span> msg <span class="op">=</span> <span class="st">"unknown htslib error"</span><span class="op">;</span></span>
-<span id="cb24-34"><a href="#cb24-34" tabindex="-1"></a>  snprintf<span class="op">(</span>st<span class="op">-&gt;</span>err<span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>st<span class="op">-&gt;</span>err<span class="op">),</span> <span class="st">"</span><span class="sc">%s</span><span class="st">"</span><span class="op">,</span> msg<span class="op">);</span></span>
-<span id="cb24-35"><a href="#cb24-35" tabindex="-1"></a>  st<span class="op">-&gt;</span>error <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-36"><a href="#cb24-36" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-37"><a href="#cb24-37" tabindex="-1"></a></span>
-<span id="cb24-38"><a href="#cb24-38" tabindex="-1"></a><span class="dt">static</span> <span class="dt">int</span> bcf_stream_resume_internal<span class="op">(</span>bcf_stream_t <span class="op">*</span>st<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-39"><a href="#cb24-39" tabindex="-1"></a>  PT_BEGIN<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-40"><a href="#cb24-40" tabindex="-1"></a></span>
-<span id="cb24-41"><a href="#cb24-41" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>fp <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-42"><a href="#cb24-42" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"stream is not open"</span><span class="op">);</span></span>
-<span id="cb24-43"><a href="#cb24-43" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-44"><a href="#cb24-44" tabindex="-1"></a>    PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-45"><a href="#cb24-45" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-46"><a href="#cb24-46" tabindex="-1"></a></span>
-<span id="cb24-47"><a href="#cb24-47" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(;;)</span> <span class="op">{</span></span>
-<span id="cb24-48"><a href="#cb24-48" tabindex="-1"></a>    st<span class="op">-&gt;</span>ret <span class="op">=</span> bcf_read<span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">,</span> st<span class="op">-&gt;</span>hdr<span class="op">,</span> st<span class="op">-&gt;</span>rec<span class="op">);</span></span>
-<span id="cb24-49"><a href="#cb24-49" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>ret <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-50"><a href="#cb24-50" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>bcf_unpack<span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">,</span> BCF_UN_STR<span class="op">)</span> <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-51"><a href="#cb24-51" tabindex="-1"></a>        bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_unpack() failed"</span><span class="op">);</span></span>
-<span id="cb24-52"><a href="#cb24-52" tabindex="-1"></a>        st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-53"><a href="#cb24-53" tabindex="-1"></a>        st<span class="op">-&gt;</span>yielded <span class="op">=</span> BCF_STREAM_ERR<span class="op">;</span></span>
-<span id="cb24-54"><a href="#cb24-54" tabindex="-1"></a>        PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-55"><a href="#cb24-55" tabindex="-1"></a>      <span class="op">}</span></span>
-<span id="cb24-56"><a href="#cb24-56" tabindex="-1"></a>      st<span class="op">-&gt;</span>yielded <span class="op">=</span> BCF_STREAM_RECORD<span class="op">;</span></span>
-<span id="cb24-57"><a href="#cb24-57" tabindex="-1"></a>      PT_YIELD<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-58"><a href="#cb24-58" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>error <span class="op">||</span> st<span class="op">-&gt;</span>done<span class="op">)</span> PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-59"><a href="#cb24-59" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
-<span id="cb24-60"><a href="#cb24-60" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>ret <span class="op">&lt;</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-61"><a href="#cb24-61" tabindex="-1"></a>        bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_read() failed"</span><span class="op">);</span></span>
-<span id="cb24-62"><a href="#cb24-62" tabindex="-1"></a>      <span class="op">}</span></span>
-<span id="cb24-63"><a href="#cb24-63" tabindex="-1"></a>      st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-64"><a href="#cb24-64" tabindex="-1"></a>      st<span class="op">-&gt;</span>yielded <span class="op">=</span> BCF_STREAM_EOF<span class="op">;</span></span>
-<span id="cb24-65"><a href="#cb24-65" tabindex="-1"></a>      PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-66"><a href="#cb24-66" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb24-67"><a href="#cb24-67" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-68"><a href="#cb24-68" tabindex="-1"></a></span>
-<span id="cb24-69"><a href="#cb24-69" tabindex="-1"></a>  PT_END<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-70"><a href="#cb24-70" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-71"><a href="#cb24-71" tabindex="-1"></a></span>
-<span id="cb24-72"><a href="#cb24-72" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>bcf_stream_open<span class="op">(</span><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>path<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-73"><a href="#cb24-73" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> calloc<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>bcf_stream_t<span class="op">));</span></span>
-<span id="cb24-74"><a href="#cb24-74" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
-<span id="cb24-75"><a href="#cb24-75" tabindex="-1"></a></span>
-<span id="cb24-76"><a href="#cb24-76" tabindex="-1"></a>  PT_INIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
-<span id="cb24-77"><a href="#cb24-77" tabindex="-1"></a></span>
-<span id="cb24-78"><a href="#cb24-78" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>path <span class="op">||</span> <span class="op">!</span>path<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="op">{</span></span>
-<span id="cb24-79"><a href="#cb24-79" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"path is empty"</span><span class="op">);</span></span>
-<span id="cb24-80"><a href="#cb24-80" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-81"><a href="#cb24-81" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
-<span id="cb24-82"><a href="#cb24-82" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-83"><a href="#cb24-83" tabindex="-1"></a></span>
-<span id="cb24-84"><a href="#cb24-84" tabindex="-1"></a>  st<span class="op">-&gt;</span>fp <span class="op">=</span> hts_open<span class="op">(</span>path<span class="op">,</span> <span class="st">"r"</span><span class="op">);</span></span>
-<span id="cb24-85"><a href="#cb24-85" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">-&gt;</span>fp<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-86"><a href="#cb24-86" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"hts_open() failed"</span><span class="op">);</span></span>
-<span id="cb24-87"><a href="#cb24-87" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-88"><a href="#cb24-88" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
-<span id="cb24-89"><a href="#cb24-89" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-90"><a href="#cb24-90" tabindex="-1"></a></span>
-<span id="cb24-91"><a href="#cb24-91" tabindex="-1"></a>  st<span class="op">-&gt;</span>hdr <span class="op">=</span> bcf_hdr_read<span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">);</span></span>
-<span id="cb24-92"><a href="#cb24-92" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">-&gt;</span>hdr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-93"><a href="#cb24-93" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_hdr_read() failed"</span><span class="op">);</span></span>
-<span id="cb24-94"><a href="#cb24-94" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-95"><a href="#cb24-95" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
-<span id="cb24-96"><a href="#cb24-96" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-97"><a href="#cb24-97" tabindex="-1"></a></span>
-<span id="cb24-98"><a href="#cb24-98" tabindex="-1"></a>  st<span class="op">-&gt;</span>rec <span class="op">=</span> bcf_init<span class="op">();</span></span>
-<span id="cb24-99"><a href="#cb24-99" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-100"><a href="#cb24-100" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_init() failed"</span><span class="op">);</span></span>
-<span id="cb24-101"><a href="#cb24-101" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-102"><a href="#cb24-102" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
-<span id="cb24-103"><a href="#cb24-103" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-104"><a href="#cb24-104" tabindex="-1"></a></span>
-<span id="cb24-105"><a href="#cb24-105" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">;</span></span>
-<span id="cb24-106"><a href="#cb24-106" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-107"><a href="#cb24-107" tabindex="-1"></a></span>
-<span id="cb24-108"><a href="#cb24-108" tabindex="-1"></a><span class="dt">int</span> bcf_stream_resume<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-109"><a href="#cb24-109" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-110"><a href="#cb24-110" tabindex="-1"></a></span>
-<span id="cb24-111"><a href="#cb24-111" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_ERR<span class="op">;</span></span>
-<span id="cb24-112"><a href="#cb24-112" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>error<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_ERR<span class="op">;</span></span>
-<span id="cb24-113"><a href="#cb24-113" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>done<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_EOF<span class="op">;</span></span>
-<span id="cb24-114"><a href="#cb24-114" tabindex="-1"></a></span>
-<span id="cb24-115"><a href="#cb24-115" tabindex="-1"></a>  st<span class="op">-&gt;</span>started <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-116"><a href="#cb24-116" tabindex="-1"></a>  bcf_stream_resume_internal<span class="op">(</span>st<span class="op">);</span></span>
-<span id="cb24-117"><a href="#cb24-117" tabindex="-1"></a></span>
-<span id="cb24-118"><a href="#cb24-118" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>error<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_ERR<span class="op">;</span></span>
-<span id="cb24-119"><a href="#cb24-119" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>done<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_EOF<span class="op">;</span></span>
-<span id="cb24-120"><a href="#cb24-120" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>yielded<span class="op">;</span></span>
-<span id="cb24-121"><a href="#cb24-121" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-122"><a href="#cb24-122" tabindex="-1"></a></span>
-<span id="cb24-123"><a href="#cb24-123" tabindex="-1"></a><span class="dt">int</span> bcf_stream_done<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-124"><a href="#cb24-124" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-125"><a href="#cb24-125" tabindex="-1"></a>  <span class="cf">return</span> st <span class="op">?</span> st<span class="op">-&gt;</span>done <span class="op">:</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-126"><a href="#cb24-126" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-127"><a href="#cb24-127" tabindex="-1"></a></span>
-<span id="cb24-128"><a href="#cb24-128" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_error<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-129"><a href="#cb24-129" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-130"><a href="#cb24-130" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span> <span class="st">"stream pointer is NULL"</span><span class="op">;</span></span>
-<span id="cb24-131"><a href="#cb24-131" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>err<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">?</span> st<span class="op">-&gt;</span>err <span class="op">:</span> NULL<span class="op">;</span></span>
-<span id="cb24-132"><a href="#cb24-132" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-133"><a href="#cb24-133" tabindex="-1"></a></span>
-<span id="cb24-134"><a href="#cb24-134" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_chrom<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-135"><a href="#cb24-135" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-136"><a href="#cb24-136" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
-<span id="cb24-137"><a href="#cb24-137" tabindex="-1"></a>  <span class="cf">return</span> bcf_seqname<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">,</span> st<span class="op">-&gt;</span>rec<span class="op">);</span></span>
-<span id="cb24-138"><a href="#cb24-138" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-139"><a href="#cb24-139" tabindex="-1"></a></span>
-<span id="cb24-140"><a href="#cb24-140" tabindex="-1"></a><span class="dt">int64_t</span> bcf_stream_pos1<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-141"><a href="#cb24-141" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-142"><a href="#cb24-142" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-143"><a href="#cb24-143" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">(</span><span class="dt">int64_t</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>pos <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-144"><a href="#cb24-144" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-145"><a href="#cb24-145" tabindex="-1"></a></span>
-<span id="cb24-146"><a href="#cb24-146" tabindex="-1"></a><span class="dt">int64_t</span> bcf_stream_end1<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-147"><a href="#cb24-147" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-148"><a href="#cb24-148" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-149"><a href="#cb24-149" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">(</span><span class="dt">int64_t</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>pos <span class="op">+</span> <span class="op">(</span><span class="dt">int64_t</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>rlen<span class="op">;</span></span>
-<span id="cb24-150"><a href="#cb24-150" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-151"><a href="#cb24-151" tabindex="-1"></a></span>
-<span id="cb24-152"><a href="#cb24-152" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_id<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-153"><a href="#cb24-153" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-154"><a href="#cb24-154" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>id <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>id<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="cf">return</span> <span class="st">"."</span><span class="op">;</span></span>
-<span id="cb24-155"><a href="#cb24-155" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>id<span class="op">;</span></span>
-<span id="cb24-156"><a href="#cb24-156" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-157"><a href="#cb24-157" tabindex="-1"></a></span>
-<span id="cb24-158"><a href="#cb24-158" tabindex="-1"></a><span class="dt">int</span> bcf_stream_n_allele<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-159"><a href="#cb24-159" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-160"><a href="#cb24-160" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb24-161"><a href="#cb24-161" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">;</span></span>
-<span id="cb24-162"><a href="#cb24-162" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-163"><a href="#cb24-163" tabindex="-1"></a></span>
-<span id="cb24-164"><a href="#cb24-164" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_allele<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> <span class="dt">int</span> idx<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-165"><a href="#cb24-165" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-166"><a href="#cb24-166" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec <span class="op">||</span> idx <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> idx <span class="op">&gt;=</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
-<span id="cb24-167"><a href="#cb24-167" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>idx<span class="op">];</span></span>
-<span id="cb24-168"><a href="#cb24-168" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-169"><a href="#cb24-169" tabindex="-1"></a></span>
-<span id="cb24-170"><a href="#cb24-170" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_ref<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-171"><a href="#cb24-171" tabindex="-1"></a>  <span class="cf">return</span> bcf_stream_allele<span class="op">(</span>ptr<span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
-<span id="cb24-172"><a href="#cb24-172" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-173"><a href="#cb24-173" tabindex="-1"></a></span>
-<span id="cb24-174"><a href="#cb24-174" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_alt<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-175"><a href="#cb24-175" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-176"><a href="#cb24-176" tabindex="-1"></a>  <span class="dt">size_t</span> need <span class="op">=</span> <span class="dv">2</span><span class="op">;</span></span>
-<span id="cb24-177"><a href="#cb24-177" tabindex="-1"></a>  <span class="dt">int</span> i<span class="op">;</span></span>
-<span id="cb24-178"><a href="#cb24-178" tabindex="-1"></a></span>
-<span id="cb24-179"><a href="#cb24-179" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
-<span id="cb24-180"><a href="#cb24-180" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">)</span> <span class="cf">return</span> <span class="st">"."</span><span class="op">;</span></span>
-<span id="cb24-181"><a href="#cb24-181" tabindex="-1"></a></span>
-<span id="cb24-182"><a href="#cb24-182" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-183"><a href="#cb24-183" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>a <span class="op">=</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">?</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="st">""</span><span class="op">;</span></span>
-<span id="cb24-184"><a href="#cb24-184" tabindex="-1"></a>    need <span class="op">+=</span> strlen<span class="op">(</span>a<span class="op">)</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb24-185"><a href="#cb24-185" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-186"><a href="#cb24-186" tabindex="-1"></a></span>
-<span id="cb24-187"><a href="#cb24-187" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>need <span class="op">&gt;</span> st<span class="op">-&gt;</span>alts_cap<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-188"><a href="#cb24-188" tabindex="-1"></a>    <span class="dt">char</span> <span class="op">*</span>tmp <span class="op">=</span> <span class="op">(</span><span class="dt">char</span> <span class="op">*)</span> realloc<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">,</span> need<span class="op">);</span></span>
-<span id="cb24-189"><a href="#cb24-189" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>tmp<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-190"><a href="#cb24-190" tabindex="-1"></a>      bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"failed to allocate ALT buffer"</span><span class="op">);</span></span>
-<span id="cb24-191"><a href="#cb24-191" tabindex="-1"></a>      <span class="cf">return</span> NULL<span class="op">;</span></span>
-<span id="cb24-192"><a href="#cb24-192" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb24-193"><a href="#cb24-193" tabindex="-1"></a>    st<span class="op">-&gt;</span>alts <span class="op">=</span> tmp<span class="op">;</span></span>
-<span id="cb24-194"><a href="#cb24-194" tabindex="-1"></a>    st<span class="op">-&gt;</span>alts_cap <span class="op">=</span> need<span class="op">;</span></span>
-<span id="cb24-195"><a href="#cb24-195" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-196"><a href="#cb24-196" tabindex="-1"></a></span>
-<span id="cb24-197"><a href="#cb24-197" tabindex="-1"></a>  st<span class="op">-&gt;</span>alts<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb24-198"><a href="#cb24-198" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-199"><a href="#cb24-199" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&gt;</span> <span class="dv">1</span><span class="op">)</span> strcat<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">,</span> <span class="st">","</span><span class="op">);</span></span>
-<span id="cb24-200"><a href="#cb24-200" tabindex="-1"></a>    strcat<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">,</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">?</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="st">""</span><span class="op">);</span></span>
-<span id="cb24-201"><a href="#cb24-201" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb24-202"><a href="#cb24-202" tabindex="-1"></a></span>
-<span id="cb24-203"><a href="#cb24-203" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>alts<span class="op">;</span></span>
-<span id="cb24-204"><a href="#cb24-204" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-205"><a href="#cb24-205" tabindex="-1"></a></span>
-<span id="cb24-206"><a href="#cb24-206" tabindex="-1"></a><span class="dt">double</span> bcf_stream_qual<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-207"><a href="#cb24-207" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-208"><a href="#cb24-208" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec <span class="op">||</span> bcf_float_is_missing<span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>qual<span class="op">))</span> <span class="cf">return</span> NAN<span class="op">;</span></span>
-<span id="cb24-209"><a href="#cb24-209" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">(</span><span class="dt">double</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>qual<span class="op">;</span></span>
-<span id="cb24-210"><a href="#cb24-210" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-211"><a href="#cb24-211" tabindex="-1"></a></span>
-<span id="cb24-212"><a href="#cb24-212" tabindex="-1"></a><span class="dt">int</span> bcf_stream_nsamples<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-213"><a href="#cb24-213" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-214"><a href="#cb24-214" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr<span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb24-215"><a href="#cb24-215" tabindex="-1"></a>  <span class="cf">return</span> bcf_hdr_nsamples<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">);</span></span>
-<span id="cb24-216"><a href="#cb24-216" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-217"><a href="#cb24-217" tabindex="-1"></a></span>
-<span id="cb24-218"><a href="#cb24-218" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_sample<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> <span class="dt">int</span> idx<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-219"><a href="#cb24-219" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-220"><a href="#cb24-220" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr <span class="op">||</span> idx <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> idx <span class="op">&gt;=</span> bcf_hdr_nsamples<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">))</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
-<span id="cb24-221"><a href="#cb24-221" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>hdr<span class="op">-&gt;</span>samples<span class="op">[</span>idx<span class="op">];</span></span>
-<span id="cb24-222"><a href="#cb24-222" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb24-223"><a href="#cb24-223" tabindex="-1"></a></span>
-<span id="cb24-224"><a href="#cb24-224" tabindex="-1"></a><span class="dt">void</span> bcf_stream_close<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-225"><a href="#cb24-225" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
-<span id="cb24-226"><a href="#cb24-226" tabindex="-1"></a></span>
-<span id="cb24-227"><a href="#cb24-227" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
-<span id="cb24-228"><a href="#cb24-228" tabindex="-1"></a></span>
-<span id="cb24-229"><a href="#cb24-229" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> bcf_destroy<span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">);</span></span>
-<span id="cb24-230"><a href="#cb24-230" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">)</span> bcf_hdr_destroy<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">);</span></span>
-<span id="cb24-231"><a href="#cb24-231" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">)</span> hts_close<span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">);</span></span>
-<span id="cb24-232"><a href="#cb24-232" tabindex="-1"></a>  free<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">);</span></span>
-<span id="cb24-233"><a href="#cb24-233" tabindex="-1"></a>  memset<span class="op">(</span>st<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>bcf_stream_t<span class="op">));</span></span>
-<span id="cb24-234"><a href="#cb24-234" tabindex="-1"></a>  free<span class="op">(</span>st<span class="op">);</span></span>
-<span id="cb24-235"><a href="#cb24-235" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</summary><div class="sourceCode" id="cb25"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;rtinycc/pt.h&gt;</span></span>
+<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdint.h&gt;</span></span>
+<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdlib.h&gt;</span></span>
+<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string.h&gt;</span></span>
+<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdio.h&gt;</span></span>
+<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;math.h&gt;</span></span>
+<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;htslib/hts.h&gt;</span></span>
+<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;htslib/vcf.h&gt;</span></span>
+<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a></span>
+<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a><span class="kw">enum</span> <span class="op">{</span></span>
+<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a>  BCF_STREAM_ERR <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span></span>
+<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a>  BCF_STREAM_EOF <span class="op">=</span> <span class="dv">0</span><span class="op">,</span></span>
+<span id="cb25-13"><a href="#cb25-13" tabindex="-1"></a>  BCF_STREAM_RECORD <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb25-14"><a href="#cb25-14" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb25-15"><a href="#cb25-15" tabindex="-1"></a></span>
+<span id="cb25-16"><a href="#cb25-16" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> bcf_stream <span class="op">{</span></span>
+<span id="cb25-17"><a href="#cb25-17" tabindex="-1"></a>  <span class="kw">struct</span> pt pt<span class="op">;</span></span>
+<span id="cb25-18"><a href="#cb25-18" tabindex="-1"></a>  <span class="dt">int</span> yielded<span class="op">;</span></span>
+<span id="cb25-19"><a href="#cb25-19" tabindex="-1"></a>  <span class="dt">int</span> started<span class="op">;</span></span>
+<span id="cb25-20"><a href="#cb25-20" tabindex="-1"></a>  <span class="dt">int</span> done<span class="op">;</span></span>
+<span id="cb25-21"><a href="#cb25-21" tabindex="-1"></a>  <span class="dt">int</span> error<span class="op">;</span></span>
+<span id="cb25-22"><a href="#cb25-22" tabindex="-1"></a>  <span class="dt">char</span> err<span class="op">[</span><span class="dv">256</span><span class="op">];</span></span>
+<span id="cb25-23"><a href="#cb25-23" tabindex="-1"></a>  htsFile <span class="op">*</span>fp<span class="op">;</span></span>
+<span id="cb25-24"><a href="#cb25-24" tabindex="-1"></a>  bcf_hdr_t <span class="op">*</span>hdr<span class="op">;</span></span>
+<span id="cb25-25"><a href="#cb25-25" tabindex="-1"></a>  bcf1_t <span class="op">*</span>rec<span class="op">;</span></span>
+<span id="cb25-26"><a href="#cb25-26" tabindex="-1"></a>  <span class="dt">char</span> <span class="op">*</span>alts<span class="op">;</span></span>
+<span id="cb25-27"><a href="#cb25-27" tabindex="-1"></a>  <span class="dt">size_t</span> alts_cap<span class="op">;</span></span>
+<span id="cb25-28"><a href="#cb25-28" tabindex="-1"></a>  <span class="dt">int</span> ret<span class="op">;</span></span>
+<span id="cb25-29"><a href="#cb25-29" tabindex="-1"></a><span class="op">}</span> bcf_stream_t<span class="op">;</span></span>
+<span id="cb25-30"><a href="#cb25-30" tabindex="-1"></a></span>
+<span id="cb25-31"><a href="#cb25-31" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> bcf_stream_set_error<span class="op">(</span>bcf_stream_t <span class="op">*</span>st<span class="op">,</span> <span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>msg<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-32"><a href="#cb25-32" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb25-33"><a href="#cb25-33" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>msg<span class="op">)</span> msg <span class="op">=</span> <span class="st">"unknown htslib error"</span><span class="op">;</span></span>
+<span id="cb25-34"><a href="#cb25-34" tabindex="-1"></a>  snprintf<span class="op">(</span>st<span class="op">-&gt;</span>err<span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>st<span class="op">-&gt;</span>err<span class="op">),</span> <span class="st">"</span><span class="sc">%s</span><span class="st">"</span><span class="op">,</span> msg<span class="op">);</span></span>
+<span id="cb25-35"><a href="#cb25-35" tabindex="-1"></a>  st<span class="op">-&gt;</span>error <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-36"><a href="#cb25-36" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-37"><a href="#cb25-37" tabindex="-1"></a></span>
+<span id="cb25-38"><a href="#cb25-38" tabindex="-1"></a><span class="dt">static</span> <span class="dt">int</span> bcf_stream_resume_internal<span class="op">(</span>bcf_stream_t <span class="op">*</span>st<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-39"><a href="#cb25-39" tabindex="-1"></a>  PT_BEGIN<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-40"><a href="#cb25-40" tabindex="-1"></a></span>
+<span id="cb25-41"><a href="#cb25-41" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>fp <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-42"><a href="#cb25-42" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"stream is not open"</span><span class="op">);</span></span>
+<span id="cb25-43"><a href="#cb25-43" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-44"><a href="#cb25-44" tabindex="-1"></a>    PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-45"><a href="#cb25-45" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-46"><a href="#cb25-46" tabindex="-1"></a></span>
+<span id="cb25-47"><a href="#cb25-47" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(;;)</span> <span class="op">{</span></span>
+<span id="cb25-48"><a href="#cb25-48" tabindex="-1"></a>    st<span class="op">-&gt;</span>ret <span class="op">=</span> bcf_read<span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">,</span> st<span class="op">-&gt;</span>hdr<span class="op">,</span> st<span class="op">-&gt;</span>rec<span class="op">);</span></span>
+<span id="cb25-49"><a href="#cb25-49" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>ret <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-50"><a href="#cb25-50" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>bcf_unpack<span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">,</span> BCF_UN_STR<span class="op">)</span> <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-51"><a href="#cb25-51" tabindex="-1"></a>        bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_unpack() failed"</span><span class="op">);</span></span>
+<span id="cb25-52"><a href="#cb25-52" tabindex="-1"></a>        st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-53"><a href="#cb25-53" tabindex="-1"></a>        st<span class="op">-&gt;</span>yielded <span class="op">=</span> BCF_STREAM_ERR<span class="op">;</span></span>
+<span id="cb25-54"><a href="#cb25-54" tabindex="-1"></a>        PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-55"><a href="#cb25-55" tabindex="-1"></a>      <span class="op">}</span></span>
+<span id="cb25-56"><a href="#cb25-56" tabindex="-1"></a>      st<span class="op">-&gt;</span>yielded <span class="op">=</span> BCF_STREAM_RECORD<span class="op">;</span></span>
+<span id="cb25-57"><a href="#cb25-57" tabindex="-1"></a>      PT_YIELD<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-58"><a href="#cb25-58" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>error <span class="op">||</span> st<span class="op">-&gt;</span>done<span class="op">)</span> PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-59"><a href="#cb25-59" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb25-60"><a href="#cb25-60" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>ret <span class="op">&lt;</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-61"><a href="#cb25-61" tabindex="-1"></a>        bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_read() failed"</span><span class="op">);</span></span>
+<span id="cb25-62"><a href="#cb25-62" tabindex="-1"></a>      <span class="op">}</span></span>
+<span id="cb25-63"><a href="#cb25-63" tabindex="-1"></a>      st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-64"><a href="#cb25-64" tabindex="-1"></a>      st<span class="op">-&gt;</span>yielded <span class="op">=</span> BCF_STREAM_EOF<span class="op">;</span></span>
+<span id="cb25-65"><a href="#cb25-65" tabindex="-1"></a>      PT_EXIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-66"><a href="#cb25-66" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-67"><a href="#cb25-67" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-68"><a href="#cb25-68" tabindex="-1"></a></span>
+<span id="cb25-69"><a href="#cb25-69" tabindex="-1"></a>  PT_END<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-70"><a href="#cb25-70" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-71"><a href="#cb25-71" tabindex="-1"></a></span>
+<span id="cb25-72"><a href="#cb25-72" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>bcf_stream_open<span class="op">(</span><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>path<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-73"><a href="#cb25-73" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> calloc<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>bcf_stream_t<span class="op">));</span></span>
+<span id="cb25-74"><a href="#cb25-74" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
+<span id="cb25-75"><a href="#cb25-75" tabindex="-1"></a></span>
+<span id="cb25-76"><a href="#cb25-76" tabindex="-1"></a>  PT_INIT<span class="op">(&amp;</span>st<span class="op">-&gt;</span>pt<span class="op">);</span></span>
+<span id="cb25-77"><a href="#cb25-77" tabindex="-1"></a></span>
+<span id="cb25-78"><a href="#cb25-78" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>path <span class="op">||</span> <span class="op">!</span>path<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="op">{</span></span>
+<span id="cb25-79"><a href="#cb25-79" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"path is empty"</span><span class="op">);</span></span>
+<span id="cb25-80"><a href="#cb25-80" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-81"><a href="#cb25-81" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
+<span id="cb25-82"><a href="#cb25-82" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-83"><a href="#cb25-83" tabindex="-1"></a></span>
+<span id="cb25-84"><a href="#cb25-84" tabindex="-1"></a>  st<span class="op">-&gt;</span>fp <span class="op">=</span> hts_open<span class="op">(</span>path<span class="op">,</span> <span class="st">"r"</span><span class="op">);</span></span>
+<span id="cb25-85"><a href="#cb25-85" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">-&gt;</span>fp<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-86"><a href="#cb25-86" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"hts_open() failed"</span><span class="op">);</span></span>
+<span id="cb25-87"><a href="#cb25-87" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-88"><a href="#cb25-88" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
+<span id="cb25-89"><a href="#cb25-89" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-90"><a href="#cb25-90" tabindex="-1"></a></span>
+<span id="cb25-91"><a href="#cb25-91" tabindex="-1"></a>  st<span class="op">-&gt;</span>hdr <span class="op">=</span> bcf_hdr_read<span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">);</span></span>
+<span id="cb25-92"><a href="#cb25-92" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">-&gt;</span>hdr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-93"><a href="#cb25-93" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_hdr_read() failed"</span><span class="op">);</span></span>
+<span id="cb25-94"><a href="#cb25-94" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-95"><a href="#cb25-95" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
+<span id="cb25-96"><a href="#cb25-96" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-97"><a href="#cb25-97" tabindex="-1"></a></span>
+<span id="cb25-98"><a href="#cb25-98" tabindex="-1"></a>  st<span class="op">-&gt;</span>rec <span class="op">=</span> bcf_init<span class="op">();</span></span>
+<span id="cb25-99"><a href="#cb25-99" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-100"><a href="#cb25-100" tabindex="-1"></a>    bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"bcf_init() failed"</span><span class="op">);</span></span>
+<span id="cb25-101"><a href="#cb25-101" tabindex="-1"></a>    st<span class="op">-&gt;</span>done <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-102"><a href="#cb25-102" tabindex="-1"></a>    <span class="cf">return</span> st<span class="op">;</span></span>
+<span id="cb25-103"><a href="#cb25-103" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-104"><a href="#cb25-104" tabindex="-1"></a></span>
+<span id="cb25-105"><a href="#cb25-105" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">;</span></span>
+<span id="cb25-106"><a href="#cb25-106" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-107"><a href="#cb25-107" tabindex="-1"></a></span>
+<span id="cb25-108"><a href="#cb25-108" tabindex="-1"></a><span class="dt">int</span> bcf_stream_resume<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-109"><a href="#cb25-109" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-110"><a href="#cb25-110" tabindex="-1"></a></span>
+<span id="cb25-111"><a href="#cb25-111" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_ERR<span class="op">;</span></span>
+<span id="cb25-112"><a href="#cb25-112" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>error<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_ERR<span class="op">;</span></span>
+<span id="cb25-113"><a href="#cb25-113" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>done<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_EOF<span class="op">;</span></span>
+<span id="cb25-114"><a href="#cb25-114" tabindex="-1"></a></span>
+<span id="cb25-115"><a href="#cb25-115" tabindex="-1"></a>  st<span class="op">-&gt;</span>started <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-116"><a href="#cb25-116" tabindex="-1"></a>  bcf_stream_resume_internal<span class="op">(</span>st<span class="op">);</span></span>
+<span id="cb25-117"><a href="#cb25-117" tabindex="-1"></a></span>
+<span id="cb25-118"><a href="#cb25-118" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>error<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_ERR<span class="op">;</span></span>
+<span id="cb25-119"><a href="#cb25-119" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>done<span class="op">)</span> <span class="cf">return</span> BCF_STREAM_EOF<span class="op">;</span></span>
+<span id="cb25-120"><a href="#cb25-120" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>yielded<span class="op">;</span></span>
+<span id="cb25-121"><a href="#cb25-121" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-122"><a href="#cb25-122" tabindex="-1"></a></span>
+<span id="cb25-123"><a href="#cb25-123" tabindex="-1"></a><span class="dt">int</span> bcf_stream_done<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-124"><a href="#cb25-124" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-125"><a href="#cb25-125" tabindex="-1"></a>  <span class="cf">return</span> st <span class="op">?</span> st<span class="op">-&gt;</span>done <span class="op">:</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-126"><a href="#cb25-126" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-127"><a href="#cb25-127" tabindex="-1"></a></span>
+<span id="cb25-128"><a href="#cb25-128" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_error<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-129"><a href="#cb25-129" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-130"><a href="#cb25-130" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span> <span class="st">"stream pointer is NULL"</span><span class="op">;</span></span>
+<span id="cb25-131"><a href="#cb25-131" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>err<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">?</span> st<span class="op">-&gt;</span>err <span class="op">:</span> NULL<span class="op">;</span></span>
+<span id="cb25-132"><a href="#cb25-132" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-133"><a href="#cb25-133" tabindex="-1"></a></span>
+<span id="cb25-134"><a href="#cb25-134" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_chrom<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-135"><a href="#cb25-135" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-136"><a href="#cb25-136" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
+<span id="cb25-137"><a href="#cb25-137" tabindex="-1"></a>  <span class="cf">return</span> bcf_seqname<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">,</span> st<span class="op">-&gt;</span>rec<span class="op">);</span></span>
+<span id="cb25-138"><a href="#cb25-138" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-139"><a href="#cb25-139" tabindex="-1"></a></span>
+<span id="cb25-140"><a href="#cb25-140" tabindex="-1"></a><span class="dt">int64_t</span> bcf_stream_pos1<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-141"><a href="#cb25-141" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-142"><a href="#cb25-142" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-143"><a href="#cb25-143" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">(</span><span class="dt">int64_t</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>pos <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-144"><a href="#cb25-144" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-145"><a href="#cb25-145" tabindex="-1"></a></span>
+<span id="cb25-146"><a href="#cb25-146" tabindex="-1"></a><span class="dt">int64_t</span> bcf_stream_end1<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-147"><a href="#cb25-147" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-148"><a href="#cb25-148" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-149"><a href="#cb25-149" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">(</span><span class="dt">int64_t</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>pos <span class="op">+</span> <span class="op">(</span><span class="dt">int64_t</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>rlen<span class="op">;</span></span>
+<span id="cb25-150"><a href="#cb25-150" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-151"><a href="#cb25-151" tabindex="-1"></a></span>
+<span id="cb25-152"><a href="#cb25-152" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_id<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-153"><a href="#cb25-153" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-154"><a href="#cb25-154" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>id <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>id<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="cf">return</span> <span class="st">"."</span><span class="op">;</span></span>
+<span id="cb25-155"><a href="#cb25-155" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>id<span class="op">;</span></span>
+<span id="cb25-156"><a href="#cb25-156" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-157"><a href="#cb25-157" tabindex="-1"></a></span>
+<span id="cb25-158"><a href="#cb25-158" tabindex="-1"></a><span class="dt">int</span> bcf_stream_n_allele<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-159"><a href="#cb25-159" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-160"><a href="#cb25-160" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb25-161"><a href="#cb25-161" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">;</span></span>
+<span id="cb25-162"><a href="#cb25-162" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-163"><a href="#cb25-163" tabindex="-1"></a></span>
+<span id="cb25-164"><a href="#cb25-164" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_allele<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> <span class="dt">int</span> idx<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-165"><a href="#cb25-165" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-166"><a href="#cb25-166" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec <span class="op">||</span> idx <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> idx <span class="op">&gt;=</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
+<span id="cb25-167"><a href="#cb25-167" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>idx<span class="op">];</span></span>
+<span id="cb25-168"><a href="#cb25-168" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-169"><a href="#cb25-169" tabindex="-1"></a></span>
+<span id="cb25-170"><a href="#cb25-170" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_ref<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-171"><a href="#cb25-171" tabindex="-1"></a>  <span class="cf">return</span> bcf_stream_allele<span class="op">(</span>ptr<span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb25-172"><a href="#cb25-172" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-173"><a href="#cb25-173" tabindex="-1"></a></span>
+<span id="cb25-174"><a href="#cb25-174" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_alt<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-175"><a href="#cb25-175" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-176"><a href="#cb25-176" tabindex="-1"></a>  <span class="dt">size_t</span> need <span class="op">=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb25-177"><a href="#cb25-177" tabindex="-1"></a>  <span class="dt">int</span> i<span class="op">;</span></span>
+<span id="cb25-178"><a href="#cb25-178" tabindex="-1"></a></span>
+<span id="cb25-179"><a href="#cb25-179" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
+<span id="cb25-180"><a href="#cb25-180" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">)</span> <span class="cf">return</span> <span class="st">"."</span><span class="op">;</span></span>
+<span id="cb25-181"><a href="#cb25-181" tabindex="-1"></a></span>
+<span id="cb25-182"><a href="#cb25-182" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-183"><a href="#cb25-183" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>a <span class="op">=</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">?</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="st">""</span><span class="op">;</span></span>
+<span id="cb25-184"><a href="#cb25-184" tabindex="-1"></a>    need <span class="op">+=</span> strlen<span class="op">(</span>a<span class="op">)</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-185"><a href="#cb25-185" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-186"><a href="#cb25-186" tabindex="-1"></a></span>
+<span id="cb25-187"><a href="#cb25-187" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>need <span class="op">&gt;</span> st<span class="op">-&gt;</span>alts_cap<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-188"><a href="#cb25-188" tabindex="-1"></a>    <span class="dt">char</span> <span class="op">*</span>tmp <span class="op">=</span> <span class="op">(</span><span class="dt">char</span> <span class="op">*)</span> realloc<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">,</span> need<span class="op">);</span></span>
+<span id="cb25-189"><a href="#cb25-189" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>tmp<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-190"><a href="#cb25-190" tabindex="-1"></a>      bcf_stream_set_error<span class="op">(</span>st<span class="op">,</span> <span class="st">"failed to allocate ALT buffer"</span><span class="op">);</span></span>
+<span id="cb25-191"><a href="#cb25-191" tabindex="-1"></a>      <span class="cf">return</span> NULL<span class="op">;</span></span>
+<span id="cb25-192"><a href="#cb25-192" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-193"><a href="#cb25-193" tabindex="-1"></a>    st<span class="op">-&gt;</span>alts <span class="op">=</span> tmp<span class="op">;</span></span>
+<span id="cb25-194"><a href="#cb25-194" tabindex="-1"></a>    st<span class="op">-&gt;</span>alts_cap <span class="op">=</span> need<span class="op">;</span></span>
+<span id="cb25-195"><a href="#cb25-195" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-196"><a href="#cb25-196" tabindex="-1"></a></span>
+<span id="cb25-197"><a href="#cb25-197" tabindex="-1"></a>  st<span class="op">-&gt;</span>alts<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb25-198"><a href="#cb25-198" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>n_allele<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-199"><a href="#cb25-199" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&gt;</span> <span class="dv">1</span><span class="op">)</span> strcat<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">,</span> <span class="st">","</span><span class="op">);</span></span>
+<span id="cb25-200"><a href="#cb25-200" tabindex="-1"></a>    strcat<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">,</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">?</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>d<span class="op">.</span>allele<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="st">""</span><span class="op">);</span></span>
+<span id="cb25-201"><a href="#cb25-201" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb25-202"><a href="#cb25-202" tabindex="-1"></a></span>
+<span id="cb25-203"><a href="#cb25-203" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>alts<span class="op">;</span></span>
+<span id="cb25-204"><a href="#cb25-204" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-205"><a href="#cb25-205" tabindex="-1"></a></span>
+<span id="cb25-206"><a href="#cb25-206" tabindex="-1"></a><span class="dt">double</span> bcf_stream_qual<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-207"><a href="#cb25-207" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-208"><a href="#cb25-208" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>rec <span class="op">||</span> bcf_float_is_missing<span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>qual<span class="op">))</span> <span class="cf">return</span> NAN<span class="op">;</span></span>
+<span id="cb25-209"><a href="#cb25-209" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">(</span><span class="dt">double</span><span class="op">)</span> st<span class="op">-&gt;</span>rec<span class="op">-&gt;</span>qual<span class="op">;</span></span>
+<span id="cb25-210"><a href="#cb25-210" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-211"><a href="#cb25-211" tabindex="-1"></a></span>
+<span id="cb25-212"><a href="#cb25-212" tabindex="-1"></a><span class="dt">int</span> bcf_stream_nsamples<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-213"><a href="#cb25-213" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-214"><a href="#cb25-214" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr<span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb25-215"><a href="#cb25-215" tabindex="-1"></a>  <span class="cf">return</span> bcf_hdr_nsamples<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">);</span></span>
+<span id="cb25-216"><a href="#cb25-216" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-217"><a href="#cb25-217" tabindex="-1"></a></span>
+<span id="cb25-218"><a href="#cb25-218" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>bcf_stream_sample<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> <span class="dt">int</span> idx<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-219"><a href="#cb25-219" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-220"><a href="#cb25-220" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st <span class="op">||</span> <span class="op">!</span>st<span class="op">-&gt;</span>hdr <span class="op">||</span> idx <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> idx <span class="op">&gt;=</span> bcf_hdr_nsamples<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">))</span> <span class="cf">return</span> NULL<span class="op">;</span></span>
+<span id="cb25-221"><a href="#cb25-221" tabindex="-1"></a>  <span class="cf">return</span> st<span class="op">-&gt;</span>hdr<span class="op">-&gt;</span>samples<span class="op">[</span>idx<span class="op">];</span></span>
+<span id="cb25-222"><a href="#cb25-222" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-223"><a href="#cb25-223" tabindex="-1"></a></span>
+<span id="cb25-224"><a href="#cb25-224" tabindex="-1"></a><span class="dt">void</span> bcf_stream_close<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-225"><a href="#cb25-225" tabindex="-1"></a>  bcf_stream_t <span class="op">*</span>st <span class="op">=</span> <span class="op">(</span>bcf_stream_t <span class="op">*)</span> ptr<span class="op">;</span></span>
+<span id="cb25-226"><a href="#cb25-226" tabindex="-1"></a></span>
+<span id="cb25-227"><a href="#cb25-227" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>st<span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb25-228"><a href="#cb25-228" tabindex="-1"></a></span>
+<span id="cb25-229"><a href="#cb25-229" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">)</span> bcf_destroy<span class="op">(</span>st<span class="op">-&gt;</span>rec<span class="op">);</span></span>
+<span id="cb25-230"><a href="#cb25-230" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">)</span> bcf_hdr_destroy<span class="op">(</span>st<span class="op">-&gt;</span>hdr<span class="op">);</span></span>
+<span id="cb25-231"><a href="#cb25-231" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">)</span> hts_close<span class="op">(</span>st<span class="op">-&gt;</span>fp<span class="op">);</span></span>
+<span id="cb25-232"><a href="#cb25-232" tabindex="-1"></a>  free<span class="op">(</span>st<span class="op">-&gt;</span>alts<span class="op">);</span></span>
+<span id="cb25-233"><a href="#cb25-233" tabindex="-1"></a>  memset<span class="op">(</span>st<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>bcf_stream_t<span class="op">));</span></span>
+<span id="cb25-234"><a href="#cb25-234" tabindex="-1"></a>  free<span class="op">(</span>st<span class="op">);</span></span>
+<span id="cb25-235"><a href="#cb25-235" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 </details><p>This points toward a useful separate package idea: a small, generic Rtinycc-based C coroutine/Protothreads layer for R. Such a package could provide reusable pieces like <code>coro_new()</code>, <code>coro_resume()</code>, finalizer-backed native handles, status/error conventions, and helpers for writing streaming bindings around C libraries such as htslib, SQLite, parsers, decompression libraries, or network clients. R would see ordinary iterators; C would keep natural blocking or recursive control flow without rewriting everything as a heap-allocated state machine.</p>
 </div>
 </div>
@@ -1520,7 +1530,7 @@ Click to show only the embedded C Protothreads / htslib source
 </h2>
 <p>For header-driven bindings, we use <code>treesitter.c</code> to parse function signatures and generate binding specifications automatically. For struct, enum, and global helpers, <code><a href="reference/tcc_generate_bindings.html">tcc_generate_bindings()</a></code> handles the code generation.</p>
 <p>The default mapper is conservative for pointers: <code>char*</code> is treated as <code>ptr</code> because C does not guarantee NUL-terminated strings. If you know a parameter is a C string, provide a custom mapper that returns <code>cstring</code> for that type.</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">header</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">double sqrt(double x);</span></span>
 <span><span class="st">double sin(double x);</span></span>
@@ -1560,7 +1570,7 @@ Click to show only the embedded C Protothreads / htslib source
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b3080f28470&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x6538651831c0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -1570,7 +1580,7 @@ Click to show only the embedded C Protothreads / htslib source
 <h2 id="io_uring-demo">io_uring Demo<a class="anchor" aria-label="anchor" href="#io_uring-demo"></a>
 </h2>
 <p><code>CSV</code> parser using <a href="https://en.wikipedia.org/wiki/Io_uring" class="external-link"><code>io_uring</code></a> on linux</p>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.info.html" class="external-link">Sys.info</a></span><span class="op">(</span><span class="op">)</span><span class="op">[[</span><span class="st">"sysname"</span><span class="op">]</span><span class="op">]</span> <span class="op">==</span> <span class="st">"Linux"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">c_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"c_examples"</span>, <span class="st">"io_uring_csv.c"</span>, package <span class="op">=</span> <span class="st">"Rtinycc"</span><span class="op">)</span></span>
 <span></span>
@@ -1675,11 +1685,11 @@ Click to show only the embedded C Protothreads / htslib source
 <span><span class="co">#&gt; # A tibble: 5 × 13</span></span>
 <span><span class="co">#&gt;   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:t&gt; &lt;bch:t&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;   &lt;bch:tm&gt;</span></span>
-<span><span class="co">#&gt; 1 read_tabl… 51.06ms 51.06ms      19.6    6.33MB     19.6     1     1     51.1ms</span></span>
-<span><span class="co">#&gt; 2 vroom_df_…  6.36ms   6.5ms     154.     1.22MB      0       2     0       13ms</span></span>
-<span><span class="co">#&gt; 3 vroom_df_…  6.44ms  6.54ms     153.     2.44MB      0       2     0     13.1ms</span></span>
-<span><span class="co">#&gt; 4 c_read_df  20.69ms 21.01ms      47.6    1.22MB      0       2     0       42ms</span></span>
-<span><span class="co">#&gt; 5 io_uring_… 20.33ms 20.48ms      48.8    1.22MB      0       2     0       41ms</span></span>
+<span><span class="co">#&gt; 1 read_tabl… 55.03ms 55.03ms      18.2    6.33MB     18.2     1     1       55ms</span></span>
+<span><span class="co">#&gt; 2 vroom_df_…  7.21ms  7.52ms     133.     1.22MB      0       2     0       15ms</span></span>
+<span><span class="co">#&gt; 3 vroom_df_…  6.95ms     7ms     143.     2.44MB      0       2     0       14ms</span></span>
+<span><span class="co">#&gt; 4 c_read_df  21.24ms 21.34ms      46.9    1.22MB      0       2     0     42.7ms</span></span>
+<span><span class="co">#&gt; 5 io_uring_… 20.42ms 20.66ms      48.4    1.22MB      0       2     0     41.3ms</span></span>
 <span><span class="co">#&gt; # ℹ 4 more variables: result &lt;list&gt;, memory &lt;list&gt;, time &lt;list&gt;, gc &lt;list&gt;</span></span></code></pre></div>
 <p><img src="reference/figures/README-io_uring-demo-1.png" alt="" width="100%"></p>
 </div>
@@ -1696,7 +1706,7 @@ Click to show only the embedded C Protothreads / htslib source
 <h3 id="id_64-bit-integer-precision">64-bit integer precision<a class="anchor" aria-label="anchor" href="#id_64-bit-integer-precision"></a>
 </h3>
 <p>R represents <code>i64</code> and <code>u64</code> values as <code>double</code>, which loses precision beyond <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mn>53</mn></msup><annotation encoding="application/x-tex">2^{53}</annotation></semantics></math>. Values that differ only past that threshold become indistinguishable.</p>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53:     %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "2^53:     9007199254740992"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"2^53 + 1: %.0f"</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span></span>
@@ -1709,7 +1719,7 @@ Click to show only the embedded C Protothreads / htslib source
 <h3 id="nested-structs">Nested structs<a class="anchor" aria-label="anchor" href="#nested-structs"></a>
 </h3>
 <p>Named nested struct fields can now be declared explicitly with <code>struct:&lt;name&gt;</code>. Getters return borrowed nested views and setters copy bytes from another struct object of the declared nested type.</p>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'</span></span>
 <span><span class="st">    struct inner { int a; };</span></span>
@@ -1732,7 +1742,7 @@ Click to show only the embedded C Protothreads / htslib source
 <span><span class="co">#&gt; NULL</span></span></code></pre></div>
 <p>For treesitter-generated bindings, nested struct fields inside structs still fall back to ptr-like accessors. If you want a borrowed nested view plus a copy-in setter, declare the nested field explicitly with <code>struct:&lt;name&gt;</code>.</p>
 <p>Bitfields are separate from ordinary addressable fields. They use scalar helper accessors, but <code>field_addr()</code> and <code>container_of()</code> reject bitfield members.</p>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct flags { unsigned int flag : 1; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span></span>
@@ -1751,7 +1761,7 @@ Click to show only the embedded C Protothreads / htslib source
 <h3 id="array-fields-in-structs">Array fields in structs<a class="anchor" aria-label="anchor" href="#array-fields-in-structs"></a>
 </h3>
 <p>Array fields require the <code>list(type = ..., size = N, array = TRUE)</code> syntax in <code><a href="reference/tcc_struct.html">tcc_struct()</a></code>, which generates element-wise accessors.</p>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">'struct buf { unsigned char data[16]; };'</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_struct.html">tcc_struct</a></span><span class="op">(</span><span class="st">"buf"</span>, accessors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -1761,9 +1771,9 @@ Click to show only the embedded C Protothreads / htslib source
 <span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">0xCAL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307db81e00&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x65386e00df00&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span>, <span class="fl">0xFEL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x5b307db81e00&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x65386e00df00&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 202</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span><span class="op">)</span></span>
@@ -1777,7 +1787,7 @@ Click to show only the embedded C Protothreads / htslib source
 </h2>
 <p>Compiled FFI objects are fork-safe: <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> and other <code>fork()</code>-based parallelism work out of the box because TCC’s compiled code lives in memory mappings that survive <code>fork()</code> via copy-on-write.</p>
 <p>Serialization is also supported. Each <code>tcc_compiled</code> object stores its FFI recipe internally, so after <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> / <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> (or <code><a href="https://rdrr.io/r/base/serialize.html" class="external-link">serialize()</a></code> / <code><a href="https://rdrr.io/r/base/serialize.html" class="external-link">unserialize()</a></code>), the first <code>$</code> access detects the dead TCC state pointer and recompiles transparently.</p>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_source.html">tcc_source</a></span><span class="op">(</span><span class="st">"int square(int x) { return x * x; }"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span>square <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
