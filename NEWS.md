@@ -1,5 +1,6 @@
 # Rtinycc 0.1.11.9000
 
+- Add TinyCC SIMD bytecode examples showing CPU feature detection with `cpuid`/`xgetbv` and selected SSE2/AVX2 instructions emitted through `.byte` for mnemonics TinyCC does not parse.
 - Add `tcc_list_symbols()` to inspect global symbol names and resolved hexadecimal addresses known to a libtcc state.
 - Expand `tcc_call_symbol()` with `.C()`-style pointer argument calls for low-level in-memory symbols, including copy-in/copy-out support for common R vector types and `NAOK` checking.
 - Improve ALTREP-aware copy-in paths by using `RAW_GET_REGION()` when copying raw vectors into native memory and scalar accessors for callback/struct scalar conversions. Clarify that mutable array FFI inputs can materialize ALTREP vectors when R exposes writable C storage.
