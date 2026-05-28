@@ -450,8 +450,8 @@ below are skipped.</p>
 <span><span class="va">compile_times</span><span class="op">$</span><span class="va">milliseconds</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">compile_times</span><span class="op">$</span><span class="va">seconds</span> <span class="op">*</span> <span class="fl">1000</span>, <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">compile_times</span></span>
 <span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
-<span><span class="co">#&gt; 1        Rtinycc   0.012           12</span></span>
-<span><span class="co">#&gt; 2         callme   0.183          183</span></span></code></pre></div>
+<span><span class="co">#&gt; 1        Rtinycc   0.020           20</span></span>
+<span><span class="co">#&gt; 2         callme   0.235          235</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -602,8 +602,8 @@ point.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc       628µs    643µs     <span style="text-decoration: underline;">1</span>546.    21.9KB        0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme        246µs    251µs     <span style="text-decoration: underline;">3</span>927.        0B        0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.09ms   1.11ms      895.    21.9KB        0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     384.37µs 400.36µs     <span style="text-decoration: underline;">2</span>486.        0B        0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -645,8 +645,8 @@ result.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.29ms   2.29ms      469.    3.15MB     23.4</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.03ms   1.06ms      799.    3.13MB     40.0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.79ms   4.33ms      246.    3.15MB     12.3</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.97ms   1.99ms      455.    3.13MB     22.7</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>both sides now write into ordinary R numeric storage</li>
@@ -696,14 +696,14 @@ into a fresh R vector</li>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc       963µs   1.03ms      881.    15.4KB     44.0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme        536µs 553.95µs     <span style="text-decoration: underline;">1</span>804.        0B      0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc       1.7ms   1.78ms      525.    15.4KB     26.2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme      934.6µs  958.4µs     <span style="text-decoration: underline;">1</span>043.        0B      0</span></span>
 <span><span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n4096</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.35ms   2.33ms      416.    3.13MB     20.8</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.03ms   1.96ms      484.    3.13MB     24.2</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.63ms   4.21ms      236.    3.13MB     11.8</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.95ms   3.31ms      292.    3.13MB     14.6</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
 <li>for <code>fill_rand()</code>, the comparison is much closer to

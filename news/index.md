@@ -2,6 +2,9 @@
 
 ## Rtinycc 0.1.11.9000
 
+- Add TinyCC SIMD bytecode examples showing CPU feature detection with
+  `cpuid`/`xgetbv` and selected SSE2/AVX2 instructions emitted through
+  `.byte` for mnemonics TinyCC does not parse.
 - Add
   [`tcc_list_symbols()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_list_symbols.md)
   to inspect global symbol names and resolved hexadecimal addresses
