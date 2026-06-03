@@ -2,7 +2,7 @@
 
 - Add TinyCC SIMD bytecode examples showing CPU feature detection with `cpuid`/`xgetbv` and selected SSE2/AVX2 instructions emitted through `.byte` for mnemonics TinyCC does not parse.
 - Add `tcc_list_symbols()` to inspect global symbol names and resolved hexadecimal addresses known to a libtcc state.
-- Expand `tcc_call_symbol()` with `.C()`-style pointer argument calls for low-level in-memory symbols, including copy-in/copy-out support for common R vector types and `NAOK` checking.
+- Expand `tcc_call_symbol()` with `.C()`-style pointer argument calls for low-level in-memory symbols, including guarded copy-in/copy-out support for common R vector types, `Csingle`, read-only `SEXP` paths, and `NAOK` checking.
 - Improve ALTREP-aware copy-in paths by using `RAW_GET_REGION()` when copying raw vectors into native memory and scalar accessors for callback/struct scalar conversions. Clarify that mutable array FFI inputs can materialize ALTREP vectors when R exposes writable C storage.
 - Harden async callback draining so explicit drains only execute R callbacks on the recorded main R thread, direct main-thread async scheduling executes immediately instead of queueing and waiting on itself, and async trampoline scheduling failures are recorded without calling R APIs from worker-capable code.
 

@@ -58,6 +58,35 @@ copy-back behavior and would not automatically preserve pointer aliasing when
 the same R vector is passed to multiple C arguments. Read-only ALTREP-friendly
 array types would be a cleaner separate API.
 
+## `tcc_call_symbol()` Uses `.C()`-Style Copy-In/Copy-Out
+
+When `tcc_call_symbol()` is called with extra arguments, it follows the
+argument-type mapping of R's `.C()` interface rather than the zero-copy array
+contract used by `tcc_ffi()` wrappers.
+
+For atomic vectors and character vectors, Rtinycc copies inputs into guarded
+mutable call storage and returns a list containing the copied-back values. This
+means C mutations are visible in the returned list, not by mutating the
+original R objects. Numeric vectors with `attr(x, "Csingle")` are converted
+through a temporary `float *` buffer, matching R's legacy `.C()` convention.
+
+Lists and other non-atomic R objects follow the legacy `.C()` read-only paths:
+lists are exposed as `SEXP *`, while functions, environments, and other R
+objects are exposed as `SEXP`. These values are borrowed only for the duration
+of the call. C code must not mutate them through `tcc_call_symbol()`, and if it
+stores a `SEXP` beyond the call it must preserve and later release it with the
+R C API. For ordinary lists, Rtinycc can pass the existing `SEXP *` element
+storage read-only; for ALTREP or otherwise opaque list-like vectors, it rebuilds
+a temporary call-lifetime `SEXP *` view with `VECTOR_ELT()` so the path remains
+ALTREP-aware without forcing writable data access.
+
+Unlike R's optional `options(CBoundsCheck = TRUE)`, `tcc_call_symbol()` checks
+guard bytes around its copied atomic and character buffers by default. This can
+catch simple underwrites and overwrites, but it is not a sandbox: far
+out-of-bounds native writes are still bugs in the called C code. For character
+arguments, C may edit the contents of each copied string buffer in place, but it
+must not replace the `char *` elements in the `char **` array.
+
 ## `cstring_array` Is Rebuilt Per Call
 
 `cstring_array` is different. The wrapper allocates a temporary `const char **`

@@ -332,13 +332,22 @@ tcc_list_symbols <- function(state) {
 #' or `void` return value.
 #'
 #' With additional arguments, it uses an R `.C()`-style calling convention: the
-#' target C function must be `void`, each R argument is copied to a mutable C
-#' buffer and passed by pointer, and the result is a list of the modified
-#' argument values. Supported argument types mirror the common `.C()` set:
-#' raw, integer, logical, double, complex, character, lists as `SEXP *`, and
-#' other R objects as `SEXP`. Up to 65 arguments are supported.
+#' target C function must be `void`, each atomic or character R argument is
+#' copied to guarded mutable call storage and passed by pointer, and the result
+#' is a list of the modified argument values. Supported argument mappings follow
+#' R's `.C()` interface: raw as `unsigned char *`, integer/logical as `int *`,
+#' numeric as `double *` or `float *` when `attr(x, "Csingle")` is true,
+#' complex as `Rcomplex *`, character as `char **`, lists as read-only `SEXP *`,
+#' and functions/environments/other R objects as read-only `SEXP`. Up to 65
+#' arguments are supported. Guard bytes around copied buffers are checked after
+#' the call to catch simple native underwrites and overwrites; character code may
+#' edit string contents in place but must not replace `char *` elements in the
+#' `char **` array.
 #'
-#' This is a low-level convenience interface. For typed scalar returns,
+#' Non-atomic R objects are borrowed for the duration of the call only. C code
+#' must not mutate them through this interface, and must call `R_PreserveObject()`
+#' if it deliberately stores a `SEXP` beyond the call. This is a low-level
+#' convenience interface; for typed scalar returns, explicit zero-copy arrays,
 #' ownership metadata, and clearer signatures, prefer [tcc_ffi()].
 #'
 #' @param .state A `tcc_state`. Named `state =` is also accepted for

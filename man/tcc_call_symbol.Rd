@@ -41,12 +41,21 @@ or \code{void} return value.
 }
 \details{
 With additional arguments, it uses an R \code{.C()}-style calling convention: the
-target C function must be \code{void}, each R argument is copied to a mutable C
-buffer and passed by pointer, and the result is a list of the modified
-argument values. Supported argument types mirror the common \code{.C()} set:
-raw, integer, logical, double, complex, character, lists as \verb{SEXP *}, and
-other R objects as \code{SEXP}. Up to 65 arguments are supported.
+target C function must be \code{void}, each atomic or character R argument is
+copied to guarded mutable call storage and passed by pointer, and the result
+is a list of the modified argument values. Supported argument mappings follow
+R's \code{.C()} interface: raw as \verb{unsigned char *}, integer/logical as \verb{int *},
+numeric as \verb{double *} or \verb{float *} when \code{attr(x, "Csingle")} is true,
+complex as \verb{Rcomplex *}, character as \verb{char **}, lists as read-only \verb{SEXP *},
+and functions/environments/other R objects as read-only \code{SEXP}. Up to 65
+arguments are supported. Guard bytes around copied buffers are checked after
+the call to catch simple native underwrites and overwrites; character code may
+edit string contents in place but must not replace \verb{char *} elements in the
+\verb{char **} array.
 
-This is a low-level convenience interface. For typed scalar returns,
+Non-atomic R objects are borrowed for the duration of the call only. C code
+must not mutate them through this interface, and must call \code{R_PreserveObject()}
+if it deliberately stores a \code{SEXP} beyond the call. This is a low-level
+convenience interface; for typed scalar returns, explicit zero-copy arrays,
 ownership metadata, and clearer signatures, prefer \code{\link[=tcc_ffi]{tcc_ffi()}}.
 }

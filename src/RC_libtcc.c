@@ -684,12 +684,15 @@ SEXP RC_libtcc_list_symbols(SEXP ext) {
  */
 #define RC_DOTC_MAX_ARGS 65
 #define RC_DOTC_CHAR_BUFSIZE_MIN 128
+#define RC_DOTC_GUARD_BYTES 64
+#define RC_DOTC_GUARD_FILL 0xee
 
 typedef enum {
     RC_DOTC_ARG_DIRECT = 0,
-    RC_DOTC_ARG_LOGICAL = 1,
-    RC_DOTC_ARG_SINGLE = 2,
-    RC_DOTC_ARG_CHARACTER = 3
+    RC_DOTC_ARG_GUARDED = 1,
+    RC_DOTC_ARG_LOGICAL = 2,
+    RC_DOTC_ARG_SINGLE = 3,
+    RC_DOTC_ARG_CHARACTER = 4
 } RC_dotc_arg_kind_t;
 
 typedef struct {
@@ -698,7 +701,43 @@ typedef struct {
     SEXP out;
     R_xlen_t n;
     void *ptr;
+    unsigned char *base;
+    size_t nbytes;
+    unsigned char **char_bases;
+    size_t *char_caps;
 } RC_dotc_arg_t;
+
+static unsigned char *RC_dotc_alloc_guarded(size_t nbytes, unsigned char **base_out) {
+    if (nbytes > SIZE_MAX - 2 * RC_DOTC_GUARD_BYTES) {
+        Rf_error("TCC foreign function argument is too large");
+    }
+    size_t total = nbytes + 2 * RC_DOTC_GUARD_BYTES;
+    unsigned char *base = (unsigned char *)R_alloc(total, 1);
+    memset(base, RC_DOTC_GUARD_FILL, total);
+    *base_out = base;
+    return base + RC_DOTC_GUARD_BYTES;
+}
+
+static void RC_dotc_check_guarded(const unsigned char *base, size_t nbytes,
+                                  int arg_index, const char *what) {
+    const unsigned char *pre = base;
+    const unsigned char *post = base + RC_DOTC_GUARD_BYTES + nbytes;
+    for (int i = 0; i < RC_DOTC_GUARD_BYTES; i++) {
+        if (pre[i] != RC_DOTC_GUARD_FILL) {
+            Rf_error("array under-run in TCC foreign function call (%s argument %d)", what, arg_index);
+        }
+        if (post[i] != RC_DOTC_GUARD_FILL) {
+            Rf_error("array over-run in TCC foreign function call (%s argument %d)", what, arg_index);
+        }
+    }
+}
+
+static int RC_dotc_has_nul(const char *s, size_t cap) {
+    for (size_t i = 0; i < cap; i++) {
+        if (s[i] == '\0') return 1;
+    }
+    return 0;
+}
 
 typedef void (*RC_DOTC_FUNV0)(void);
 typedef void (*RC_DOTC_FUNV1)(void *);
@@ -1054,61 +1093,73 @@ static void RC_libtcc_prepare_dotc_arg(SEXP x, int arg_index, int naok,
     meta->out = x;
     meta->n = RC_libtcc_dotc_arg_length(x, arg_index);
     meta->ptr = NULL;
+    meta->base = NULL;
+    meta->nbytes = 0;
+    meta->char_bases = NULL;
+    meta->char_caps = NULL;
 
     switch (TYPEOF(x)) {
     case RAWSXP: {
         SEXP out = PROTECT(Rf_allocVector(RAWSXP, meta->n));
-        if (meta->n) memcpy(RAW(out), RAW(x), (size_t)meta->n * sizeof(Rbyte));
         RC_libtcc_copy_attrib(out, x);
         SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->kind = RC_DOTC_ARG_GUARDED;
         meta->out = out;
-        meta->ptr = RAW(out);
+        meta->nbytes = (size_t)meta->n * sizeof(Rbyte);
+        meta->ptr = RC_dotc_alloc_guarded(meta->nbytes, &meta->base);
+        if (meta->nbytes) memcpy(meta->ptr, RAW(x), meta->nbytes);
         cargs[arg_index - 1] = meta->ptr;
         UNPROTECT(1);
         break;
     }
     case LGLSXP: {
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, meta->n));
-        if (meta->n) memcpy(LOGICAL(out), LOGICAL(x), (size_t)meta->n * sizeof(int));
         RC_libtcc_copy_attrib(out, x);
         SET_VECTOR_ELT(ans, arg_index - 1, out);
         meta->kind = RC_DOTC_ARG_LOGICAL;
         meta->out = out;
-        meta->ptr = LOGICAL(out);
+        meta->nbytes = (size_t)meta->n * sizeof(int);
+        meta->ptr = RC_dotc_alloc_guarded(meta->nbytes, &meta->base);
+        if (meta->nbytes) memcpy(meta->ptr, LOGICAL(x), meta->nbytes);
         cargs[arg_index - 1] = meta->ptr;
         UNPROTECT(1);
         break;
     }
     case INTSXP: {
         SEXP out = PROTECT(Rf_allocVector(INTSXP, meta->n));
-        if (meta->n) memcpy(INTEGER(out), INTEGER(x), (size_t)meta->n * sizeof(int));
         RC_libtcc_copy_attrib(out, x);
         SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->kind = RC_DOTC_ARG_GUARDED;
         meta->out = out;
-        meta->ptr = INTEGER(out);
+        meta->nbytes = (size_t)meta->n * sizeof(int);
+        meta->ptr = RC_dotc_alloc_guarded(meta->nbytes, &meta->base);
+        if (meta->nbytes) memcpy(meta->ptr, INTEGER(x), meta->nbytes);
         cargs[arg_index - 1] = meta->ptr;
         UNPROTECT(1);
         break;
     }
     case REALSXP: {
         if (RC_libtcc_is_csingle(x)) {
-            float *buf = (float *)R_alloc((size_t)meta->n, sizeof(float));
-            for (R_xlen_t i = 0; i < meta->n; i++) buf[i] = (float)REAL(x)[i];
             SEXP out = PROTECT(Rf_allocVector(REALSXP, meta->n));
             RC_libtcc_copy_attrib(out, x);
             SET_VECTOR_ELT(ans, arg_index - 1, out);
             meta->kind = RC_DOTC_ARG_SINGLE;
             meta->out = out;
-            meta->ptr = buf;
+            meta->nbytes = (size_t)meta->n * sizeof(float);
+            meta->ptr = RC_dotc_alloc_guarded(meta->nbytes, &meta->base);
+            float *buf = (float *)meta->ptr;
+            for (R_xlen_t i = 0; i < meta->n; i++) buf[i] = (float)REAL(x)[i];
             cargs[arg_index - 1] = meta->ptr;
             UNPROTECT(1);
         } else {
             SEXP out = PROTECT(Rf_allocVector(REALSXP, meta->n));
-            if (meta->n) memcpy(REAL(out), REAL(x), (size_t)meta->n * sizeof(double));
             RC_libtcc_copy_attrib(out, x);
             SET_VECTOR_ELT(ans, arg_index - 1, out);
+            meta->kind = RC_DOTC_ARG_GUARDED;
             meta->out = out;
-            meta->ptr = REAL(out);
+            meta->nbytes = (size_t)meta->n * sizeof(double);
+            meta->ptr = RC_dotc_alloc_guarded(meta->nbytes, &meta->base);
+            if (meta->nbytes) memcpy(meta->ptr, REAL(x), meta->nbytes);
             cargs[arg_index - 1] = meta->ptr;
             UNPROTECT(1);
         }
@@ -1116,24 +1167,32 @@ static void RC_libtcc_prepare_dotc_arg(SEXP x, int arg_index, int naok,
     }
     case CPLXSXP: {
         SEXP out = PROTECT(Rf_allocVector(CPLXSXP, meta->n));
-        if (meta->n) memcpy(COMPLEX(out), COMPLEX(x), (size_t)meta->n * sizeof(Rcomplex));
         RC_libtcc_copy_attrib(out, x);
         SET_VECTOR_ELT(ans, arg_index - 1, out);
+        meta->kind = RC_DOTC_ARG_GUARDED;
         meta->out = out;
-        meta->ptr = COMPLEX(out);
+        meta->nbytes = (size_t)meta->n * sizeof(Rcomplex);
+        meta->ptr = RC_dotc_alloc_guarded(meta->nbytes, &meta->base);
+        if (meta->nbytes) memcpy(meta->ptr, COMPLEX(x), meta->nbytes);
         cargs[arg_index - 1] = meta->ptr;
         UNPROTECT(1);
         break;
     }
     case STRSXP: {
         char **cptr = (char **)R_alloc((size_t)meta->n, sizeof(char *));
+        meta->char_bases = (unsigned char **)R_alloc((size_t)meta->n, sizeof(unsigned char *));
+        meta->char_caps = (size_t *)R_alloc((size_t)meta->n, sizeof(size_t));
         for (R_xlen_t i = 0; i < meta->n; i++) {
             const char *src = (STRING_ELT(x, i) == NA_STRING) ? "NA" : Rf_translateChar(STRING_ELT(x, i));
             size_t len = strlen(src) + 1;
             size_t cap = len < RC_DOTC_CHAR_BUFSIZE_MIN ? RC_DOTC_CHAR_BUFSIZE_MIN : len;
-            cptr[i] = (char *)R_alloc(cap, sizeof(char));
-            memset(cptr[i], 0, cap);
-            memcpy(cptr[i], src, len);
+            unsigned char *base = NULL;
+            char *buf = (char *)RC_dotc_alloc_guarded(cap, &base);
+            memset(buf, 0, cap);
+            memcpy(buf, src, len);
+            cptr[i] = buf;
+            meta->char_bases[i] = base;
+            meta->char_caps[i] = cap;
         }
         SEXP out = PROTECT(Rf_allocVector(STRSXP, meta->n));
         RC_libtcc_copy_attrib(out, x);
@@ -1146,10 +1205,19 @@ static void RC_libtcc_prepare_dotc_arg(SEXP x, int arg_index, int naok,
         break;
     }
     case VECSXP: {
-        SEXP *lptr = (SEXP *)R_alloc((size_t)meta->n, sizeof(SEXP));
-        for (R_xlen_t i = 0; i < meta->n; i++) lptr[i] = VECTOR_ELT(x, i);
+        /* Lists are a read-only legacy .C path.  For ordinary materialized
+         * vectors, DATAPTR_OR_NULL() gives the existing SEXP* array without
+         * forcing ALTREP materialization.  For ALTREP or otherwise opaque
+         * vectors, rebuild a call-lifetime SEXP* view element-by-element. */
+        const void *data = DATAPTR_OR_NULL(x);
         SET_VECTOR_ELT(ans, arg_index - 1, x);
-        meta->ptr = lptr;
+        if (data) {
+            meta->ptr = (void *)data;
+        } else {
+            SEXP *lptr = (SEXP *)R_alloc((size_t)meta->n, sizeof(SEXP));
+            for (R_xlen_t i = 0; i < meta->n; i++) lptr[i] = VECTOR_ELT(x, i);
+            meta->ptr = lptr;
+        }
         cargs[arg_index - 1] = meta->ptr;
         break;
     }
@@ -1165,17 +1233,39 @@ static void RC_libtcc_prepare_dotc_arg(SEXP x, int arg_index, int naok,
     }
 }
 
-static void RC_libtcc_finish_dotc_arg(RC_dotc_arg_t *meta) {
+static void RC_libtcc_finish_dotc_arg(RC_dotc_arg_t *meta, int arg_index) {
     switch (meta->kind) {
+    case RC_DOTC_ARG_GUARDED:
+        RC_dotc_check_guarded(meta->base, meta->nbytes, arg_index, Rf_type2char(TYPEOF(meta->out)));
+        switch (TYPEOF(meta->out)) {
+        case RAWSXP:
+            if (meta->nbytes) memcpy(RAW(meta->out), meta->ptr, meta->nbytes);
+            break;
+        case INTSXP:
+            if (meta->nbytes) memcpy(INTEGER(meta->out), meta->ptr, meta->nbytes);
+            break;
+        case REALSXP:
+            if (meta->nbytes) memcpy(REAL(meta->out), meta->ptr, meta->nbytes);
+            break;
+        case CPLXSXP:
+            if (meta->nbytes) memcpy(COMPLEX(meta->out), meta->ptr, meta->nbytes);
+            break;
+        default:
+            break;
+        }
+        break;
     case RC_DOTC_ARG_LOGICAL: {
-        int *p = LOGICAL(meta->out);
+        RC_dotc_check_guarded(meta->base, meta->nbytes, arg_index, "logical");
+        int *p = (int *)meta->ptr;
+        int *out = LOGICAL(meta->out);
         for (R_xlen_t i = 0; i < meta->n; i++) {
             int v = p[i];
-            p[i] = (v == NA_INTEGER || v == 0) ? v : 1;
+            out[i] = (v == NA_INTEGER || v == 0) ? v : 1;
         }
         break;
     }
     case RC_DOTC_ARG_SINGLE: {
+        RC_dotc_check_guarded(meta->base, meta->nbytes, arg_index, "single");
         float *p = (float *)meta->ptr;
         for (R_xlen_t i = 0; i < meta->n; i++) REAL(meta->out)[i] = (double)p[i];
         break;
@@ -1183,7 +1273,17 @@ static void RC_libtcc_finish_dotc_arg(RC_dotc_arg_t *meta) {
     case RC_DOTC_ARG_CHARACTER: {
         char **p = (char **)meta->ptr;
         for (R_xlen_t i = 0; i < meta->n; i++) {
-            SET_STRING_ELT(meta->out, i, Rf_mkChar(p[i] ? p[i] : ""));
+            RC_dotc_check_guarded(meta->char_bases[i], meta->char_caps[i], arg_index, "character");
+            char *expected = (char *)(meta->char_bases[i] + RC_DOTC_GUARD_BYTES);
+            if (p[i] != expected) {
+                Rf_error("character pointer replacement is not supported in TCC foreign function call (argument %d, element %d)",
+                         arg_index, (int)i + 1);
+            }
+            if (!RC_dotc_has_nul(p[i], meta->char_caps[i])) {
+                Rf_error("unterminated string in TCC foreign function call (character argument %d, element %d)",
+                         arg_index, (int)i + 1);
+            }
+            SET_STRING_ELT(meta->out, i, Rf_mkChar(p[i]));
         }
         break;
     }
@@ -1220,7 +1320,7 @@ static SEXP RC_libtcc_call_symbol_dotc(uintptr_t addr, SEXP args, int naok) {
     RC_libtcc_call_void_symbol(addr, nargs, cargs);
 
     for (int i = 0; i < nargs; i++) {
-        RC_libtcc_finish_dotc_arg(&meta[i]);
+        RC_libtcc_finish_dotc_arg(&meta[i], i + 1);
     }
 
     UNPROTECT(1);
