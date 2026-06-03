@@ -136,6 +136,43 @@ when the same R vector is passed to multiple C arguments. Read-only
 ALTREP-friendly array types would be a cleaner separate API.</p>
 </div>
 <div class="section level2">
+<h2 id="tcc_call_symbol-uses--c-style-copy-incopy-out">
+<code>tcc_call_symbol()</code> Uses <code>.C()</code>-Style
+Copy-In/Copy-Out<a class="anchor" aria-label="anchor" href="#tcc_call_symbol-uses--c-style-copy-incopy-out"></a>
+</h2>
+<p>When <code><a href="../reference/tcc_call_symbol.html">tcc_call_symbol()</a></code> is called with extra arguments,
+it follows the argument-type mapping of R’s <code><a href="https://rdrr.io/r/base/Foreign.html" class="external-link">.C()</a></code> interface
+rather than the zero-copy array contract used by <code><a href="../reference/tcc_ffi.html">tcc_ffi()</a></code>
+wrappers.</p>
+<p>For atomic vectors and character vectors, Rtinycc copies inputs into
+guarded mutable call storage and returns a list containing the
+copied-back values. This means C mutations are visible in the returned
+list, not by mutating the original R objects. Numeric vectors with
+<code>attr(x, "Csingle")</code> are converted through a temporary
+<code>float *</code> buffer, matching R’s legacy <code><a href="https://rdrr.io/r/base/Foreign.html" class="external-link">.C()</a></code>
+convention.</p>
+<p>Lists and other non-atomic R objects follow the legacy
+<code><a href="https://rdrr.io/r/base/Foreign.html" class="external-link">.C()</a></code> read-only paths: lists are exposed as
+<code>SEXP *</code>, while functions, environments, and other R objects
+are exposed as <code>SEXP</code>. These values are borrowed only for the
+duration of the call. C code must not mutate them through
+<code><a href="../reference/tcc_call_symbol.html">tcc_call_symbol()</a></code>, and if it stores a <code>SEXP</code>
+beyond the call it must preserve and later release it with the R C API.
+For ordinary lists, Rtinycc can pass the existing <code>SEXP *</code>
+element storage read-only; for ALTREP or otherwise opaque list-like
+vectors, it rebuilds a temporary call-lifetime <code>SEXP *</code> view
+with <code>VECTOR_ELT()</code> so the path remains ALTREP-aware without
+forcing writable data access.</p>
+<p>Unlike R’s optional <code>options(CBoundsCheck = TRUE)</code>,
+<code><a href="../reference/tcc_call_symbol.html">tcc_call_symbol()</a></code> checks guard bytes around its copied
+atomic and character buffers by default. This can catch simple
+underwrites and overwrites, but it is not a sandbox: far out-of-bounds
+native writes are still bugs in the called C code. For character
+arguments, C may edit the contents of each copied string buffer in
+place, but it must not replace the <code>char *</code> elements in the
+<code>char **</code> array.</p>
+</div>
+<div class="section level2">
 <h2 id="cstring_array-is-rebuilt-per-call">
 <code>cstring_array</code> Is Rebuilt Per Call<a class="anchor" aria-label="anchor" href="#cstring_array-is-rebuilt-per-call"></a>
 </h2>

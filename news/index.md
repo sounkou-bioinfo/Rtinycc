@@ -12,9 +12,9 @@
 - Expand
   [`tcc_call_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_call_symbol.md)
   with [`.C()`](https://rdrr.io/r/base/Foreign.html)-style pointer
-  argument calls for low-level in-memory symbols, including
-  copy-in/copy-out support for common R vector types and `NAOK`
-  checking.
+  argument calls for low-level in-memory symbols, including guarded
+  copy-in/copy-out support for common R vector types, `Csingle`,
+  read-only `SEXP` paths, and `NAOK` checking.
 - Improve ALTREP-aware copy-in paths by using `RAW_GET_REGION()` when
   copying raw vectors into native memory and scalar accessors for
   callback/struct scalar conversions. Clarify that mutable array FFI
