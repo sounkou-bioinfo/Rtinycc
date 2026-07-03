@@ -20,11 +20,12 @@ permissions: read-all
 jobs:
   jit-probe:
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }}
+    name: ${{ matrix.os }} / Rtinycc-${{ matrix.rtinycc-from }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-15, macos-26]
+        rtinycc-from: [source, runiverse]
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -150,10 +151,17 @@ jobs:
         with:
           needs: check
 
-      - name: Install Rtinycc
+      - name: Install Rtinycc (${{ matrix.rtinycc-from }})
         run: |
-          R CMD build --no-manual --no-build-vignettes .
-          R CMD INSTALL Rtinycc_*.tar.gz
+          if [ "${{ matrix.rtinycc-from }}" = "runiverse" ]; then
+            # The prebuilt binary tccquickr's CI installs; built on the
+            # r-universe macOS builder, not on this runner image.
+            Rscript -e 'install.packages("Rtinycc", repos = "https://sounkou-bioinfo.r-universe.dev")'
+            Rscript -e 'cat("installed Rtinycc", as.character(packageVersion("Rtinycc")), "\n")'
+          else
+            R CMD build --no-manual --no-build-vignettes .
+            R CMD INSTALL Rtinycc_*.tar.gz
+          fi
 
       - name: TinyCC JIT probe with crash-report capture
         run: |
