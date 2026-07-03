@@ -184,3 +184,52 @@ jobs:
             fi
             exit 1
           fi
+
+      - name: TinyCC JIT probe with tccquickr-shaped kernel
+        run: |
+          cat > jit_probe_kernel.R <<'EOF2'
+          # Mirrors the first kernel tccquickr JITs in its test suite: SDK
+          # includes, malloc'd buffer return, i32 extent/count ABI.
+          source_text <- paste(
+            "#include <math.h>",
+            "#include <stddef.h>",
+            "#include <stdlib.h>",
+            "",
+            "double *probe_map(const double *a, const double *b, int extent_n, int result_count) {",
+            "  if (result_count < 0) { return NULL; }",
+            "  double *out = (double *)malloc(sizeof(double) * (size_t)result_count);",
+            "  if (out == NULL) { return NULL; }",
+            "  for (int i = 0; i < extent_n; ++i) {",
+            "    out[i] = sqrt(a[i]) + b[i];",
+            "  }",
+            "  return out;",
+            "}",
+            sep = "\n"
+          )
+          ffi <- Rtinycc::tcc_ffi()
+          ffi <- Rtinycc::tcc_bind(
+            ffi,
+            probe_map = list(
+              args = list("numeric_array", "numeric_array", "i32", "i32"),
+              returns = list(type = "numeric_array", length_arg = 4, free = TRUE)
+            )
+          )
+          ffi <- Rtinycc::tcc_source(ffi, source_text)
+          compiled <- Rtinycc::tcc_compile(ffi)
+          out <- compiled[["probe_map"]](c(1, 4, 9), c(1, 1, 1), 3L, 3L)
+          stopifnot(identical(out, c(2, 3, 4)))
+          cat("tinycc-kernel-jit-ok\n")
+          EOF2
+          set +e
+          Rscript jit_probe_kernel.R
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "== kernel JIT probe died with exit $status; newest crash reports:"
+            ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head -5 || true
+            REPORT=$(ls -t ~/Library/Logs/DiagnosticReports/R* 2>/dev/null | head -1)
+            if [ -n "$REPORT" ]; then
+              head -c 20000 "$REPORT"
+            fi
+            exit 1
+          fi
