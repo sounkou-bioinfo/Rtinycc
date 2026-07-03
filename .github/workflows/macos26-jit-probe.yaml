@@ -1,0 +1,186 @@
+# Diagnostic workflow for the macOS 26 (Tahoe) TinyCC JIT segfault.
+#
+# macos-latest is a mixed Sequoia/Tahoe pool since 2026-06-15. Jobs that land
+# on Tahoe crash with 'invalid permissions' inside tcc_compile_string while
+# the same code passes on Sequoia. This workflow pins both images and answers
+# three questions per image:
+#   1. what entitlements does the CRAN R binary carry
+#   2. which write-then-execute strategies does the OS allow inside the R
+#      process (malloc+mprotect as TinyCC's CONFIG_RUNMEM_RO does, anonymous
+#      mmap RW->RX, and mmap MAP_JIT + pthread_jit_write_protect_np)
+#   3. does a trivial Rtinycc JIT compile-and-call survive, with the macOS
+#      crash report captured when it does not
+name: macos26-jit-probe
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  jit-probe:
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - name: OS version and R binary entitlements
+        run: |
+          sw_vers
+          uname -m
+          R_EXEC="$(R RHOME)/bin/exec/R"
+          echo "== R binary: $R_EXEC"
+          codesign -dv --entitlements - "$R_EXEC" || true
+          echo "== Rscript binary: $(which Rscript)"
+          codesign -dv --entitlements - "$(which Rscript)" || true
+
+      - name: W^X policy probe inside the R process
+        run: |
+          cat > wx_probe.c <<'EOF'
+          #include <errno.h>
+          #include <setjmp.h>
+          #include <signal.h>
+          #include <stdint.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <sys/mman.h>
+          #include <unistd.h>
+          #include <pthread.h>
+          #include <libkern/OSCacheControl.h>
+
+          /* aarch64: movz w0, #42 ; ret */
+          static const uint32_t code[2] = {0x52800540u, 0xd65f03c0u};
+
+          static sigjmp_buf jump;
+          static void trap(int sig) { siglongjmp(jump, sig); }
+
+          static int call_guarded(void *p) {
+            struct sigaction sa, old_segv, old_bus;
+            memset(&sa, 0, sizeof sa);
+            sa.sa_handler = trap;
+            sigaction(SIGSEGV, &sa, &old_segv);
+            sigaction(SIGBUS, &sa, &old_bus);
+            int sig = sigsetjmp(jump, 1);
+            int out;
+            if (sig == 0) {
+              int (*fn)(void) = (int (*)(void))p;
+              out = fn(); /* 42 on success */
+            } else {
+              out = -sig; /* -11 SIGSEGV, -10 SIGBUS */
+            }
+            sigaction(SIGSEGV, &old_segv, NULL);
+            sigaction(SIGBUS, &old_bus, NULL);
+            return out;
+          }
+
+          /* strategy 1: TinyCC CONFIG_RUNMEM_RO emulation: malloc, write,
+             mprotect page to R-X, execute. */
+          static int probe_malloc_mprotect(void) {
+            long page = sysconf(_SC_PAGESIZE);
+            unsigned char *raw = malloc(2 * page);
+            if (!raw) return -200;
+            unsigned char *aligned =
+              (unsigned char *)(((uintptr_t)raw + page - 1) & ~(uintptr_t)(page - 1));
+            memcpy(aligned, code, sizeof code);
+            sys_icache_invalidate(aligned, sizeof code);
+            if (mprotect(aligned, page, PROT_READ | PROT_EXEC) != 0) return -100 - errno;
+            return call_guarded(aligned);
+          }
+
+          /* strategy 2: anonymous mmap RW, write, mprotect to R-X, execute. */
+          static int probe_mmap_mprotect(void) {
+            long page = sysconf(_SC_PAGESIZE);
+            void *p = mmap(NULL, page, PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (p == MAP_FAILED) return -100 - errno;
+            memcpy(p, code, sizeof code);
+            sys_icache_invalidate(p, sizeof code);
+            if (mprotect(p, page, PROT_READ | PROT_EXEC) != 0) return -100 - errno;
+            return call_guarded(p);
+          }
+
+          /* strategy 3: Apple-sanctioned JIT path: mmap MAP_JIT RWX with
+             pthread_jit_write_protect_np toggling. */
+          static int probe_map_jit(void) {
+            long page = sysconf(_SC_PAGESIZE);
+            void *p = mmap(NULL, page, PROT_READ | PROT_WRITE | PROT_EXEC,
+                           MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+            if (p == MAP_FAILED) return -100 - errno;
+            pthread_jit_write_protect_np(0);
+            memcpy(p, code, sizeof code);
+            pthread_jit_write_protect_np(1);
+            sys_icache_invalidate(p, sizeof code);
+            return call_guarded(p);
+          }
+
+          void wx_probe(int *strategy, int *result) {
+            switch (*strategy) {
+              case 1: *result = probe_malloc_mprotect(); break;
+              case 2: *result = probe_mmap_mprotect(); break;
+              case 3: *result = probe_map_jit(); break;
+              default: *result = -999; break;
+            }
+          }
+          EOF
+          R CMD SHLIB wx_probe.c
+          for strategy in 1 2 3; do
+            cat > run_probe.R <<EOF
+          dyn.load("wx_probe.so")
+          out <- .C("wx_probe", strategy = as.integer($strategy), result = integer(1))
+          cat(sprintf("strategy %d -> %d\n", $strategy, out\$result))
+          EOF
+            echo "== strategy $strategy (42 = executes, -100-errno = denied, -SIG = trapped)"
+            Rscript run_probe.R || echo "strategy $strategy: R process died (exit $?)"
+          done
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          needs: check
+
+      - name: Install Rtinycc
+        run: |
+          R CMD build --no-manual --no-build-vignettes .
+          R CMD INSTALL Rtinycc_*.tar.gz
+
+      - name: TinyCC JIT probe with crash-report capture
+        run: |
+          cat > jit_probe.R <<'EOF'
+          ffi <- Rtinycc::tcc_ffi()
+          ffi <- Rtinycc::tcc_bind(
+            ffi,
+            probe_add = list(args = list("f64", "f64"), returns = "f64")
+          )
+          ffi <- Rtinycc::tcc_source(
+            ffi,
+            "double probe_add(double a, double b) { return a + b; }"
+          )
+          compiled <- Rtinycc::tcc_compile(ffi)
+          stopifnot(identical(compiled[["probe_add"]](1, 2), 3))
+          cat("tinycc-jit-ok\n")
+          EOF
+          set +e
+          Rscript jit_probe.R
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "== JIT probe died with exit $status; newest crash reports:"
+            ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head -5 || true
+            REPORT=$(ls -t ~/Library/Logs/DiagnosticReports/R* 2>/dev/null | head -1)
+            if [ -n "$REPORT" ]; then
+              head -c 20000 "$REPORT"
+            fi
+            exit 1
+          fi
