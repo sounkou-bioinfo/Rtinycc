@@ -50,10 +50,10 @@ Ownership notes:
   external pointer owns memory, keep it alive; otherwise the pointer may
   be freed while the global still points to it.
 
-- `cstring` globals store a borrowed pointer to R's string data (UTF-8
-  translation). Do not free it; for C-owned strings prefer a `ptr`
-  global and manage lifetime explicitly (e.g., with
-  [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md)).
+- `cstring` globals are rejected because a global would outlive the
+  borrowed R string view. Declare the global as `ptr` and manage its
+  storage explicitly with an owned object such as
+  [`tcc_cstring()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_cstring.md).
 
 ## Note
 

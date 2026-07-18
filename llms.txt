@@ -2222,6 +2222,9 @@ GPL-3
 - [`tcc_output()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output.md)
   : Set output type for FFI compilation
 
+- [`tcc_output_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output_file.md)
+  : Write a non-memory TinyCC output file
+
 - [`tcc_path()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_path.md)
   : Locate the TinyCC executable
 

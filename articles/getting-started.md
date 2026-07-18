@@ -21,6 +21,7 @@ tcc_path()
 tcc_include_paths()
 #> [1] "/home/runner/work/_temp/Library/Rtinycc/tinycc/include"        
 #> [2] "/home/runner/work/_temp/Library/Rtinycc/tinycc/lib/tcc/include"
+#> [3] "/home/runner/work/_temp/Library/Rtinycc/include"
 tcc_lib_paths()
 #> [1] "/home/runner/work/_temp/Library/Rtinycc/tinycc/lib/tcc"
 #> [2] "/home/runner/work/_temp/Library/Rtinycc/tinycc/lib"

@@ -1,6 +1,7 @@
 # Get a symbol pointer from a libtcc state
 
-Get a symbol pointer from a libtcc state
+The memory state must first be successfully finalized with
+[`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md).
 
 ## Usage
 
@@ -20,4 +21,5 @@ tcc_get_symbol(state, name)
 
 ## Value
 
-External pointer of class `tcc_symbol`.
+External pointer of class `tcc_symbol`. The pointer retains `state` so
+its relocated code remains alive for as long as the symbol is reachable.

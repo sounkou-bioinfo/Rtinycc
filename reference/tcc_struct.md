@@ -25,6 +25,10 @@ tcc_struct(ffi, name, accessors)
   are FFI types (e.g., list(x="f64", y="f64")). Named nested struct
   fields can use `"struct:<name>"` to generate borrowed nested-view
   getters and copy-in setters (for example `child = "struct:child"`).
+  Fixed character arrays use `list(type = "cstring", size = n)`. Bare
+  `cstring` pointer fields are rejected because setters cannot safely
+  retain borrowed R string storage; use `ptr` with explicitly owned
+  storage instead.
 
 ## Value
 

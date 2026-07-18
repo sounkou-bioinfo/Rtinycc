@@ -49,6 +49,12 @@ and returns a default value.
 Pointer arguments (e.g., `double*`, `int*`) are passed as external
 pointers. Lengths must be supplied separately if needed.
 
+A callback `ptr` or `cstring` return is borrowed. C may consume it
+during the enclosing compiled call, but must not retain it after that
+call unless the owner is kept alive by some other explicit contract.
+Copy string data into C-owned storage when it must escape the callback
+call chain.
+
 The return type may be any scalar type supported by the FFI mappings
 (e.g., `i32`, `f64`, `bool`, `cstring`), or `SEXP` to return an R object
 directly.

@@ -71,7 +71,8 @@ The union must be defined in a header.</p>
 
 
 <dt id="arg-members">members<a class="anchor" aria-label="anchor" href="#arg-members"></a></dt>
-<dd><p>Named list of union members with FFI types</p></dd>
+<dd><p>Named list of union members with FFI types. Bare <code>cstring</code>
+pointer members are rejected; use <code>ptr</code> with explicitly owned storage.</p></dd>
 
 
 <dt id="arg-active">active<a class="anchor" aria-label="anchor" href="#arg-active"></a></dt>

@@ -21,7 +21,8 @@ tcc_union(ffi, name, members, active = NULL)
 
 - members:
 
-  Named list of union members with FFI types
+  Named list of union members with FFI types. Bare `cstring` pointer
+  members are rejected; use `ptr` with explicitly owned storage.
 
 - active:
 

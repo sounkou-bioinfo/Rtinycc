@@ -390,7 +390,7 @@ compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
 #> 1        Rtinycc   0.019           19
-#> 2         callme   0.242          242
+#> 2         callme   0.229          229
 ```
 
 The expected pattern is:
@@ -417,11 +417,14 @@ Rtinycc:::rtinycc_c_block(generated_code)
 
 #include <R.h>
 #include <Rinternals.h>
+#include <stddef.h>
 #ifndef STRING_PTR_RO
 #define STRING_PTR_RO STRING_PTR
 #endif
 void RC_free_finalizer(SEXP ext);
 void RC_owned_native_finalizer(SEXP ext);
+void *RC_check_composite_ptr(SEXP ext, SEXP expected_tag, int require_owned);
+void *RC_host_calloc_c(size_t n, size_t size);
 SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
 SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
 SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
@@ -429,7 +432,6 @@ SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -541,8 +543,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.05ms    1.1ms      908.    21.9KB        0
-#> 2 callme      390.1µs    405µs     2454.        0B        0
+#> 1 Rtinycc      1.22ms   1.25ms      796.    21.9KB        0
+#> 2 callme     460.53µs 472.18µs     2122.        0B        0
 ```
 
 Interpretation:
@@ -581,8 +583,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.71ms   4.24ms      253.    3.15MB     12.6
-#> 2 callme        2.3ms   2.41ms      384.    3.13MB     19.2
+#> 1 Rtinycc      2.79ms   3.95ms      266.    3.15MB     13.3
+#> 2 callme       2.17ms   2.21ms      420.    3.13MB     21.0
 ```
 
 Interpretation:
@@ -631,14 +633,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.71ms   1.81ms      517.    15.4KB     25.8
-#> 2 callme       1.01ms   1.02ms      968.        0B      0
+#> 1 Rtinycc      1.77ms   1.84ms      512.    15.4KB     25.6
+#> 2 callme     961.41µs 978.43µs     1019.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.63ms   4.19ms      237.    3.13MB     11.9
-#> 2 callme       2.35ms   3.72ms      263.    3.13MB     13.2
+#> 1 Rtinycc      2.77ms   4.03ms      246.    3.13MB     12.3
+#> 2 callme       1.95ms   3.21ms      305.    3.13MB     15.2
 ```
 
 The usual pattern is:

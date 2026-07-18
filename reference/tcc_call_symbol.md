@@ -1,8 +1,7 @@
 # Call a symbol from a TinyCC state
 
-With no additional arguments, `tcc_call_symbol()` preserves its
-historical quick-test behavior: call a zero-argument symbol and box an
-`int`, `double`, or `void` return value.
+The memory state must first be successfully finalized with
+[`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md).
 
 ## Usage
 
@@ -53,6 +52,10 @@ For zero-argument scalar calls, the boxed return value (`NULL` for
 a list mirroring `...` with any C-side modifications copied back.
 
 ## Details
+
+With no additional arguments, `tcc_call_symbol()` preserves its
+historical quick-test behavior: call a zero-argument symbol and box an
+`int`, `double`, or `void` return value.
 
 With additional arguments, it uses an R
 [`.C()`](https://rdrr.io/r/base/Foreign.html)-style calling convention:

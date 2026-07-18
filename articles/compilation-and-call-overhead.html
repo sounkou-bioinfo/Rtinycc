@@ -451,7 +451,7 @@ below are skipped.</p>
 <span><span class="va">compile_times</span></span>
 <span><span class="co">#&gt;   implementation seconds milliseconds</span></span>
 <span><span class="co">#&gt; 1        Rtinycc   0.019           19</span></span>
-<span><span class="co">#&gt; 2         callme   0.242          242</span></span></code></pre></div>
+<span><span class="co">#&gt; 2         callme   0.229          229</span></span></code></pre></div>
 <p>The expected pattern is:</p>
 <ul>
 <li>
@@ -479,103 +479,105 @@ input path.</p>
 <span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a></span>
 <span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;R.h&gt;</span></span>
 <span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rinternals.h&gt;</span></span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="pp">#ifndef STRING_PTR_RO</span></span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="pp">#define STRING_PTR_RO STRING_PTR</span></span>
-<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="pp">#endif</span></span>
-<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="dt">void</span> RC_free_finalizer<span class="op">(</span>SEXP ext<span class="op">);</span></span>
-<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="dt">void</span> RC_owned_native_finalizer<span class="op">(</span>SEXP ext<span class="op">);</span></span>
-<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a>SEXP RC_make_borrowed_view<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">,</span> SEXP owner<span class="op">);</span></span>
-<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a>SEXP RC_make_unowned_ptr<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">);</span></span>
-<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a>SEXP RC_make_owned_ptr<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">);</span></span>
-<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a>SEXP RC_make_owned_composite_ptr<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">);</span></span>
-<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a></span>
-<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdint.h&gt;</span></span>
-<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdbool.h&gt;</span></span>
-<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stddef.h&gt;</span></span>
-<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;limits.h&gt;</span></span>
-<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;math.h&gt;</span></span>
-<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string.h&gt;</span></span>
-<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a></span>
-<span id="cb14-23"><a href="#cb14-23" tabindex="-1"></a><span class="co">/* User code */</span></span>
-<span id="cb14-24"><a href="#cb14-24" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;R.h&gt;</span></span>
-<span id="cb14-25"><a href="#cb14-25" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rinternals.h&gt;</span></span>
-<span id="cb14-26"><a href="#cb14-26" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rmath.h&gt;</span></span>
-<span id="cb14-27"><a href="#cb14-27" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdlib.h&gt;</span></span>
-<span id="cb14-28"><a href="#cb14-28" tabindex="-1"></a></span>
-<span id="cb14-29"><a href="#cb14-29" tabindex="-1"></a><span class="dt">void</span> noop<span class="op">(</span><span class="dt">void</span><span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stddef.h&gt;</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="pp">#ifndef STRING_PTR_RO</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="pp">#define STRING_PTR_RO STRING_PTR</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="pp">#endif</span></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="dt">void</span> RC_free_finalizer<span class="op">(</span>SEXP ext<span class="op">);</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="dt">void</span> RC_owned_native_finalizer<span class="op">(</span>SEXP ext<span class="op">);</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>RC_check_composite_ptr<span class="op">(</span>SEXP ext<span class="op">,</span> SEXP expected_tag<span class="op">,</span> <span class="dt">int</span> require_owned<span class="op">);</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>RC_host_calloc_c<span class="op">(</span><span class="dt">size_t</span> n<span class="op">,</span> <span class="dt">size_t</span> size<span class="op">);</span></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a>SEXP RC_make_borrowed_view<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">,</span> SEXP owner<span class="op">);</span></span>
+<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a>SEXP RC_make_unowned_ptr<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">);</span></span>
+<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a>SEXP RC_make_owned_ptr<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">);</span></span>
+<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a>SEXP RC_make_owned_composite_ptr<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">,</span> SEXP tag<span class="op">);</span></span>
+<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a></span>
+<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdint.h&gt;</span></span>
+<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdbool.h&gt;</span></span>
+<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;limits.h&gt;</span></span>
+<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;math.h&gt;</span></span>
+<span id="cb14-23"><a href="#cb14-23" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string.h&gt;</span></span>
+<span id="cb14-24"><a href="#cb14-24" tabindex="-1"></a></span>
+<span id="cb14-25"><a href="#cb14-25" tabindex="-1"></a><span class="co">/* User code */</span></span>
+<span id="cb14-26"><a href="#cb14-26" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;R.h&gt;</span></span>
+<span id="cb14-27"><a href="#cb14-27" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rinternals.h&gt;</span></span>
+<span id="cb14-28"><a href="#cb14-28" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rmath.h&gt;</span></span>
+<span id="cb14-29"><a href="#cb14-29" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdlib.h&gt;</span></span>
 <span id="cb14-30"><a href="#cb14-30" tabindex="-1"></a></span>
-<span id="cb14-31"><a href="#cb14-31" tabindex="-1"></a><span class="dt">void</span> fill_rand<span class="op">(</span><span class="dt">double</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-32"><a href="#cb14-32" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-33"><a href="#cb14-33" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
-<span id="cb14-34"><a href="#cb14-34" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb14-35"><a href="#cb14-35" tabindex="-1"></a></span>
-<span id="cb14-36"><a href="#cb14-36" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
-<span id="cb14-37"><a href="#cb14-37" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-38"><a href="#cb14-38" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
-<span id="cb14-39"><a href="#cb14-39" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb14-40"><a href="#cb14-40" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
-<span id="cb14-41"><a href="#cb14-41" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb14-42"><a href="#cb14-42" tabindex="-1"></a></span>
-<span id="cb14-43"><a href="#cb14-43" tabindex="-1"></a><span class="dt">double</span><span class="op">*</span> rand_unif<span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-44"><a href="#cb14-44" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-45"><a href="#cb14-45" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
-<span id="cb14-46"><a href="#cb14-46" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb14-47"><a href="#cb14-47" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-48"><a href="#cb14-48" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span><span class="dt">double</span><span class="op">*)</span> malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">));</span></span>
-<span id="cb14-49"><a href="#cb14-49" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb14-50"><a href="#cb14-50" tabindex="-1"></a></span>
-<span id="cb14-51"><a href="#cb14-51" tabindex="-1"></a>  <span class="dt">double</span> <span class="op">*</span>out <span class="op">=</span> <span class="op">(</span><span class="dt">double</span><span class="op">*)</span> malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="dt">size_t</span><span class="op">)</span> n<span class="op">);</span></span>
-<span id="cb14-52"><a href="#cb14-52" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>out<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-53"><a href="#cb14-53" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"malloc failed"</span><span class="op">);</span></span>
-<span id="cb14-54"><a href="#cb14-54" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb14-55"><a href="#cb14-55" tabindex="-1"></a></span>
-<span id="cb14-56"><a href="#cb14-56" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
-<span id="cb14-57"><a href="#cb14-57" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-58"><a href="#cb14-58" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
-<span id="cb14-59"><a href="#cb14-59" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb14-60"><a href="#cb14-60" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
-<span id="cb14-61"><a href="#cb14-61" tabindex="-1"></a>  <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb14-62"><a href="#cb14-62" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb14-63"><a href="#cb14-63" tabindex="-1"></a></span>
-<span id="cb14-64"><a href="#cb14-64" tabindex="-1"></a><span class="co">/* R callable wrappers for bound symbols */</span></span>
-<span id="cb14-65"><a href="#cb14-65" tabindex="-1"></a>SEXP R_wrap_noop<span class="op">(</span><span class="dt">void</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-66"><a href="#cb14-66" tabindex="-1"></a>  <span class="co">// No arguments</span></span>
-<span id="cb14-67"><a href="#cb14-67" tabindex="-1"></a></span>
-<span id="cb14-68"><a href="#cb14-68" tabindex="-1"></a>  <span class="co">// Call and return</span></span>
-<span id="cb14-69"><a href="#cb14-69" tabindex="-1"></a>   noop<span class="op">();</span></span>
-<span id="cb14-70"><a href="#cb14-70" tabindex="-1"></a>     <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
-<span id="cb14-71"><a href="#cb14-71" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb14-72"><a href="#cb14-72" tabindex="-1"></a></span>
-<span id="cb14-73"><a href="#cb14-73" tabindex="-1"></a></span>
-<span id="cb14-74"><a href="#cb14-74" tabindex="-1"></a>SEXP R_wrap_fill_rand<span class="op">(</span>SEXP arg1_<span class="op">,</span> SEXP arg2_<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-75"><a href="#cb14-75" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>TYPEOF<span class="op">(</span>arg1_<span class="op">)</span> <span class="op">!=</span> REALSXP<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"expected numeric vector for argument 'arg1'"</span><span class="op">);</span></span>
-<span id="cb14-76"><a href="#cb14-76" tabindex="-1"></a>  <span class="dt">double</span><span class="op">*</span> arg1 <span class="op">=</span> REAL<span class="op">(</span>arg1_<span class="op">);</span></span>
-<span id="cb14-77"><a href="#cb14-77" tabindex="-1"></a>  <span class="dt">int</span> _arg2 <span class="op">=</span> asInteger<span class="op">(</span>arg2_<span class="op">);</span></span>
-<span id="cb14-78"><a href="#cb14-78" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg2 <span class="op">==</span> NA_INTEGER<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"integer value is NA"</span><span class="op">);</span></span>
-<span id="cb14-79"><a href="#cb14-79" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg2 <span class="op">&lt;</span> INT32_MIN <span class="op">||</span> _arg2 <span class="op">&gt;</span> INT32_MAX<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"i32 out of range"</span><span class="op">);</span></span>
-<span id="cb14-80"><a href="#cb14-80" tabindex="-1"></a>  <span class="dt">int32_t</span> arg2 <span class="op">=</span> <span class="op">(</span><span class="dt">int32_t</span><span class="op">)</span>_arg2<span class="op">;</span></span>
-<span id="cb14-81"><a href="#cb14-81" tabindex="-1"></a></span>
-<span id="cb14-82"><a href="#cb14-82" tabindex="-1"></a>  <span class="co">// Call and return</span></span>
-<span id="cb14-83"><a href="#cb14-83" tabindex="-1"></a>   fill_rand<span class="op">(</span>arg1<span class="op">,</span> arg2<span class="op">);</span></span>
-<span id="cb14-84"><a href="#cb14-84" tabindex="-1"></a>     <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
-<span id="cb14-85"><a href="#cb14-85" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb14-86"><a href="#cb14-86" tabindex="-1"></a></span>
-<span id="cb14-87"><a href="#cb14-87" tabindex="-1"></a></span>
-<span id="cb14-88"><a href="#cb14-88" tabindex="-1"></a>SEXP R_wrap_rand_unif<span class="op">(</span>SEXP arg1_<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-89"><a href="#cb14-89" tabindex="-1"></a>  <span class="dt">int</span> _arg1 <span class="op">=</span> asInteger<span class="op">(</span>arg1_<span class="op">);</span></span>
-<span id="cb14-90"><a href="#cb14-90" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg1 <span class="op">==</span> NA_INTEGER<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"integer value is NA"</span><span class="op">);</span></span>
-<span id="cb14-91"><a href="#cb14-91" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg1 <span class="op">&lt;</span> INT32_MIN <span class="op">||</span> _arg1 <span class="op">&gt;</span> INT32_MAX<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"i32 out of range"</span><span class="op">);</span></span>
-<span id="cb14-92"><a href="#cb14-92" tabindex="-1"></a>  <span class="dt">int32_t</span> arg1 <span class="op">=</span> <span class="op">(</span><span class="dt">int32_t</span><span class="op">)</span>_arg1<span class="op">;</span></span>
-<span id="cb14-93"><a href="#cb14-93" tabindex="-1"></a></span>
-<span id="cb14-94"><a href="#cb14-94" tabindex="-1"></a>  <span class="co">// Call and return</span></span>
-<span id="cb14-95"><a href="#cb14-95" tabindex="-1"></a>   <span class="dt">double</span><span class="op">*</span> __rtinycc_ret <span class="op">=</span> rand_unif<span class="op">(</span>arg1<span class="op">);</span></span>
-<span id="cb14-96"><a href="#cb14-96" tabindex="-1"></a>   <span class="cf">if</span> <span class="op">(!</span>__rtinycc_ret<span class="op">)</span> <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
-<span id="cb14-97"><a href="#cb14-97" tabindex="-1"></a>   SEXP out <span class="op">=</span> PROTECT<span class="op">(</span>allocVector<span class="op">(</span>REALSXP<span class="op">,</span> arg1<span class="op">));</span></span>
-<span id="cb14-98"><a href="#cb14-98" tabindex="-1"></a>     <span class="cf">if</span> <span class="op">(</span>arg1 <span class="op">&gt;</span> <span class="dv">0</span><span class="op">)</span> memcpy<span class="op">(</span>REAL<span class="op">(</span>out<span class="op">),</span> __rtinycc_ret<span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">*</span> arg1<span class="op">);</span></span>
-<span id="cb14-99"><a href="#cb14-99" tabindex="-1"></a>     <span class="cf">if</span> <span class="op">(</span>__rtinycc_ret<span class="op">)</span> free<span class="op">(</span>__rtinycc_ret<span class="op">);</span></span>
-<span id="cb14-100"><a href="#cb14-100" tabindex="-1"></a>     UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb14-101"><a href="#cb14-101" tabindex="-1"></a>     <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb14-102"><a href="#cb14-102" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<span id="cb14-31"><a href="#cb14-31" tabindex="-1"></a><span class="dt">void</span> noop<span class="op">(</span><span class="dt">void</span><span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb14-32"><a href="#cb14-32" tabindex="-1"></a></span>
+<span id="cb14-33"><a href="#cb14-33" tabindex="-1"></a><span class="dt">void</span> fill_rand<span class="op">(</span><span class="dt">double</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-34"><a href="#cb14-34" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-35"><a href="#cb14-35" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
+<span id="cb14-36"><a href="#cb14-36" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-37"><a href="#cb14-37" tabindex="-1"></a></span>
+<span id="cb14-38"><a href="#cb14-38" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
+<span id="cb14-39"><a href="#cb14-39" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-40"><a href="#cb14-40" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
+<span id="cb14-41"><a href="#cb14-41" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-42"><a href="#cb14-42" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
+<span id="cb14-43"><a href="#cb14-43" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-44"><a href="#cb14-44" tabindex="-1"></a></span>
+<span id="cb14-45"><a href="#cb14-45" tabindex="-1"></a><span class="dt">double</span><span class="op">*</span> rand_unif<span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-46"><a href="#cb14-46" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-47"><a href="#cb14-47" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"n must be non-negative"</span><span class="op">);</span></span>
+<span id="cb14-48"><a href="#cb14-48" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-49"><a href="#cb14-49" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-50"><a href="#cb14-50" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span><span class="dt">double</span><span class="op">*)</span> malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">));</span></span>
+<span id="cb14-51"><a href="#cb14-51" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-52"><a href="#cb14-52" tabindex="-1"></a></span>
+<span id="cb14-53"><a href="#cb14-53" tabindex="-1"></a>  <span class="dt">double</span> <span class="op">*</span>out <span class="op">=</span> <span class="op">(</span><span class="dt">double</span><span class="op">*)</span> malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="dt">size_t</span><span class="op">)</span> n<span class="op">);</span></span>
+<span id="cb14-54"><a href="#cb14-54" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>out<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-55"><a href="#cb14-55" tabindex="-1"></a>    Rf_error<span class="op">(</span><span class="st">"malloc failed"</span><span class="op">);</span></span>
+<span id="cb14-56"><a href="#cb14-56" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-57"><a href="#cb14-57" tabindex="-1"></a></span>
+<span id="cb14-58"><a href="#cb14-58" tabindex="-1"></a>  GetRNGstate<span class="op">();</span></span>
+<span id="cb14-59"><a href="#cb14-59" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-60"><a href="#cb14-60" tabindex="-1"></a>    out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> unif_rand<span class="op">();</span></span>
+<span id="cb14-61"><a href="#cb14-61" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-62"><a href="#cb14-62" tabindex="-1"></a>  PutRNGstate<span class="op">();</span></span>
+<span id="cb14-63"><a href="#cb14-63" tabindex="-1"></a>  <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb14-64"><a href="#cb14-64" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-65"><a href="#cb14-65" tabindex="-1"></a></span>
+<span id="cb14-66"><a href="#cb14-66" tabindex="-1"></a><span class="co">/* R callable wrappers for bound symbols */</span></span>
+<span id="cb14-67"><a href="#cb14-67" tabindex="-1"></a>SEXP R_wrap_noop<span class="op">(</span><span class="dt">void</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-68"><a href="#cb14-68" tabindex="-1"></a>  <span class="co">// No arguments</span></span>
+<span id="cb14-69"><a href="#cb14-69" tabindex="-1"></a></span>
+<span id="cb14-70"><a href="#cb14-70" tabindex="-1"></a>  <span class="co">// Call and return</span></span>
+<span id="cb14-71"><a href="#cb14-71" tabindex="-1"></a>   noop<span class="op">();</span></span>
+<span id="cb14-72"><a href="#cb14-72" tabindex="-1"></a>     <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
+<span id="cb14-73"><a href="#cb14-73" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-74"><a href="#cb14-74" tabindex="-1"></a></span>
+<span id="cb14-75"><a href="#cb14-75" tabindex="-1"></a></span>
+<span id="cb14-76"><a href="#cb14-76" tabindex="-1"></a>SEXP R_wrap_fill_rand<span class="op">(</span>SEXP arg1_<span class="op">,</span> SEXP arg2_<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-77"><a href="#cb14-77" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>TYPEOF<span class="op">(</span>arg1_<span class="op">)</span> <span class="op">!=</span> REALSXP<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"expected numeric vector for argument 'arg1'"</span><span class="op">);</span></span>
+<span id="cb14-78"><a href="#cb14-78" tabindex="-1"></a>  <span class="dt">double</span><span class="op">*</span> arg1 <span class="op">=</span> REAL<span class="op">(</span>arg1_<span class="op">);</span></span>
+<span id="cb14-79"><a href="#cb14-79" tabindex="-1"></a>  <span class="dt">int</span> _arg2 <span class="op">=</span> asInteger<span class="op">(</span>arg2_<span class="op">);</span></span>
+<span id="cb14-80"><a href="#cb14-80" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg2 <span class="op">==</span> NA_INTEGER<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"integer value is NA"</span><span class="op">);</span></span>
+<span id="cb14-81"><a href="#cb14-81" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg2 <span class="op">&lt;</span> INT32_MIN <span class="op">||</span> _arg2 <span class="op">&gt;</span> INT32_MAX<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"i32 out of range"</span><span class="op">);</span></span>
+<span id="cb14-82"><a href="#cb14-82" tabindex="-1"></a>  <span class="dt">int32_t</span> arg2 <span class="op">=</span> <span class="op">(</span><span class="dt">int32_t</span><span class="op">)</span>_arg2<span class="op">;</span></span>
+<span id="cb14-83"><a href="#cb14-83" tabindex="-1"></a></span>
+<span id="cb14-84"><a href="#cb14-84" tabindex="-1"></a>  <span class="co">// Call and return</span></span>
+<span id="cb14-85"><a href="#cb14-85" tabindex="-1"></a>   fill_rand<span class="op">(</span>arg1<span class="op">,</span> arg2<span class="op">);</span></span>
+<span id="cb14-86"><a href="#cb14-86" tabindex="-1"></a>     <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
+<span id="cb14-87"><a href="#cb14-87" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-88"><a href="#cb14-88" tabindex="-1"></a></span>
+<span id="cb14-89"><a href="#cb14-89" tabindex="-1"></a></span>
+<span id="cb14-90"><a href="#cb14-90" tabindex="-1"></a>SEXP R_wrap_rand_unif<span class="op">(</span>SEXP arg1_<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-91"><a href="#cb14-91" tabindex="-1"></a>  <span class="dt">int</span> _arg1 <span class="op">=</span> asInteger<span class="op">(</span>arg1_<span class="op">);</span></span>
+<span id="cb14-92"><a href="#cb14-92" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg1 <span class="op">==</span> NA_INTEGER<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"integer value is NA"</span><span class="op">);</span></span>
+<span id="cb14-93"><a href="#cb14-93" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>_arg1 <span class="op">&lt;</span> INT32_MIN <span class="op">||</span> _arg1 <span class="op">&gt;</span> INT32_MAX<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"i32 out of range"</span><span class="op">);</span></span>
+<span id="cb14-94"><a href="#cb14-94" tabindex="-1"></a>  <span class="dt">int32_t</span> arg1 <span class="op">=</span> <span class="op">(</span><span class="dt">int32_t</span><span class="op">)</span>_arg1<span class="op">;</span></span>
+<span id="cb14-95"><a href="#cb14-95" tabindex="-1"></a></span>
+<span id="cb14-96"><a href="#cb14-96" tabindex="-1"></a>  <span class="co">// Call and return</span></span>
+<span id="cb14-97"><a href="#cb14-97" tabindex="-1"></a>   <span class="dt">double</span><span class="op">*</span> __rtinycc_ret <span class="op">=</span> rand_unif<span class="op">(</span>arg1<span class="op">);</span></span>
+<span id="cb14-98"><a href="#cb14-98" tabindex="-1"></a>   <span class="cf">if</span> <span class="op">(!</span>__rtinycc_ret<span class="op">)</span> <span class="cf">return</span> R_NilValue<span class="op">;</span></span>
+<span id="cb14-99"><a href="#cb14-99" tabindex="-1"></a>   SEXP out <span class="op">=</span> PROTECT<span class="op">(</span>allocVector<span class="op">(</span>REALSXP<span class="op">,</span> arg1<span class="op">));</span></span>
+<span id="cb14-100"><a href="#cb14-100" tabindex="-1"></a>     <span class="cf">if</span> <span class="op">(</span>arg1 <span class="op">&gt;</span> <span class="dv">0</span><span class="op">)</span> memcpy<span class="op">(</span>REAL<span class="op">(</span>out<span class="op">),</span> __rtinycc_ret<span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">*</span> arg1<span class="op">);</span></span>
+<span id="cb14-101"><a href="#cb14-101" tabindex="-1"></a>     <span class="cf">if</span> <span class="op">(</span>__rtinycc_ret<span class="op">)</span> free<span class="op">(</span>__rtinycc_ret<span class="op">);</span></span>
+<span id="cb14-102"><a href="#cb14-102" tabindex="-1"></a>     UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb14-103"><a href="#cb14-103" tabindex="-1"></a>     <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb14-104"><a href="#cb14-104" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="noop-call-overhead">
@@ -602,8 +604,8 @@ point.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.05ms    1.1ms      908.    21.9KB        0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme      390.1µs    405µs     <span style="text-decoration: underline;">2</span>454.        0B        0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.22ms   1.25ms      796.    21.9KB        0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     460.53µs 472.18µs     <span style="text-decoration: underline;">2</span>122.        0B        0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>the <code>callme</code> path is close to the cost of a conventional
@@ -645,8 +647,8 @@ result.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.71ms   4.24ms      253.    3.15MB     12.6</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme        2.3ms   2.41ms      384.    3.13MB     19.2</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.79ms   3.95ms      266.    3.15MB     13.3</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.17ms   2.21ms      420.    3.13MB     21.0</span></span></code></pre></div>
 <p>Interpretation:</p>
 <ul>
 <li>both sides now write into ordinary R numeric storage</li>
@@ -696,14 +698,14 @@ into a fresh R vector</li>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.71ms   1.81ms      517.    15.4KB     25.8</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.01ms   1.02ms      968.        0B      0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      1.77ms   1.84ms      512.    15.4KB     25.6</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme     961.41µs 978.43µs     <span style="text-decoration: underline;">1</span>019.        0B      0</span></span>
 <span><span class="va">rand_results</span><span class="op">$</span><span class="va">rand_bench_n4096</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 6</span></span></span>
 <span><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.63ms   4.19ms      237.    3.13MB     11.9</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       2.35ms   3.72ms      263.    3.13MB     13.2</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Rtinycc      2.77ms   4.03ms      246.    3.13MB     12.3</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> callme       1.95ms   3.21ms      305.    3.13MB     15.2</span></span></code></pre></div>
 <p>The usual pattern is:</p>
 <ul>
 <li>for <code>fill_rand()</code>, the comparison is much closer to

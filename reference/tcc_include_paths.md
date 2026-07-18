@@ -1,7 +1,7 @@
 # TinyCC include search paths
 
-Returns the include directories used by the bundled TinyCC (top-level
-include and lib/tcc/include).
+Returns the include directories used by the bundled TinyCC, including
+the package headers under `include/rtinycc`.
 
 ## Usage
 

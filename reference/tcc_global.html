@@ -92,9 +92,9 @@ exact integer range for numeric vectors.</p></li>
 </ul><p>Ownership notes:</p><ul><li><p><code>ptr</code> globals store the raw address from an external pointer. If the
 external pointer owns memory, keep it alive; otherwise the pointer may
 be freed while the global still points to it.</p></li>
-<li><p><code>cstring</code> globals store a borrowed pointer to R's string data
-(UTF-8 translation). Do not free it; for C-owned strings prefer a <code>ptr</code>
-global and manage lifetime explicitly (e.g., with <code><a href="tcc_cstring.html">tcc_cstring()</a></code>).</p></li>
+<li><p><code>cstring</code> globals are rejected because a global would outlive the borrowed
+R string view. Declare the global as <code>ptr</code> and manage its storage explicitly
+with an owned object such as <code><a href="tcc_cstring.html">tcc_cstring()</a></code>.</p></li>
 </ul></div>
     <div class="section level2">
     <h2 id="note">Note<a class="anchor" aria-label="anchor" href="#note"></a></h2>

@@ -96,6 +96,10 @@ thread-safe usage from worker threads, use <code>callback_async:&lt;signature&gt
 which schedules the call on the main thread and returns a default value.</p>
 <p>Pointer arguments (e.g., <code>double*</code>, <code>int*</code>) are passed as
 external pointers. Lengths must be supplied separately if needed.</p>
+<p>A callback <code>ptr</code> or <code>cstring</code> return is borrowed. C may consume it during the
+enclosing compiled call, but must not retain it after that call unless the
+owner is kept alive by some other explicit contract. Copy string data into
+C-owned storage when it must escape the callback call chain.</p>
 <p>The return type may be any scalar type supported by the FFI mappings
 (e.g., <code>i32</code>, <code>f64</code>, <code>bool</code>, <code>cstring</code>), or
 <code>SEXP</code> to return an R object directly.</p>

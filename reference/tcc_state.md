@@ -1,7 +1,12 @@
 # Create a libtcc state
 
 Initialize a libtcc compilation state, optionally pointing at the
-bundled include/lib paths.
+bundled include/lib paths. Memory states are finalized with
+[`tcc_relocate()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_relocate.md);
+other output modes are written with
+[`tcc_output_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output_file.md).
+Finalization is single-shot, after which compilation options and source
+cannot be changed.
 
 ## Usage
 
