@@ -11,8 +11,8 @@ recent GCC toolchains, including CRAN's Fedora GCC builder.
   `ghcr.io/r-hub/containers/gcc16` image, mirroring the CRAN
   `r-devel-linux-x86_64-fedora-gcc` flavour
 - GitHub Actions Ubuntu, macOS, and Windows checks
-- win-builder R-release submission
-- macOS builder R-devel submission
+- win-builder R-release submission (awaiting results)
+- macOS builder R-devel upload attempted; the service returned HTTP 502
 
 ## R CMD check results
 
