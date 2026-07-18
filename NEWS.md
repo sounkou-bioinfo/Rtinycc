@@ -1,4 +1,4 @@
-# Rtinycc 0.1.11
+# Rtinycc 0.1.12
 
 - Update the bundled TinyCC source to the wasm32-enabled `sounkou-bioinfo/tinycc` fork and fix a const-correctness warning reported by recent GCC toolchains.
 - Add a Fedora/GCC 16 R-devel check path that mirrors the CRAN Fedora build environment.
