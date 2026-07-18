@@ -179,7 +179,7 @@
 <span><span class="fu"><a href="reference/tcc_read_bytes.html">tcc_read_bytes</a></span><span class="op">(</span><span class="va">ptr</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 68 65 6c 6c 6f</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_addr.html">tcc_ptr_addr</a></span><span class="op">(</span><span class="va">ptr</span>, hex <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "0x56fcbc659a40"</span></span>
+<span><span class="co">#&gt; [1] "0x611e99dc60d0"</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_is_null.html">tcc_ptr_is_null</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr</span><span class="op">)</span></span>
@@ -200,11 +200,11 @@
 <code class="sourceCode R"><span><span class="va">ptr_ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">sizeof.pointer</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">8L</span><span class="op">)</span></span>
 <span><span class="va">target</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tcc_malloc.html">tcc_malloc</a></span><span class="op">(</span><span class="fl">8</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="va">target</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbba1bf10&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e97e33150&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_data_ptr.html">tcc_data_ptr</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbcf3f630&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e96d84680&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_ptr_set.html">tcc_ptr_set</a></span><span class="op">(</span><span class="va">ptr_ref</span>, <span class="fu"><a href="reference/tcc_null_ptr.html">tcc_null_ptr</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbba1bf10&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e97e33150&gt;</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="reference/tcc_free.html">tcc_free</a></span><span class="op">(</span><span class="va">ptr_ref</span><span class="op">)</span></span>
@@ -328,10 +328,11 @@
 <h3 id="cuda-through-nvrtc-on-a-remote-gpu">CUDA through NVRTC on a remote GPU<a class="anchor" aria-label="anchor" href="#cuda-through-nvrtc-on-a-remote-gpu"></a>
 </h3>
 <p>TinyCC compiles the host adapter, not the CUDA kernel. The adapter links to the CUDA Driver API and NVRTC; NVRTC compiles CUDA C to PTX, and the driver loads and launches that PTX. The self-contained demonstration below borrows three R numeric vectors at the wrapper boundary, copies the inputs to device memory, launches a runtime-compiled kernel, synchronizes, and copies the result back.</p>
-<p>The opt-in chunk uses the pure-R <code>ssh</code> knitr engine registered at the top of this file. The complete displayed program is sent unchanged to <code>Rscript --vanilla -</code> on the SSH host. Set <code>RTINYCC_RUN_SSH_DEMOS=true</code> to execute it; ordinary CRAN and CI renders only show the code.</p>
+<p>The complete program is collapsed to keep this README navigable. The visible mirai chunk after it reads that exact knitr source, launches an R daemon on the rig through the SSH tunnel, executes the program there, and returns the result. Set <code>RTINYCC_RUN_SSH_DEMOS=true</code> while rendering to perform the live run.</p>
 <details><summary>
-Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
-</summary><pre class="ssh"><code><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rtinycc" class="external-link">Rtinycc</a></span><span class="op">)</span></span>
+Show the complete Rtinycc, NVRTC, and CUDA program
+</summary><div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rtinycc" class="external-link">Rtinycc</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># This opt-in demonstration is run on an NVIDIA Linux/WSL host. Override the</span></span>
 <span><span class="co"># paths and architecture when CUDA is installed elsewhere.</span></span>
@@ -656,58 +657,58 @@ Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">result</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="va">max_error</span> <span class="op">==</span> <span class="fl">0</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="va">result</span><span class="op">)</span></span>
-<span><span class="co">#&gt; $host</span></span>
-<span><span class="co">#&gt; [1] "SMT"</span></span>
-<span><span class="co">#&gt; $rtinycc_version</span></span>
-<span><span class="co">#&gt; [1] "0.1.12"</span></span>
-<span><span class="co">#&gt; $device</span></span>
-<span><span class="co">#&gt; [1] "NVIDIA GeForce RTX 5050 Laptop GPU"</span></span>
-<span><span class="co">#&gt; $architecture</span></span>
-<span><span class="co">#&gt; [1] "compute_120"</span></span>
-<span><span class="co">#&gt; $n</span></span>
-<span><span class="co">#&gt; [1] 1000000</span></span>
-<span><span class="co">#&gt; $status</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="co">#&gt; $elapsed_seconds_including_nvrtc</span></span>
-<span><span class="co">#&gt; [1] 0.226</span></span>
-<span><span class="co">#&gt; $max_error</span></span>
-<span><span class="co">#&gt; [1] 0</span></span>
-<span><span class="co">#&gt; $first_values</span></span>
-<span><span class="co">#&gt; [1] 0.4056264 1.0677446 1.3017378 0.9998551 0.2682939 1.5112469</span></span></code></pre>
-</details><p>For a persistent asynchronous GPU queue, <code>mirai</code> supports launching daemons via SSH directly. The explicit port is important here because <code>ssh_config()</code> uses the port from its URL rather than the <code>Port</code> value of the <code>rig</code> SSH alias. <code>crew</code> builds higher-level orchestration on mirai, but a dedicated mirai <code>"gpu"</code> compute profile is the smaller mechanism for one rig.</p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="va">result</span><span class="op">)</span></span></code></pre></div>
+</details><p><code>mirai</code> supports SSH launch and tunnelling directly. The explicit port matters here because <code>ssh_config()</code> uses the port from its URL rather than the <code>Port</code> value of the <code>rig</code> SSH alias. <code>crew</code> provides higher-level orchestration on mirai, while a dedicated mirai <code>"gpu"</code> profile is sufficient for this rig.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://mirai.r-lib.org" class="external-link">mirai</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">rmd</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readLines.html" class="external-link">readLines</a></span><span class="op">(</span><span class="st">"README.Rmd"</span><span class="op">)</span></span>
-<span><span class="va">chunk_start</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"^```\\{ssh cuda-nvrtc-rig"</span>, <span class="va">rmd</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">chunk_start</span><span class="op">)</span> <span class="op">==</span> <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="va">chunk_end</span> <span class="op">&lt;-</span> <span class="va">chunk_start</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span></span>
-<span>  <span class="va">rmd</span><span class="op">[</span><span class="op">(</span><span class="va">chunk_start</span> <span class="op">+</span> <span class="fl">1L</span><span class="op">)</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">rmd</span><span class="op">)</span><span class="op">]</span> <span class="op">==</span> <span class="st">"```"</span></span>
-<span><span class="op">)</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="va">cuda_code</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
-<span>  <span class="va">rmd</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq.int</a></span><span class="op">(</span><span class="va">chunk_start</span> <span class="op">+</span> <span class="fl">1L</span>, <span class="va">chunk_end</span> <span class="op">-</span> <span class="fl">1L</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>  <span class="fu">knitr</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/knitr/man/knit_code.html" class="external-link">knit_code</a></span><span class="op">$</span><span class="fu">get</span><span class="op">(</span><span class="st">"cuda-nvrtc-program"</span><span class="op">)</span>,</span>
 <span>  collapse <span class="op">=</span> <span class="st">"\n"</span></span>
 <span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">cuda_code</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu">daemons</span><span class="op">(</span></span>
-<span>  n <span class="op">=</span> <span class="fl">1L</span>,</span>
-<span>  url <span class="op">=</span> <span class="fu">local_url</span><span class="op">(</span>tcp <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span>  remote <span class="op">=</span> <span class="fu">ssh_config</span><span class="op">(</span></span>
-<span>    <span class="st">"ssh://sounkoutoure@localhost:2222"</span>,</span>
-<span>    tunnel <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  .compute <span class="op">=</span> <span class="st">"gpu"</span></span>
+<span><span class="va">cuda_result</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
+<span>  <span class="op">{</span></span>
+<span>    <span class="fu">daemons</span><span class="op">(</span></span>
+<span>      n <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>      url <span class="op">=</span> <span class="fu">local_url</span><span class="op">(</span>tcp <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>      remote <span class="op">=</span> <span class="fu">ssh_config</span><span class="op">(</span></span>
+<span>        <span class="st">"ssh://sounkoutoure@localhost:2222"</span>,</span>
+<span>        tunnel <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>      <span class="op">)</span>,</span>
+<span>      .compute <span class="op">=</span> <span class="st">"gpu"</span></span>
+<span>    <span class="op">)</span></span>
+<span>    <span class="va">job</span> <span class="op">&lt;-</span> <span class="fu">mirai</span><span class="op">(</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">eval</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/parse.html" class="external-link">parse</a></span><span class="op">(</span>text <span class="op">=</span> <span class="va">code</span><span class="op">)</span>, envir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">new.env</a></span><span class="op">(</span>parent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">globalenv</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>      code <span class="op">=</span> <span class="va">cuda_code</span>,</span>
+<span>      .compute <span class="op">=</span> <span class="st">"gpu"</span></span>
+<span>    <span class="op">)</span></span>
+<span>    <span class="va">job</span><span class="op">[</span><span class="op">]</span></span>
+<span>  <span class="op">}</span>,</span>
+<span>  finally <span class="op">=</span> <span class="fu">daemons</span><span class="op">(</span><span class="fl">0</span>, .compute <span class="op">=</span> <span class="st">"gpu"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">job</span> <span class="op">&lt;-</span> <span class="fu">mirai</span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">eval</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/parse.html" class="external-link">parse</a></span><span class="op">(</span>text <span class="op">=</span> <span class="va">code</span><span class="op">)</span>, envir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">new.env</a></span><span class="op">(</span>parent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">globalenv</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  code <span class="op">=</span> <span class="va">cuda_code</span>,</span>
-<span>  .compute <span class="op">=</span> <span class="st">"gpu"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">is.list</a></span><span class="op">(</span><span class="va">cuda_result</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">cuda_result</span><span class="op">$</span><span class="va">status</span>, <span class="fl">0L</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">cuda_result</span><span class="op">$</span><span class="va">max_error</span>, <span class="fl">0</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">job</span><span class="op">[</span><span class="op">]</span></span>
-<span><span class="fu">daemons</span><span class="op">(</span><span class="fl">0</span>, .compute <span class="op">=</span> <span class="st">"gpu"</span><span class="op">)</span></span></code></pre></div>
-<p>On the RTX 5050 rig this path produced an exact result for one million doubles (<code>max_error = 0</code>). The measured call includes NVRTC compilation, CUDA context creation, device allocation, transfers, launch, and synchronization; it is a correctness demonstration rather than a steady-state kernel benchmark.</p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  host <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">host</span>,</span>
+<span>  rtinycc <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">rtinycc_version</span>,</span>
+<span>  device <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">device</span>,</span>
+<span>  architecture <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">architecture</span>,</span>
+<span>  n <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">n</span>,</span>
+<span>  elapsed_seconds <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">elapsed_seconds_including_nvrtc</span>,</span>
+<span>  max_error <span class="op">=</span> <span class="va">cuda_result</span><span class="op">$</span><span class="va">max_error</span>,</span>
+<span>  check.names <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;   host rtinycc                             device architecture       n</span></span>
+<span><span class="co">#&gt; 1  SMT  0.1.12 NVIDIA GeForce RTX 5050 Laptop GPU  compute_120 1000000</span></span>
+<span><span class="co">#&gt;   elapsed_seconds max_error</span></span>
+<span><span class="co">#&gt; 1           0.231         0</span></span></code></pre></div>
+<p>The displayed result is returned by the remote R process. Timing includes NVRTC compilation, CUDA context creation, device allocation, transfers, launch, and synchronization; this is a correctness demonstration rather than a steady-state kernel benchmark.</p>
 </div>
 <div class="section level3">
 <h3 id="compiler-options">Compiler options<a class="anchor" aria-label="anchor" href="#compiler-options"></a>
@@ -783,7 +784,7 @@ Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
 <span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span><span class="op">)</span> <span class="co"># to avoid ALTREP</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @56fcbfa42898 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
+<span><span class="co">#&gt; @611e9c2f0de0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">sum_array</span><span class="op">(</span><span class="va">x</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5050</span></span>
 <span></span>
@@ -799,7 +800,7 @@ Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
 <span><span class="co">#&gt; [1] 11</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @56fcbfa42898 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
+<span><span class="co">#&gt; @611e9c2f0de0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -826,15 +827,15 @@ Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
 <span></span>
 <span><span class="va">p1</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbb2deb60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e9884d5d0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p1</span>, <span class="fl">0.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbb2deb60&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e9884d5d0&gt;</span></span>
 <span></span>
 <span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_x</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">3.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbae56bb0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e97a71490&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_set_y</span><span class="op">(</span><span class="va">p2</span>, <span class="fl">4.0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbae56bb0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e97a71490&gt;</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">distance</span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 5</span></span>
@@ -876,9 +877,9 @@ Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
 <span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_active</span><span class="op">(</span><span class="va">s</span>, <span class="fl">1L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbde48f80&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e993c33e0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_set_level</span><span class="op">(</span><span class="va">s</span>, <span class="fl">9L</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbde48f80&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e993c33e0&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_active</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_flags_get_level</span><span class="op">(</span><span class="va">s</span><span class="op">)</span></span>
@@ -1956,7 +1957,7 @@ Click to show only the embedded C Protothreads / htslib source
 <span>  <span class="fu"><a href="reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_point_new</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcc046fca0&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e975e9650&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">enum_status_OK</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">global_global_counter_get</span><span class="op">(</span><span class="op">)</span></span>
@@ -2071,11 +2072,11 @@ Click to show only the embedded C Protothreads / htslib source
 <span><span class="co">#&gt; # A tibble: 5 × 13</span></span>
 <span><span class="co">#&gt;   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time</span></span>
 <span><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:t&gt; &lt;bch:t&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;   &lt;bch:tm&gt;</span></span>
-<span><span class="co">#&gt; 1 read_tabl… 50.48ms 50.85ms      19.7    6.33MB        0     2     0    101.7ms</span></span>
-<span><span class="co">#&gt; 2 vroom_df_…  6.39ms  6.51ms     154.     1.22MB        0     2     0       13ms</span></span>
-<span><span class="co">#&gt; 3 vroom_df_…  6.85ms   8.1ms     124.     2.44MB        0     2     0     16.2ms</span></span>
-<span><span class="co">#&gt; 4 c_read_df  21.39ms  22.6ms      44.3    1.22MB        0     2     0     45.2ms</span></span>
-<span><span class="co">#&gt; 5 io_uring_…  21.8ms 21.86ms      45.7    1.22MB        0     2     0     43.7ms</span></span>
+<span><span class="co">#&gt; 1 read_tabl… 49.45ms 49.45ms      20.2    6.33MB     20.2     1     1     49.4ms</span></span>
+<span><span class="co">#&gt; 2 vroom_df_…  6.34ms  6.55ms     153.     1.22MB      0       2     0     13.1ms</span></span>
+<span><span class="co">#&gt; 3 vroom_df_…  6.55ms  6.61ms     151.     2.44MB      0       2     0     13.2ms</span></span>
+<span><span class="co">#&gt; 4 c_read_df   20.8ms 21.01ms      47.6    1.22MB      0       2     0       42ms</span></span>
+<span><span class="co">#&gt; 5 io_uring_… 20.12ms 20.69ms      48.3    1.22MB      0       2     0     41.4ms</span></span>
 <span><span class="co">#&gt; # ℹ 4 more variables: result &lt;list&gt;, memory &lt;list&gt;, time &lt;list&gt;, gc &lt;list&gt;</span></span></code></pre></div>
 <p><img src="reference/figures/README-io_uring-demo-1.png" alt="" width="100%"></p>
 </div>
@@ -2157,9 +2158,9 @@ Click to show only the embedded C Protothreads / htslib source
 <span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_new</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span>, <span class="fl">0xCAL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbfc89980&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e9d497f00&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_set_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span>, <span class="fl">0xFEL</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;pointer: 0x56fcbfc89980&gt;</span></span>
+<span><span class="co">#&gt; &lt;pointer: 0x611e9d497f00&gt;</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">0L</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 202</span></span>
 <span><span class="va">ffi</span><span class="op">$</span><span class="fu">struct_buf_get_data_elt</span><span class="op">(</span><span class="va">b</span>, <span class="fl">1L</span><span class="op">)</span></span>
