@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.12</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.13</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,6 +45,12 @@
       <small>Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.13" id="rtinycc-0113">Rtinycc 0.1.13<a class="anchor" aria-label="anchor" href="#rtinycc-0113"></a></h2>
+<ul><li>Fix the vendored TinyCC build on Linux arm64 by keeping TLS relocation declarations C90-compatible.</li>
+<li>Fix the webR/R-universe wasm package build so the Emscripten-hosted TinyCC build does not try to execute its wasm <code>tcc</code> side module while constructing <code>libtcc1.a</code>.</li>
+<li>Document a persistent remote CUDA workflow in which a mirai daemon loads Rtinycc, retains the compiled host adapter between requests, executes NVRTC-generated PTX, and returns structured R results.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.12" id="rtinycc-0112">Rtinycc 0.1.12<a class="anchor" aria-label="anchor" href="#rtinycc-0112"></a></h2>
 <ul><li>Prevent high-level FFI compilation modes that cannot produce safe callable bindings; <code><a href="../reference/tcc_compile.html">tcc_compile()</a></code> now fails clearly unless output is in-memory.</li>
