@@ -206,7 +206,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x5dfe4e9ec0f0"
+#> [1] "0x56fcbc659a40"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -239,11 +239,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x5dfe514cc430>
+#> <pointer: 0x56fcbba1bf10>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x5dfe4b9cbef0>
+#> <pointer: 0x56fcbcf3f630>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x5dfe514cc430>
+#> <pointer: 0x56fcbba1bf10>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -397,6 +397,416 @@ math$floor(3.7)
 #> [1] 3
 ```
 
+### CUDA through NVRTC on a remote GPU
+
+TinyCC compiles the host adapter, not the CUDA kernel. The adapter links
+to the CUDA Driver API and NVRTC; NVRTC compiles CUDA C to PTX, and the
+driver loads and launches that PTX. The self-contained demonstration
+below borrows three R numeric vectors at the wrapper boundary, copies
+the inputs to device memory, launches a runtime-compiled kernel,
+synchronizes, and copies the result back.
+
+The opt-in chunk uses the pure-R `ssh` knitr engine registered at the
+top of this file. The complete displayed program is sent unchanged to
+`Rscript --vanilla -` on the SSH host. Set `RTINYCC_RUN_SSH_DEMOS=true`
+to execute it; ordinary CRAN and CI renders only show the code.
+
+Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
+
+``` ssh
+library(Rtinycc)
+
+# This opt-in demonstration is run on an NVIDIA Linux/WSL host. Override the
+# paths and architecture when CUDA is installed elsewhere.
+cuda_path <- Sys.getenv(
+  "RTINYCC_CUDA_DRIVER",
+  "/usr/lib/wsl/lib/libcuda.so.1"
+)
+nvrtc_path <- Sys.getenv(
+  "RTINYCC_NVRTC",
+  file.path(Sys.getenv("CUDA_HOME", "/usr/local/cuda"), "lib64", "libnvrtc.so")
+)
+stopifnot(file.exists(cuda_path), file.exists(nvrtc_path))
+
+cuda_arch <- Sys.getenv("RTINYCC_CUDA_ARCH")
+if (!nzchar(cuda_arch)) {
+  nvidia_smi <- Sys.getenv(
+    "RTINYCC_NVIDIA_SMI",
+    "/usr/lib/wsl/lib/nvidia-smi"
+  )
+  compute_capability <- trimws(system2(
+    nvidia_smi,
+    c("--query-gpu=compute_cap", "--format=csv,noheader"),
+    stdout = TRUE
+  )[[1L]])
+  cuda_arch <- paste0("compute_", gsub("[^0-9]", "", compute_capability))
+}
+stopifnot(grepl("^compute_[0-9]+$", cuda_arch))
+
+code <- '
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+typedef int CUresult;
+typedef int CUdevice;
+typedef unsigned long long CUdeviceptr;
+typedef struct CUctx_st *CUcontext;
+typedef struct CUmod_st *CUmodule;
+typedef struct CUfunc_st *CUfunction;
+typedef struct CUstream_st *CUstream;
+
+typedef int nvrtcResult;
+typedef struct _nvrtcProgram *nvrtcProgram;
+
+extern CUresult cuInit(unsigned int flags);
+extern CUresult cuDeviceGet(CUdevice *device, int ordinal);
+extern CUresult cuCtxCreate_v2(CUcontext *ctx, unsigned int flags,
+                               CUdevice device);
+extern CUresult cuCtxDestroy_v2(CUcontext ctx);
+extern CUresult cuMemAlloc_v2(CUdeviceptr *ptr, size_t bytes);
+extern CUresult cuMemFree_v2(CUdeviceptr ptr);
+extern CUresult cuMemcpyHtoD_v2(CUdeviceptr dst, const void *src,
+                                size_t bytes);
+extern CUresult cuMemcpyDtoH_v2(void *dst, CUdeviceptr src, size_t bytes);
+extern CUresult cuModuleLoadData(CUmodule *module, const void *image);
+extern CUresult cuModuleUnload(CUmodule module);
+extern CUresult cuModuleGetFunction(CUfunction *function, CUmodule module,
+                                    const char *name);
+extern CUresult cuLaunchKernel(CUfunction function,
+                               unsigned int grid_x,
+                               unsigned int grid_y,
+                               unsigned int grid_z,
+                               unsigned int block_x,
+                               unsigned int block_y,
+                               unsigned int block_z,
+                               unsigned int shared_mem_bytes,
+                               CUstream stream,
+                               void **kernel_params,
+                               void **extra);
+extern CUresult cuCtxSynchronize(void);
+
+extern nvrtcResult nvrtcCreateProgram(nvrtcProgram *program,
+                                      const char *source,
+                                      const char *name,
+                                      int n_headers,
+                                      const char * const *headers,
+                                      const char * const *include_names);
+extern nvrtcResult nvrtcCompileProgram(nvrtcProgram program,
+                                       int n_options,
+                                       const char * const *options);
+extern nvrtcResult nvrtcGetPTXSize(nvrtcProgram program, size_t *size);
+extern nvrtcResult nvrtcGetPTX(nvrtcProgram program, char *ptx);
+extern nvrtcResult nvrtcGetProgramLogSize(nvrtcProgram program,
+                                          size_t *size);
+extern nvrtcResult nvrtcGetProgramLog(nvrtcProgram program, char *log);
+extern nvrtcResult nvrtcDestroyProgram(nvrtcProgram *program);
+
+static char rt_cuda_error[8192];
+
+static void rt_cuda_set_error(const char *stage, int code) {
+  snprintf(rt_cuda_error, sizeof(rt_cuda_error), "%s failed: %d", stage, code);
+}
+
+char *rt_cuda_last_error(void) {
+  return rt_cuda_error;
+}
+
+static void rt_cuda_set_nvrtc_log(nvrtcProgram program, int code) {
+  char *log;
+  size_t copy_size;
+  size_t size = 0;
+
+  snprintf(rt_cuda_error, sizeof(rt_cuda_error),
+           "nvrtcCompileProgram failed: %d", code);
+  if (nvrtcGetProgramLogSize(program, &size) != 0 || size <= 1)
+    return;
+  log = malloc(size);
+  if (!log)
+    return;
+  if (nvrtcGetProgramLog(program, log) != 0) {
+    free(log);
+    rt_cuda_set_error("nvrtcGetProgramLog", code);
+    return;
+  }
+  copy_size = size - 1;
+  if (copy_size >= sizeof(rt_cuda_error))
+    copy_size = sizeof(rt_cuda_error) - 1;
+  memcpy(rt_cuda_error, log, copy_size);
+  rt_cuda_error[copy_size] = 0;
+  free(log);
+}
+
+int rt_cuda_vec_add(double *x, double *y, double *out, int n) {
+  static const char *kernel_source =
+    "extern \\"C\\" __global__ void vec_add(const double *x, "
+    "const double *y, double *out, int n) {"
+    "  int i = (int)(blockIdx.x * blockDim.x + threadIdx.x);"
+    "  if (i < n) out[i] = x[i] + y[i];"
+    "}";
+  const char *options[] = {
+    "--gpu-architecture=@CUDA_ARCH@",
+    "--std=c++11"
+  };
+  nvrtcProgram program = 0;
+  CUcontext context = 0;
+  CUmodule module = 0;
+  CUfunction function = 0;
+  CUdevice device = 0;
+  CUdeviceptr device_x = 0;
+  CUdeviceptr device_y = 0;
+  CUdeviceptr device_out = 0;
+  char *ptx = 0;
+  size_t ptx_size = 0;
+  size_t bytes;
+  void *params[4];
+  unsigned int blocks;
+  int rc;
+  int status = -1;
+
+  rt_cuda_error[0] = 0;
+  if (n < 0) {
+    strcpy(rt_cuda_error, "negative vector length");
+    return -1;
+  }
+  if (n == 0)
+    return 0;
+  bytes = (size_t)n * sizeof(double);
+
+  rc = nvrtcCreateProgram(&program, kernel_source, "vec_add.cu",
+                          0, 0, 0);
+  if (rc != 0) {
+    rt_cuda_set_error("nvrtcCreateProgram", rc);
+    goto cleanup;
+  }
+  rc = nvrtcCompileProgram(program, 2, options);
+  if (rc != 0) {
+    rt_cuda_set_nvrtc_log(program, rc);
+    goto cleanup;
+  }
+  rc = nvrtcGetPTXSize(program, &ptx_size);
+  if (rc != 0) {
+    rt_cuda_set_error("nvrtcGetPTXSize", rc);
+    goto cleanup;
+  }
+  ptx = malloc(ptx_size);
+  if (!ptx) {
+    strcpy(rt_cuda_error, "PTX allocation failed");
+    goto cleanup;
+  }
+  rc = nvrtcGetPTX(program, ptx);
+  if (rc != 0) {
+    rt_cuda_set_error("nvrtcGetPTX", rc);
+    goto cleanup;
+  }
+
+  rc = cuInit(0);
+  if (rc != 0) {
+    rt_cuda_set_error("cuInit", rc);
+    goto cleanup;
+  }
+  rc = cuDeviceGet(&device, 0);
+  if (rc != 0) {
+    rt_cuda_set_error("cuDeviceGet", rc);
+    goto cleanup;
+  }
+  rc = cuCtxCreate_v2(&context, 0, device);
+  if (rc != 0) {
+    rt_cuda_set_error("cuCtxCreate_v2", rc);
+    goto cleanup;
+  }
+  rc = cuModuleLoadData(&module, ptx);
+  if (rc != 0) {
+    rt_cuda_set_error("cuModuleLoadData", rc);
+    goto cleanup;
+  }
+  rc = cuModuleGetFunction(&function, module, "vec_add");
+  if (rc != 0) {
+    rt_cuda_set_error("cuModuleGetFunction", rc);
+    goto cleanup;
+  }
+  rc = cuMemAlloc_v2(&device_x, bytes);
+  if (rc != 0) {
+    rt_cuda_set_error("cuMemAlloc(x)", rc);
+    goto cleanup;
+  }
+  rc = cuMemAlloc_v2(&device_y, bytes);
+  if (rc != 0) {
+    rt_cuda_set_error("cuMemAlloc(y)", rc);
+    goto cleanup;
+  }
+  rc = cuMemAlloc_v2(&device_out, bytes);
+  if (rc != 0) {
+    rt_cuda_set_error("cuMemAlloc(out)", rc);
+    goto cleanup;
+  }
+  rc = cuMemcpyHtoD_v2(device_x, x, bytes);
+  if (rc != 0) {
+    rt_cuda_set_error("cuMemcpyHtoD(x)", rc);
+    goto cleanup;
+  }
+  rc = cuMemcpyHtoD_v2(device_y, y, bytes);
+  if (rc != 0) {
+    rt_cuda_set_error("cuMemcpyHtoD(y)", rc);
+    goto cleanup;
+  }
+
+  params[0] = &device_x;
+  params[1] = &device_y;
+  params[2] = &device_out;
+  params[3] = &n;
+  blocks = ((unsigned int)n + 255U) / 256U;
+  rc = cuLaunchKernel(function, blocks, 1, 1, 256, 1, 1,
+                      0, 0, params, 0);
+  if (rc != 0) {
+    rt_cuda_set_error("cuLaunchKernel", rc);
+    goto cleanup;
+  }
+  rc = cuCtxSynchronize();
+  if (rc != 0) {
+    rt_cuda_set_error("cuCtxSynchronize", rc);
+    goto cleanup;
+  }
+  rc = cuMemcpyDtoH_v2(out, device_out, bytes);
+  if (rc != 0) {
+    rt_cuda_set_error("cuMemcpyDtoH", rc);
+    goto cleanup;
+  }
+  status = 0;
+
+cleanup:
+  if (device_out)
+    cuMemFree_v2(device_out);
+  if (device_y)
+    cuMemFree_v2(device_y);
+  if (device_x)
+    cuMemFree_v2(device_x);
+  if (module)
+    cuModuleUnload(module);
+  if (context)
+    cuCtxDestroy_v2(context);
+  free(ptx);
+  if (program)
+    nvrtcDestroyProgram(&program);
+  return status;
+}
+'
+code <- sub("@CUDA_ARCH@", cuda_arch, code, fixed = TRUE)
+
+cuda <- tcc_ffi() |>
+  tcc_source(code) |>
+  tcc_library(cuda_path) |>
+  tcc_library(nvrtc_path) |>
+  tcc_bind(
+    rt_cuda_vec_add = list(
+      args = list("numeric_array", "numeric_array", "numeric_array", "i32"),
+      returns = "i32"
+    ),
+    rt_cuda_last_error = list(args = list(), returns = "cstring")
+  ) |>
+  tcc_compile()
+
+n <- as.integer(Sys.getenv("RTINYCC_CUDA_N", "1000000"))
+stopifnot(length(n) == 1L, !is.na(n), n > 0L)
+set.seed(1)
+x <- runif(n)
+y <- runif(n)
+out <- numeric(n)
+
+timing <- system.time({
+  rc <- cuda$rt_cuda_vec_add(x, y, out, n)
+})
+if (rc != 0L) {
+  stop("CUDA vector add failed: ", cuda$rt_cuda_last_error())
+}
+
+expected <- x + y
+max_error <- max(abs(out - expected))
+result <- list(
+  host = Sys.info()[["nodename"]],
+  rtinycc_version = as.character(packageVersion("Rtinycc")),
+  device = trimws(system2(
+    Sys.getenv("RTINYCC_NVIDIA_SMI", "/usr/lib/wsl/lib/nvidia-smi"),
+    c("--query-gpu=name", "--format=csv,noheader"),
+    stdout = TRUE
+  )[[1L]]),
+  architecture = cuda_arch,
+  n = n,
+  status = rc,
+  elapsed_seconds_including_nvrtc = unname(timing[["elapsed"]]),
+  max_error = max_error,
+  first_values = head(out)
+)
+print(result)
+stopifnot(max_error == 0)
+invisible(result)
+#> $host
+#> [1] "SMT"
+#> $rtinycc_version
+#> [1] "0.1.12"
+#> $device
+#> [1] "NVIDIA GeForce RTX 5050 Laptop GPU"
+#> $architecture
+#> [1] "compute_120"
+#> $n
+#> [1] 1000000
+#> $status
+#> [1] 0
+#> $elapsed_seconds_including_nvrtc
+#> [1] 0.226
+#> $max_error
+#> [1] 0
+#> $first_values
+#> [1] 0.4056264 1.0677446 1.3017378 0.9998551 0.2682939 1.5112469
+```
+
+For a persistent asynchronous GPU queue, `mirai` supports launching
+daemons via SSH directly. The explicit port is important here because
+`ssh_config()` uses the port from its URL rather than the `Port` value
+of the `rig` SSH alias. `crew` builds higher-level orchestration on
+mirai, but a dedicated mirai `"gpu"` compute profile is the smaller
+mechanism for one rig.
+
+``` r
+
+library(mirai)
+
+rmd <- readLines("README.Rmd")
+chunk_start <- grep("^```\\{ssh cuda-nvrtc-rig", rmd)
+stopifnot(length(chunk_start) == 1L)
+chunk_end <- chunk_start + which(
+  rmd[(chunk_start + 1L):length(rmd)] == "```"
+)[[1L]]
+cuda_code <- paste(
+  rmd[seq.int(chunk_start + 1L, chunk_end - 1L)],
+  collapse = "\n"
+)
+
+daemons(
+  n = 1L,
+  url = local_url(tcp = TRUE),
+  remote = ssh_config(
+    "ssh://sounkoutoure@localhost:2222",
+    tunnel = TRUE
+  ),
+  .compute = "gpu"
+)
+
+job <- mirai(
+  eval(parse(text = code), envir = new.env(parent = globalenv())),
+  code = cuda_code,
+  .compute = "gpu"
+)
+job[]
+daemons(0, .compute = "gpu")
+```
+
+On the RTX 5050 rig this path produced an exact result for one million
+doubles (`max_error = 0`). The measured call includes NVRTC compilation,
+CUDA context creation, device allocation, transfers, launch, and
+synchronization; it is a correctness demonstration rather than a
+steady-state kernel benchmark.
+
 ### Compiler options
 
 Use
@@ -480,7 +890,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @5dfe4f87a180 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @56fcbfa42898 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -496,7 +906,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @5dfe4f87a180 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @56fcbfa42898 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -525,15 +935,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x5dfe51808b90>
+#> <pointer: 0x56fcbb2deb60>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x5dfe51808b90>
+#> <pointer: 0x56fcbb2deb60>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x5dfe4e2258c0>
+#> <pointer: 0x56fcbae56bb0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x5dfe4e2258c0>
+#> <pointer: 0x56fcbae56bb0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -580,9 +990,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x5dfe4eb02090>
+#> <pointer: 0x56fcbde48f80>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x5dfe4eb02090>
+#> <pointer: 0x56fcbde48f80>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -1757,7 +2167,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x5dfe4ca39770>
+#> <pointer: 0x56fcc046fca0>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1875,11 +2285,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 47.22ms 49.14ms      20.3    6.33MB       0      2     0    98.28ms
-#> 2 vroom_df_…  7.04ms  7.04ms     142.     1.22MB     142.     1     1     7.04ms
-#> 3 vroom_df_…  8.95ms  9.29ms     108.     2.44MB       0      2     0    18.58ms
-#> 4 c_read_df  21.26ms 21.95ms      45.6    1.22MB       0      2     0    43.89ms
-#> 5 io_uring_… 21.14ms 21.21ms      47.1    1.22MB       0      2     0    42.43ms
+#> 1 read_tabl… 50.48ms 50.85ms      19.7    6.33MB        0     2     0    101.7ms
+#> 2 vroom_df_…  6.39ms  6.51ms     154.     1.22MB        0     2     0       13ms
+#> 3 vroom_df_…  6.85ms   8.1ms     124.     2.44MB        0     2     0     16.2ms
+#> 4 c_read_df  21.39ms  22.6ms      44.3    1.22MB        0     2     0     45.2ms
+#> 5 io_uring_…  21.8ms 21.86ms      45.7    1.22MB        0     2     0     43.7ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1988,9 +2398,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x5dfe51e41290>
+#> <pointer: 0x56fcbfc89980>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x5dfe51e41290>
+#> <pointer: 0x56fcbfc89980>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
