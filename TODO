@@ -1,1 +1,89 @@
-- design explicit ALTREP-aware FFI array semantics before changing mutable array inputs; decide whether to add read-only array types, inout copy-back modes, aliasing rules, and when to use *_GET_REGION(), DATAPTR_RO(), or writable materialization
+## Core FFI
+
+- Design explicit ALTREP-aware FFI array semantics before changing mutable
+  array inputs. Decide whether to add read-only array types, inout copy-back
+  modes, aliasing rules, and when to use `*_GET_REGION()`, `DATAPTR_RO()`, or
+  writable materialization.
+
+## Persistent accelerator runtime investigation
+
+The README demonstration has established the end-to-end architecture: a
+persistent remote R process launched by mirai can load Rtinycc, compile a host
+adapter against the CUDA Driver API and NVRTC, retain the compiled FFI between
+requests, execute generated PTX, and return structured R results. It establishes
+feasibility, not yet a production GPU runtime or steady-state performance.
+
+Keep CUDA-specific resource and execution policy out of Rtinycc unless a
+prototype identifies a genuinely generic FFI gap. Prototype it in a downstream
+package, provisionally `Rtinycuda`, with Rtinycc as the compiler and FFI
+substrate and mirai as an optional remote execution plane.
+
+### Next proof: a warm persistent path
+
+- Create one CUDA context in the daemon and reuse it across mirai requests.
+- Compile PTX once with NVRTC, load one module, and retain typed module and
+  kernel handles.
+- Introduce owned device-buffer handles; upload inputs once, launch repeatedly,
+  and download once.
+- Add persistent stream and event handles, then establish synchronization and
+  error-propagation semantics.
+- Exercise one established vendor library, preferably cuBLAS, through a retained
+  library handle and the same device buffers.
+- Measure and report cold setup separately from warm launch, transfer, and
+  end-to-end timings. Compare against a direct CUDA baseline before making
+  performance claims.
+
+### Ownership and failure model
+
+- Define explicit ownership, tags, finalizers, and deterministic `close()` paths
+  for contexts, modules, kernels, buffers, streams, events, and vendor handles.
+- Make cleanup idempotent and order-aware: dependent resources must not outlive
+  their context, module, or daemon.
+- Record device identity and context ownership on every handle; reject use from
+  the wrong process, device, context, or closed session.
+- Determine whether every operation must restore the CUDA context as current,
+  rather than relying on thread-local state surviving between calls.
+- Specify behavior for daemon death, interrupted jobs, CUDA context loss,
+  partially completed asynchronous work, and finalizers during process exit.
+- Keep host-vector borrowing limited to the synchronous call window. Do not
+  retain R vector addresses for asynchronous transfers without an explicit
+  pin/copy/lifetime model.
+
+### API and execution questions
+
+- Decide whether the public abstraction is session-oriented (`cuda_session()`),
+  resource-oriented, or both; avoid exposing raw driver handles by default.
+- Define kernel signatures declaratively, including scalar width, array element
+  type, direction, shape/stride metadata, and launch dimensions.
+- Investigate runtime specialization by data type, shape, constants, and compute
+  capability, with cache keys that include source, options, CUDA/NVRTC versions,
+  target architecture, and ABI metadata.
+- Decide which operations should return ordinary R values and which should keep
+  data resident on the device for pipeline composition.
+- Explore one daemon per GPU, named mirai compute profiles, multi-GPU placement,
+  and backpressure only after the single-GPU ownership model is sound.
+- Treat remote compilation as trusted arbitrary native-code execution. Document
+  the trust boundary; do not present it as a sandbox.
+
+### Packaging and validation
+
+- Keep GPU and SSH examples opt-in so CRAN and ordinary CI never require CUDA,
+  a reachable rig, credentials, or network access.
+- Add local tests around generated adapter source and handle-state transitions;
+  put hardware tests in a separately enabled integration workflow.
+- Test missing libraries, NVRTC compile errors, invalid architectures, launch
+  failures, use-after-close, cross-session handles, interrupted work, and daemon
+  loss—not only successful kernels.
+- Do not expand Rtinycc's public API until the downstream prototype demonstrates
+  which missing primitives are reusable beyond CUDA. Candidate generic gaps
+  include typed owned handles, dependent-handle lifetime retention, and
+  session-bound resource validation.
+
+### Longer-term opportunities
+
+- Generate host adapters and kernels specialized to an R workload rather than
+  only wrapping fixed vendor entry points.
+- Fuse suitable operation sequences to reduce launch and transfer overhead.
+- Evaluate the same persistent-adapter pattern for other C-ABI runtimes, such as
+  ROCm or specialized scientific libraries, without claiming portability until
+  each backend has been demonstrated.
