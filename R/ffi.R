@@ -1878,9 +1878,6 @@ recompile_into <- function(target) {
   invisible(target)
 }
 
-# Helper for %||%
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 tcc_library_search_paths <- function(
   sysname = as.character(unname(Sys.info()[["sysname"]]))
 ) {

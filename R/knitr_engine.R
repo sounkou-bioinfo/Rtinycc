@@ -45,8 +45,6 @@ rtinycc_engine <- function(options) {
     return(NULL)
   }
 
-  `%||%` <- function(x, y) if (is.null(x)) y else x
-
   object_name <- options$object %||% options$name %||% options$label
   if (
     !is.character(object_name) ||

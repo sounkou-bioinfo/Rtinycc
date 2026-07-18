@@ -5,8 +5,6 @@ suppressPackageStartupMessages(library(Rtinycc))
 
 say <- function(...) cat(..., "\n", sep = "")
 
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 pkg_config_paths <- function(args, prefix) {
   out <- tryCatch(
     system2("pkg-config", c(args, "htslib"), stdout = TRUE, stderr = FALSE),
