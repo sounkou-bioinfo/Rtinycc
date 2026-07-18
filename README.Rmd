@@ -15,30 +15,6 @@ has_callme <- requireNamespace("callme", quietly = TRUE)
 has_bench <- requireNamespace("bench", quietly = TRUE)
 run_ssh_demos <- tolower(Sys.getenv("RTINYCC_RUN_SSH_DEMOS")) %in%
   c("1", "true", "yes")
-
-# Opt-in engine for examples that must execute on a remote machine. The chunk
-# code is sent unchanged to `Rscript --vanilla -` over OpenSSH; no shell package
-# or R package is required on the coordinating machine beyond knitr itself.
-knitr::knit_engines$set(ssh = function(options) {
-  if (!isTRUE(options$eval)) {
-    return(knitr::engine_output(options, options$code, character()))
-  }
-
-  host <- if (is.null(options$host)) "rig" else options$host
-  output <- system2(
-    "ssh",
-    c(host, "Rscript", "--vanilla", "-"),
-    input = options$code,
-    stdout = TRUE,
-    stderr = TRUE
-  )
-  status <- attr(output, "status", exact = TRUE)
-  if (!is.null(status) && status != 0L) {
-    stop(paste(output, collapse = "\n"), call. = FALSE)
-  }
-  output <- output[nzchar(output)]
-  knitr::engine_output(options, options$code, output)
-})
 ```
 
 # Rtinycc
@@ -343,15 +319,15 @@ and launches that PTX. The self-contained demonstration below borrows three R
 numeric vectors at the wrapper boundary, copies the inputs to device memory,
 launches a runtime-compiled kernel, synchronizes, and copies the result back.
 
-The opt-in chunk uses the pure-R `ssh` knitr engine registered at the top of
-this file. The complete displayed program is sent unchanged to
-`Rscript --vanilla -` on the SSH host. Set `RTINYCC_RUN_SSH_DEMOS=true` to
-execute it; ordinary CRAN and CI renders only show the code.
+The complete program is collapsed to keep this README navigable. The visible
+mirai chunk after it reads that exact knitr source, launches an R daemon on the
+rig through the SSH tunnel, executes the program there, and returns the result.
+Set `RTINYCC_RUN_SSH_DEMOS=true` while rendering to perform the live run.
 
 <details>
-<summary>Show the complete Rtinycc, NVRTC, and CUDA program with live rig output</summary>
+<summary>Show the complete Rtinycc, NVRTC, and CUDA program</summary>
 
-```{ssh cuda-nvrtc-rig, host="rig", eval=run_ssh_demos}
+```{r cuda-nvrtc-program, eval=FALSE}
 library(Rtinycc)
 
 # This opt-in demonstration is run on an NVIDIA Linux/WSL host. Override the
@@ -682,49 +658,62 @@ invisible(result)
 
 </details>
 
-For a persistent asynchronous GPU queue, `mirai` supports launching daemons via
-SSH directly. The explicit port is important here because `ssh_config()` uses
-the port from its URL rather than the `Port` value of the `rig` SSH alias.
-`crew` builds higher-level orchestration on mirai, but a dedicated mirai
-`"gpu"` compute profile is the smaller mechanism for one rig.
+`mirai` supports SSH launch and tunnelling directly. The explicit port matters
+here because `ssh_config()` uses the port from its URL rather than the `Port`
+value of the `rig` SSH alias. `crew` provides higher-level orchestration on
+mirai, while a dedicated mirai `"gpu"` profile is sufficient for this rig.
 
-```{r mirai-cuda-ssh, eval=FALSE}
+```{r mirai-cuda-ssh, eval=run_ssh_demos}
 library(mirai)
 
-rmd <- readLines("README.Rmd")
-chunk_start <- grep("^```\\{ssh cuda-nvrtc-rig", rmd)
-stopifnot(length(chunk_start) == 1L)
-chunk_end <- chunk_start + which(
-  rmd[(chunk_start + 1L):length(rmd)] == "```"
-)[[1L]]
 cuda_code <- paste(
-  rmd[seq.int(chunk_start + 1L, chunk_end - 1L)],
+  knitr::knit_code$get("cuda-nvrtc-program"),
   collapse = "\n"
 )
+stopifnot(nzchar(cuda_code))
 
-daemons(
-  n = 1L,
-  url = local_url(tcp = TRUE),
-  remote = ssh_config(
-    "ssh://sounkoutoure@localhost:2222",
-    tunnel = TRUE
-  ),
-  .compute = "gpu"
+cuda_result <- tryCatch(
+  {
+    daemons(
+      n = 1L,
+      url = local_url(tcp = TRUE),
+      remote = ssh_config(
+        "ssh://sounkoutoure@localhost:2222",
+        tunnel = TRUE
+      ),
+      .compute = "gpu"
+    )
+    job <- mirai(
+      eval(parse(text = code), envir = new.env(parent = globalenv())),
+      code = cuda_code,
+      .compute = "gpu"
+    )
+    job[]
+  },
+  finally = daemons(0, .compute = "gpu")
 )
 
-job <- mirai(
-  eval(parse(text = code), envir = new.env(parent = globalenv())),
-  code = cuda_code,
-  .compute = "gpu"
+stopifnot(
+  is.list(cuda_result),
+  identical(cuda_result$status, 0L),
+  identical(cuda_result$max_error, 0)
 )
-job[]
-daemons(0, .compute = "gpu")
+data.frame(
+  host = cuda_result$host,
+  rtinycc = cuda_result$rtinycc_version,
+  device = cuda_result$device,
+  architecture = cuda_result$architecture,
+  n = cuda_result$n,
+  elapsed_seconds = cuda_result$elapsed_seconds_including_nvrtc,
+  max_error = cuda_result$max_error,
+  check.names = FALSE
+)
 ```
 
-On the RTX 5050 rig this path produced an exact result for one million doubles
-(`max_error = 0`). The measured call includes NVRTC compilation, CUDA context
-creation, device allocation, transfers, launch, and synchronization; it is a
-correctness demonstration rather than a steady-state kernel benchmark.
+The displayed result is returned by the remote R process. Timing includes NVRTC
+compilation, CUDA context creation, device allocation, transfers, launch, and
+synchronization; this is a correctness demonstration rather than a steady-state
+kernel benchmark.
 
 ### Compiler options
 

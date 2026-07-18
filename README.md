@@ -197,7 +197,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x56fcbc659a40"
+#> [1] "0x611e99dc60d0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -228,11 +228,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x56fcbba1bf10>
+#> <pointer: 0x611e97e33150>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x56fcbcf3f630>
+#> <pointer: 0x611e96d84680>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x56fcbba1bf10>
+#> <pointer: 0x611e97e33150>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -392,17 +392,18 @@ below borrows three R numeric vectors at the wrapper boundary, copies
 the inputs to device memory, launches a runtime-compiled kernel,
 synchronizes, and copies the result back.
 
-The opt-in chunk uses the pure-R `ssh` knitr engine registered at the
-top of this file. The complete displayed program is sent unchanged to
-`Rscript --vanilla -` on the SSH host. Set `RTINYCC_RUN_SSH_DEMOS=true`
-to execute it; ordinary CRAN and CI renders only show the code.
+The complete program is collapsed to keep this README navigable. The
+visible mirai chunk after it reads that exact knitr source, launches an
+R daemon on the rig through the SSH tunnel, executes the program there,
+and returns the result. Set `RTINYCC_RUN_SSH_DEMOS=true` while rendering
+to perform the live run.
 
 <details>
 <summary>
-Show the complete Rtinycc, NVRTC, and CUDA program with live rig output
+Show the complete Rtinycc, NVRTC, and CUDA program
 </summary>
 
-``` ssh
+``` r
 library(Rtinycc)
 
 # This opt-in demonstration is run on an NVIDIA Linux/WSL host. Override the
@@ -729,73 +730,71 @@ result <- list(
 print(result)
 stopifnot(max_error == 0)
 invisible(result)
-#> $host
-#> [1] "SMT"
-#> $rtinycc_version
-#> [1] "0.1.12"
-#> $device
-#> [1] "NVIDIA GeForce RTX 5050 Laptop GPU"
-#> $architecture
-#> [1] "compute_120"
-#> $n
-#> [1] 1000000
-#> $status
-#> [1] 0
-#> $elapsed_seconds_including_nvrtc
-#> [1] 0.226
-#> $max_error
-#> [1] 0
-#> $first_values
-#> [1] 0.4056264 1.0677446 1.3017378 0.9998551 0.2682939 1.5112469
 ```
 
 </details>
 
-For a persistent asynchronous GPU queue, `mirai` supports launching
-daemons via SSH directly. The explicit port is important here because
-`ssh_config()` uses the port from its URL rather than the `Port` value
-of the `rig` SSH alias. `crew` builds higher-level orchestration on
-mirai, but a dedicated mirai `"gpu"` compute profile is the smaller
-mechanism for one rig.
+`mirai` supports SSH launch and tunnelling directly. The explicit port
+matters here because `ssh_config()` uses the port from its URL rather
+than the `Port` value of the `rig` SSH alias. `crew` provides
+higher-level orchestration on mirai, while a dedicated mirai `"gpu"`
+profile is sufficient for this rig.
 
 ``` r
 library(mirai)
 
-rmd <- readLines("README.Rmd")
-chunk_start <- grep("^```\\{ssh cuda-nvrtc-rig", rmd)
-stopifnot(length(chunk_start) == 1L)
-chunk_end <- chunk_start + which(
-  rmd[(chunk_start + 1L):length(rmd)] == "```"
-)[[1L]]
 cuda_code <- paste(
-  rmd[seq.int(chunk_start + 1L, chunk_end - 1L)],
+  knitr::knit_code$get("cuda-nvrtc-program"),
   collapse = "\n"
 )
+stopifnot(nzchar(cuda_code))
 
-daemons(
-  n = 1L,
-  url = local_url(tcp = TRUE),
-  remote = ssh_config(
-    "ssh://sounkoutoure@localhost:2222",
-    tunnel = TRUE
-  ),
-  .compute = "gpu"
+cuda_result <- tryCatch(
+  {
+    daemons(
+      n = 1L,
+      url = local_url(tcp = TRUE),
+      remote = ssh_config(
+        "ssh://sounkoutoure@localhost:2222",
+        tunnel = TRUE
+      ),
+      .compute = "gpu"
+    )
+    job <- mirai(
+      eval(parse(text = code), envir = new.env(parent = globalenv())),
+      code = cuda_code,
+      .compute = "gpu"
+    )
+    job[]
+  },
+  finally = daemons(0, .compute = "gpu")
 )
 
-job <- mirai(
-  eval(parse(text = code), envir = new.env(parent = globalenv())),
-  code = cuda_code,
-  .compute = "gpu"
+stopifnot(
+  is.list(cuda_result),
+  identical(cuda_result$status, 0L),
+  identical(cuda_result$max_error, 0)
 )
-job[]
-daemons(0, .compute = "gpu")
+data.frame(
+  host = cuda_result$host,
+  rtinycc = cuda_result$rtinycc_version,
+  device = cuda_result$device,
+  architecture = cuda_result$architecture,
+  n = cuda_result$n,
+  elapsed_seconds = cuda_result$elapsed_seconds_including_nvrtc,
+  max_error = cuda_result$max_error,
+  check.names = FALSE
+)
+#>   host rtinycc                             device architecture       n
+#> 1  SMT  0.1.12 NVIDIA GeForce RTX 5050 Laptop GPU  compute_120 1000000
+#>   elapsed_seconds max_error
+#> 1           0.231         0
 ```
 
-On the RTX 5050 rig this path produced an exact result for one million
-doubles (`max_error = 0`). The measured call includes NVRTC compilation,
-CUDA context creation, device allocation, transfers, launch, and
-synchronization; it is a correctness demonstration rather than a
-steady-state kernel benchmark.
+The displayed result is returned by the remote R process. Timing
+includes NVRTC compilation, CUDA context creation, device allocation,
+transfers, launch, and synchronization; this is a correctness
+demonstration rather than a steady-state kernel benchmark.
 
 ### Compiler options
 
@@ -874,7 +873,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @56fcbfa42898 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @611e9c2f0de0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -890,7 +889,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @56fcbfa42898 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @611e9c2f0de0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -917,15 +916,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x56fcbb2deb60>
+#> <pointer: 0x611e9884d5d0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x56fcbb2deb60>
+#> <pointer: 0x611e9884d5d0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x56fcbae56bb0>
+#> <pointer: 0x611e97a71490>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x56fcbae56bb0>
+#> <pointer: 0x611e97a71490>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -970,9 +969,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x56fcbde48f80>
+#> <pointer: 0x611e993c33e0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x56fcbde48f80>
+#> <pointer: 0x611e993c33e0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -2143,7 +2142,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x56fcc046fca0>
+#> <pointer: 0x611e975e9650>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -2260,11 +2259,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 50.48ms 50.85ms      19.7    6.33MB        0     2     0    101.7ms
-#> 2 vroom_df_…  6.39ms  6.51ms     154.     1.22MB        0     2     0       13ms
-#> 3 vroom_df_…  6.85ms   8.1ms     124.     2.44MB        0     2     0     16.2ms
-#> 4 c_read_df  21.39ms  22.6ms      44.3    1.22MB        0     2     0     45.2ms
-#> 5 io_uring_…  21.8ms 21.86ms      45.7    1.22MB        0     2     0     43.7ms
+#> 1 read_tabl… 49.45ms 49.45ms      20.2    6.33MB     20.2     1     1     49.4ms
+#> 2 vroom_df_…  6.34ms  6.55ms     153.     1.22MB      0       2     0     13.1ms
+#> 3 vroom_df_…  6.55ms  6.61ms     151.     2.44MB      0       2     0     13.2ms
+#> 4 c_read_df   20.8ms 21.01ms      47.6    1.22MB      0       2     0       42ms
+#> 5 io_uring_… 20.12ms 20.69ms      48.3    1.22MB      0       2     0     41.4ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -2366,9 +2365,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x56fcbfc89980>
+#> <pointer: 0x611e9d497f00>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x56fcbfc89980>
+#> <pointer: 0x611e9d497f00>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
