@@ -55,6 +55,7 @@ typedef struct cb_task {
     cb_arg_t    *args;
     struct cb_task *next;  /* used only for R-side drain ordering (unused here) */
     cb_result_t result;   /* filled by WndProc before SendMessage returns */
+    int invoke_failed;    /* main-thread callback escaped via non-local jump */
 } cb_task_t;
 
 /**
@@ -159,7 +160,7 @@ static void cbq_execute_task_body(void *data) {
 
 static void cbq_execute_task(cb_task_t *task) {
     memset(&task->result, 0, sizeof(task->result));
-    (void)R_ToplevelExec(cbq_execute_task_body, task);
+    task->invoke_failed = !R_ToplevelExec(cbq_execute_task_body, task);
 }
 
 /**
@@ -273,9 +274,10 @@ int RC_platform_async_schedule_sync(int id, unsigned int generation,
     /* SendMessage blocks until WndProc returns on the main thread. */
     SendMessage(cbq_hwnd, WM_CB_SYNC, 0, (LPARAM)task);
 
+    int rc = task->invoke_failed ? -5 : 0;
     if (result) *result = task->result;
     cbq_free_task(task);
-    return 0;
+    return rc;
 }
 
 /**
@@ -392,6 +394,7 @@ typedef struct cb_task {
     pthread_mutex_t sync_mtx;
     pthread_cond_t  sync_cond;
     int          result_ready;
+    int          invoke_failed;
 } cb_task_t;
 
 static cb_task_t      *cbq_head = NULL;
@@ -511,7 +514,7 @@ static void cbq_execute_task_body(void *data) {
 
 static void cbq_execute_task(cb_task_t *task) {
     memset(&task->result, 0, sizeof(task->result));
-    (void)R_ToplevelExec(cbq_execute_task_body, task);
+    task->invoke_failed = !R_ToplevelExec(cbq_execute_task_body, task);
 }
 
 /**
@@ -654,12 +657,13 @@ int RC_platform_async_schedule_sync(int id, unsigned int generation,
     }
     pthread_mutex_unlock(&task->sync_mtx);
 
+    int rc = task->invoke_failed ? -5 : 0;
     if (result) *result = task->result;
 
     pthread_mutex_destroy(&task->sync_mtx);
     pthread_cond_destroy(&task->sync_cond);
     cbq_free_task(task);
-    return 0;
+    return rc;
 }
 
 /**

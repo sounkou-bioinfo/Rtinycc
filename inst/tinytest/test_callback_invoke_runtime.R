@@ -273,6 +273,31 @@ expect_equal(
 )
 close_if_valid(cb_direct)
 
+# A warning promoted to an error must be caught before it can unwind through
+# the TCC caller on the main-thread fast path.
+cb_direct_error <- tcc_callback(
+  function(x) stop("direct callback failure"),
+  signature = "void (*)(int)"
+)
+old_options <- options(warn = 2)
+direct_error_rc <- NULL
+invisible(capture.output(
+  direct_error_rc <- tryCatch(
+    ffi_direct_schedule$schedule_direct(
+      tcc_callback_ptr(cb_direct_error),
+      1L
+    ),
+    finally = options(old_options)
+  ),
+  type = "message"
+))
+expect_equal(
+  direct_error_rc,
+  -5L,
+  info = "Main-thread async callback non-local jumps become dispatch failures"
+)
+close_if_valid(cb_direct_error)
+
 # Test: queued R-level async scheduling auto-fires during R event-loop activity.
 # This exercises the input-handler/message pump path without a manual drain call.
 hits_event_loop <- 0L
@@ -555,6 +580,47 @@ expect_false(
   tcc_callback_valid(cb_self_close),
   info = "A self-closed callback remains invalid after returning"
 )
+
+# A non-local jump while the main thread executes a queued task must still
+# signal the blocked worker and return a typed failure instead of deadlocking.
+.Call("RC_callback_async_failure_reset", PACKAGE = "Rtinycc")
+cb_async_jump <- tcc_callback(
+  function(x) stop("queued callback failure"),
+  signature = "int (*)(int)"
+)
+old_options <- options(warn = 2)
+queued_jump_result <- NULL
+invisible(capture.output(
+  tryCatch(
+    {
+      ffi_async_sync$start_int_worker(
+        cb_async_jump,
+        tcc_callback_ptr(cb_async_jump),
+        1L
+      )
+      for (i in seq_len(50)) {
+        tcc_callback_async_drain()
+        if (ffi_async_sync$is_int_worker_done() != 0L) {
+          break
+        }
+        Sys.sleep(0.01)
+      }
+      queued_jump_result <- ffi_async_sync$join_int_worker()
+    },
+    finally = options(old_options)
+  ),
+  type = "message"
+))
+expect_true(
+  is.na(queued_jump_result),
+  info = "Queued callback non-local jump returns the declared default"
+)
+expect_equal(
+  unname(.Call("RC_callback_async_failure_status", PACKAGE = "Rtinycc")),
+  c(1L, -5L),
+  info = "Queued callback non-local jump is recorded as a dispatch failure"
+)
+close_if_valid(cb_async_jump)
 
 # Test: non-void async callback (double return) from worker thread
 cb_async_dbl <- tcc_callback(

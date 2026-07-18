@@ -2314,20 +2314,39 @@ static cb_result_t RC_callback_async_result_from_sexp(SEXP s) {
     return r;
 }
 
+typedef struct {
+    int id;
+    unsigned int generation;
+    int n_args;
+    const cb_arg_t *args;
+    cb_result_t *result;
+} RC_callback_async_invoke_ctx;
+
+static void RC_callback_async_invoke_now_body(void *data) {
+    RC_callback_async_invoke_ctx *ctx =
+        (RC_callback_async_invoke_ctx *)data;
+    SEXP r_args = PROTECT(RC_callback_async_args_to_sexp(
+        ctx->n_args, ctx->args
+    ));
+    SEXP res = PROTECT(RC_invoke_callback_internal_generation(
+        ctx->id, ctx->generation, r_args
+    ));
+
+    if (ctx->result) {
+        *ctx->result = RC_callback_async_result_from_sexp(res);
+    }
+    UNPROTECT(2);
+}
+
 static int RC_callback_async_invoke_now(int id, unsigned int generation,
                                         int n_args, const cb_arg_t *args,
                                         cb_result_t *result) {
-    /* Return value is dispatch status. Callback-level R errors are converted
-     * by RC_invoke_callback_internal() into the declared default result. */
-    SEXP r_args = PROTECT(RC_callback_async_args_to_sexp(n_args, args));
-    SEXP res = PROTECT(RC_invoke_callback_internal_generation(
-        id, generation, r_args
-    ));
-    if (result) {
-        *result = RC_callback_async_result_from_sexp(res);
-    }
-    UNPROTECT(2);
-    return 0;
+    RC_callback_async_invoke_ctx ctx = {
+        id, generation, n_args, args, result
+    };
+
+    /* Never let an R non-local jump escape through a native callback frame. */
+    return R_ToplevelExec(RC_callback_async_invoke_now_body, &ctx) ? 0 : -5;
 }
 
 /**
