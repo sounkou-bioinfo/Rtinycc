@@ -41,9 +41,12 @@ TCC compiles them in-memory -- no shared library is written to disk and no
 After `tcc_relocate()`, wrapper pointers are retrieved via `tcc_get_symbol()`,
 which internally calls `RC_libtcc_get_symbol()`. That function converts TCC's
 raw `void*` into a `DL_FUNC` wrapped with `R_MakeExternalPtrFn` (tagged
-`"native symbol"`). On the R side, [`make_callable()`](R/ffi.R) creates a
-closure that passes this external pointer to `.Call` (aliased as `.RtinyccCall`
-to keep `R CMD check` happy).
+`"native symbol"`). The symbol pointer retains its owning `tcc_state`, so the
+relocated code remains alive while the symbol is reachable. On the R side,
+[`make_callable()`](R/ffi.R) creates a closure that passes this external pointer
+to `.Call` (aliased as `.RtinyccCall` to keep `R CMD check` happy). Non-memory
+states instead produce one-shot artifacts with `tcc_output_file()` and cannot
+expose callable symbol pointers.
 
 The design follows [CFFI's](https://cffi.readthedocs.io/) API-mode pattern:
 instead of computing struct layouts and calling conventions in R (ABI-mode,
@@ -66,7 +69,7 @@ TinyCC resolves CRT symbols against `ucrtbase.dll` (R 4.2+ uses UCRT).
 
 
 Ownership semantics are explicit. Pointers from `tcc_malloc()` are tagged `rtinycc_owned` and can be released with `tcc_free()` (or by their R finalizer). Generated struct constructors use a struct-specific tag
-(`struct_<name>`) with an `RC_free_finalizer`; free them with `struct_<name>_free()`, not `tcc_free()`. Pointers from `tcc_data_ptr()` are
+(`struct_<name>`) and host-allocated storage with `RC_owned_native_finalizer`; free them with `struct_<name>_free()`, not `tcc_free()`. Pointers from `tcc_data_ptr()` are
 tagged `rtinycc_borrowed` and are never freed by Rtinycc. Array returns are copied into a fresh R vector; set `free = TRUE` only when the C function returns a `malloc`-owned buffer.
 
 ## Installation
