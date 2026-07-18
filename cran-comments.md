@@ -3,8 +3,8 @@
 This release updates the bundled TinyCC source to the wasm32-enabled
 `sounkou-bioinfo/tinycc` fork and fixes a const-correctness warning reported by
 recent GCC toolchains, including CRAN's Fedora GCC builder. It also hardens
-callable-symbol and struct/union ownership, range checking, and non-memory
-output handling.
+callable-symbol and struct/union ownership, async callback queue identity and
+result validation, range checking, and non-memory output handling.
 
 ## Test environments
 

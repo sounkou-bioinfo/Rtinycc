@@ -96,8 +96,11 @@ SEXP RC_callback_async_drain(void);
 SEXP RC_callback_async_failure_status(void);
 SEXP RC_callback_async_failure_reset(void);
 void RC_callback_async_note_failure_c(int code);
-int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);
-int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);
+int RC_callback_async_schedule_c(int id, unsigned int generation,
+                                 int n_args, const cb_arg_t *args);
+int RC_callback_async_schedule_sync_c(int id, unsigned int generation,
+                                      int n_args, const cb_arg_t *args,
+                                      cb_result_t *result);
 void RC_callback_async_drain_loop_c(volatile int *done_flag);
 void RC_callback_async_exec_c(void (*func)(void *), void *arg);
 static void RC_callback_finalizer(SEXP ext);
@@ -108,8 +111,11 @@ SEXP RC_get_callback_ptr(SEXP callback_ext);
 SEXP RC_callback_is_valid(SEXP callback_ext);
 static SEXP RC_callback_default_sexp(const char *return_type);
 SEXP RC_invoke_callback_internal(int id, SEXP args);
+SEXP RC_invoke_callback_internal_generation(
+    int id, unsigned int generation, SEXP args
+);
 SEXP RC_invoke_callback(SEXP callback_id, SEXP args);
-SEXP RC_invoke_callback_id(int id, SEXP args);
+SEXP RC_invoke_callback_id(int id, unsigned int generation, SEXP args);
 SEXP RC_cleanup_callbacks(void);
 SEXP RC_libtcc_add_host_symbols(SEXP ext);
 
@@ -125,12 +131,14 @@ typedef struct {
     int n_args;            // Number of arguments
     int threadsafe;        // Thread-safety flag
     int valid;             // Whether this entry is still valid
+    unsigned int generation; // Distinguishes reused registry slots
     void *trampoline;      // Pointer to trampoline function (if generated)
 } callback_entry_t;
 
 // Static array of callbacks (simple fixed-size for now)
 #define MAX_CALLBACKS 256
 static callback_entry_t callback_registry[MAX_CALLBACKS];
+static unsigned int callback_next_generation = 1;
 
 /* Async trampoline failures can occur on worker threads, where R warnings and
  * other R API calls are not safe. Keep a small atomic diagnostic counter so the
@@ -162,11 +170,39 @@ static int RC_async_diag_load(int *value) {
 #endif
 }
 
+static unsigned int RC_async_uint_load(unsigned int *value) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __sync_fetch_and_add(value, 0U);
+#else
+    return *value;
+#endif
+}
+
+static void RC_async_uint_store(unsigned int *value, unsigned int new_value) {
+#if defined(__GNUC__) || defined(__clang__)
+    (void)__sync_lock_test_and_set(value, new_value);
+#else
+    *value = new_value;
+#endif
+}
+
+static int RC_callback_entry_matches(int id, unsigned int generation) {
+    callback_entry_t *entry;
+
+    if (id < 0 || id >= MAX_CALLBACKS || generation == 0) {
+        return 0;
+    }
+    entry = &callback_registry[id];
+    return RC_async_diag_load(&entry->valid) &&
+        RC_async_uint_load(&entry->generation) == generation;
+}
+
 // Callback token structure - passed back to R as external ptr
 typedef struct {
     int id;                // Index into callback_registry (or -1 when closed)
     int refs;              // Reference count for outstanding external pointers
     int origin_id;         // Original registry slot for diagnostics after close
+    unsigned int generation; // Registry generation captured at registration
 } callback_token_t;
 
 // ============================================================================
@@ -2106,7 +2142,8 @@ SEXP RC_write_ptr(SEXP ptr, SEXP offset, SEXP value) {
 // Find a free callback registry slot (returns -1 if none available)
 static int RC_callback_find_free_slot(void) {
     for (int i = 0; i < MAX_CALLBACKS; i++) {
-        if (!callback_registry[i].valid && callback_registry[i].fun == NULL) {
+        if (!RC_async_diag_load(&callback_registry[i].valid) &&
+            callback_registry[i].fun == NULL) {
             return i;
         }
     }
@@ -2142,7 +2179,7 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
     if (!token) {
         Rf_error("Callback is closed");
     }
-    if (token->id < 0 || token->id >= MAX_CALLBACKS || !callback_registry[token->id].valid) {
+    if (!RC_callback_entry_matches(token->id, token->generation)) {
         Rf_error("Invalid or expired callback");
     }
 
@@ -2180,7 +2217,9 @@ SEXP RC_callback_async_schedule(SEXP callback_ext, SEXP args) {
         }
     }
 
-    int rc = RC_platform_async_schedule(token->id, n_args, cb_args);
+    int rc = RC_platform_async_schedule(
+        token->id, token->generation, n_args, cb_args
+    );
     if (cb_args) {
         free(cb_args);
     }
@@ -2275,11 +2314,15 @@ static cb_result_t RC_callback_async_result_from_sexp(SEXP s) {
     return r;
 }
 
-static int RC_callback_async_invoke_now(int id, int n_args, const cb_arg_t *args, cb_result_t *result) {
+static int RC_callback_async_invoke_now(int id, unsigned int generation,
+                                        int n_args, const cb_arg_t *args,
+                                        cb_result_t *result) {
     /* Return value is dispatch status. Callback-level R errors are converted
      * by RC_invoke_callback_internal() into the declared default result. */
     SEXP r_args = PROTECT(RC_callback_async_args_to_sexp(n_args, args));
-    SEXP res = PROTECT(RC_invoke_callback_internal(id, r_args));
+    SEXP res = PROTECT(RC_invoke_callback_internal_generation(
+        id, generation, r_args
+    ));
     if (result) {
         *result = RC_callback_async_result_from_sexp(res);
     }
@@ -2294,20 +2337,23 @@ static int RC_callback_async_invoke_now(int id, int n_args, const cb_arg_t *args
  * @param args Array of cb_arg_t values.
  * @return 0 on success, negative error code otherwise.
  */
-int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
+int RC_callback_async_schedule_c(int id, unsigned int generation,
+                                 int n_args, const cb_arg_t *args) {
     if (!RC_platform_async_is_initialized()) {
         RC_platform_async_init();
     }
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
-    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
+    if (!RC_callback_entry_matches(id, generation)) {
         return -2;
     }
     if (RC_platform_async_is_main_thread()) {
-        return RC_callback_async_invoke_now(id, n_args, args, NULL);
+        return RC_callback_async_invoke_now(
+            id, generation, n_args, args, NULL
+        );
     }
-    return RC_platform_async_schedule(id, n_args, args);
+    return RC_platform_async_schedule(id, generation, n_args, args);
 }
 
 /**
@@ -2320,7 +2366,8 @@ int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args) {
  * @param result Output: filled with the callback's return value.
  * @return 0 on success, negative error code otherwise.
  */
-int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
+int RC_callback_async_schedule_sync_c(int id, unsigned int generation,
+                                      int n_args, const cb_arg_t *args,
                                       cb_result_t *result) {
     if (!RC_platform_async_is_initialized()) {
         RC_platform_async_init();
@@ -2328,13 +2375,17 @@ int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args,
     if (!RC_platform_async_is_initialized()) {
         return -1;
     }
-    if (id < 0 || id >= MAX_CALLBACKS || !callback_registry[id].valid) {
+    if (!RC_callback_entry_matches(id, generation)) {
         return -2;
     }
     if (RC_platform_async_is_main_thread()) {
-        return RC_callback_async_invoke_now(id, n_args, args, result);
+        return RC_callback_async_invoke_now(
+            id, generation, n_args, args, result
+        );
     }
-    return RC_platform_async_schedule_sync(id, n_args, args, result);
+    return RC_platform_async_schedule_sync(
+        id, generation, n_args, args, result
+    );
 }
 
 /**
@@ -2379,16 +2430,16 @@ static void RC_callback_finalizer(SEXP ext) {
             token->id,
             token->origin_id,
             token->refs,
-            (token->id >= 0 && token->id < MAX_CALLBACKS) ? callback_registry[token->id].valid : 0
+            RC_callback_entry_matches(token->id, token->generation)
         );
         RC_trace_finalizer_event("callback_release", ext, R_NilValue, detail);
         // Release the preserved R function
-        if (token->id >= 0 && token->id < MAX_CALLBACKS) {
+        if (RC_callback_entry_matches(token->id, token->generation)) {
             callback_entry_t *entry = &callback_registry[token->id];
-            if (entry->valid) {
+            RC_async_diag_store(&entry->valid, 0);
+            if (entry->fun) {
                 R_ReleaseObject(entry->fun);
                 entry->fun = NULL;
-                entry->valid = 0;
                 if (entry->return_type) {
                     free(entry->return_type);
                     entry->return_type = NULL;
@@ -2488,17 +2539,35 @@ SEXP RC_register_callback(SEXP fun, SEXP return_type, SEXP arg_types, SEXP threa
     }
     
     entry->threadsafe = Rf_asInteger(threadsafe);
-    entry->valid = 1;
     entry->trampoline = NULL;
-    
+
+    unsigned int generation = callback_next_generation++;
+    if (generation == 0) {
+        generation = callback_next_generation++;
+    }
+    RC_async_uint_store(&entry->generation, generation);
+
     // Create token
     callback_token_t *token = malloc(sizeof(callback_token_t));
     if (!token) {
+        R_ReleaseObject(entry->fun);
+        entry->fun = NULL;
+        free(entry->return_type);
+        entry->return_type = NULL;
+        if (entry->arg_types) {
+            for (int i = 0; i < entry->n_args; i++) {
+                free(entry->arg_types[i]);
+            }
+            free(entry->arg_types);
+            entry->arg_types = NULL;
+        }
         Rf_error("Memory allocation failed");
     }
     token->id = id;
     token->refs = 1;
     token->origin_id = id;
+    token->generation = generation;
+    RC_async_diag_store(&entry->valid, 1);
     
     SEXP ext = PROTECT(R_MakeExternalPtr(token, R_NilValue, R_NilValue));
     SEXP class_str = PROTECT(Rf_mkString("tcc_callback"));
@@ -2582,7 +2651,10 @@ SEXP RC_callback_is_valid(SEXP callback_ext) {
     }
     
     callback_entry_t *entry = &callback_registry[token->id];
-    return Rf_ScalarLogical(entry->valid && entry->fun != NULL);
+    return Rf_ScalarLogical(
+        RC_callback_entry_matches(token->id, token->generation) &&
+        entry->fun != NULL
+    );
 }
 
 // Invoke callback from trampoline
@@ -2688,12 +2760,19 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
     }
 
     callback_entry_t *entry = &callback_registry[id];
-    if (!entry->valid) {
+    if (!RC_async_diag_load(&entry->valid)) {
         Rf_warning("Invalid or expired callback: %d", id);
         if (entry->return_type) {
             return RC_callback_default_sexp(entry->return_type);
         }
         return R_NilValue;
+    }
+
+    /* The callback may close itself, which releases registry metadata before
+     * control returns here. Keep the return contract independent of the slot. */
+    char *return_type = strdup(entry->return_type);
+    if (!return_type) {
+        Rf_error("Memory allocation failed");
     }
 
     // Build the call with the function as head and arguments following
@@ -2727,69 +2806,73 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
     if (err) {
         UNPROTECT(2);  // call and result
         Rf_warning("Callback raised an error");
-        return RC_callback_default_sexp(entry->return_type);
+        SEXP fallback = RC_callback_default_sexp(return_type);
+        free(return_type);
+        return fallback;
     }
     
     // Convert result based on expected return type
     SEXP converted = R_NilValue;
-    if (strcmp(entry->return_type, "void") == 0) {
+    if (strcmp(return_type, "void") == 0) {
         converted = R_NilValue;
-    } else if (strcmp(entry->return_type, "int") == 0 ||
-               strcmp(entry->return_type, "i32") == 0 ||
-               strcmp(entry->return_type, "int32_t") == 0 ||
-               strcmp(entry->return_type, "i8") == 0 ||
-               strcmp(entry->return_type, "int8_t") == 0 ||
-               strcmp(entry->return_type, "i16") == 0 ||
-               strcmp(entry->return_type, "int16_t") == 0) {
+    } else if (strcmp(return_type, "int") == 0 ||
+               strcmp(return_type, "i32") == 0 ||
+               strcmp(return_type, "int32_t") == 0 ||
+               strcmp(return_type, "i8") == 0 ||
+               strcmp(return_type, "int8_t") == 0 ||
+               strcmp(return_type, "i16") == 0 ||
+               strcmp(return_type, "int16_t") == 0) {
         converted = Rf_ScalarInteger(Rf_asInteger(result));
-    } else if (strcmp(entry->return_type, "i64") == 0 ||
-               strcmp(entry->return_type, "int64_t") == 0 ||
-               strcmp(entry->return_type, "u32") == 0 ||
-               strcmp(entry->return_type, "uint32_t") == 0 ||
-               strcmp(entry->return_type, "u64") == 0 ||
-               strcmp(entry->return_type, "uint64_t") == 0 ||
-               strcmp(entry->return_type, "double") == 0 ||
-               strcmp(entry->return_type, "f64") == 0 ||
-               strcmp(entry->return_type, "float") == 0 ||
-               strcmp(entry->return_type, "f32") == 0) {
+    } else if (strcmp(return_type, "i64") == 0 ||
+               strcmp(return_type, "int64_t") == 0 ||
+               strcmp(return_type, "u32") == 0 ||
+               strcmp(return_type, "uint32_t") == 0 ||
+               strcmp(return_type, "u64") == 0 ||
+               strcmp(return_type, "uint64_t") == 0 ||
+               strcmp(return_type, "double") == 0 ||
+               strcmp(return_type, "f64") == 0 ||
+               strcmp(return_type, "float") == 0 ||
+               strcmp(return_type, "f32") == 0) {
         double numeric_result = Rf_asReal(result);
-        if ((strcmp(entry->return_type, "i64") == 0 ||
-             strcmp(entry->return_type, "int64_t") == 0) &&
+        if ((strcmp(return_type, "i64") == 0 ||
+             strcmp(return_type, "int64_t") == 0) &&
             !ISNA(numeric_result) &&
             !ISNAN(numeric_result) &&
             fabs(numeric_result) > 9007199254740992.0) {
             Rf_warning("callback i64 precision loss in R numeric");
         }
-        if ((strcmp(entry->return_type, "u64") == 0 ||
-             strcmp(entry->return_type, "uint64_t") == 0) &&
+        if ((strcmp(return_type, "u64") == 0 ||
+             strcmp(return_type, "uint64_t") == 0) &&
             !ISNA(numeric_result) &&
             !ISNAN(numeric_result) &&
             numeric_result > 9007199254740992.0) {
             Rf_warning("callback u64 precision loss in R numeric");
         }
         converted = Rf_ScalarReal(numeric_result);
-    } else if (strcmp(entry->return_type, "u8") == 0 ||
-               strcmp(entry->return_type, "uint8_t") == 0 ||
-               strcmp(entry->return_type, "u16") == 0 ||
-               strcmp(entry->return_type, "uint16_t") == 0) {
+    } else if (strcmp(return_type, "u8") == 0 ||
+               strcmp(return_type, "uint8_t") == 0 ||
+               strcmp(return_type, "u16") == 0 ||
+               strcmp(return_type, "uint16_t") == 0) {
         converted = Rf_ScalarInteger(Rf_asInteger(result));
-    } else if (strcmp(entry->return_type, "bool") == 0 ||
-               strcmp(entry->return_type, "logical") == 0) {
+    } else if (strcmp(return_type, "bool") == 0 ||
+               strcmp(return_type, "logical") == 0) {
         converted = Rf_ScalarLogical(Rf_asLogical(result));
-    } else if (strcmp(entry->return_type, "sexp") == 0 ||
-               strcmp(entry->return_type, "SEXP") == 0) {
+    } else if (strcmp(return_type, "sexp") == 0 ||
+               strcmp(return_type, "SEXP") == 0) {
         converted = result;
-    } else if (rtinycc_is_cstring_type_name(entry->return_type)) {
+    } else if (rtinycc_is_cstring_type_name(return_type)) {
         if (Rf_isString(result)) {
             converted = result;
         } else {
             converted = Rf_ScalarString(Rf_asChar(result));
         }
-    } else if (rtinycc_is_pointer_type_name(entry->return_type)) {
+    } else if (rtinycc_is_pointer_type_name(return_type)) {
         if (TYPEOF(result) != EXTPTRSXP) {
             UNPROTECT(2);
             Rf_warning("Callback return is not an external pointer");
-            return RC_callback_default_sexp(entry->return_type);
+            SEXP fallback = RC_callback_default_sexp(return_type);
+            free(return_type);
+            return fallback;
         }
         converted = result;
     } else {
@@ -2798,6 +2881,7 @@ SEXP RC_invoke_callback_internal(int id, SEXP args) {
     }
     
     UNPROTECT(2);  // call and result
+    free(return_type);
     return converted;
 }
 
@@ -2820,8 +2904,17 @@ SEXP RC_invoke_callback(SEXP callback_id, SEXP args) {
  * @param args List of arguments.
  * @return Converted result.
  */
-SEXP RC_invoke_callback_id(int id, SEXP args) {
+SEXP RC_invoke_callback_internal_generation(
+    int id, unsigned int generation, SEXP args
+) {
+    if (!RC_callback_entry_matches(id, generation)) {
+        return R_NilValue;
+    }
     return RC_invoke_callback_internal(id, args);
+}
+
+SEXP RC_invoke_callback_id(int id, unsigned int generation, SEXP args) {
+    return RC_invoke_callback_internal_generation(id, generation, args);
 }
 
 
@@ -2840,9 +2933,10 @@ SEXP RC_cleanup_callbacks(void) {
     // Clean up all valid callbacks in the registry
     for (int i = 0; i < MAX_CALLBACKS; i++) {
         callback_entry_t *entry = &callback_registry[i];
-        if (entry->valid && entry->fun != NULL) {
+        if (RC_async_diag_load(&entry->valid) && entry->fun != NULL) {
+            RC_async_diag_store(&entry->valid, 0);
             R_ReleaseObject(entry->fun);
-            entry->valid = 0;
+            entry->fun = NULL;
             if (entry->return_type) {
                 free(entry->return_type);
                 entry->return_type = NULL;

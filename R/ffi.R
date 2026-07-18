@@ -808,9 +808,10 @@ tcc_source <- function(ffi, code) {
 #'   Callback arguments should use the form \code{callback:<signature>} (e.g.,
 #'   \code{callback:double(double)}). The generated trampoline expects a
 #'   \code{tcc_callback_ptr(cb)} to the corresponding user-data parameter in
-#'   the C API. For thread-safe scheduling, use
-#'   \code{callback_async:<signature>} which enqueues the call on the main
-#'   thread and returns a default value immediately.
+#'   the C API. For worker-thread scheduling, use
+#'   \code{callback_async:<signature>}. Void callbacks are queued
+#'   fire-and-forget; non-void callbacks block the worker until the main thread
+#'   returns a result.
 #' @return Updated tcc_ffi object (for chaining)
 #' @export
 #' @examples

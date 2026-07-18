@@ -321,6 +321,15 @@ expect_silent(
   mk_tramps("callback_async:void(uint64_t)"),
   info = "Async callback accepts u64 arguments through the real slot"
 )
+wide_arg_tramp <- mk_tramps("callback_async:void(int64_t)")$code
+expect_true(
+  grepl("9007199254740992LL", wide_arg_tramp, fixed = TRUE),
+  info = "Async i64 callback arguments guard the exact R numeric range"
+)
+expect_true(
+  grepl("RC_callback_async_note_failure_c(-7)", wide_arg_tramp, fixed = TRUE),
+  info = "Inexact async wide arguments record a dispatch failure"
+)
 
 expect_silent(
   mk_tramps("callback_async:void(int, double, const char*, void*)"),

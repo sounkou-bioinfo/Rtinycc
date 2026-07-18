@@ -12,6 +12,7 @@
 - Expand `tcc_call_symbol()` with `.C()`-style pointer argument calls for low-level in-memory symbols, including guarded copy-in/copy-out support for common R vector types, `Csingle`, read-only `SEXP` paths, and `NAOK` checking.
 - Improve ALTREP-aware copy-in paths by using `RAW_GET_REGION()` when copying raw vectors into native memory and scalar accessors for callback/struct scalar conversions. Clarify that mutable array FFI inputs can materialize ALTREP vectors when R exposes writable C storage.
 - Harden async callback draining so explicit drains only execute R callbacks on the recorded main R thread, direct main-thread async scheduling executes immediately instead of queueing and waiting on itself, and async trampoline scheduling failures are recorded without calling R APIs from worker-capable code.
+- Identify queued callbacks by registry generation so stale work cannot invoke a replacement callback, keep active callback return metadata stable across self-close, validate async result union kinds and numeric ranges before native casts, guard wide integer transport at R's exact numeric limit, and defer interrupts until worker contexts have been joined safely.
 
 # Rtinycc 0.1.11
 

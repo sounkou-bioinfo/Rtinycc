@@ -88,7 +88,8 @@ int RC_platform_async_init(void);
  * Allocation: platform queue nodes.
  * Protection: none.
  */
-int RC_platform_async_schedule(int id, int n_args, const cb_arg_t *args);
+int RC_platform_async_schedule(int id, unsigned int generation,
+                               int n_args, const cb_arg_t *args);
 
 /**
  * Drain all pending callbacks.
@@ -102,7 +103,8 @@ void RC_platform_async_drain(void);
  * Drain pending callbacks in a polling loop until *done_flag becomes non-zero.
  * Uses select() (POSIX) or MsgWaitForMultipleObjects (Windows) for instant
  * wakeup — zero latency, zero CPU waste while idle.
- * Calls R_CheckUserInterrupt() every ~100 ms to support Ctrl+C.
+ * Polls for interrupts every ~100 ms, but reports them only after the worker's
+ * done flag is set so native stack contexts cannot escape while still in use.
  * Must be called from the main R thread only.
  * Ownership: none.
  * Allocation: none.
@@ -131,7 +133,8 @@ void RC_platform_async_exec(void (*func)(void *), void *arg);
  * Allocation: platform task node (freed after result is read).
  * Protection: none.
  */
-int RC_platform_async_schedule_sync(int id, int n_args, const cb_arg_t *args,
+int RC_platform_async_schedule_sync(int id, unsigned int generation,
+                                    int n_args, const cb_arg_t *args,
                                     cb_result_t *result);
 
 #ifdef __cplusplus

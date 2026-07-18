@@ -490,7 +490,7 @@ ffi$global_counter_get()
 
 ### Callbacks
 
-R functions can be registered as C function pointers via `tcc_callback()` and passed to compiled code. Specify a `callback:<signature>` argument in `tcc_bind()` so the trampoline is generated automatically. Call `tcc_callback_close()` when you want deterministic invalidation and earlier release of the preserved R function.
+R functions can be registered as C function pointers via `tcc_callback()` and passed to compiled code. Specify a `callback:<signature>` argument in `tcc_bind()` so the trampoline is generated automatically. Call `tcc_callback_close()` when you want deterministic invalidation and earlier release of the preserved R function. The legacy `threadsafe` argument is informational; worker dispatch is selected by `callback_async:<signature>`.
 
 ```{r callback-example}
 cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
@@ -553,7 +553,7 @@ tcc_callback_close(cb_err)
 
 ### Async callbacks
 
-For thread-safe scheduling from worker threads, use
+For callback dispatch from worker threads, use
 `callback_async:<signature>` in `tcc_bind()`. The async callback queue
 is initialized automatically at package load.
 
@@ -561,7 +561,8 @@ When a bound function has any `callback_async:` argument, the generated
 wrapper automatically runs your C function on a new thread while draining
 callbacks on the main R thread. Your C code doesn't need to know about
 draining at all — just call the callback as normal and the wrapper handles
-the rest.
+the rest. Interrupt requests are deferred until the worker has returned and
+been joined, so native stack contexts cannot escape while still in use.
 
 **Void return (fire-and-forget):** the callback is enqueued from any
 thread and executed on the main R thread automatically — on Windows via
@@ -570,8 +571,14 @@ R's message pump, on Linux/macOS via R's event loop `addInputHandler`.
 **Non-void return (synchronous):** the worker thread blocks until the
 main R thread executes the callback and returns the real result.
 Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
-`u8`, `u16`), floating-point (`double`, `float`), `bool`/`logical`, and
-pointer (`void*`, `T*`).
+`u8`, `u16`, `u32`, `i64`, `u64`), floating-point (`double`, `float`),
+`bool`/`logical`, and pointer (`void*`, `T*`). Wide integer values must remain
+within R's exact numeric range (absolute value at most `2^53`).
+
+Async scalar and string payloads are copied into queue tasks. Pointer payloads
+copy only the address: C must keep the pointee alive until the callback has
+executed. Closing a callback cancels queued work for that callback; registry
+slot reuse cannot redirect old work to a newly registered callback.
 
 ```{r callback-async}
 # Fire-and-forget: void callback accumulated from 100 worker threads

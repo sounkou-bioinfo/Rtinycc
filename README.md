@@ -197,7 +197,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x61f844d88140"
+#> [1] "0x5dfe4e9ec0f0"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -228,11 +228,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x61f845ccf520>
+#> <pointer: 0x5dfe514cc430>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x61f84089bf20>
+#> <pointer: 0x5dfe4b9cbef0>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x61f845ccf520>
+#> <pointer: 0x5dfe514cc430>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -460,7 +460,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @61f8444240e0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @5dfe4f87a180 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -476,7 +476,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @61f8444240e0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @5dfe4f87a180 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -503,15 +503,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x61f8429ab9d0>
+#> <pointer: 0x5dfe51808b90>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x61f8429ab9d0>
+#> <pointer: 0x5dfe51808b90>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x61f84002cd40>
+#> <pointer: 0x5dfe4e2258c0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x61f84002cd40>
+#> <pointer: 0x5dfe4e2258c0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -556,9 +556,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x61f846a9d4f0>
+#> <pointer: 0x5dfe4eb02090>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x61f846a9d4f0>
+#> <pointer: 0x5dfe4eb02090>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -598,7 +598,8 @@ R functions can be registered as C function pointers via
 `callback:<signature>` argument in `tcc_bind()` so the trampoline is
 generated automatically. Call `tcc_callback_close()` when you want
 deterministic invalidation and earlier release of the preserved R
-function.
+function. The legacy `threadsafe` argument is informational; worker
+dispatch is selected by `callback_async:<signature>`.
 
 ``` r
 cb <- tcc_callback(function(x) x * x, signature = "double (*)(double)")
@@ -671,7 +672,7 @@ tcc_callback_close(cb_err)
 
 ### Async callbacks
 
-For thread-safe scheduling from worker threads, use
+For callback dispatch from worker threads, use
 `callback_async:<signature>` in `tcc_bind()`. The async callback queue
 is initialized automatically at package load.
 
@@ -679,7 +680,9 @@ When a bound function has any `callback_async:` argument, the generated
 wrapper automatically runs your C function on a new thread while
 draining callbacks on the main R thread. Your C code doesn’t need to
 know about draining at all — just call the callback as normal and the
-wrapper handles the rest.
+wrapper handles the rest. Interrupt requests are deferred until the
+worker has returned and been joined, so native stack contexts cannot
+escape while still in use.
 
 **Void return (fire-and-forget):** the callback is enqueued from any
 thread and executed on the main R thread automatically — on Windows via
@@ -688,8 +691,15 @@ R’s message pump, on Linux/macOS via R’s event loop `addInputHandler`.
 **Non-void return (synchronous):** the worker thread blocks until the
 main R thread executes the callback and returns the real result.
 Supported return types: integer variants (`int`, `int32_t`, `i8`, `i16`,
-`u8`, `u16`), floating-point (`double`, `float`), `bool`/`logical`, and
-pointer (`void*`, `T*`).
+`u8`, `u16`, `u32`, `i64`, `u64`), floating-point (`double`, `float`),
+`bool`/`logical`, and pointer (`void*`, `T*`). Wide integer values must
+remain within R’s exact numeric range (absolute value at most `2^53`).
+
+Async scalar and string payloads are copied into queue tasks. Pointer
+payloads copy only the address: C must keep the pointee alive until the
+callback has executed. Closing a callback cancels queued work for that
+callback; registry slot reuse cannot redirect old work to a newly
+registered callback.
 
 ``` r
 # Fire-and-forget: void callback accumulated from 100 worker threads
@@ -1719,7 +1729,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x61f8436b2d50>
+#> <pointer: 0x5dfe4ca39770>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1836,11 +1846,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 58.58ms 58.58ms      17.1    6.33MB     17.1     1     1     58.6ms
-#> 2 vroom_df_…  7.31ms  7.36ms     136.     1.22MB      0       2     0     14.7ms
-#> 3 vroom_df_…  8.31ms  9.08ms     110.     2.44MB      0       2     0     18.2ms
-#> 4 c_read_df  24.38ms 24.59ms      40.7    1.22MB      0       2     0     49.2ms
-#> 5 io_uring_…  24.1ms 24.15ms      41.4    1.22MB      0       2     0     48.3ms
+#> 1 read_tabl… 47.22ms 49.14ms      20.3    6.33MB       0      2     0    98.28ms
+#> 2 vroom_df_…  7.04ms  7.04ms     142.     1.22MB     142.     1     1     7.04ms
+#> 3 vroom_df_…  8.95ms  9.29ms     108.     2.44MB       0      2     0    18.58ms
+#> 4 c_read_df  21.26ms 21.95ms      45.6    1.22MB       0      2     0    43.89ms
+#> 5 io_uring_… 21.14ms 21.21ms      47.1    1.22MB       0      2     0    42.43ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1942,9 +1952,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x61f846b58670>
+#> <pointer: 0x5dfe51e41290>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x61f846b58670>
+#> <pointer: 0x5dfe51e41290>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)

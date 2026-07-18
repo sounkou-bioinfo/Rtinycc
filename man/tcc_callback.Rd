@@ -11,7 +11,8 @@ tcc_callback(fun, signature, threadsafe = FALSE)
 
 \item{signature}{C function signature string (e.g., "double (*)(int, double)")}
 
-\item{threadsafe}{Whether to enable thread-safe invocation (experimental)}
+\item{threadsafe}{Informational compatibility flag. Thread dispatch is
+selected by \verb{callback_async:<signature>} in \code{\link[=tcc_bind]{tcc_bind()}}, not by this flag.}
 }
 \value{
 A tcc_callback object (externalptr wrapper)
@@ -22,9 +23,9 @@ to compiled code. The callback will be invoked via a trampoline
 that marshals arguments between C and R.
 }
 \details{
-Thread safety: callbacks are executed on the R main thread only. Invoking
-a callback from a worker thread is unsupported and may crash R. The
-\code{threadsafe} flag is currently informational only.
+Thread safety: ordinary \verb{callback:<signature>} trampolines must be invoked
+on the R main thread. Use \verb{callback_async:<signature>} when native workers
+need to dispatch to R. The \code{threadsafe} flag is informational only.
 
 If a callback raises an error, a warning is emitted and a type-appropriate
 default value is returned.
@@ -33,8 +34,10 @@ When binding callbacks with \code{tcc_bind()}, use a \verb{callback:<signature>}
 argument type so a synchronous trampoline is generated. The trampoline
 expects a \verb{void*} user-data pointer as its first argument; pass
 \code{tcc_callback_ptr(cb)} as the user-data argument to the C API. For
-thread-safe usage from worker threads, use \verb{callback_async:<signature>}
-which schedules the call on the main thread and returns a default value.
+worker-thread dispatch, use \verb{callback_async:<signature>}, which schedules
+the R call on the main thread. Void callbacks are fire-and-forget; non-void
+callbacks block the worker until the main thread returns the real result.
+Type-appropriate defaults are used only when dispatch or conversion fails.
 
 Pointer arguments (e.g., \code{double*}, \code{int*}) are passed as
 external pointers. Lengths must be supplied separately if needed.
@@ -48,7 +51,7 @@ The return type may be any scalar type supported by the FFI mappings
 (e.g., \code{i32}, \code{f64}, \code{bool}, \code{cstring}), or
 \code{SEXP} to return an R object directly.
 
-Callback lifetime: callbacks are eventually released by finalizers and
-package unload. Call \code{tcc_callback_close()} when you want deterministic
-invalidation and earlier release of the preserved R function.
+Callback lifetime: callbacks are eventually released by finalizers. Call
+\code{tcc_callback_close()} when you want deterministic invalidation and earlier
+release of the preserved R function.
 }

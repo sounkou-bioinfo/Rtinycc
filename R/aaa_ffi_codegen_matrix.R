@@ -829,14 +829,19 @@ RTINYCC_CALLBACK_SEMANTICS <- list(
       callback_token = TRUE,
       pointer_pointee = TRUE
     ),
+    identity = list(
+      mode = "registry-slot-plus-generation",
+      close_cancels_queued = TRUE
+    ),
     returns = list(
       default_on_error = "NA-like scalar or NULL pointer",
       nonvoid_mode = "sync-result-channel"
     ),
     notes = paste(
       "Async callbacks marshal arguments into cb_arg_t task payloads,",
-      "duplicate cstring payloads for cross-thread safety, and reconstruct",
-      "fresh R objects on the main thread before invocation."
+      "duplicate cstring payloads for cross-thread safety, identify queued",
+      "work by registry slot plus generation, and reconstruct fresh R objects",
+      "on the main thread before invocation. Pointer pointees remain borrowed."
     )
   )
 )
@@ -884,6 +889,14 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
           info = "Async trampoline normalizes f32 to float in the C signature"
         ),
         list(
+          pattern = "RC_callback_async_schedule_sync_c\\(tok->id, tok->generation,",
+          info = "Async trampoline carries registry generation into queued work"
+        ),
+        list(
+          pattern = "result.kind != CB_RESULT_REAL",
+          info = "Async trampoline validates the active result union member"
+        ),
+        list(
           pattern = "return \\(float\\)result.v.d;",
           info = "Async trampoline normalizes f32 return casts to float"
         )
@@ -904,6 +917,10 @@ RTINYCC_CALLBACK_ABI_SPECS <- list(
         list(
           pattern = "args\\[0\\]\\.v\\.p = arg1;",
           info = "Async pointer trampoline stores raw pointer value without pointee copy"
+        ),
+        list(
+          pattern = "result.kind != CB_RESULT_PTR",
+          info = "Async pointer trampoline validates its result kind"
         ),
         list(
           pattern = "return \\(void\\*\\)result.v.p;",

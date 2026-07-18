@@ -1395,9 +1395,12 @@ generate_ffi_code <- function(
       parts,
       "",
       "/* Callback trampoline support */",
-      "typedef struct { int id; int refs; int origin_id; } callback_token_t;",
+      paste(
+        "typedef struct { int id; int refs; int origin_id;",
+        "unsigned int generation; } callback_token_t;"
+      ),
       if (cb_tramps$needs_sync) {
-        "SEXP RC_invoke_callback_id(int, SEXP);"
+        "SEXP RC_invoke_callback_id(int, unsigned int, SEXP);"
       } else {
         NULL
       },
@@ -1416,7 +1419,10 @@ generate_ffi_code <- function(
           "  union { int i; double d; void* p; char* s; } v;",
           "} cb_arg_t;",
           "",
-          "int RC_callback_async_schedule_c(int id, int n_args, const cb_arg_t *args);",
+          paste(
+            "int RC_callback_async_schedule_c(int id, unsigned int generation,",
+            "int n_args, const cb_arg_t *args);"
+          ),
           "void RC_callback_async_note_failure_c(int code);",
           "/* Drain pending async callbacks from main-thread C code */",
           "void RC_callback_async_drain_c(void);",
@@ -1442,7 +1448,10 @@ generate_ffi_code <- function(
           "  union { int i; double d; void* p; } v;",
           "} cb_result_t;",
           "",
-          "int RC_callback_async_schedule_sync_c(int id, int n_args, const cb_arg_t *args, cb_result_t *result);",
+          paste(
+            "int RC_callback_async_schedule_sync_c(int id, unsigned int generation,",
+            "int n_args, const cb_arg_t *args, cb_result_t *result);"
+          ),
           "/* Drain loop: services callbacks via select()/MsgWait until *done_flag != 0. */",
           "void RC_callback_async_drain_loop_c(volatile int *done_flag);"
         )
