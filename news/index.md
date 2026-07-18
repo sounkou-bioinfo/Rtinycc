@@ -1,6 +1,6 @@
 # Changelog
 
-## Rtinycc 0.1.11.9000
+## Rtinycc 0.1.12
 
 - Update the bundled TinyCC source to the wasm32-enabled
   `sounkou-bioinfo/tinycc` fork and fix a const-correctness warning
