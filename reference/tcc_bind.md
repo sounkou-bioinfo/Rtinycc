@@ -39,9 +39,9 @@ tcc_bind(ffi, ...)
   Callback arguments should use the form `callback:<signature>` (e.g.,
   `callback:double(double)`). The generated trampoline expects a
   `tcc_callback_ptr(cb)` to the corresponding user-data parameter in the
-  C API. For thread-safe scheduling, use `callback_async:<signature>`
-  which enqueues the call on the main thread and returns a default value
-  immediately.
+  C API. For worker-thread scheduling, use `callback_async:<signature>`.
+  Void callbacks are queued fire-and-forget; non-void callbacks block
+  the worker until the main thread returns a result.
 
 ## Value
 

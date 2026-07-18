@@ -22,7 +22,10 @@ tcc_callback(fun, signature, threadsafe = FALSE)
 
 - threadsafe:
 
-  Whether to enable thread-safe invocation (experimental)
+  Informational compatibility flag. Thread dispatch is selected by
+  `callback_async:<signature>` in
+  [`tcc_bind()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_bind.md),
+  not by this flag.
 
 ## Value
 
@@ -30,9 +33,10 @@ A tcc_callback object (externalptr wrapper)
 
 ## Details
 
-Thread safety: callbacks are executed on the R main thread only.
-Invoking a callback from a worker thread is unsupported and may crash R.
-The `threadsafe` flag is currently informational only.
+Thread safety: ordinary `callback:<signature>` trampolines must be
+invoked on the R main thread. Use `callback_async:<signature>` when
+native workers need to dispatch to R. The `threadsafe` flag is
+informational only.
 
 If a callback raises an error, a warning is emitted and a
 type-appropriate default value is returned.
@@ -42,9 +46,11 @@ When binding callbacks with
 use a `callback:<signature>` argument type so a synchronous trampoline
 is generated. The trampoline expects a `void*` user-data pointer as its
 first argument; pass `tcc_callback_ptr(cb)` as the user-data argument to
-the C API. For thread-safe usage from worker threads, use
-`callback_async:<signature>` which schedules the call on the main thread
-and returns a default value.
+the C API. For worker-thread dispatch, use `callback_async:<signature>`,
+which schedules the R call on the main thread. Void callbacks are
+fire-and-forget; non-void callbacks block the worker until the main
+thread returns the real result. Type-appropriate defaults are used only
+when dispatch or conversion fails.
 
 Pointer arguments (e.g., `double*`, `int*`) are passed as external
 pointers. Lengths must be supplied separately if needed.
@@ -59,8 +65,7 @@ The return type may be any scalar type supported by the FFI mappings
 (e.g., `i32`, `f64`, `bool`, `cstring`), or `SEXP` to return an R object
 directly.
 
-Callback lifetime: callbacks are eventually released by finalizers and
-package unload. Call
+Callback lifetime: callbacks are eventually released by finalizers. Call
 [`tcc_callback_close()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_callback_close.md)
 when you want deterministic invalidation and earlier release of the
 preserved R function.

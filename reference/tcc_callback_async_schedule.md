@@ -1,7 +1,9 @@
 # Schedule a callback to run on the main thread
 
 Enqueue a callback for main-thread execution. Arguments must be basic
-scalars or external pointers.
+scalars or external pointers. The callback must remain open until the
+task executes. External-pointer arguments are borrowed addresses: their
+owners and pointees must remain valid until execution finishes.
 
 ## Usage
 

@@ -74,7 +74,8 @@ that marshals arguments between C and R.</p>
 
 
 <dt id="arg-threadsafe">threadsafe<a class="anchor" aria-label="anchor" href="#arg-threadsafe"></a></dt>
-<dd><p>Whether to enable thread-safe invocation (experimental)</p></dd>
+<dd><p>Informational compatibility flag. Thread dispatch is
+selected by <code>callback_async:&lt;signature&gt;</code> in <code><a href="tcc_bind.html">tcc_bind()</a></code>, not by this flag.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -83,17 +84,19 @@ that marshals arguments between C and R.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Thread safety: callbacks are executed on the R main thread only. Invoking
-a callback from a worker thread is unsupported and may crash R. The
-<code>threadsafe</code> flag is currently informational only.</p>
+    <p>Thread safety: ordinary <code>callback:&lt;signature&gt;</code> trampolines must be invoked
+on the R main thread. Use <code>callback_async:&lt;signature&gt;</code> when native workers
+need to dispatch to R. The <code>threadsafe</code> flag is informational only.</p>
 <p>If a callback raises an error, a warning is emitted and a type-appropriate
 default value is returned.</p>
 <p>When binding callbacks with <code><a href="tcc_bind.html">tcc_bind()</a></code>, use a <code>callback:&lt;signature&gt;</code>
 argument type so a synchronous trampoline is generated. The trampoline
 expects a <code>void*</code> user-data pointer as its first argument; pass
 <code>tcc_callback_ptr(cb)</code> as the user-data argument to the C API. For
-thread-safe usage from worker threads, use <code>callback_async:&lt;signature&gt;</code>
-which schedules the call on the main thread and returns a default value.</p>
+worker-thread dispatch, use <code>callback_async:&lt;signature&gt;</code>, which schedules
+the R call on the main thread. Void callbacks are fire-and-forget; non-void
+callbacks block the worker until the main thread returns the real result.
+Type-appropriate defaults are used only when dispatch or conversion fails.</p>
 <p>Pointer arguments (e.g., <code>double*</code>, <code>int*</code>) are passed as
 external pointers. Lengths must be supplied separately if needed.</p>
 <p>A callback <code>ptr</code> or <code>cstring</code> return is borrowed. C may consume it during the
@@ -103,9 +106,9 @@ C-owned storage when it must escape the callback call chain.</p>
 <p>The return type may be any scalar type supported by the FFI mappings
 (e.g., <code>i32</code>, <code>f64</code>, <code>bool</code>, <code>cstring</code>), or
 <code>SEXP</code> to return an R object directly.</p>
-<p>Callback lifetime: callbacks are eventually released by finalizers and
-package unload. Call <code><a href="tcc_callback_close.html">tcc_callback_close()</a></code> when you want deterministic
-invalidation and earlier release of the preserved R function.</p>
+<p>Callback lifetime: callbacks are eventually released by finalizers. Call
+<code><a href="tcc_callback_close.html">tcc_callback_close()</a></code> when you want deterministic invalidation and earlier
+release of the preserved R function.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
