@@ -31,10 +31,15 @@ wrapper pointers are retrieved via
 [`tcc_get_symbol()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_get_symbol.md),
 which internally calls `RC_libtcc_get_symbol()`. That function converts
 TCC’s raw `void*` into a `DL_FUNC` wrapped with `R_MakeExternalPtrFn`
-(tagged `"native symbol"`). On the R side,
+(tagged `"native symbol"`). The symbol pointer retains its owning
+`tcc_state`, so the relocated code remains alive while the symbol is
+reachable. On the R side,
 [`make_callable()`](https://sounkou-bioinfo.github.io/Rtinycc/R/ffi.R)
 creates a closure that passes this external pointer to `.Call` (aliased
-as `.RtinyccCall` to keep `R CMD check` happy).
+as `.RtinyccCall` to keep `R CMD check` happy). Non-memory states
+instead produce one-shot artifacts with
+[`tcc_output_file()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_output_file.md)
+and cannot expose callable symbol pointers.
 
 The design follows [CFFI’s](https://cffi.readthedocs.io/) API-mode
 pattern: instead of computing struct layouts and calling conventions in
@@ -66,8 +71,8 @@ Ownership semantics are explicit. Pointers from
 are tagged `rtinycc_owned` and can be released with
 [`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md)
 (or by their R finalizer). Generated struct constructors use a
-struct-specific tag (`struct_<name>`) with an `RC_free_finalizer`; free
-them with `struct_<name>_free()`, not
+struct-specific tag (`struct_<name>`) and host-allocated storage with
+`RC_owned_native_finalizer`; free them with `struct_<name>_free()`, not
 [`tcc_free()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_free.md).
 Pointers from
 [`tcc_data_ptr()`](https://sounkou-bioinfo.github.io/Rtinycc/reference/tcc_data_ptr.md)
@@ -201,7 +206,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x6538652f7850"
+#> [1] "0x61f844d88140"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -234,11 +239,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x6538652f7850>
+#> <pointer: 0x61f845ccf520>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x653866def2f0>
+#> <pointer: 0x61f84089bf20>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x6538652f7850>
+#> <pointer: 0x61f845ccf520>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -475,7 +480,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @653868b6d278 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @61f8444240e0 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -491,7 +496,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @653868b6d278 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @61f8444240e0 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -520,15 +525,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x653866dbd710>
+#> <pointer: 0x61f8429ab9d0>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x653866dbd710>
+#> <pointer: 0x61f8429ab9d0>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x653866c5a820>
+#> <pointer: 0x61f84002cd40>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x653866c5a820>
+#> <pointer: 0x61f84002cd40>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -575,9 +580,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x65386b1a9c50>
+#> <pointer: 0x61f846a9d4f0>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x65386b1a9c50>
+#> <pointer: 0x61f846a9d4f0>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -965,7 +970,7 @@ API as BCF.
 
 source("scripts/demo-streaming-bcf-reader-ffi.R")
 run_streaming_bcf_demo()
-#> Rtinycc version: 0.1.11.9000
+#> Rtinycc version: 0.1.12
 #> Demo: stackless Protothreads + htslib BCF/VCF API streaming reader
 #> Note: htslib reads run using Protothreads. Warning: Local C variables are NOT preserved across yields!; R objects are built only after each yield.
 #> 
@@ -1742,7 +1747,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x6538651831c0>
+#> <pointer: 0x61f8436b2d50>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -1860,11 +1865,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 55.03ms 55.03ms      18.2    6.33MB     18.2     1     1       55ms
-#> 2 vroom_df_…  7.21ms  7.52ms     133.     1.22MB      0       2     0       15ms
-#> 3 vroom_df_…  6.95ms     7ms     143.     2.44MB      0       2     0       14ms
-#> 4 c_read_df  21.24ms 21.34ms      46.9    1.22MB      0       2     0     42.7ms
-#> 5 io_uring_… 20.42ms 20.66ms      48.4    1.22MB      0       2     0     41.3ms
+#> 1 read_tabl… 58.58ms 58.58ms      17.1    6.33MB     17.1     1     1     58.6ms
+#> 2 vroom_df_…  7.31ms  7.36ms     136.     1.22MB      0       2     0     14.7ms
+#> 3 vroom_df_…  8.31ms  9.08ms     110.     2.44MB      0       2     0     18.2ms
+#> 4 c_read_df  24.38ms 24.59ms      40.7    1.22MB      0       2     0     49.2ms
+#> 5 io_uring_…  24.1ms 24.15ms      41.4    1.22MB      0       2     0     48.3ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -1973,9 +1978,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x65386e00df00>
+#> <pointer: 0x61f846b58670>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x65386e00df00>
+#> <pointer: 0x61f846b58670>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
