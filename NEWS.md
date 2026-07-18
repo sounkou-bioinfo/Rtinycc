@@ -1,5 +1,7 @@
 # Rtinycc 0.1.11.9000
 
+- Update the bundled TinyCC source to the wasm32-enabled `sounkou-bioinfo/tinycc` fork and fix a const-correctness warning reported by recent GCC toolchains.
+- Add a Fedora/GCC 16 R-devel check path that mirrors the CRAN Fedora build environment.
 - Add TinyCC SIMD bytecode examples showing CPU feature detection with `cpuid`/`xgetbv` and selected SSE2/AVX2 instructions emitted through `.byte` for mnemonics TinyCC does not parse.
 - Add `tcc_list_symbols()` to inspect global symbol names and resolved hexadecimal addresses known to a libtcc state.
 - Expand `tcc_call_symbol()` with `.C()`-style pointer argument calls for low-level in-memory symbols, including guarded copy-in/copy-out support for common R vector types, `Csingle`, read-only `SEXP` paths, and `NAOK` checking.
