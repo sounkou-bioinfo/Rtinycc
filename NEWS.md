@@ -1,3 +1,9 @@
+# Rtinycc 0.1.13
+
+- Fix the vendored TinyCC build on Linux arm64 by keeping TLS relocation declarations C90-compatible.
+- Fix the webR/R-universe wasm package build so the Emscripten-hosted TinyCC build does not try to execute its wasm `tcc` side module while constructing `libtcc1.a`.
+- Document a persistent remote CUDA workflow in which a mirai daemon loads Rtinycc, retains the compiled host adapter between requests, executes NVRTC-generated PTX, and returns structured R results.
+
 # Rtinycc 0.1.12
 
 - Prevent high-level FFI compilation modes that cannot produce safe callable bindings; `tcc_compile()` now fails clearly unless output is in-memory.

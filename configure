@@ -8,6 +8,14 @@ AR=$("${R_HOME}/bin/R" CMD config AR | awk '{print $1}')
 TINYCC_SRC="$THISDIR/src/tinycc"
 TINYCC_DEST="$THISDIR/inst/tinycc"
 
+WASM_BUILD=no
+case "$("$CC" -dumpmachine 2>/dev/null)" in
+    wasm32*) WASM_BUILD=yes ;;
+esac
+case " $* " in
+    *" --host=wasm32"*) WASM_BUILD=yes ;;
+esac
+
 : > "$CONFIG_LOG"
 
 log() {
@@ -34,6 +42,7 @@ log "Starting configure for Rtinycc"
 log "Package source directory: $THISDIR"
 log "TinyCC source directory: $TINYCC_SRC"
 log "TinyCC install directory: $TINYCC_DEST"
+log "WebAssembly package build: $WASM_BUILD"
 
 log "Unpacking vendored TinyCC source"
 run_logged "${R_HOME}/bin/Rscript" "$THISDIR/tools/vendortinycc.R" unpack || exit 1
@@ -69,7 +78,9 @@ fi
 log "Selected shared library target: $SHLIB"
 
 TCC_CONFIG_EXTRA=""
-if [ "$(uname)" = "Linux" ]; then
+if [ "$WASM_BUILD" = "yes" ]; then
+    TCC_CONFIG_EXTRA="--cpu=wasm32 --targetos=Emscripten"
+elif [ "$(uname)" = "Linux" ]; then
     if ldd --version 2>&1 | grep -qi musl || \
         ls /lib/ld-musl-*.so.1 >/dev/null 2>&1 || \
         ls /usr/lib/ld-musl-*.so.1 >/dev/null 2>&1 || \
@@ -87,7 +98,14 @@ run_logged ./configure \
     $TCC_CONFIG_EXTRA \
     --debug || exit 1
 
-run_logged "$MAKE" CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc || exit 1
+if [ "$WASM_BUILD" = "yes" ]; then
+    # The hosted tcc is itself a wasm side module and cannot run on the build
+    # machine.  The wasm backend compiles its runtime source when a state is
+    # finalized, so do not invoke that side module to construct libtcc1.a.
+    run_logged "$MAKE" CONFIG_static=no libtcc.a "$SHLIB" tcc || exit 1
+else
+    run_logged "$MAKE" CONFIG_static=no libtcc.a "$SHLIB" libtcc1.a tcc || exit 1
+fi
 
 # Install artifacts manually instead of `make install`. Upstream's install-unx
 # target depends on BSD/GNU `install` quirks and a strict $(call IF,...) over
@@ -114,11 +132,21 @@ run_logged cp "$TINYCC_SRC/libtcc.h" "$TINYCC_DEST/include/" || exit 1
 run_logged cp "$TINYCC_SRC/$SHLIB" "$TINYCC_DEST/lib/" || exit 1
 [ -f "$TINYCC_SRC/libtcc.a" ] && run_logged cp "$TINYCC_SRC/libtcc.a" "$TINYCC_DEST/lib/"
 
-# JIT runtime archive.
-run_logged cp "$TINYCC_SRC/libtcc1.a" "$TINYCC_DEST/lib/tcc/" || exit 1
-for x in "$TINYCC_SRC"/*-libtcc1.a; do
-    [ -f "$x" ] && run_logged cp "$x" "$TINYCC_DEST/lib/tcc/"
-done
+# JIT runtime support.  A native TinyCC build consumes libtcc1.a.  A hosted
+# wasm build cannot execute its tcc side module during package installation;
+# its backend instead compiles this source through libtcc at finalization time.
+if [ "$WASM_BUILD" = "yes" ]; then
+    run_logged mkdir -p "$TINYCC_DEST/lib/tcc/lib" || exit 1
+    run_logged cp "$TINYCC_SRC/lib/wasm32-libtcc1.c" \
+        "$TINYCC_DEST/lib/tcc/lib/" || exit 1
+    TCC_RUNTIME="$TINYCC_DEST/lib/tcc/lib/wasm32-libtcc1.c"
+else
+    run_logged cp "$TINYCC_SRC/libtcc1.a" "$TINYCC_DEST/lib/tcc/" || exit 1
+    for x in "$TINYCC_SRC"/*-libtcc1.a; do
+        [ -f "$x" ] && run_logged cp "$x" "$TINYCC_DEST/lib/tcc/"
+    done
+    TCC_RUNTIME="$TINYCC_DEST/lib/tcc/libtcc1.a"
+fi
 
 # Tinycc-shipped C headers (stdarg.h, stdbool.h, stddef.h, ...) — tinycc
 # resolves these as <tccdir>/include at JIT compile time.
@@ -130,7 +158,7 @@ for f in \
     "$TINYCC_DEST/bin/tcc" \
     "$TINYCC_DEST/include/libtcc.h" \
     "$TINYCC_DEST/lib/$SHLIB" \
-    "$TINYCC_DEST/lib/tcc/libtcc1.a" \
+    "$TCC_RUNTIME" \
     "$TINYCC_DEST/lib/tcc/include/stdbool.h"
 do
     if [ ! -f "$f" ]; then
@@ -139,7 +167,9 @@ do
     fi
 done
 
-if [ -x "$THISDIR/tools/run_tcc_minimal_test.sh" ]; then
+if [ "$WASM_BUILD" = "yes" ]; then
+    log "Skipping native TCC CLI smoke test for hosted WebAssembly build"
+elif [ -x "$THISDIR/tools/run_tcc_minimal_test.sh" ]; then
     log "Running minimal TCC JIT test"
     (
         cd "$THISDIR/tools" || exit 1
