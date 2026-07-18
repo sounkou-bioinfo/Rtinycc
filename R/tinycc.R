@@ -70,14 +70,16 @@ tcc_path <- function() {
 
 #' TinyCC include search paths
 #'
-#' Returns the include directories used by the bundled TinyCC (top-level include and lib/tcc/include).
+#' Returns the include directories used by the bundled TinyCC, including the
+#' package headers under `include/rtinycc`.
 #' @return A character vector of include directories.
 #' @export
 tcc_include_paths <- function() {
   prefix <- tcc_prefix()
   paths <- c(
     file.path(prefix, "include"),
-    file.path(prefix, "lib", "tcc", "include")
+    file.path(prefix, "lib", "tcc", "include"),
+    system.file("include", package = "Rtinycc")
   )
   if (.Platform$OS.type == "windows") {
     paths <- c(paths, file.path(prefix, "include", "winapi"))
@@ -174,7 +176,10 @@ check_cli_exists <- function() {
 
 #' Create a libtcc state
 #'
-#' Initialize a libtcc compilation state, optionally pointing at the bundled include/lib paths.
+#' Initialize a libtcc compilation state, optionally pointing at the bundled
+#' include/lib paths. Memory states are finalized with [tcc_relocate()]; other
+#' output modes are written with `tcc_output_file()`. Finalization is
+#' single-shot, after which compilation options and source cannot be changed.
 #' @param output Output type: one of "memory", "obj", "dll", "exe", "preprocess".
 #' @param include_path Path(s) to headers; defaults to the bundled include dirs.
 #' @param lib_path Path(s) to libraries; defaults to the bundled lib dirs (lib and lib/tcc).
@@ -281,11 +286,38 @@ tcc_compile_string <- function(state, code) {
 }
 
 #' Relocate compiled code
+#'
+#' Relocation is valid only for a state created with `output = "memory"` and
+#' can be performed only once. Callable symbols are unavailable until relocation
+#' succeeds. Use `tcc_output_file()` for object, shared-library, executable, or
+#' preprocessor output.
+#'
 #' @param state A `tcc_state`.
 #' @return Integer status code (0 = success).
 #' @export
 tcc_relocate <- function(state) {
   .Call(RC_libtcc_relocate, state)
+}
+
+#' Write a non-memory TinyCC output file
+#'
+#' Finalize a state created with `output = "obj"`, `"dll"`, `"exe"`, or
+#' `"preprocess"` and write the resulting artifact. A state can be finalized
+#' only once. Memory states must instead use [tcc_relocate()].
+#'
+#' @param state A non-memory `tcc_state`.
+#' @param path Destination file path.
+#' @return Integer status code (0 = success).
+#' @export
+tcc_output_file <- function(state, path) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
+    stop("path must be a non-empty character scalar", call. = FALSE)
+  }
+  .Call(
+    RC_libtcc_output_file,
+    state,
+    normalizePath(path, winslash = "/", mustWork = FALSE)
+  )
 }
 
 #' Add a symbol to a libtcc state
@@ -299,9 +331,13 @@ tcc_add_symbol <- function(state, name, addr) {
 }
 
 #' Get a symbol pointer from a libtcc state
+#'
+#' The memory state must first be successfully finalized with [tcc_relocate()].
+#'
 #' @param state A `tcc_state`.
 #' @param name Symbol name to look up.
-#' @return External pointer of class `tcc_symbol`.
+#' @return External pointer of class `tcc_symbol`. The pointer retains `state`
+#'   so its relocated code remains alive for as long as the symbol is reachable.
 #' @export
 tcc_get_symbol <- function(state, name) {
   .Call(RC_libtcc_get_symbol, state, name)
@@ -326,6 +362,8 @@ tcc_list_symbols <- function(state) {
 
 
 #' Call a symbol from a TinyCC state
+#'
+#' The memory state must first be successfully finalized with [tcc_relocate()].
 #'
 #' With no additional arguments, `tcc_call_symbol()` preserves its historical
 #' quick-test behavior: call a zero-argument symbol and box an `int`, `double`,

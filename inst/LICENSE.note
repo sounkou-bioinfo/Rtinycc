@@ -1,9 +1,12 @@
-Rtinycc bundles TinyCC as a vendored third-party component.
+Rtinycc bundles TinyCC and Protothreads as vendored third-party components
+and adapts a knitr engine helper from callme.
 
 Bundled component: TinyCC
-Upstream repository: https://github.com/TinyCC/tinycc
-Vendored source archive: src/tinycc-34eed88.tar.gz
-Vendored commit: 34eed88a70fc8238cd5b623cc96b8bf0e40392ed
+Upstream project: https://github.com/TinyCC/tinycc
+Vendored repository: https://github.com/sounkou-bioinfo/tinycc
+Vendored source archive: src/tinycc-e273cf4.tar.gz
+Vendored commit: e273cf42c2bc316da260a35b85a39ddff72baf64
+Archive SHA-256: 356b1f52802265eb1d553b7fa45138f9ddf08f81f682036a73cf7c0cbf109d1b
 
 TinyCC copyright:
 - Fabrice Bellard
@@ -12,14 +15,22 @@ TinyCC copyright:
 TinyCC licensing:
 - The bundled TinyCC source archive includes a COPYING file stating the
   GNU Lesser General Public License, version 2.1.
-- See the upstream source archive and repository for the complete TinyCC
-  license text and notices.
+- See the vendored source archive and repositories above for the complete
+  TinyCC license text and notices.
 
-Rtinycc package licensing:
-- The Rtinycc package code is licensed under GPL (>= 3), as declared in
-  DESCRIPTION.
-- This notice documents the bundled TinyCC component and does not modify
-  the license terms declared for the Rtinycc package itself.
+Bundled component: Protothreads headers
+Bundled files: inst/include/rtinycc/pt.h, pt-sem.h, lc.h,
+  lc-switch.h, and lc-addrlabels.h
+Upstream project: https://dunkels.com/adam/pt/
+
+Protothreads copyright:
+- Swedish Institute of Computer Science
+- Adam Dunkels is identified in the headers as the author.
+
+Protothreads licensing:
+- The bundled headers retain their three-clause BSD license notices.
+- See each bundled header for the complete copyright, conditions, and
+  disclaimer.
 
 Adapted component: vignette knitr engine helper
 Upstream repository: https://github.com/coolbutuseless/callme
@@ -29,7 +40,13 @@ Upstream copyright:
 - Mike Cheng
 
 Upstream licensing:
-- The original `callme` knitr engine is distributed under the MIT license.
+- The original callme knitr engine is distributed under the MIT license.
 - Rtinycc includes an adapted version of that helper for vignette rendering.
 - The adapted helper is distributed as part of the GPL (>= 3) Rtinycc package,
   compatible with the upstream MIT terms.
+
+Rtinycc package licensing:
+- The Rtinycc package code is licensed under GPL (>= 3), as declared in
+  DESCRIPTION.
+- This notice documents bundled and adapted components and does not modify
+  the license terms declared for the Rtinycc package itself.

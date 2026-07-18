@@ -14,7 +14,10 @@ tcc_struct(ffi, name, accessors)
 \item{accessors}{Named list of field accessors where
 names are field names and values are FFI types (e.g., list(x="f64", y="f64")).
 Named nested struct fields can use \code{"struct:<name>"} to generate borrowed
-nested-view getters and copy-in setters (for example \code{child = "struct:child"}).}
+nested-view getters and copy-in setters (for example \code{child = "struct:child"}).
+Fixed character arrays use \code{list(type = "cstring", size = n)}. Bare
+\code{cstring} pointer fields are rejected because setters cannot safely retain
+borrowed R string storage; use \code{ptr} with explicitly owned storage instead.}
 }
 \value{
 Updated tcc_ffi object

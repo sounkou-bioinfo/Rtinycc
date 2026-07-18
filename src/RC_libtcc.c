@@ -33,6 +33,7 @@ SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);
 SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);
 SEXP RC_make_owned_ptr(void *ptr, SEXP tag);
 SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag);
+void *RC_check_composite_ptr(SEXP ext, SEXP expected_tag, int require_owned);
 void *RC_host_calloc_c(size_t n, size_t size);
 void RC_host_free_c(void *ptr);
 
@@ -260,7 +261,7 @@ void RC_host_free_c(void *ptr) {
 
 /**
  * Finalizer for owned native allocations created by generated composite helpers.
- * Ownership: frees owned heap memory on Unix; Windows finalizer clears only.
+ * Ownership: frees memory allocated by RC_host_calloc_c().
  * Allocation: none.
  * Protection: none.
  */
@@ -269,12 +270,9 @@ void RC_owned_native_finalizer(SEXP ext) {
     if (!ptr) {
         return;
     }
-#ifdef _WIN32
-    RC_trace_finalizer_event("owned_native:skip_free_windows", ext, R_ExternalPtrProtected(ext), NULL);
+    RC_trace_finalizer_event("owned_native:free", ext, R_ExternalPtrProtected(ext), NULL);
+    RC_host_free_c(ptr);
     R_ClearExternalPtr(ext);
-#else
-    RC_free_finalizer(ext);
-#endif
 }
 
 /**
@@ -323,6 +321,36 @@ SEXP RC_make_owned_composite_ptr(void *ptr, SEXP tag) {
     return ext;
 }
 
+/**
+ * Validate a generated struct/union external pointer and return its address.
+ * Borrowed views carry their owner in the protected slot; require_owned rejects
+ * those views before an explicit destructor can release native storage.
+ */
+void *RC_check_composite_ptr(SEXP ext, SEXP expected_tag, int require_owned) {
+    if (TYPEOF(ext) != EXTPTRSXP) {
+        Rf_error("expected an external pointer");
+    }
+
+    if (require_owned && R_ExternalPtrProtected(ext) != R_NilValue) {
+        Rf_error("Cannot free borrowed view; free the owning object instead");
+    }
+
+    SEXP actual_tag = R_ExternalPtrTag(ext);
+    if (actual_tag != expected_tag) {
+        Rf_error(
+            "expected pointer tagged '%s', got '%s'",
+            RC_extptr_tag_name(expected_tag),
+            RC_extptr_tag_name(actual_tag)
+        );
+    }
+
+    void *ptr = R_ExternalPtrAddr(ext);
+    if (!ptr) {
+        Rf_error("external pointer is NULL or already freed");
+    }
+    return ptr;
+}
+
 // ============================================================================
 // TCC state and compilation
 // ============================================================================
@@ -352,6 +380,45 @@ static inline TCCState *RC_tcc_state(SEXP ext) {
         Rf_error("tcc_state pointer is NULL");
     }
     return s;
+}
+
+static int RC_tcc_state_output_type(SEXP ext) {
+    SEXP metadata = R_ExternalPtrProtected(ext);
+    if (TYPEOF(metadata) == INTSXP && XLENGTH(metadata) >= 1) {
+        return INTEGER(metadata)[0];
+    }
+    return TCC_OUTPUT_MEMORY;
+}
+
+static int RC_tcc_state_is_finalized(SEXP ext) {
+    SEXP metadata = R_ExternalPtrProtected(ext);
+    return TYPEOF(metadata) == INTSXP && XLENGTH(metadata) >= 2 &&
+        INTEGER(metadata)[1] != 0;
+}
+
+static void RC_tcc_state_mark_finalized(SEXP ext) {
+    SEXP metadata = R_ExternalPtrProtected(ext);
+    if (TYPEOF(metadata) == INTSXP && XLENGTH(metadata) >= 2) {
+        INTEGER(metadata)[1] = 1;
+    }
+}
+
+static void RC_require_memory_output(SEXP ext, const char *operation) {
+    if (RC_tcc_state_output_type(ext) != TCC_OUTPUT_MEMORY) {
+        Rf_error("%s requires a tcc_state with output = 'memory'", operation);
+    }
+}
+
+static void RC_require_finalized_state(SEXP ext, const char *operation) {
+    if (!RC_tcc_state_is_finalized(ext)) {
+        Rf_error("%s requires a relocated tcc_state", operation);
+    }
+}
+
+static void RC_require_open_state(SEXP ext, const char *operation) {
+    if (RC_tcc_state_is_finalized(ext)) {
+        Rf_error("%s cannot modify a finalized tcc_state", operation);
+    }
 }
 
 static void RC_tcc_error_callback(void *opaque, const char *msg) {
@@ -414,6 +481,11 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
     Rf_setAttrib(ext, R_ClassSymbol, class_str);
     UNPROTECT(1);
     R_SetExternalPtrTag(ext, Rf_install("rtinycc_tcc_state_owned"));
+    SEXP output_meta = PROTECT(Rf_allocVector(INTSXP, 2));
+    INTEGER(output_meta)[0] = out_type;
+    INTEGER(output_meta)[1] = 0;
+    R_SetExternalPtrProtected(ext, output_meta);
+    UNPROTECT(1);
     /* onexit = FALSE: skip tcc_delete() during R shutdown.
        tcc_delete() → tcc_run_free() releases DLLs loaded during JIT
        (FreeLibrary on Windows, dlclose on Unix) and frees JIT memory.
@@ -434,6 +506,7 @@ SEXP RC_libtcc_state_new(SEXP lib_path, SEXP include_path, SEXP output_type) {
  */
 SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_add_file()");
     const char *fname = Rf_translateCharUTF8(STRING_ELT(path, 0));
     int rc = tcc_add_file(s, fname);
     return Rf_ScalarInteger(rc);
@@ -447,6 +520,7 @@ SEXP RC_libtcc_add_file(SEXP ext, SEXP path) {
  */
 SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_add_include_path()");
     const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
     int rc = tcc_add_include_path(s, p);
     return Rf_ScalarInteger(rc);
@@ -460,6 +534,7 @@ SEXP RC_libtcc_add_include_path(SEXP ext, SEXP path) {
  */
 SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_add_sysinclude_path()");
     const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
     int rc = tcc_add_sysinclude_path(s, p);
     return Rf_ScalarInteger(rc);
@@ -473,6 +548,7 @@ SEXP RC_libtcc_add_sysinclude_path(SEXP ext, SEXP path) {
  */
 SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_add_library_path()");
     const char *p = Rf_translateCharUTF8(STRING_ELT(path, 0));
     int rc = tcc_add_library_path(s, p);
     return Rf_ScalarInteger(rc);
@@ -486,6 +562,7 @@ SEXP RC_libtcc_add_library_path(SEXP ext, SEXP path) {
  */
 SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_add_library()");
     const char *lib = Rf_translateCharUTF8(STRING_ELT(library, 0));
     int rc = tcc_add_library(s, lib);
     return Rf_ScalarInteger(rc);
@@ -499,6 +576,7 @@ SEXP RC_libtcc_add_library(SEXP ext, SEXP library) {
  */
 SEXP RC_libtcc_set_options(SEXP ext, SEXP options) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_set_options()");
     const char *opt = Rf_translateCharUTF8(STRING_ELT(options, 0));
     int rc = tcc_set_options(s, opt);
     return Rf_ScalarInteger(rc);
@@ -514,6 +592,7 @@ SEXP RC_libtcc_set_options(SEXP ext, SEXP options) {
  */
 SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_compile_string()");
      const char *src = Rf_translateCharUTF8(STRING_ELT(code, 0));
     int rc = tcc_compile_string(s, src);
     return Rf_ScalarInteger(rc);
@@ -527,6 +606,7 @@ SEXP RC_libtcc_compile_string(SEXP ext, SEXP code) {
  */
 SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "tcc_add_symbol()");
     const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
     void *ptr = R_ExternalPtrAddr(addr);
     int rc = tcc_add_symbol(s, sym, ptr);
@@ -541,7 +621,14 @@ SEXP RC_libtcc_add_symbol(SEXP ext, SEXP name, SEXP addr) {
  */
 SEXP RC_libtcc_relocate(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_memory_output(ext, "tcc_relocate()");
+    if (RC_tcc_state_is_finalized(ext)) {
+        Rf_error("tcc_relocate() cannot finalize a state more than once");
+    }
     int rc = tcc_relocate(s);
+    if (rc == 0) {
+        RC_tcc_state_mark_finalized(ext);
+    }
     return Rf_ScalarInteger(rc);
 }
 
@@ -560,14 +647,16 @@ SEXP RC_libtcc_relocate(SEXP ext) {
 
 /**
  * Look up a symbol after relocation and return it as a DL_FUNC external pointer.
- * Ownership: returns owned external pointer (no free required).
+ * Ownership: returns a borrowed function pointer that retains its TCC state.
  * Allocation: external pointer only.
- * Protection: PROTECT(1), UNPROTECT(1).
+ * Protection: the external pointer's protected slot retains ext.
  */
 /* Look up a symbol after relocation and return it as a DL_FUNC external
  * pointer tagged "native symbol" so .Call() can invoke it directly. */
 SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_memory_output(ext, "tcc_get_symbol()");
+    RC_require_finalized_state(ext, "tcc_get_symbol()");
     const char *sym = Rf_translateCharUTF8(STRING_ELT(name, 0));
     void *fn = tcc_get_symbol(s, sym);
     if (!fn) {
@@ -580,7 +669,7 @@ SEXP RC_libtcc_get_symbol(SEXP ext, SEXP name) {
     }
     DL_FUNC fn_ptr;
     memcpy(&fn_ptr, &fn, sizeof(fn_ptr));
-    SEXP ptr = PROTECT(R_MakeExternalPtrFn(fn_ptr, native_symbol_tag, R_NilValue));
+    SEXP ptr = PROTECT(R_MakeExternalPtrFn(fn_ptr, native_symbol_tag, ext));
     SEXP class_str = PROTECT(Rf_mkString("tcc_symbol"));
     Rf_setAttrib(ptr, R_ClassSymbol, class_str);
     UNPROTECT(1);
@@ -1332,6 +1421,8 @@ static SEXP RC_libtcc_call_symbol_dotc(uintptr_t addr, SEXP args, int naok) {
  * arguments and must be declared void. */
 SEXP RC_libtcc_call_symbol(SEXP ext, SEXP name, SEXP ret_type, SEXP args, SEXP naok_) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_memory_output(ext, "tcc_call_symbol()");
+    RC_require_finalized_state(ext, "tcc_call_symbol()");
     if (!Rf_isString(name) || XLENGTH(name) != 1) {
         Rf_error("symbol name must be a character scalar");
     }
@@ -1412,8 +1503,21 @@ SEXP RC_libtcc_ptr_valid(SEXP ptr) {
 /* Write compilation output to a file (obj, dll, or exe). */
 SEXP RC_libtcc_output_file(SEXP ext, SEXP filename) {
     TCCState *s = RC_tcc_state(ext);
+    if (RC_tcc_state_output_type(ext) == TCC_OUTPUT_MEMORY) {
+        Rf_error("tcc_output_file() requires a non-memory tcc_state");
+    }
+    if (RC_tcc_state_is_finalized(ext)) {
+        Rf_error("tcc_output_file() cannot finalize a state more than once");
+    }
+    if (!Rf_isString(filename) || XLENGTH(filename) != 1 ||
+        STRING_ELT(filename, 0) == NA_STRING) {
+        Rf_error("filename must be a character scalar");
+    }
     const char *fname = Rf_translateCharUTF8(STRING_ELT(filename, 0));
     int rc = tcc_output_file(s, fname);
+    if (rc == 0) {
+        RC_tcc_state_mark_finalized(ext);
+    }
     return Rf_ScalarInteger(rc);
 }
 
@@ -2795,12 +2899,14 @@ static int RC_tcc_add_function_symbol(TCCState *s, const char *name, DL_FUNC fn)
 
 SEXP RC_libtcc_add_host_symbols(SEXP ext) {
     TCCState *s = RC_tcc_state(ext);
+    RC_require_open_state(ext, "host symbol registration");
     RC_tcc_add_function_symbol(s, "RC_free_finalizer", (DL_FUNC) RC_free_finalizer);
     RC_tcc_add_function_symbol(s, "RC_owned_native_finalizer", (DL_FUNC) RC_owned_native_finalizer);
     RC_tcc_add_function_symbol(s, "RC_make_borrowed_view", (DL_FUNC) RC_make_borrowed_view);
     RC_tcc_add_function_symbol(s, "RC_make_unowned_ptr", (DL_FUNC) RC_make_unowned_ptr);
     RC_tcc_add_function_symbol(s, "RC_make_owned_ptr", (DL_FUNC) RC_make_owned_ptr);
     RC_tcc_add_function_symbol(s, "RC_make_owned_composite_ptr", (DL_FUNC) RC_make_owned_composite_ptr);
+    RC_tcc_add_function_symbol(s, "RC_check_composite_ptr", (DL_FUNC) RC_check_composite_ptr);
     RC_tcc_add_function_symbol(s, "RC_host_calloc_c", (DL_FUNC) RC_host_calloc_c);
     RC_tcc_add_function_symbol(s, "RC_host_free_c", (DL_FUNC) RC_host_free_c);
     RC_tcc_add_function_symbol(s, "RC_invoke_callback", (DL_FUNC) RC_invoke_callback);

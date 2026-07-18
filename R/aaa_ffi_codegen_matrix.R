@@ -1066,9 +1066,11 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "owned-native-storage",
     finalizer = TRUE,
+    allocator = "RC_host_calloc_c/RC_host_free_c",
     notes = paste(
-      "Struct constructors allocate owned native storage and return an",
-      "external pointer tagged with the struct type and a finalizer."
+      "Struct constructors allocate owned native storage through the package",
+      "host allocator and return an external pointer tagged with the struct",
+      "type and a matching finalizer."
     )
   ),
   struct_field_addr = list(
@@ -1131,9 +1133,10 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     copy = FALSE,
     ownership = "owned-native-storage",
     finalizer = TRUE,
+    allocator = "RC_host_calloc_c/RC_host_free_c",
     notes = paste(
-      "Union constructors allocate owned native storage and expose member",
-      "getters/setters over that shared buffer."
+      "Union constructors allocate owned native storage through the package",
+      "host allocator and expose member getters/setters over that shared buffer."
     )
   ),
   union_nested_struct_view = list(
@@ -1168,12 +1171,14 @@ RTINYCC_COMPOSITE_SEMANTICS <- list(
     helper = "tcc_global",
     scalar_only = TRUE,
     arrays_forbidden = TRUE,
+    cstring_forbidden = TRUE,
     borrow = FALSE,
     copy = TRUE,
     ownership = "compiled-unit",
     notes = paste(
-      "Global helpers are limited to scalar types and reuse the same wrapper",
-      "input/output coercion rules as ordinary scalar bindings."
+      "Global helpers are limited to scalar types and reuse ordinary scalar",
+      "coercion rules, except cstring is rejected because a global cannot",
+      "retain the borrowed translated R string pointer safely."
     )
   ),
   bitfield_native = list(
@@ -1220,6 +1225,10 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
       structs = list(student = c(id = "i32", grade = "f64"))
     ),
     patterns = list(
+      list(
+        pattern = "RC_host_calloc_c(1, sizeof(struct student))",
+        fixed = TRUE
+      ),
       list(
         pattern = "return RC_make_owned_composite_ptr(p, Rf_install(\"struct_student\"));",
         fixed = TRUE
@@ -1320,6 +1329,10 @@ RTINYCC_COMPOSITE_CODEGEN_SPECS <- list(
       )
     ),
     patterns = list(
+      list(
+        pattern = "RC_host_calloc_c(1, sizeof(union wrapper))",
+        fixed = TRUE
+      ),
       list(
         pattern = "return RC_make_owned_composite_ptr(p, Rf_install(\"union_wrapper\"));",
         fixed = TRUE

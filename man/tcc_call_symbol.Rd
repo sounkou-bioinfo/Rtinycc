@@ -35,11 +35,13 @@ For zero-argument scalar calls, the boxed return value (\code{NULL} for
 modifications copied back.
 }
 \description{
+The memory state must first be successfully finalized with \code{\link[=tcc_relocate]{tcc_relocate()}}.
+}
+\details{
 With no additional arguments, \code{tcc_call_symbol()} preserves its historical
 quick-test behavior: call a zero-argument symbol and box an \code{int}, \code{double},
 or \code{void} return value.
-}
-\details{
+
 With additional arguments, it uses an R \code{.C()}-style calling convention: the
 target C function must be \code{void}, each atomic or character R argument is
 copied to guarded mutable call storage and passed by pointer, and the result

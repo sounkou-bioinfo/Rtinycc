@@ -230,7 +230,9 @@ tcc_treesitter_defines <- function(
 #' This mapper is intentionally conservative for pointer types. `char*` is
 #' treated as a raw pointer (`ptr`) because C does not guarantee NUL-terminated
 #' strings. If you know the API expects a C string, map it explicitly to
-#' `cstring` in your custom mapper.
+#' `cstring` in your custom mapper. Unknown scalar types and `long double` are
+#' rejected rather than assigned a potentially incompatible calling convention;
+#' provide a custom mapper when their ABI is known.
 #'
 #' @examples
 #' \dontrun{

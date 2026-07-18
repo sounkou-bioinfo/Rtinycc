@@ -4,16 +4,19 @@
 \alias{tcc_output}
 \title{Set output type for FFI compilation}
 \usage{
-tcc_output(ffi, output = c("memory", "dll", "exe"))
+tcc_output(ffi, output = "memory")
 }
 \arguments{
 \item{ffi}{A tcc_ffi object}
 
-\item{output}{One of "memory", "dll", "exe"}
+\item{output}{Must be \code{"memory"}.}
 }
 \value{
 Updated tcc_ffi object (for chaining)
 }
 \description{
-Set output type for FFI compilation
+The high-level FFI creates callable in-memory wrappers, so only \code{"memory"}
+output is supported. Executable and shared-library artifact output requires
+the low-level \code{\link[=tcc_state]{tcc_state()}} and \code{tcc_output_file()} path and is rejected here
+rather than returning dangling callable addresses.
 }

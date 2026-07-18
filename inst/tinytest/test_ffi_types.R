@@ -107,35 +107,24 @@ mapping_cases <- list(
   i16 = c("short", "short int", "signed short", "signed short int", "int16_t"),
   i8 = c("char", "signed char", "int8_t"),
   i64 = c(
-    "long",
-    "long int",
     "long long",
     "long long int",
-    "signed long",
-    "signed long int",
     "signed long long",
     "signed long long int",
     "int64_t",
     "__int64",
-    "intptr_t",
-    "ptrdiff_t",
-    "ssize_t",
     "off_t"
   ),
   u32 = c("unsigned int", "unsigned", "uint32_t", "unsigned __int32"),
   u16 = c("unsigned short", "unsigned short int", "uint16_t"),
   u8 = c("unsigned char", "uint8_t"),
   u64 = c(
-    "unsigned long",
-    "unsigned long int",
     "unsigned long long",
     "unsigned long long int",
     "uint64_t",
-    "unsigned __int64",
-    "size_t",
-    "uintptr_t"
+    "unsigned __int64"
   ),
-  f64 = c("double", "long double"),
+  f64 = c("double"),
   f32 = c("float")
 )
 
@@ -147,6 +136,40 @@ for (ffi_type in names(mapping_cases)) {
       info = paste("C type", shQuote(c_type), "maps to", ffi_type)
     )
   }
+}
+
+long_type <- if (.Machine$sizeof.long == 8L) "i64" else "i32"
+unsigned_long_type <- if (.Machine$sizeof.long == 8L) "u64" else "u32"
+pointer_signed_type <- if (.Machine$sizeof.pointer == 8L) "i64" else "i32"
+pointer_unsigned_type <- if (.Machine$sizeof.pointer == 8L) "u64" else "u32"
+
+for (c_type in c("long", "long int", "signed long", "signed long int")) {
+  expect_equal(
+    tcc_map_c_type_to_ffi(c_type),
+    long_type,
+    info = paste("C type", shQuote(c_type), "follows sizeof(long)")
+  )
+}
+for (c_type in c("unsigned long", "unsigned long int")) {
+  expect_equal(
+    tcc_map_c_type_to_ffi(c_type),
+    unsigned_long_type,
+    info = paste("C type", shQuote(c_type), "follows sizeof(unsigned long)")
+  )
+}
+for (c_type in c("intptr_t", "ptrdiff_t", "ssize_t")) {
+  expect_equal(
+    tcc_map_c_type_to_ffi(c_type),
+    pointer_signed_type,
+    info = paste("C type", shQuote(c_type), "follows pointer width")
+  )
+}
+for (c_type in c("size_t", "uintptr_t")) {
+  expect_equal(
+    tcc_map_c_type_to_ffi(c_type),
+    pointer_unsigned_type,
+    info = paste("C type", shQuote(c_type), "follows pointer width")
+  )
 }
 
 # Test 8: pointer spellings stay pointer-like under conservative mapping
@@ -177,3 +200,13 @@ for (c_type in pointer_cases) {
 expect_equal(tcc_map_c_type_to_ffi(" const   unsigned   long  long   int "), "u64")
 expect_equal(tcc_map_c_type_to_ffi("const volatile restrict double"), "f64")
 expect_equal(tcc_map_c_type_to_ffi("const volatile char * name"), "ptr")
+expect_error(
+  tcc_map_c_type_to_ffi("long double"),
+  "no safe Rtinycc scalar ABI mapping",
+  info = "long double is rejected instead of using the double calling convention"
+)
+expect_error(
+  tcc_map_c_type_to_ffi("application_word"),
+  "unsupported C scalar type",
+  info = "unknown by-value scalar types require an explicit mapper"
+)

@@ -13,5 +13,8 @@ tcc_relocate(state)
 Integer status code (0 = success).
 }
 \description{
-Relocate compiled code
+Relocation is valid only for a state created with \code{output = "memory"} and
+can be performed only once. Callable symbols are unavailable until relocation
+succeeds. Use \code{tcc_output_file()} for object, shared-library, executable, or
+preprocessor output.
 }

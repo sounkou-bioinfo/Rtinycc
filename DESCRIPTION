@@ -6,10 +6,12 @@ Authors@R: c(
     email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
     person(given = "Mike", family = "Cheng", role = c("cph"),
     comment = "Adapted parts of the vignette knitr engine from the callme package"),
-    person(given = "Adam", family = "Dunkels", role = c("cph"),
-    comment = "Author of the bundled protothreads library"),
-    person( given ="Fabrice Bellard and tinycc Authors" , role = c("ctb"),
-    comment = "Tinycc Compiler (tinycc) authors and COPYRIGHT holders")
+    person(given = "Adam", family = "Dunkels", role = c("ctb"),
+    comment = "Author of the bundled Protothreads headers"),
+    person(family = "Swedish Institute of Computer Science", role = c("cph"),
+    comment = "Copyright holder for the bundled Protothreads headers"),
+    person(given = "Fabrice Bellard and TinyCC authors", role = c("cph"),
+    comment = "TinyCC compiler authors and copyright holders")
     )
 Description: Builds the 'TinyCC' (Tiny 'C' Compiler) command-line interface
     and library for package use in 'R'. The package compiles 'TinyCC' from source and
@@ -33,6 +35,6 @@ VignetteBuilder: knitr
 SystemRequirements: GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 URL: https://github.com/sounkou-bioinfo/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc/
 BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues
+Config/roxygen2/version: 8.0.0

@@ -1,5 +1,10 @@
 # Rtinycc 0.1.12
 
+- Prevent high-level FFI compilation modes that cannot produce safe callable bindings; `tcc_compile()` now fails clearly unless output is in-memory.
+- Keep relocated TinyCC code alive while a `tcc_symbol` pointer remains reachable.
+- Validate struct and union pointer types before access or explicit release, use one host allocator for their storage on every platform, apply scalar FFI range and `NA` checks to generated composite setters, and reject long-lived borrowed `cstring` pointer setters in favor of explicit ownership.
+- Map C `long`, `size_t`, and pointer-width integer aliases according to the active platform ABI, and reject unsupported by-value scalar types such as `long double` instead of guessing an incompatible calling convention.
+- Add `tcc_output_file()` for low-level non-memory artifacts, enforce one-shot state finalization before callable symbols can escape, include the package's bundled headers in the default TinyCC search path, and correct the provenance and licensing records for vendored TinyCC and Protothreads sources.
 - Update the bundled TinyCC source to the wasm32-enabled `sounkou-bioinfo/tinycc` fork and fix a const-correctness warning reported by recent GCC toolchains.
 - Add a Fedora/GCC 16 R-devel check path that mirrors the CRAN Fedora build environment.
 - Add TinyCC SIMD bytecode examples showing CPU feature detection with `cpuid`/`xgetbv` and selected SSE2/AVX2 instructions emitted through `.byte` for mnemonics TinyCC does not parse.

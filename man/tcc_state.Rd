@@ -21,5 +21,8 @@ tcc_state(
 An external pointer of class \code{tcc_state}.
 }
 \description{
-Initialize a libtcc compilation state, optionally pointing at the bundled include/lib paths.
+Initialize a libtcc compilation state, optionally pointing at the bundled
+include/lib paths. Memory states are finalized with \code{\link[=tcc_relocate]{tcc_relocate()}}; other
+output modes are written with \code{tcc_output_file()}. Finalization is
+single-shot, after which compilation options and source cannot be changed.
 }

@@ -532,15 +532,26 @@ tcc_ffi <- function() {
 
 #' Set output type for FFI compilation
 #'
+#' The high-level FFI creates callable in-memory wrappers, so only `"memory"`
+#' output is supported. Executable and shared-library artifact output requires
+#' the low-level [tcc_state()] and `tcc_output_file()` path and is rejected here
+#' rather than returning dangling callable addresses.
+#'
 #' @param ffi A tcc_ffi object
-#' @param output One of "memory", "dll", "exe"
+#' @param output Must be `"memory"`.
 #' @return Updated tcc_ffi object (for chaining)
 #' @export
-tcc_output <- function(ffi, output = c("memory", "dll", "exe")) {
+tcc_output <- function(ffi, output = "memory") {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
   }
-  output <- match.arg(output)
+  output <- match.arg(output, c("memory", "dll", "exe"))
+  if (!identical(output, "memory")) {
+    stop(
+      "High-level FFI compilation only supports output = 'memory'",
+      call. = FALSE
+    )
+  }
   ffi$output <- output
   ffi
 }
@@ -695,9 +706,9 @@ tcc_library <- function(ffi, library) {
 #' - `ptr` globals store the raw address from an external pointer. If the
 #'   external pointer owns memory, keep it alive; otherwise the pointer may
 #'   be freed while the global still points to it.
-#' - `cstring` globals store a borrowed pointer to R's string data
-#'   (UTF-8 translation). Do not free it; for C-owned strings prefer a `ptr`
-#'   global and manage lifetime explicitly (e.g., with `tcc_cstring()`).
+#' - `cstring` globals are rejected because a global would outlive the borrowed
+#'   R string view. Declare the global as `ptr` and manage its storage explicitly
+#'   with an owned object such as [tcc_cstring()].
 #'
 #' @note
 #' Global helpers are generated inside the compiled TCC unit. Recompiling
@@ -733,6 +744,12 @@ tcc_global <- function(ffi, name, type) {
   }
   if (type == "void") {
     stop("Global type cannot be void", call. = FALSE)
+  }
+  if (type == "cstring") {
+    stop(
+      "Global type cannot be cstring; use ptr with explicitly owned storage",
+      call. = FALSE
+    )
   }
 
   if (is.null(ffi$globals)) {
@@ -832,6 +849,12 @@ tcc_bind <- function(ffi, ...) {
 tcc_compile <- function(ffi, verbose = FALSE) {
   if (!inherits(ffi, "tcc_ffi")) {
     stop("Expected tcc_ffi object", call. = FALSE)
+  }
+  if (!identical(ffi$output, "memory")) {
+    stop(
+      "tcc_compile() only creates callable in-memory bindings; use output = 'memory'",
+      call. = FALSE
+    )
   }
 
   if (
@@ -2193,6 +2216,16 @@ read_c_string <- function(ptr) {
 # Struct, Union, Enum Support
 # ============================================================================
 
+validate_composite_size <- function(size, what) {
+  if (
+    !is.numeric(size) || length(size) != 1L || !is.finite(size) ||
+      size < 1 || size > .Machine$integer.max || size != floor(size)
+  ) {
+    stop(what, " must include a positive integer 'size'", call. = FALSE)
+  }
+  invisible(as.integer(size))
+}
+
 #' Declare struct for FFI helper generation
 #'
 #' Generate R-callable helpers for struct allocation, field access,
@@ -2204,6 +2237,9 @@ read_c_string <- function(ptr) {
 #'   names are field names and values are FFI types (e.g., list(x="f64", y="f64")).
 #'   Named nested struct fields can use `"struct:<name>"` to generate borrowed
 #'   nested-view getters and copy-in setters (for example `child = "struct:child"`).
+#'   Fixed character arrays use `list(type = "cstring", size = n)`. Bare
+#'   `cstring` pointer fields are rejected because setters cannot safely retain
+#'   borrowed R string storage; use `ptr` with explicitly owned storage instead.
 #' @return Updated tcc_ffi object
 #' @export
 #' @examples
@@ -2239,18 +2275,36 @@ tcc_struct <- function(ffi, name, accessors) {
     # Handle complex field specs like list(type="cstring", size=20)
     if (is.list(field_type)) {
       type_name <- field_type$type %||% "ptr"
-      if (isTRUE(field_type$array)) {
-        if (is.null(field_type$size) || !is.numeric(field_type$size)) {
-          stop(
-            "Array field '",
-            field_name,
-            "' must include numeric 'size'",
-            call. = FALSE
-          )
-        }
+      size <- field_type$size
+      if (isTRUE(field_type$array) && is.null(size)) {
+        stop(
+          "Array field '",
+          field_name,
+          "' must include a positive integer 'size'",
+          call. = FALSE
+        )
+      }
+      if (!is.null(size)) {
+        validate_composite_size(size, str_interp("Field '{field_name}'"))
+      }
+      if (identical(type_name, "cstring") && isTRUE(field_type$array)) {
+        stop(
+          "Fixed cstring fields use list(type = 'cstring', size = n) without array = TRUE",
+          call. = FALSE
+        )
       }
     } else {
       type_name <- field_type
+    }
+
+    if (
+      identical(type_name, "cstring") &&
+        (!is.list(field_type) || is.null(field_type$size))
+    ) {
+      stop(
+        "Struct cstring pointer fields are unsafe; use ptr with explicitly owned storage",
+        call. = FALSE
+      )
     }
 
     # Allow "struct:name" for nested structs
@@ -2278,7 +2332,8 @@ tcc_struct <- function(ffi, name, accessors) {
 #'
 #' @param ffi A tcc_ffi object
 #' @param name Union name (as defined in C header)
-#' @param members Named list of union members with FFI types
+#' @param members Named list of union members with FFI types. Bare `cstring`
+#'   pointer members are rejected; use `ptr` with explicitly owned storage.
 #' @param active Default active member for accessors
 #' @return Updated tcc_ffi object
 #' @export
@@ -2304,12 +2359,30 @@ tcc_union <- function(ffi, name, members, active = NULL) {
         # Valid - nested struct
       } else {
         type_name <- mem_type$type %||% "ptr"
+        if (!is.null(mem_type$size)) {
+          validate_composite_size(
+            mem_type$size,
+            str_interp("Union member '{mem_name}'")
+          )
+        }
+        if (identical(type_name, "cstring") && is.null(mem_type$size)) {
+          stop(
+            "Union cstring pointer members are unsafe; use ptr with explicitly owned storage",
+            call. = FALSE
+          )
+        }
         check_ffi_type(
           type_name,
           str_interp("union '{name}' member '{mem_name}'")
         )
       }
     } else {
+      if (identical(mem_type, "cstring")) {
+        stop(
+          "Union cstring pointer members are unsafe; use ptr with explicitly owned storage",
+          call. = FALSE
+        )
+      }
       check_ffi_type(
         mem_type,
         str_interp("union '{name}' member '{mem_name}'")

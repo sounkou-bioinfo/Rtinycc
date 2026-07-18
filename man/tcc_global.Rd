@@ -39,9 +39,9 @@ Ownership notes:
 \item \code{ptr} globals store the raw address from an external pointer. If the
 external pointer owns memory, keep it alive; otherwise the pointer may
 be freed while the global still points to it.
-\item \code{cstring} globals store a borrowed pointer to R's string data
-(UTF-8 translation). Do not free it; for C-owned strings prefer a \code{ptr}
-global and manage lifetime explicitly (e.g., with \code{tcc_cstring()}).
+\item \code{cstring} globals are rejected because a global would outlive the borrowed
+R string view. Declare the global as \code{ptr} and manage its storage explicitly
+with an owned object such as \code{\link[=tcc_cstring]{tcc_cstring()}}.
 }
 }
 \note{

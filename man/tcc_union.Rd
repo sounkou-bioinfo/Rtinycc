@@ -11,7 +11,8 @@ tcc_union(ffi, name, members, active = NULL)
 
 \item{name}{Union name (as defined in C header)}
 
-\item{members}{Named list of union members with FFI types}
+\item{members}{Named list of union members with FFI types. Bare \code{cstring}
+pointer members are rejected; use \code{ptr} with explicitly owned storage.}
 
 \item{active}{Default active member for accessors}
 }

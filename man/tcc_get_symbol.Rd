@@ -12,8 +12,9 @@ tcc_get_symbol(state, name)
 \item{name}{Symbol name to look up.}
 }
 \value{
-External pointer of class \code{tcc_symbol}.
+External pointer of class \code{tcc_symbol}. The pointer retains \code{state}
+so its relocated code remains alive for as long as the symbol is reachable.
 }
 \description{
-Get a symbol pointer from a libtcc state
+The memory state must first be successfully finalized with \code{\link[=tcc_relocate]{tcc_relocate()}}.
 }

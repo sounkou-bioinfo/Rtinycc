@@ -520,59 +520,71 @@ struct_array_field_getter_rule(type_name, field_name) %as%
 ## Generate code to set an element of an array field inside a struct
 ## from an R `SEXP` value (named `val`).
 ## ------------------------------------------------------------------
+rtinycc_composite_scalar_setter <- function(type_name, lhs) {
+  conversion <- rtinycc_scalar_input_rule_body(
+    type_name,
+    "field_value",
+    "val"
+  )
+  c(
+    strsplit(conversion, "\n", fixed = TRUE)[[1]],
+    sprintf("%s = field_value;", lhs)
+  )
+}
+
 struct_array_field_setter_rule("i8", field_name) %as%
   {
-    sprintf("p->%s[idx] = (int8_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("i8", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("i16", field_name) %as%
   {
-    sprintf("p->%s[idx] = (int16_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("i16", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("i32", field_name) %as%
   {
-    sprintf("p->%s[idx] = asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("i32", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("i64", field_name) %as%
   {
-    sprintf("p->%s[idx] = (int64_t)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("i64", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("u8", field_name) %as%
   {
-    sprintf("p->%s[idx] = (uint8_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("u8", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("u16", field_name) %as%
   {
-    sprintf("p->%s[idx] = (uint16_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("u16", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("u32", field_name) %as%
   {
-    sprintf("p->%s[idx] = (uint32_t)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("u32", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("u64", field_name) %as%
   {
-    sprintf("p->%s[idx] = (uint64_t)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("u64", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("f32", field_name) %as%
   {
-    sprintf("p->%s[idx] = (float)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("f32", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("f64", field_name) %as%
   {
-    sprintf("p->%s[idx] = asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("f64", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule("bool", field_name) %as%
   {
-    sprintf("p->%s[idx] = (bool)asLogical(val);", field_name)
+    rtinycc_composite_scalar_setter("bool", sprintf("p->%s[idx]", field_name))
   }
 
 struct_array_field_setter_rule(type_name, field_name) %as%
@@ -589,57 +601,57 @@ struct_array_field_setter_rule(type_name, field_name) %as%
 ## ------------------------------------------------------------------
 struct_field_setter_rule("i8", field_name, size) %as%
   {
-    sprintf("p->%s = (int8_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("i8", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("i16", field_name, size) %as%
   {
-    sprintf("p->%s = (int16_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("i16", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("i32", field_name, size) %as%
   {
-    sprintf("p->%s = asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("i32", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("i64", field_name, size) %as%
   {
-    sprintf("p->%s = (int64_t)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("i64", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("u8", field_name, size) %as%
   {
-    sprintf("p->%s = (uint8_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("u8", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("u16", field_name, size) %as%
   {
-    sprintf("p->%s = (uint16_t)asInteger(val);", field_name)
+    rtinycc_composite_scalar_setter("u16", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("u32", field_name, size) %as%
   {
-    sprintf("p->%s = (uint32_t)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("u32", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("u64", field_name, size) %as%
   {
-    sprintf("p->%s = (uint64_t)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("u64", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("f32", field_name, size) %as%
   {
-    sprintf("p->%s = (float)asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("f32", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("f64", field_name, size) %as%
   {
-    sprintf("p->%s = asReal(val);", field_name)
+    rtinycc_composite_scalar_setter("f64", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("bool", field_name, size) %as%
   {
-    sprintf("p->%s = (bool)asLogical(val);", field_name)
+    rtinycc_composite_scalar_setter("bool", sprintf("p->%s", field_name))
   }
 
 struct_field_setter_rule("ptr", field_name, size) %as%
@@ -651,12 +663,15 @@ struct_field_setter_rule("cstring", field_name, size) %as%
   {
     if (!is.null(size)) {
       return(c(
-        "  const char *src = CHAR(STRING_ELT(val, 0));",
+        "  if (!Rf_isString(val) || XLENGTH(val) != 1) Rf_error(\"expected a character scalar\");",
+        "  SEXP string_value = STRING_ELT(val, 0);",
+        "  if (string_value == NA_STRING) Rf_error(\"cstring array field cannot be NA\");",
+        "  const char *src = Rf_translateCharUTF8(string_value);",
         sprintf("  strncpy(p->%s, src, %d);", field_name, size - 1),
         sprintf("  p->%s[%d] = '\\0';", field_name, size - 1)
       ))
     }
-    sprintf("p->%s = CHAR(STRING_ELT(val, 0));", field_name)
+    "Rf_error(\"cstring pointer setters require explicitly owned ptr storage\");"
   }
 
 struct_field_setter_rule(type_name, field_name, size) %as%
@@ -2309,11 +2324,11 @@ ffi_c_type_map_rule("int8_t", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule("long", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.long == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("long int", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.long == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("long long", FALSE, FALSE) %as%
   {
@@ -2325,11 +2340,11 @@ ffi_c_type_map_rule("long long int", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule("signed long", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.long == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("signed long int", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.long == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("signed long long", FALSE, FALSE) %as%
   {
@@ -2349,15 +2364,15 @@ ffi_c_type_map_rule("__int64", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule("intptr_t", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.pointer == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("ptrdiff_t", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.pointer == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("ssize_t", FALSE, FALSE) %as%
   {
-    "i64"
+    if (.Machine$sizeof.pointer == 8L) "i64" else "i32"
   }
 ffi_c_type_map_rule("off_t", FALSE, FALSE) %as%
   {
@@ -2401,11 +2416,11 @@ ffi_c_type_map_rule("uint8_t", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule("unsigned long", FALSE, FALSE) %as%
   {
-    "u64"
+    if (.Machine$sizeof.long == 8L) "u64" else "u32"
   }
 ffi_c_type_map_rule("unsigned long int", FALSE, FALSE) %as%
   {
-    "u64"
+    if (.Machine$sizeof.long == 8L) "u64" else "u32"
   }
 ffi_c_type_map_rule("unsigned long long", FALSE, FALSE) %as%
   {
@@ -2425,11 +2440,11 @@ ffi_c_type_map_rule("unsigned __int64", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule("size_t", FALSE, FALSE) %as%
   {
-    "u64"
+    if (.Machine$sizeof.pointer == 8L) "u64" else "u32"
   }
 ffi_c_type_map_rule("uintptr_t", FALSE, FALSE) %as%
   {
-    "u64"
+    if (.Machine$sizeof.pointer == 8L) "u64" else "u32"
   }
 ffi_c_type_map_rule("double", FALSE, FALSE) %as%
   {
@@ -2437,7 +2452,10 @@ ffi_c_type_map_rule("double", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule("long double", FALSE, FALSE) %as%
   {
-    "f64"
+    stop(
+      "long double has no safe Rtinycc scalar ABI mapping; provide a custom mapper",
+      call. = FALSE
+    )
   }
 ffi_c_type_map_rule("float", FALSE, FALSE) %as%
   {
@@ -2445,5 +2463,13 @@ ffi_c_type_map_rule("float", FALSE, FALSE) %as%
   }
 ffi_c_type_map_rule(type_name, is_char_ptr, is_ptr) %as%
   {
-    "ptr"
+    if (is_ptr) {
+      return("ptr")
+    }
+    stop(
+      "unsupported C scalar type '",
+      type_name,
+      "'; provide a custom mapper",
+      call. = FALSE
+    )
   }

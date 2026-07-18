@@ -652,12 +652,33 @@ generate_struct_helpers <- function(
   paste(helpers, collapse = "\n")
 }
 
+composite_pointer_line <- function(
+  kind,
+  type_name,
+  variable = "p",
+  ext = "ext",
+  require_owned = FALSE
+) {
+  c_type <- sprintf("%s %s", kind, type_name)
+  tag <- sprintf("%s_%s", kind, type_name)
+  sprintf(
+    "  %s *%s = (%s *)RC_check_composite_ptr(%s, Rf_install(\"%s\"), %d);",
+    c_type,
+    variable,
+    c_type,
+    ext,
+    tag,
+    as.integer(require_owned)
+  )
+}
+
 # Generate constructor
 generate_struct_new <- function(struct_name) {
   c(
     sprintf("SEXP R_wrap_struct_%s_new(void) {", struct_name),
     sprintf(
-      "  struct %s *p = calloc(1, sizeof(struct %s));",
+      "  struct %s *p = (struct %s *)RC_host_calloc_c(1, sizeof(struct %s));",
+      struct_name,
       struct_name,
       struct_name
     ),
@@ -675,10 +696,11 @@ generate_struct_new <- function(struct_name) {
 generate_struct_free <- function(struct_name) {
   c(
     sprintf("SEXP R_wrap_struct_%s_free(SEXP ext) {", struct_name),
-    "  if (R_ExternalPtrProtected(ext) != R_NilValue) {",
-    "    Rf_error(\"Cannot free borrowed view; free the owning object instead\");",
-    "  }",
-    "  RC_free_finalizer(ext);",
+    sprintf(
+      "  (void)RC_check_composite_ptr(ext, Rf_install(\"struct_%s\"), 1);",
+      struct_name
+    ),
+    "  RC_owned_native_finalizer(ext);",
     "  return R_NilValue;",
     "}",
     ""
@@ -694,8 +716,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
         struct_name,
         field_name
       ),
-      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      composite_pointer_line("struct", struct_name),
       sprintf(
         "  return RC_make_borrowed_view(p->%s, Rf_install(\"rtinycc_borrowed\"), ext);",
         field_name
@@ -718,8 +739,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
         struct_name,
         field_name
       ),
-      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      composite_pointer_line("struct", struct_name),
       sprintf(
         "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
         field_name,
@@ -738,8 +758,7 @@ generate_struct_getter <- function(struct_name, field_name, field_spec) {
       struct_name,
       field_name
     ),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     paste("  ", return_code, collapse = "\n"),
     "}",
     ""
@@ -761,8 +780,7 @@ generate_struct_array_getter <- function(struct_name, field_name, field_spec) {
       struct_name,
       field_name
     ),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     "  int idx = asInteger(idx_);",
     sprintf(
       "  if (idx < 0 || idx >= %d) Rf_error(\"index out of bounds\");",
@@ -789,8 +807,7 @@ generate_struct_array_setter <- function(struct_name, field_name, field_spec) {
       struct_name,
       field_name
     ),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     "  int idx = asInteger(idx_);",
     sprintf(
       "  if (idx < 0 || idx >= %d) Rf_error(\"index out of bounds\");",
@@ -821,13 +838,13 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
         struct_name,
         field_name
       ),
-      sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
-      sprintf(
-        "  struct %s *child = R_ExternalPtrAddr(val);",
-        nested_struct_name
+      composite_pointer_line("struct", struct_name),
+      composite_pointer_line(
+        "struct",
+        nested_struct_name,
+        variable = "child",
+        ext = "val"
       ),
-      "  if (!child) Rf_error(\"Null pointer\");",
       sprintf(
         "  memcpy(&p->%s, child, sizeof(struct %s));",
         field_name,
@@ -847,8 +864,7 @@ generate_struct_setter <- function(struct_name, field_name, field_spec) {
       struct_name,
       field_name
     ),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     paste("  ", setter_code, collapse = "\n"),
     "  return ext;", # Return ext for chaining
     "}",
@@ -890,8 +906,7 @@ generate_field_addr <- function(struct_name, field_name) {
       struct_name,
       field_name
     ),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     sprintf("  void *field_ptr = &p->%s;", field_name),
     sprintf(
       "  return RC_make_borrowed_view(field_ptr, Rf_install(\"rtinycc_borrowed\"), ext);"
@@ -905,8 +920,7 @@ generate_field_addr <- function(struct_name, field_name) {
 generate_struct_raw_access <- function(struct_name) {
   c(
     sprintf("SEXP R_wrap_struct_%s_get_raw(SEXP ext, SEXP len) {", struct_name),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     "  int n = asInteger(len);",
     "  SEXP raw = PROTECT(allocVector(RAWSXP, n));",
     sprintf(
@@ -919,8 +933,7 @@ generate_struct_raw_access <- function(struct_name) {
     "}",
     "",
     sprintf("SEXP R_wrap_struct_%s_set_raw(SEXP ext, SEXP raw) {", struct_name),
-    sprintf("  struct %s *p = R_ExternalPtrAddr(ext);", struct_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("struct", struct_name),
     "  if (TYPEOF(raw) != RAWSXP) Rf_error(\"expected raw vector\");",
     "  R_xlen_t n = XLENGTH(raw);",
     sprintf(
@@ -998,7 +1011,8 @@ generate_union_new <- function(union_name) {
   c(
     sprintf("SEXP R_wrap_union_%s_new(void) {", union_name),
     sprintf(
-      "  union %s *p = calloc(1, sizeof(union %s));",
+      "  union %s *p = (union %s *)RC_host_calloc_c(1, sizeof(union %s));",
+      union_name,
       union_name,
       union_name
     ),
@@ -1015,10 +1029,11 @@ generate_union_new <- function(union_name) {
 generate_union_free <- function(union_name) {
   c(
     sprintf("SEXP R_wrap_union_%s_free(SEXP ext) {", union_name),
-    "  if (R_ExternalPtrProtected(ext) != R_NilValue) {",
-    "    Rf_error(\"Cannot free borrowed view; free the owning object instead\");",
-    "  }",
-    "  RC_free_finalizer(ext);",
+    sprintf(
+      "  (void)RC_check_composite_ptr(ext, Rf_install(\"union_%s\"), 1);",
+      union_name
+    ),
+    "  RC_owned_native_finalizer(ext);",
     "  return R_NilValue;",
     "}",
     ""
@@ -1033,8 +1048,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
     # Nested struct in union
     return(c(
       sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
-      sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
-      sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+      composite_pointer_line("union", union_name),
       sprintf(
         "  return RC_make_borrowed_view(&p->%s, Rf_install(\"struct_%s\"), ext);",
         mem_name,
@@ -1050,8 +1064,7 @@ generate_union_getter <- function(union_name, mem_name, mem_spec) {
 
   c(
     sprintf("SEXP R_wrap_union_%s_get_%s(SEXP ext) {", union_name, mem_name),
-    sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("union", union_name),
     paste("  ", return_code, collapse = "\n"),
     "}",
     ""
@@ -1185,8 +1198,7 @@ generate_union_setter <- function(union_name, mem_name, mem_spec) {
       union_name,
       mem_name
     ),
-    sprintf("  union %s *p = R_ExternalPtrAddr(ext);", union_name),
-    sprintf("  if (!p) Rf_error(\"Null pointer\");"),
+    composite_pointer_line("union", union_name),
     paste("  ", setter_code, collapse = "\n"),
     "  return ext;",
     "}",
@@ -1272,6 +1284,12 @@ generate_global_helpers <- function(globals) {
     if (ffi_type == "void") {
       stop("Global type cannot be void", call. = FALSE)
     }
+    if (ffi_type == "cstring") {
+      stop(
+        "Global type cannot be cstring; use ptr with explicitly owned storage",
+        call. = FALSE
+      )
+    }
 
     c_type <- type_info$c_type
     get_ret <- generate_c_return(global_name, ffi_type)
@@ -1346,11 +1364,14 @@ generate_ffi_code <- function(
     parts,
     "#include <R.h>",
     "#include <Rinternals.h>",
+    "#include <stddef.h>",
     "#ifndef STRING_PTR_RO",
     "#define STRING_PTR_RO STRING_PTR",
     "#endif",
     "void RC_free_finalizer(SEXP ext);",
     "void RC_owned_native_finalizer(SEXP ext);",
+    "void *RC_check_composite_ptr(SEXP ext, SEXP expected_tag, int require_owned);",
+    "void *RC_host_calloc_c(size_t n, size_t size);",
     "SEXP RC_make_borrowed_view(void *ptr, SEXP tag, SEXP owner);",
     "SEXP RC_make_unowned_ptr(void *ptr, SEXP tag);",
     "SEXP RC_make_owned_ptr(void *ptr, SEXP tag);",
@@ -1362,7 +1383,6 @@ generate_ffi_code <- function(
     parts,
     "#include <stdint.h>",
     "#include <stdbool.h>",
-    "#include <stddef.h>",
     "#include <limits.h>",
     "#include <math.h>",
     "#include <string.h>",
