@@ -16,10 +16,9 @@ recent GCC toolchains, including CRAN's Fedora GCC builder.
 
 ## R CMD check results
 
-- Fedora R-devel (GCC 16): 0 errors | 0 warnings | 1 note
-- local Ubuntu R-release: 0 errors | 0 warnings | 1 note
-
-The notes are the expected CRAN incoming-feasibility notes for the release.
+- Fedora R-devel (GCC 16): 0 errors | 0 warnings | 0 notes
+- local Ubuntu R 4.6.0: 0 errors | 0 warnings | 1 note about the
+  non-portable compiler flag `-mno-omit-leaf-frame-pointer`.
 
 ## Additional notes
 
