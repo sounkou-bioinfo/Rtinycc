@@ -52,13 +52,14 @@ jobs:
       - name: R CMD build
         run: |
           echo "R_LIBS_USER=/root/R-libs" >> ~/.Renviron
+          rm -f Rtinycc_*.tar.gz
           R CMD build .
 
       - name: R CMD check --as-cran
         run: |
           echo "R_LIBS_USER=/root/R-libs" >> ~/.Renviron
           PKG=$(ls -t Rtinycc_*.tar.gz | head -n1)
-          R CMD check --as-cran --no-manual "$PKG"
+          R CMD check --as-cran "$PKG"
 
       - name: Upload check artifacts on failure
         if: failure()

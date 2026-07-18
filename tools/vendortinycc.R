@@ -4,10 +4,11 @@
 args <- commandArgs(trailingOnly = TRUE)
 mode <- if (length(args) > 0) args[[1]] else "download"
 
-# Use specific commit hash
-commit_hash <- "34eed88a70fc8238cd5b623cc96b8bf0e40392ed"
+# Use specific commit hash (sounkou-bioinfo/tinycc: upstream mob + wasm32
+# side-module backend, tag tcc-wasm-v0.1.0-alpha lineage)
+commit_hash <- "e273cf42c2bc316da260a35b85a39ddff72baf64"
 url <- paste0(
-  "https://github.com/TinyCC/tinycc/archive/",
+  "https://github.com/sounkou-bioinfo/tinycc/archive/",
   commit_hash,
   ".tar.gz"
 )
