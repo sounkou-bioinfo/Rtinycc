@@ -80,23 +80,46 @@ log "Selected shared library target: $SHLIB"
 TCC_CONFIG_EXTRA=""
 if [ "$WASM_BUILD" = "yes" ]; then
     TCC_CONFIG_EXTRA="--cpu=wasm32 --targetos=Emscripten"
-elif [ "$(uname)" = "Linux" ]; then
-    if ldd --version 2>&1 | grep -qi musl || \
+else
+    # The package is relocated after configuration.  Do not leave the CLI
+    # pointing at the temporary installation tree; locate libtcc beside the
+    # installed executable instead.
+    TCC_CONFIG_EXTRA="--disable-rpath"
+
+    if [ "$(uname)" = "Linux" ] && { \
+        ldd --version 2>&1 | grep -qi musl || \
         ls /lib/ld-musl-*.so.1 >/dev/null 2>&1 || \
         ls /usr/lib/ld-musl-*.so.1 >/dev/null 2>&1 || \
-        "$CC" -dumpmachine 2>/dev/null | grep -qi musl; then
+        "$CC" -dumpmachine 2>/dev/null | grep -qi musl; \
+    }; then
         log "Detected musl libc; enabling TinyCC musl configuration"
-        TCC_CONFIG_EXTRA="--config-musl"
+        TCC_CONFIG_EXTRA="$TCC_CONFIG_EXTRA --config-musl"
     fi
 fi
 
-run_logged ./configure \
+set -- \
     --prefix="$TINYCC_DEST" \
     --cc="$CC" \
     --ar="$AR" \
-    --extra-cflags=-fPIC \
-    $TCC_CONFIG_EXTRA \
-    --debug || exit 1
+    --extra-cflags=-fPIC
+for arg in $TCC_CONFIG_EXTRA; do
+    set -- "$@" "$arg"
+done
+set -- "$@" --debug
+run_logged ./configure "$@" || exit 1
+
+if [ "$WASM_BUILD" != "yes" ]; then
+    log "Adding relocatable loader path to TinyCC CLI"
+    if [ "$(uname)" = "Darwin" ]; then
+        printf '%s\n' \
+            'LDFLAGS += -Wl,-rpath,@loader_path -Wl,-rpath,@loader_path/../lib' \
+            > "$TINYCC_SRC/config-extra.mak" || exit 1
+    else
+        printf '%s\n' \
+            "LDFLAGS += -Wl,-rpath,'\$\$ORIGIN' -Wl,-rpath,'\$\$ORIGIN/../lib'" \
+            > "$TINYCC_SRC/config-extra.mak" || exit 1
+    fi
+fi
 
 if [ "$WASM_BUILD" = "yes" ]; then
     # The hosted tcc is itself a wasm side module and cannot run on the build

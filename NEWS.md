@@ -1,3 +1,8 @@
+# Rtinycc 0.1.14
+
+- Give the bundled TinyCC command-line executable a relocatable loader path (`$ORIGIN/../lib` on ELF systems and `@loader_path/../lib` on macOS), so `tcc_path()` works directly after installation without loader environment variables.
+- Check the bundled CLI with loader environment variables removed during package configuration and installed-package tests.
+
 # Rtinycc 0.1.13
 
 - Fix the vendored TinyCC build on Linux arm64 by keeping TLS relocation declarations C90-compatible.

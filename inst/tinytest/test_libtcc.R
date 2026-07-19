@@ -208,6 +208,34 @@ expect_error(
   tcc_call_symbol(state, "replace_char_pointer", "abc"),
   info = "tcc_call_symbol rejects character pointer replacement"
 )
+run_cli_without_loader_env <- function(args) {
+  keys <- c(
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+    "DYLD_FALLBACK_LIBRARY_PATH",
+    "LIBPATH",
+    "SHLIB_PATH"
+  )
+  old <- Sys.getenv(keys, unset = NA_character_)
+  on.exit({
+    Sys.unsetenv(keys)
+    for (i in seq_along(keys)) {
+      if (!is.na(old[[i]])) {
+        do.call(Sys.setenv, setNames(list(old[[i]]), keys[[i]]))
+      }
+    }
+  })
+  Sys.unsetenv(keys)
+  suppressWarnings(system2(tcc_path(), args, stdout = TRUE, stderr = TRUE))
+}
+
+cli_probe <- run_cli_without_loader_env("-v")
+expect_equal(
+  attr(cli_probe, "status") %||% 0L,
+  0L,
+  info = "installed tcc CLI resolves libtcc without loader environment help"
+)
+
 # CLI compile to object
 # forty_two.c uses stdio.h / printf which are UCRT-inline on Windows,
 # so skip this CLI test there.
