@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.13</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.14</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,6 +45,11 @@
       <small>Source: <a href="https://github.com/sounkou-bioinfo/Rtinycc/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.14" id="rtinycc-0114">Rtinycc 0.1.14<a class="anchor" aria-label="anchor" href="#rtinycc-0114"></a></h2>
+<ul><li>Give the bundled TinyCC command-line executable a relocatable loader path (<code>$ORIGIN/../lib</code> on ELF systems and <code>@loader_path/../lib</code> on macOS), so <code><a href="../reference/tcc_path.html">tcc_path()</a></code> works directly after installation without loader environment variables.</li>
+<li>Check the bundled CLI with loader environment variables removed during package configuration and installed-package tests.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.13" id="rtinycc-0113">Rtinycc 0.1.13<a class="anchor" aria-label="anchor" href="#rtinycc-0113"></a></h2>
 <ul><li>Fix the vendored TinyCC build on Linux arm64 by keeping TLS relocation declarations C90-compatible.</li>
