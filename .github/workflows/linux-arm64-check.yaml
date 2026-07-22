@@ -1,0 +1,72 @@
+name: Linux ARM64 CRAN special check
+
+# Mirrors r-devel/linux-arm64-checks: native arm64 runners and the CRAN
+# rcheckserver Debian environment. Fedora remains the complementary x86_64
+# R-devel check; it cannot exercise the arm64 TinyCC backend.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-arm64-check:
+    name: Linux arm64 (rcheckserver)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    container:
+      image: ghcr.io/r-devel/rcheckserver/ubuntu:latest
+    env:
+      _R_CHECK_FORCE_SUGGESTS_: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Match the special check's ordinary package paths while keeping optional
+      # Suggests optional, as they are on the CRAN arm64 check service.
+      - name: Install CRAN package dependencies
+        run: |
+          mkdir -p mylib
+          Rscript -e '
+            repos <- "https://cloud.r-project.org"
+            packages <- c("lambda.r", "bench", "callme", "knitr",
+              "rmarkdown", "tinytest", "treesitter.c")
+            available <- rownames(available.packages(repos = repos))
+            install.packages(intersect(packages, available), repos = repos,
+              dependencies = TRUE)
+            unavailable <- setdiff(packages, available)
+            if (length(unavailable)) {
+              message("Optional packages unavailable from CRAN: ",
+                paste(unavailable, collapse = ", "))
+            }
+          '
+
+      - name: Build source package
+        run: R CMD build .
+
+      # The separate install log makes compiler warnings immediately visible,
+      # as in r-devel/linux-arm64-checks.
+      - name: Install source package
+        run: |
+          R CMD INSTALL Rtinycc_*.tar.gz --library=mylib --use-vanilla \
+            2>&1 | tee install.log
+
+      - name: R CMD check
+        run: |
+          R CMD check Rtinycc_*.tar.gz --library=mylib \
+            --install=check:install.log --no-manual --no-vignettes
+
+      - name: Upload check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-rcheckserver
+          path: |
+            install.log
+            Rtinycc.Rcheck/00check.log
+            Rtinycc.Rcheck/00install.out
+          if-no-files-found: ignore
