@@ -1,3 +1,7 @@
+# Rtinycc 0.1.15
+
+- Update the bundled TinyCC fork for Linux arm64 builds. Its arm64 CI now rejects mixed C90 declarations, preventing the compiler warning reported by R-devel checks.
+
 # Rtinycc 0.1.14
 
 - Give the bundled TinyCC command-line executable a relocatable loader path (`$ORIGIN/../lib` on ELF systems and `@loader_path/../lib` on macOS), so `tcc_path()` works directly after installation without loader environment variables.
