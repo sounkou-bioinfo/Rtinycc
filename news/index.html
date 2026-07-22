@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">Rtinycc</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.14</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.15</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,6 +46,10 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.15" id="rtinycc-0115">Rtinycc 0.1.15<a class="anchor" aria-label="anchor" href="#rtinycc-0115"></a></h2>
+<ul><li>Update the bundled TinyCC fork for Linux arm64 builds. Its arm64 CI now rejects mixed C90 declarations, preventing the compiler warning reported by R-devel checks.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.14" id="rtinycc-0114">Rtinycc 0.1.14<a class="anchor" aria-label="anchor" href="#rtinycc-0114"></a></h2>
 <ul><li>Give the bundled TinyCC command-line executable a relocatable loader path (<code>$ORIGIN/../lib</code> on ELF systems and <code>@loader_path/../lib</code> on macOS), so <code><a href="../reference/tcc_path.html">tcc_path()</a></code> works directly after installation without loader environment variables.</li>
 <li>Check the bundled CLI with loader environment variables removed during package configuration and installed-package tests.</li>
@@ -57,7 +61,7 @@
 <li>Document a persistent remote CUDA workflow in which a mirai daemon loads Rtinycc, retains the compiled host adapter between requests, executes NVRTC-generated PTX, and returns structured R results.</li>
 </ul></div>
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.1.12" id="rtinycc-0112">Rtinycc 0.1.12<a class="anchor" aria-label="anchor" href="#rtinycc-0112"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.1.12" id="rtinycc-0112">Rtinycc 0.1.12<a class="anchor" aria-label="anchor" href="#rtinycc-0112"></a></h2><p class="text-muted">CRAN release: 2026-07-19</p>
 <ul><li>Prevent high-level FFI compilation modes that cannot produce safe callable bindings; <code><a href="../reference/tcc_compile.html">tcc_compile()</a></code> now fails clearly unless output is in-memory.</li>
 <li>Keep relocated TinyCC code alive while a <code>tcc_symbol</code> pointer remains reachable.</li>
 <li>Validate struct and union pointer types before access or explicit release, use one host allocator for their storage on every platform, apply scalar FFI range and <code>NA</code> checks to generated composite setters, and reject long-lived borrowed <code>cstring</code> pointer setters in favor of explicit ownership.</li>

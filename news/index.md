@@ -1,5 +1,11 @@
 # Changelog
 
+## Rtinycc 0.1.15
+
+- Update the bundled TinyCC fork for Linux arm64 builds. Its arm64 CI
+  now rejects mixed C90 declarations, preventing the compiler warning
+  reported by R-devel checks.
+
 ## Rtinycc 0.1.14
 
 - Give the bundled TinyCC command-line executable a relocatable loader
@@ -23,6 +29,8 @@
   executes NVRTC-generated PTX, and returns structured R results.
 
 ## Rtinycc 0.1.12
+
+CRAN release: 2026-07-19
 
 - Prevent high-level FFI compilation modes that cannot produce safe
   callable bindings;
