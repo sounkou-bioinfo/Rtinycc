@@ -1,4 +1,5 @@
 ^README\.Rmd$
+^\.git$
 ^\.github$
 ^README\.html$
 ^\.claude$

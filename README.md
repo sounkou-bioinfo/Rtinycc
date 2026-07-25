@@ -197,7 +197,7 @@ tcc_read_cstring(ptr)
 tcc_read_bytes(ptr, 5)
 #> [1] 68 65 6c 6c 6f
 tcc_ptr_addr(ptr, hex = TRUE)
-#> [1] "0x60cba3dea350"
+#> [1] "0x6531efbdcb10"
 tcc_ptr_is_null(ptr)
 #> [1] FALSE
 tcc_free(ptr)
@@ -228,11 +228,11 @@ through output parameters.
 ptr_ref <- tcc_malloc(.Machine$sizeof.pointer %||% 8L)
 target <- tcc_malloc(8)
 tcc_ptr_set(ptr_ref, target)
-#> <pointer: 0x60cba373adc0>
+#> <pointer: 0x6531ef32bcb0>
 tcc_data_ptr(ptr_ref)
-#> <pointer: 0x60cba669d8d0>
+#> <pointer: 0x6531efb6ac30>
 tcc_ptr_set(ptr_ref, tcc_null_ptr())
-#> <pointer: 0x60cba373adc0>
+#> <pointer: 0x6531ef32bcb0>
 tcc_free(target)
 #> NULL
 tcc_free(ptr_ref)
@@ -426,8 +426,6 @@ gpu_session <- mirai(
   .compute = "gpu"
 )
 as.data.frame(gpu_session[], check.names = FALSE)
-#>   host    pid rtinycc                             device
-#> 1  SMT 346798  0.1.14 NVIDIA GeForce RTX 5050 Laptop GPU
 ```
 
 The long step is collapsed. It runs *inside the existing daemon* with
@@ -757,8 +755,6 @@ cuda_ready <- mirai(
   .compute = "gpu"
 )
 as.data.frame(cuda_ready[], check.names = FALSE)
-#>   host architecture    ffi_class                            bindings
-#> 1  SMT  compute_120 tcc_compiled rt_cuda_vec_add, rt_cuda_last_error
 ```
 
 Now submit the actual vector addition to that daemon. This call uses the
@@ -820,10 +816,6 @@ data.frame(
   max_error = cuda_result$max_error,
   check.names = FALSE
 )
-#>   host rtinycc                             device architecture       n
-#> 1  SMT  0.1.14 NVIDIA GeForce RTX 5050 Laptop GPU  compute_120 1000000
-#>   elapsed_seconds max_error
-#> 1           0.346         0
 ```
 
 Finally release the retained TCC state and stop the remote daemon.
@@ -922,7 +914,7 @@ ffi <- tcc_ffi() |>
 
 x <- as.integer(1:100) # to avoid ALTREP
 .Internal(inspect(x))
-#> @60cba99c5e28 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
+#> @6531f0dbe828 13 INTSXP g0c0 [REF(65535)]  1 : 100 (compact)
 ffi$sum_array(x, length(x))
 #> [1] 5050
 
@@ -938,7 +930,7 @@ y[1]
 #> [1] 11
 
 .Internal(inspect(x))
-#> @60cba99c5e28 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
+#> @6531f0dbe828 13 INTSXP g0c0 [REF(65535)]  11 : 110 (expanded)
 ```
 
 ## Advanced FFI features
@@ -965,15 +957,15 @@ ffi <- tcc_ffi() |>
 
 p1 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p1, 0.0)
-#> <pointer: 0x60cba6827b10>
+#> <pointer: 0x6531ee42b750>
 ffi$struct_point_set_y(p1, 0.0)
-#> <pointer: 0x60cba6827b10>
+#> <pointer: 0x6531ee42b750>
 
 p2 <- ffi$struct_point_new()
 ffi$struct_point_set_x(p2, 3.0)
-#> <pointer: 0x60cba451a560>
+#> <pointer: 0x6531ec668af0>
 ffi$struct_point_set_y(p2, 4.0)
-#> <pointer: 0x60cba451a560>
+#> <pointer: 0x6531ec668af0>
 
 ffi$distance(p1, p2)
 #> [1] 5
@@ -1018,9 +1010,9 @@ ffi <- tcc_ffi() |>
 
 s <- ffi$struct_flags_new()
 ffi$struct_flags_set_active(s, 1L)
-#> <pointer: 0x60cba3f81fa0>
+#> <pointer: 0x6531edfbf230>
 ffi$struct_flags_set_level(s, 9L)
-#> <pointer: 0x60cba3f81fa0>
+#> <pointer: 0x6531edfbf230>
 ffi$struct_flags_get_active(s)
 #> [1] 1
 ffi$struct_flags_get_level(s)
@@ -1407,7 +1399,7 @@ API as BCF.
 ``` r
 source("scripts/demo-streaming-bcf-reader-ffi.R")
 run_streaming_bcf_demo()
-#> Rtinycc version: 0.1.14
+#> Rtinycc version: 0.1.15
 #> Demo: stackless Protothreads + htslib BCF/VCF API streaming reader
 #> Note: htslib reads run using Protothreads. Warning: Local C variables are NOT preserved across yields!; R objects are built only after each yield.
 #> 
@@ -2189,7 +2181,7 @@ ffi <- tcc_ffi() |>
   tcc_compile()
 
 ffi$struct_point_new()
-#> <pointer: 0x60cba451a560>
+#> <pointer: 0x6531f328ce30>
 ffi$enum_status_OK()
 #> [1] 0
 ffi$global_global_counter_get()
@@ -2306,11 +2298,11 @@ if (Sys.info()[["sysname"]] == "Linux") {
 #> # A tibble: 5 × 13
 #>   expression     min  median `itr/sec` mem_alloc `gc/sec` n_itr  n_gc total_time
 #>   <bch:expr> <bch:t> <bch:t>     <dbl> <bch:byt>    <dbl> <int> <dbl>   <bch:tm>
-#> 1 read_tabl… 62.85ms 62.85ms      15.9    6.33MB     15.9     1     1     62.8ms
-#> 2 vroom_df_…  7.87ms  9.11ms     110.     1.22MB      0       2     0     18.2ms
-#> 3 vroom_df_…  9.18ms  9.19ms     109.     2.44MB      0       2     0     18.4ms
-#> 4 c_read_df  24.77ms 25.73ms      38.9    1.22MB      0       2     0     51.5ms
-#> 5 io_uring_… 25.62ms 26.18ms      38.2    1.22MB      0       2     0     52.4ms
+#> 1 read_tabl… 48.56ms 50.33ms      19.9    6.33MB      0       2     0    100.7ms
+#> 2 vroom_df_…  6.33ms  6.45ms     155.     1.22MB      0       2     0     12.9ms
+#> 3 vroom_df_…  6.74ms  6.78ms     148.     2.44MB      0       2     0     13.6ms
+#> 4 c_read_df  20.94ms 21.32ms      46.9    1.22MB      0       2     0     42.6ms
+#> 5 io_uring_… 21.07ms 21.07ms      47.5    1.22MB     47.5     1     1     21.1ms
 #> # ℹ 4 more variables: result <list>, memory <list>, time <list>, gc <list>
 ```
 
@@ -2412,9 +2404,9 @@ ffi <- tcc_ffi() |>
 
 b <- ffi$struct_buf_new()
 ffi$struct_buf_set_data_elt(b, 0L, 0xCAL)
-#> <pointer: 0x60cbaa572440>
+#> <pointer: 0x6531f7aae2b0>
 ffi$struct_buf_set_data_elt(b, 1L, 0xFEL)
-#> <pointer: 0x60cbaa572440>
+#> <pointer: 0x6531f7aae2b0>
 ffi$struct_buf_get_data_elt(b, 0L)
 #> [1] 202
 ffi$struct_buf_get_data_elt(b, 1L)
