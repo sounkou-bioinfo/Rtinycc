@@ -389,8 +389,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc    0.02           20
-#> 2         callme    0.24          240
+#> 1        Rtinycc   0.021           21
+#> 2         callme   0.233          233
 ```
 
 The expected pattern is:
@@ -543,8 +543,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.22ms   1.26ms      796.    21.9KB        0
-#> 2 callme     482.21µs  493.8µs     2016.        0B        0
+#> 1 Rtinycc       1.2ms   1.23ms      813.    21.9KB        0
+#> 2 callme      446.5µs 459.47µs     2179.        0B        0
 ```
 
 Interpretation:
@@ -583,8 +583,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       2.8ms      4ms      261.    3.15MB     13.1
-#> 2 callme       2.19ms   2.21ms      412.    3.13MB     20.6
+#> 1 Rtinycc      2.78ms   3.98ms      266.    3.15MB     13.3
+#> 2 callme       2.18ms    2.2ms      419.    3.13MB     20.9
 ```
 
 Interpretation:
@@ -633,14 +633,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.77ms   1.86ms      501.    15.4KB     25.0
-#> 2 callme       1.03ms   1.05ms      952.        0B      0
+#> 1 Rtinycc      1.72ms   1.79ms      523.    15.4KB     26.2
+#> 2 callme     959.21µs 967.16µs     1027.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      2.84ms   4.05ms      242.    3.13MB     12.1
-#> 2 callme       1.99ms   3.23ms      299.    3.13MB     14.9
+#> 1 Rtinycc      2.79ms      4ms      244.    3.13MB     12.2
+#> 2 callme       1.99ms   3.21ms      303.    3.13MB     15.2
 ```
 
 The usual pattern is:
