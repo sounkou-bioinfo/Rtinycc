@@ -25,6 +25,7 @@ jobs:
           # macos-oldrel-arm64 builder uses (Apple silicon + older Xcode/clang).
           - {os: macos-latest,   r: 'oldrel'}
           - {os: windows-latest, r: 'release'}
+          - {os: windows-11-arm, r: 'release'}
           - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
           #- {os: ubuntu-latest,   r: 'release'}
           #- {os: ubuntu-latest,   r: 'oldrel-1'}
