@@ -12,6 +12,15 @@ TINYCC_DEST="$THISDIR/inst/tinycc"
 export MSYSTEM=UCRT64
 RTINYCC_DEBUG_BUILD=${RTINYCC_DEBUG_BUILD:-0}
 
+# Detect ARM64 from CC target
+CC_TARGET=$("$CC" -dumpmachine 2>/dev/null)
+case "$CC_TARGET" in
+    aarch64* | arm64*) TCC_CPU=arm64 ;;
+    x86_64* | amd64*)  TCC_CPU=x86_64 ;;
+    i?86*)             TCC_CPU=i386 ;;
+    *)                 TCC_CPU= ;;
+esac
+
 : > "$CONFIG_LOG"
 
 log() {
@@ -37,6 +46,7 @@ log "Package source directory: $THISDIR"
 log "TinyCC source directory: $TINYCC_SRC"
 log "TinyCC install directory: $TINYCC_DEST"
 log "MSYSTEM=$MSYSTEM"
+log "Compiler target: ${CC_TARGET:-unknown} (TinyCC cpu: ${TCC_CPU:-autodetect})"
 log "RTINYCC_DEBUG_BUILD=$RTINYCC_DEBUG_BUILD"
 
 log "Unpacking vendored TinyCC source"
@@ -58,10 +68,12 @@ log "Building TinyCC in $PWD"
 
 if [ "$RTINYCC_DEBUG_BUILD" = "1" ]; then
     log "Configuring TinyCC with debug symbols"
-    run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" --debug || exit 1
+    run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" \
+        ${TCC_CPU:+--cpu="$TCC_CPU"} --debug || exit 1
     run_logged "$MAKE" CFLAGS='-O0 -g3' libtcc.dll libtcc.a tcc.exe libtcc1.a || exit 1
 else
-    run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" || exit 1
+    run_logged ./configure --prefix="$TINYCC_DEST" --cc="$CC" --ar="$AR" \
+        ${TCC_CPU:+--cpu="$TCC_CPU"} || exit 1
     run_logged "$MAKE" libtcc.dll libtcc.a tcc.exe libtcc1.a || exit 1
 fi
 
