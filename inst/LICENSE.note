@@ -4,9 +4,9 @@ and adapts a knitr engine helper from callme.
 Bundled component: TinyCC
 Upstream project: https://github.com/TinyCC/tinycc
 Vendored repository: https://github.com/sounkou-bioinfo/tinycc
-Vendored source archive: src/tinycc-199f07b.tar.gz
-Vendored commit: 199f07becdc89cbfb33c54a509d99aab8ff53299
-Archive SHA-256: 040f03f6037a91fdf258e77b894c4c42700cfdc38befd0d619c90b25d7df75a5
+Vendored source archive: src/tinycc-76cbba9.tar.gz
+Vendored commit: 76cbba947bf8f635adfe52ec858496139ebd1eb7
+Archive SHA-256: 1845aac0428eee1406e4e4dee8cdd85b7b9a183250d29bce6256da979078bda2
 
 TinyCC copyright:
 - Fabrice Bellard

@@ -6,7 +6,7 @@ mode <- if (length(args) > 0) args[[1]] else "download"
 
 # Use specific commit hash (sounkou-bioinfo/tinycc: upstream mob + wasm32
 # side-module backend, tag tcc-wasm-v0.1.0-alpha lineage)
-commit_hash <- "199f07becdc89cbfb33c54a509d99aab8ff53299"
+commit_hash <- "76cbba947bf8f635adfe52ec858496139ebd1eb7"
 url <- paste0(
   "https://github.com/sounkou-bioinfo/tinycc/archive/",
   commit_hash,
