@@ -2,6 +2,11 @@
 
 ## Rtinycc 0.1.15.9000
 
+- Refresh bundled TinyCC with upstream linker, TLS and bounds-checking
+  fixes, plus improved experimental WebAssembly scalar control flow,
+  floating-point conversions and call handling. Unsupported WebAssembly
+  wide-integer operations now fail explicitly; general webR FFI remains
+  unsupported.
 - Build and check natively on Windows arm64 by selecting TinyCC’s CPU
   from the R compiler target and using arm64-safe rounding functions in
   the bundled Windows headers.
