@@ -1,5 +1,5 @@
 Rtinycc bundles TinyCC and Protothreads as vendored third-party components
-and adapts a knitr engine helper from callme.
+and adapts code from callme and lambda.r.
 
 Bundled component: TinyCC
 Upstream project: https://github.com/TinyCC/tinycc
@@ -44,6 +44,21 @@ Upstream licensing:
 - Rtinycc includes an adapted version of that helper for vignette rendering.
 - The adapted helper is distributed as part of the GPL (>= 3) Rtinycc package,
   compatible with the upstream MIT terms.
+
+Adapted component: internal rule dispatcher
+Upstream repository: https://github.com/zatonovo/lambda.r
+Upstream version: 1.2.4
+Adapted source: R/aaa_ffi_codegen_dispatch.R
+
+Upstream copyright:
+- Brian Lee Yung Rowe
+- lambda.r contributors
+
+Upstream licensing:
+- lambda.r is distributed under the GNU Lesser General Public License,
+  version 3.
+- The adapted source file retains the LGPL-3 license and implements only the
+  fixed-arity literal and catch-all rules used by Rtinycc's code generator.
 
 Rtinycc package licensing:
 - The Rtinycc package code is licensed under GPL (>= 3), as declared in

@@ -177,11 +177,11 @@ So the internal design is intentionally mixed:
 
 That is the main semantic reason the generated wrapper layer exists.
 
-## Why `lambda.r` Is Used
+## Internal Rule Dispatch
 
-The large rule file `R/aaa_ffi_codegen_rules.R` uses `lambda.r` as a small
-dispatch DSL. The package imports `%as%` and `UseFunction`, and defines rules
-like:
+The large rule file `R/aaa_ffi_codegen_rules.R` uses a package-local subset of
+multipart pattern dispatch adapted from `lambda.r`. The `%as%` operator
+registers ordered literal and catch-all rules such as:
 
 - `ffi_input_rule(...)`
 - `ffi_return_rule(...)`
@@ -189,9 +189,11 @@ like:
 - `c_default_return_rule(...)`
 - `ffi_c_type_map_rule(...)`
 
-Those rules are not user-facing metaprogramming. They are an internal way to
-register many small code-generation cases without turning
-`R/ffi_codegen.R` into one enormous nest of `if` and `switch` statements.
+These rules are not user-facing metaprogramming. They register small
+code-generation cases without turning `R/ffi_codegen.R` into one enormous nest
+of `if` and `switch` statements. The internal dispatcher intentionally supports
+only the fixed-arity literal patterns and catch-all arguments used by these
+rules.
 
 In practice, `generate_c_input()` and `generate_c_return()` delegate into that
 rule table:
@@ -201,14 +203,9 @@ Rtinycc:::generate_c_input("x", "arg1_", "i32")
 Rtinycc:::generate_c_return("res", "f64")
 ```
 
-The main tradeoff is simple:
-
-- `lambda.r` keeps the dispatch table explicit and composable
-- the rule file becomes long because many integer, floating-point, and helper
-  cases are still written out individually
-
-So `lambda.r` here is being used for internal rule dispatch and code-template
-selection, not because the public API depends on functional programming style.
+The dispatch table remains explicit and composable, while the rule file stays
+long because integer, floating-point, and helper cases are written out
+individually.
 
 ## Wrapper Builders Work at the `SEXP` Boundary
 

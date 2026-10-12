@@ -2,11 +2,11 @@
 # Copyright (C) 2025-2026 Sounkou Mahamane Toure
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Internal lambda.r rules for codegen dispatch
+# Internal rules for codegen dispatch
 #
 # This file defines many small "rules" used by the code generator. Each
-# rule is registered with a tiny DSL (the lambda.r style rules such as
-# `ffi_input_rule`, `ffi_return_rule`, `r_to_c_return_lines_rule`, etc.)
+# rule is registered with the package-local dispatch DSL (`ffi_input_rule`,
+# `ffi_return_rule`, `r_to_c_return_lines_rule`, etc.)
 # and returns either a string or a character vector containing C source
 # lines to be injected into generated bindings. The sections below are
 # grouped by purpose (input conversion, return conversion, array helpers,
@@ -137,7 +137,7 @@ rtinycc_call(n_args, call_ptr, args) %as%
 ## Runtime platform dispatch rules
 ##
 ## Keep platform-specific path/name/env branching declarative using
-## lambda.r dispatch instead of large switch/if chains.
+## ordered pattern dispatch.
 ## ------------------------------------------------------------------
 tcc_platform_lib_paths("Linux") %as%
   {

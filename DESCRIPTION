@@ -11,7 +11,10 @@ Authors@R: c(
     person(family = "Swedish Institute of Computer Science", role = c("cph"),
     comment = "Copyright holder for the bundled Protothreads headers"),
     person(given = "Fabrice Bellard and TinyCC authors", role = c("cph"),
-    comment = "TinyCC compiler authors and copyright holders")
+    comment = "TinyCC compiler authors and copyright holders"),
+    person(given = c("Brian", "Lee", "Yung"), family = "Rowe",
+    role = c("ctb", "cph"),
+    comment = "Author and copyright holder of the lambda.r rule-dispatch code adapted for internal use")
     )
 Description: Builds the 'TinyCC' (Tiny 'C' Compiler) command-line interface
     and library for package use in 'R'. The package compiles 'TinyCC' from source and
@@ -19,11 +22,9 @@ Description: Builds the 'TinyCC' (Tiny 'C' Compiler) command-line interface
     used for header preprocessing, just-in-time compilation of 'C' code in
     'R', and lightweight 'C' scripting workflows.
 License: GPL (>= 3)
-Copyright: See inst/LICENSE.note for bundled TinyCC copyright and
-    licensing details.
+Copyright: See inst/LICENSE.note for bundled and adapted component copyright
+    and licensing details.
 Depends: R (>= 4.4.0)
-Imports:
-    lambda.r
 Suggests:
     bench,
     callme,

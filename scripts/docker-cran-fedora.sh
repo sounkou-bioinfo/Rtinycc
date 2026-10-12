@@ -43,8 +43,8 @@ exec docker run --rm "${DOCKER_TTY_FLAGS[@]}" \
     mkdir -p /root/R-libs
 
     R -q -e "
-      pkgs <- c(\"lambda.r\",\"bench\",\"callme\",\"knitr\",\"rmarkdown\",
-                \"tinytest\",\"treesitter.c\")
+      pkgs <- c(\"bench\",\"callme\",\"knitr\",\"rmarkdown\",\"tinytest\",
+                \"treesitter.c\")
       need <- setdiff(pkgs, rownames(installed.packages(lib.loc=\"/root/R-libs\")))
       if (length(need)) install.packages(need, lib=\"/root/R-libs\",
         repos=\"https://cloud.r-project.org\")
