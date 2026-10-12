@@ -2,6 +2,8 @@
 
 ## Rtinycc 0.1.15.9000
 
+- Carry the code generator’s narrow internal rule dispatcher directly,
+  removing the runtime dependency on `lambda.r`.
 - Refresh bundled TinyCC with upstream linker, TLS and bounds-checking
   fixes, plus improved experimental WebAssembly scalar control flow,
   floating-point conversions and call handling. Unsupported WebAssembly

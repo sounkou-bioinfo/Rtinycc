@@ -16,6 +16,10 @@
 - **Fabrice Bellard and TinyCC authors**. Copyright holder.  
   TinyCC compiler authors and copyright holders
 
+- **Brian Lee Yung Rowe**. Contributor, copyright holder.  
+  Author and copyright holder of the lambda.r rule-dispatch code adapted
+  for internal use
+
 ## Citation
 
 Source:

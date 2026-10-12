@@ -277,12 +277,12 @@ ownership</li>
 exists.</p>
 </div>
 <div class="section level2">
-<h2 id="why-lambda-r-is-used">Why <code>lambda.r</code> Is Used<a class="anchor" aria-label="anchor" href="#why-lambda-r-is-used"></a>
+<h2 id="internal-rule-dispatch">Internal Rule Dispatch<a class="anchor" aria-label="anchor" href="#internal-rule-dispatch"></a>
 </h2>
-<p>The large rule file <code>R/aaa_ffi_codegen_rules.R</code> uses
-<code>lambda.r</code> as a small dispatch DSL. The package imports
-<code>%as%</code> and <code>UseFunction</code>, and defines rules
-like:</p>
+<p>The large rule file <code>R/aaa_ffi_codegen_rules.R</code> uses a
+package-local subset of multipart pattern dispatch adapted from
+<code>lambda.r</code>. The <code>%as%</code> operator registers ordered
+literal and catch-all rules such as:</p>
 <ul>
 <li><code>ffi_input_rule(...)</code></li>
 <li><code>ffi_return_rule(...)</code></li>
@@ -290,10 +290,11 @@ like:</p>
 <li><code>c_default_return_rule(...)</code></li>
 <li><code>ffi_c_type_map_rule(...)</code></li>
 </ul>
-<p>Those rules are not user-facing metaprogramming. They are an internal
-way to register many small code-generation cases without turning
-<code>R/ffi_codegen.R</code> into one enormous nest of <code>if</code>
-and <code>switch</code> statements.</p>
+<p>These rules are not user-facing metaprogramming. They register small
+code-generation cases without turning <code>R/ffi_codegen.R</code> into
+one enormous nest of <code>if</code> and <code>switch</code> statements.
+The internal dispatcher intentionally supports only the fixed-arity
+literal patterns and catch-all arguments used by these rules.</p>
 <p>In practice, <code>generate_c_input()</code> and
 <code>generate_c_return()</code> delegate into that rule table:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -301,17 +302,9 @@ and <code>switch</code> statements.</p>
 <span><span class="co">#&gt; [1] "  int _x = asInteger(arg1_);\n  if (_x == NA_INTEGER) Rf_error(\"integer value is NA\");\n  if (_x &lt; INT32_MIN || _x &gt; INT32_MAX) Rf_error(\"i32 out of range\");\n  int32_t x = (int32_t)_x;"</span></span>
 <span><span class="fu">Rtinycc</span><span class="fu">:::</span><span class="fu">generate_c_return</span><span class="op">(</span><span class="st">"res"</span>, <span class="st">"f64"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "return ScalarReal(res);"</span></span></code></pre></div>
-<p>The main tradeoff is simple:</p>
-<ul>
-<li>
-<code>lambda.r</code> keeps the dispatch table explicit and
-composable</li>
-<li>the rule file becomes long because many integer, floating-point, and
-helper cases are still written out individually</li>
-</ul>
-<p>So <code>lambda.r</code> here is being used for internal rule
-dispatch and code-template selection, not because the public API depends
-on functional programming style.</p>
+<p>The dispatch table remains explicit and composable, while the rule
+file stays long because integer, floating-point, and helper cases are
+written out individually.</p>
 </div>
 <div class="section level2">
 <h2 id="wrapper-builders-work-at-the-sexp-boundary">Wrapper Builders Work at the <code>SEXP</code> Boundary<a class="anchor" aria-label="anchor" href="#wrapper-builders-work-at-the-sexp-boundary"></a>
