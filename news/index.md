@@ -1,6 +1,6 @@
 # Changelog
 
-## Rtinycc 0.1.15.9000
+## Rtinycc 0.1.16
 
 - Carry the code generator’s narrow internal rule dispatcher directly,
   removing the runtime dependency on `lambda.r`.
@@ -12,6 +12,11 @@
 - Build and check natively on Windows arm64 by selecting TinyCC’s CPU
   from the R compiler target and using arm64-safe rounding functions in
   the bundled Windows headers.
+
+## Rtinycc 0.1.15
+
+CRAN release: 2026-07-25
+
 - Update the bundled TinyCC fork for Linux arm64 builds. Its arm64 CI
   now rejects mixed C90 declarations, preventing the compiler warning
   reported by R-devel checks.
