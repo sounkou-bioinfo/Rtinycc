@@ -4,6 +4,9 @@
 .httr-oauth
 .DS_Store
 .quarto
+.pi/
+a.out
+config.log
 README.html
 docs
 Rtinycc*tar.gz

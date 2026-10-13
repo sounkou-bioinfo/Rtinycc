@@ -1,8 +1,11 @@
-# Rtinycc 0.1.15.9000
+# Rtinycc 0.1.16
 
 - Carry the code generator's narrow internal rule dispatcher directly, removing the runtime dependency on `lambda.r`.
 - Refresh bundled TinyCC with upstream linker, TLS and bounds-checking fixes, plus improved experimental WebAssembly scalar control flow, floating-point conversions and call handling. Unsupported WebAssembly wide-integer operations now fail explicitly; general webR FFI remains unsupported.
 - Build and check natively on Windows arm64 by selecting TinyCC's CPU from the R compiler target and using arm64-safe rounding functions in the bundled Windows headers.
+
+# Rtinycc 0.1.15
+
 - Update the bundled TinyCC fork for Linux arm64 builds. Its arm64 CI now rejects mixed C90 declarations, preventing the compiler warning reported by R-devel checks.
 
 # Rtinycc 0.1.14

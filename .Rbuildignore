@@ -4,6 +4,7 @@
 ^README\.html$
 ^\.claude$
 ^\.codex$
+^\.pi$
 ^\.\.pdf$
 ^\.\.Rcheck$
 ^\.\.Rcheck/.*$
@@ -24,6 +25,7 @@ src/*.o
 ^scripts/.*$
 ^AGENTS.md$
 ^CLAUDE.md$
+^a\.out$
 ^config\.log$
 ^copilot-instructions\.md$
 ^cran-comments\.md$
@@ -39,4 +41,3 @@ src/*.o
 ^treesitter\.c/.*$
 ^\.sync$
 ^Rducks$
-^patch_protect\.py$
