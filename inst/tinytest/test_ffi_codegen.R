@@ -147,7 +147,6 @@ full_code <- Rtinycc:::generate_ffi_code(
 expect_true(grepl("#define _Complex", full_code))
 expect_true(grepl("#include <R.h>", full_code))
 expect_true(grepl("#include <Rinternals.h>", full_code))
-expect_true(grepl("#ifndef STRING_PTR_RO", full_code))
 expect_true(grepl("#include <stdint.h>", full_code))
 expect_true(grepl("#include <stdbool.h>", full_code))
 expect_true(grepl("R_wrap_add", full_code))

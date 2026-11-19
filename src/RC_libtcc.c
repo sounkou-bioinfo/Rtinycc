@@ -1895,25 +1895,21 @@ SEXP RC_read_cstring_n(SEXP ptr, SEXP nbytes) {
         Rf_error("Expected external pointer");
     }
     int n = Rf_asInteger(nbytes);
-    if (n < 0) {
+    if (n == NA_INTEGER || n < 0) {
         Rf_error("nbytes must be non-negative");
     }
 
-    char *data = (char*)R_ExternalPtrAddr(ptr);
+    const char *data = (const char *)R_ExternalPtrAddr(ptr);
     if (!data) {
         return Rf_ScalarString(NA_STRING);
     }
 
-    SEXP out = PROTECT(Rf_allocVector(STRSXP, 1));
-    if (n == 0) {
-        SET_STRING_ELT(out, 0, Rf_mkChar(""));
-        UNPROTECT(1);
-        return out;
+    /* nbytes bounds the read; the string ends at its terminator. */
+    const char *end = memchr(data, '\0', (size_t)n);
+    if (end) {
+        n = (int)(end - data);
     }
-
-    SET_STRING_ELT(out, 0, Rf_mkCharLenCE(data, n, CE_UTF8));
-    UNPROTECT(1);
-    return out;
+    return Rf_ScalarString(Rf_mkCharLenCE(data, n, CE_UTF8));
 }
 
 // ============================================================================

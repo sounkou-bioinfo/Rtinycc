@@ -2,6 +2,9 @@
 
 - Refresh bundled TinyCC with upstream fixes for qualified array types and parameters, `restrict`, the `_Optional` qualifier, chained designated initializers, and arm64 stack offsets of 4096 bytes and more.
 - Experimental WebAssembly output now reads and writes `char` and `short` values through pointers at their own width, and truncates them when stored in local variables. Address-taken locals, globals and string literals remain unsupported.
+- `character_array` arguments work again on current R. Generated wrappers fell back to the non-API `STRING_PTR()` accessor, which R no longer declares, so the call crashed (seen on R 4.6.2); they now call `STRING_PTR_RO()` directly.
+- `tcc_read_cstring(max_bytes = )` treats `max_bytes` as a bound and stops at the NUL terminator. It previously read exactly `max_bytes` bytes, which ran past the end of shorter strings and failed with an embedded-NUL error.
+- Add tests that run generated wrappers, struct field-address helpers, pointer helpers and synchronous callbacks under `gctorture2()`.
 
 # Rtinycc 0.1.16
 
