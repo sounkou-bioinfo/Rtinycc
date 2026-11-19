@@ -1,6 +1,6 @@
 # Changelog
 
-## Rtinycc 0.1.16.9001
+## Rtinycc 0.1.17.9000
 
 - Refresh bundled TinyCC with upstream fixes for qualified array types
   and parameters, `restrict`, the `_Optional` qualifier, chained
