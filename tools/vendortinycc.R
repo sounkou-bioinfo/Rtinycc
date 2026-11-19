@@ -5,8 +5,8 @@ args <- commandArgs(trailingOnly = TRUE)
 mode <- if (length(args) > 0) args[[1]] else "download"
 
 # Pinned sounkou-bioinfo/tinycc: upstream mob plus the experimental wasm32
-# scalar/control-flow side-module backend.
-commit_hash <- "1bed0f33464e5f07e07c64907d348ac400081de9"
+# side-module backend.
+commit_hash <- "a731f9f48ff01b0e810649c4fdcc8cc9c6b05953"
 url <- paste0(
   "https://github.com/sounkou-bioinfo/tinycc/archive/",
   commit_hash,
