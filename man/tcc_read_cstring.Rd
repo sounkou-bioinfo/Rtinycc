@@ -13,7 +13,9 @@ tcc_read_cstring(
 \arguments{
 \item{ptr}{External pointer to C string}
 
-\item{max_bytes}{Optional maximum number of bytes to read (fixed-length read).}
+\item{max_bytes}{Optional maximum number of bytes to read. The read stops at
+the first NUL terminator or after \code{max_bytes} bytes, whichever comes first,
+so it is safe on buffers that carry no terminator.}
 
 \item{null_action}{Behavior when ptr is NULL: one of "na", "empty", "error".
 Only effective when \code{max_bytes} is provided; without it a NULL pointer

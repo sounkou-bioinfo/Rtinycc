@@ -38,4 +38,4 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 URL: https://github.com/sounkou-bioinfo/Rtinycc, https://sounkou-bioinfo.github.io/Rtinycc/
 BugReports: https://github.com/sounkou-bioinfo/Rtinycc/issues
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.1

@@ -44,7 +44,9 @@ tcc_cstring <- function(str) {
 #' Handles UTF-8 decoding automatically.
 #'
 #' @param ptr External pointer to C string
-#' @param max_bytes Optional maximum number of bytes to read (fixed-length read).
+#' @param max_bytes Optional maximum number of bytes to read. The read stops at
+#'   the first NUL terminator or after `max_bytes` bytes, whichever comes first,
+#'   so it is safe on buffers that carry no terminator.
 #' @param null_action Behavior when ptr is NULL: one of "na", "empty", "error".
 #'   Only effective when `max_bytes` is provided; without it a NULL pointer
 #'   returns `""`.

@@ -22,6 +22,18 @@ expect_equal(read_str, test_str)
 read_str_n <- tcc_read_cstring(str_ptr, max_bytes = 5)
 expect_equal(read_str_n, "Hello")
 
+# `max_bytes` is a bound: the read stops at the terminator
+short_ptr <- tcc_cstring("hi")
+expect_identical(tcc_read_cstring(short_ptr, max_bytes = 64), "hi")
+expect_identical(tcc_read_cstring(short_ptr, max_bytes = 0), "")
+expect_error(tcc_read_cstring(short_ptr, max_bytes = -1), "non-negative")
+expect_error(tcc_read_cstring(short_ptr, max_bytes = NA), "non-negative")
+
+# A buffer without a terminator is read up to `max_bytes`
+unterminated <- tcc_malloc(8)
+tcc_write_bytes(unterminated, charToRaw("abcdefgh"))
+expect_identical(tcc_read_cstring(unterminated, max_bytes = 8), "abcdefgh")
+
 # Test memory allocation
 mem_ptr <- tcc_malloc(1024)
 expect_true(inherits(mem_ptr, "externalptr"))
