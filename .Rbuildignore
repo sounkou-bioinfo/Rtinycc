@@ -41,3 +41,4 @@ src/*.o
 ^treesitter\.c/.*$
 ^\.sync$
 ^Rducks$
+^\.ruff_cache$
