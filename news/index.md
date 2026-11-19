@@ -1,8 +1,19 @@
 # Changelog
 
-## Rtinycc 0.1.16.9000
+## Rtinycc 0.1.16.9001
+
+- Refresh bundled TinyCC with upstream fixes for qualified array types
+  and parameters, `restrict`, the `_Optional` qualifier, chained
+  designated initializers, and arm64 stack offsets of 4096 bytes and
+  more.
+- Experimental WebAssembly output now reads and writes `char` and
+  `short` values through pointers at their own width, and truncates them
+  when stored in local variables. Address-taken locals, globals and
+  string literals remain unsupported.
 
 ## Rtinycc 0.1.16
+
+CRAN release: 2026-10-13
 
 - Carry the code generator’s narrow internal rule dispatcher directly,
   removing the runtime dependency on `lambda.r`.
