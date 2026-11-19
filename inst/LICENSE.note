@@ -4,8 +4,8 @@ and adapts code from callme and lambda.r.
 Bundled component: TinyCC
 Upstream project: https://github.com/TinyCC/tinycc
 Vendored repository: https://github.com/sounkou-bioinfo/tinycc
-Vendored source archive: src/tinycc-1bed0f3.tar.gz
-Vendored commit: 1bed0f33464e5f07e07c64907d348ac400081de9
+Vendored source archive: src/tinycc-a731f9f.tar.gz
+Vendored commit: a731f9f48ff01b0e810649c4fdcc8cc9c6b05953
 Archive SHA-256: 1d1428501369276109d37933817553a5686ac2e49778518fcfabba72e8fbaf85
 
 TinyCC copyright:
