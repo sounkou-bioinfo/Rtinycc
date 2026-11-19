@@ -71,7 +71,9 @@ Handles UTF-8 decoding automatically.</p>
 
 
 <dt id="arg-max-bytes">max_bytes<a class="anchor" aria-label="anchor" href="#arg-max-bytes"></a></dt>
-<dd><p>Optional maximum number of bytes to read (fixed-length read).</p></dd>
+<dd><p>Optional maximum number of bytes to read. The read stops at
+the first NUL terminator or after <code>max_bytes</code> bytes, whichever comes first,
+so it is safe on buffers that carry no terminator.</p></dd>
 
 
 <dt id="arg-null-action">null_action<a class="anchor" aria-label="anchor" href="#arg-null-action"></a></dt>

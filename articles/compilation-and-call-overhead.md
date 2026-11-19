@@ -389,8 +389,8 @@ compile_times <- data.frame(
 compile_times$milliseconds <- round(compile_times$seconds * 1000, 1)
 compile_times
 #>   implementation seconds milliseconds
-#> 1        Rtinycc   0.010           10
-#> 2         callme   0.195          195
+#> 1        Rtinycc   0.019           19
+#> 2         callme   0.248          248
 ```
 
 The expected pattern is:
@@ -418,9 +418,6 @@ Rtinycc:::rtinycc_c_block(generated_code)
 #include <R.h>
 #include <Rinternals.h>
 #include <stddef.h>
-#ifndef STRING_PTR_RO
-#define STRING_PTR_RO STRING_PTR
-#endif
 void RC_free_finalizer(SEXP ext);
 void RC_owned_native_finalizer(SEXP ext);
 void *RC_check_composite_ptr(SEXP ext, SEXP expected_tag, int require_owned);
@@ -543,8 +540,8 @@ noop_bench
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       600µs    641µs     1563.    21.9KB        0
-#> 2 callme        219µs    223µs     4435.        0B        0
+#> 1 Rtinycc       1.2ms   1.24ms      807.    21.9KB        0
+#> 2 callme      435.2µs 445.99µs     2240.        0B        0
 ```
 
 Interpretation:
@@ -583,8 +580,8 @@ fill_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.34ms   2.19ms      481.    3.15MB     24.1
-#> 2 callme        1.1ms   1.12ms      788.    3.13MB     39.4
+#> 1 Rtinycc      3.04ms   4.25ms      246.    3.15MB     12.3
+#> 2 callme       2.19ms   2.22ms      408.    3.13MB     20.4
 ```
 
 Interpretation:
@@ -633,14 +630,14 @@ rand_results$rand_bench_n1
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc       903µs    967µs      950.    15.4KB     47.5
-#> 2 callme        492µs    507µs     1974.        0B      0
+#> 1 Rtinycc      1.78ms   1.85ms      502.    15.4KB     25.1
+#> 2 callme     977.88µs 983.32µs     1014.        0B      0
 rand_results$rand_bench_n4096
 #> # A tibble: 2 × 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Rtinycc      1.41ms   2.29ms      418.    3.13MB     20.9
-#> 2 callme       1.08ms      2ms      477.    3.13MB     23.8
+#> 1 Rtinycc      3.11ms   4.31ms      226.    3.13MB     11.3
+#> 2 callme       2.12ms    3.5ms      277.    3.13MB     13.8
 ```
 
 The usual pattern is:

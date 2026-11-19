@@ -226,13 +226,47 @@ Use <code>cstring_array</code> when the C side expects a temporary
 <span><span class="co">#&gt; [1] 10</span></span>
 <span><span class="va">ffi_arr</span><span class="op">$</span><span class="fu">second_num</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="fl">2.5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 2.5</span></span></code></pre></div>
+<p>The two string-vector types see the same R character vector
+differently. <code>cstring_array</code> hands C a translated
+<code>const char **</code>, while <code>character_array</code> hands it
+the vector’s own <code>CHARSXP</code> cells for use with the R C
+API:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ffi_strings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>
+<span>    <span class="st">"</span></span>
+<span><span class="st">    #include &lt;string.h&gt;</span></span>
+<span><span class="st">    #include &lt;Rinternals.h&gt;</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">    int total_strlen(const char **s, int n) {</span></span>
+<span><span class="st">      int total = 0;</span></span>
+<span><span class="st">      for (int i = 0; i &lt; n; i++) total += (int)strlen(s[i]);</span></span>
+<span><span class="st">      return total;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    int count_na(const SEXP *cells, int n) {</span></span>
+<span><span class="st">      int total = 0;</span></span>
+<span><span class="st">      for (int i = 0; i &lt; n; i++) total += cells[i] == NA_STRING;</span></span>
+<span><span class="st">      return total;</span></span>
+<span><span class="st">    }</span></span>
+<span><span class="st">    "</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/tcc_bind.html">tcc_bind</a></span><span class="op">(</span></span>
+<span>    total_strlen <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"cstring_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span>,</span>
+<span>    count_na <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"character_array"</span>, <span class="st">"i32"</span><span class="op">)</span>, returns <span class="op">=</span> <span class="st">"i32"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/tcc_compile.html">tcc_compile</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ffi_strings</span><span class="op">$</span><span class="fu">total_strlen</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"bc"</span>, <span class="st">"def"</span><span class="op">)</span>, <span class="fl">3L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 6</span></span>
+<span><span class="va">ffi_strings</span><span class="op">$</span><span class="fu">count_na</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="cn">NA</span>, <span class="st">"def"</span><span class="op">)</span>, <span class="fl">3L</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 1</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="direct-r-objects-with-sexp">Direct R Objects with <code>sexp</code><a class="anchor" aria-label="anchor" href="#direct-r-objects-with-sexp"></a>
 </h2>
 <p><code>sexp</code> passes the R object through the wrapper without
 conversion.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ffi_sexp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tcc_ffi.html">tcc_ffi</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/tcc_source.html">tcc_source</a></span><span class="op">(</span></span>
 <span>    <span class="st">"</span></span>

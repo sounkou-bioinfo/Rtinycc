@@ -133,6 +133,43 @@ ffi_arr$second_num(c(1.5, 2.5))
 #> [1] 2.5
 ```
 
+The two string-vector types see the same R character vector differently.
+`cstring_array` hands C a translated `const char **`, while
+`character_array` hands it the vector’s own `CHARSXP` cells for use with
+the R C API:
+
+``` r
+
+ffi_strings <- tcc_ffi() |>
+  tcc_source(
+    "
+    #include <string.h>
+    #include <Rinternals.h>
+
+    int total_strlen(const char **s, int n) {
+      int total = 0;
+      for (int i = 0; i < n; i++) total += (int)strlen(s[i]);
+      return total;
+    }
+    int count_na(const SEXP *cells, int n) {
+      int total = 0;
+      for (int i = 0; i < n; i++) total += cells[i] == NA_STRING;
+      return total;
+    }
+    "
+  ) |>
+  tcc_bind(
+    total_strlen = list(args = list("cstring_array", "i32"), returns = "i32"),
+    count_na = list(args = list("character_array", "i32"), returns = "i32")
+  ) |>
+  tcc_compile()
+
+ffi_strings$total_strlen(c("a", "bc", "def"), 3L)
+#> [1] 6
+ffi_strings$count_na(c("a", NA, "def"), 3L)
+#> [1] 1
+```
+
 ## Direct R Objects with `sexp`
 
 `sexp` passes the R object through the wrapper without conversion.

@@ -21,7 +21,9 @@ tcc_read_cstring(
 
 - max_bytes:
 
-  Optional maximum number of bytes to read (fixed-length read).
+  Optional maximum number of bytes to read. The read stops at the first
+  NUL terminator or after `max_bytes` bytes, whichever comes first, so
+  it is safe on buffers that carry no terminator.
 
 - null_action:
 
