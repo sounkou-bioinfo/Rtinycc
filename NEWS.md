@@ -1,4 +1,4 @@
-# Rtinycc 0.1.17
+# Rtinycc 0.1.17.9000
 
 - Refresh bundled TinyCC with upstream fixes for qualified array types and parameters, `restrict`, the `_Optional` qualifier, chained designated initializers, and arm64 stack offsets of 4096 bytes and more.
 - Experimental WebAssembly output now reads and writes `char` and `short` values through pointers at their own width, and truncates them when stored in local variables. Address-taken locals, globals and string literals remain unsupported.

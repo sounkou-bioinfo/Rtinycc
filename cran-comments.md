@@ -1,37 +1,36 @@
 ## Submission
 
-This submission updates Rtinycc from 0.1.16 to 0.1.17. It is a bug-fix
-release, submitted five weeks after 0.1.16 because of the first item:
+This submission updates Rtinycc from 0.1.15 to 0.1.16. It removes the runtime
+dependency on `lambda.r` by carrying the fixed-arity rule dispatcher used by
+the code generator. The upstream attribution and LGPL-3 licensing are recorded
+in `DESCRIPTION`, the source file, and `inst/LICENSE.note`.
 
-- Calls with a `character_array` argument crashed on current R. The generated
-  wrappers fell back to the non-API `STRING_PTR()` accessor, which R no longer
-  declares. They now call `STRING_PTR_RO()` directly.
-- `tcc_read_cstring(max_bytes = )` read exactly `max_bytes` bytes, past the
-  terminator of shorter strings. It now stops at the terminator.
-- The bundled TinyCC source is refreshed with upstream fixes for qualified
-  array types, `restrict`, designated initializers, and arm64 stack offsets.
+The bundled TinyCC source is refreshed with upstream linker, TLS, and
+bounds-checking fixes. This release also adds native Windows arm64 builds and
+improves TinyCC's experimental wasm32 backend; general webR FFI remains
+unsupported.
 
 ## Test environments
 
-- local Ubuntu 24.04.3 LTS, R 4.6.2
-- Fedora + GCC + R-devel via the `ghcr.io/r-hub/containers` image
+- local Ubuntu 24.04.3 LTS, R 4.6.0
+- Fedora 44 + GCC 16 + R-devel via the
+  `ghcr.io/r-hub/containers/gcc16` image
 - native Linux arm64 + R-devel via the
   `ghcr.io/r-devel/rcheckserver/ubuntu` image
-- GitHub Actions: Ubuntu (R-devel), macOS (release and oldrel), Windows
-  x86_64 (release), and Windows arm64 (release)
+- GitHub Actions Ubuntu, macOS, Windows x86_64, and Windows arm64 checks
+- win-builder R-release submission
+- macOS builder arm64, R 4.6.1
 
 ## R CMD check results
 
-- local Ubuntu R 4.6.2: 0 errors | 0 warnings | 1 note
-- GitHub Actions and container checks: no errors or warnings
+- local Ubuntu R 4.6.0: 0 errors | 0 warnings | 1 note
+- native Linux arm64 R-devel: 0 errors | 0 warnings | 0 notes
+- Fedora R-devel (GCC 16): 0 errors | 0 warnings | 1 note
+- macOS builder arm64, R 4.6.1: 0 errors | 0 warnings | 0 notes
 
 The local note is for `-mno-omit-leaf-frame-pointer`, which is inherited from
-the local R toolchain.
-
-## Reverse dependencies
-
-Rduckhts and rdyncall list Rtinycc in `Suggests`. Both pass `R CMD check`
-with this version installed (Status: OK).
+the local R toolchain. The Fedora note reports the development version number
+`0.1.15.9000`; the release tarball uses `0.1.16`.
 
 ## Additional notes
 
@@ -39,3 +38,4 @@ with this version installed (Status: OK).
   for the bundled compiler are documented in `inst/LICENSE.note` and reflected
   in `DESCRIPTION`.
 - No network access is required in examples, tests, or vignettes.
+- There are no strong reverse dependencies on CRAN.
